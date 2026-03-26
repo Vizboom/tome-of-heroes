@@ -1822,29 +1822,32 @@ function showPlayerGate(){
 function joinAsPlayer(){
   const raw=(document.getElementById('playerAccessCode')?.value||'').trim();
   if(!raw){ toast('Enter your access code','var(--red)'); return; }
-  // Try shortcode match first
   const chars=getChars();
   let char=chars.find(c=>c.shareCode&&c.shareCode.toUpperCase()===raw.toUpperCase());
-  // Try full export decode
   if(!char){
-    const decoded=decodeChar(raw);
-    if(decoded&&decoded.name&&decoded.classIdx!==undefined){
-      decoded.id=decoded.id||Date.now();
-      decoded.currentHP=decoded.currentHP||decoded.maxHP;
-      decoded.statuses=decoded.statuses||[];decoded.spells=decoded.spells||[];
-      decoded.attacks=decoded.attacks||[];decoded.equipment=decoded.equipment||[];
-      const existing=chars.find(c=>c.id===decoded.id||(c.shareCode&&c.shareCode===decoded.shareCode));
-      if(!existing){chars.push(decoded);saveChars(chars);}
-      char=decoded;
-    }
+    try{
+      const decoded=decodeChar(raw);
+      if(decoded&&decoded.name&&decoded.classIdx!==undefined){
+        decoded.id=decoded.id||Date.now();
+        decoded.currentHP=decoded.currentHP||decoded.maxHP;
+        decoded.statuses=decoded.statuses||[];decoded.spells=decoded.spells||[];
+        decoded.attacks=decoded.attacks||[];decoded.equipment=decoded.equipment||[];
+        const existing=chars.find(c=>String(c.id)===String(decoded.id)||(c.shareCode&&c.shareCode===decoded.shareCode));
+        if(!existing){chars.push(decoded);saveChars(chars);}
+        char=existing||decoded;
+      }
+    }catch(e){}
   }
   if(!char){ toast('Code not recognised — check with your DM','var(--red)'); return; }
+  // Use string comparison to avoid number/string type mismatch in charIds
   const campaigns=getCampaigns();
-  const camp=campaigns.find(c=>(c.charIds||[]).includes(char.id));
+  const camp=campaigns.find(c=>(c.charIds||[]).some(x=>String(x)===String(char.id)));
   S.set('toh_mode','player');
   S.set('toh_player_char_id',char.id);
-  S.set('toh_player_camp_id',camp?.id||null);
+  S.set('toh_player_camp_id',camp?camp.id:null);
+  // Sync active campaign so loot, dice and all tabs scope correctly
   if(camp) setActiveCampId(camp.id);
+  else toast('Character not yet assigned to a campaign — ask your DM','var(--gold)');
   document.querySelector('.bottomnav').style.display='flex';
   applyModeUI();
   toast('✦ Welcome, '+char.name+'!');
@@ -2635,6 +2638,19 @@ function bootApp(){
     nav_bar.style.display='none';
     const ex=document.getElementById('modeBadge');if(ex)ex.remove();
   } else {
+    // If player mode, re-sync active campaign from stored player camp ID
+    if(mode==='player'){
+      const playerCampId = S.get('toh_player_camp_id');
+      if(playerCampId) setActiveCampId(playerCampId);
+      else {
+        // Try to find campaign by char ID in case it was assigned after last login
+        const charId = S.get('toh_player_char_id');
+        if(charId){
+          const camp = getCampaigns().find(c=>(c.charIds||[]).some(x=>String(x)===String(charId)));
+          if(camp){ setActiveCampId(camp.id); S.set('toh_player_camp_id', camp.id); }
+        }
+      }
+    }
     nav_bar.style.display='flex';
     applyModeUI();
     nav('roster');
