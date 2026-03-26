@@ -545,6 +545,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <div class="divider"><span>Your Characters</span></div>
     <div id="rosterList"></div>
     <button class="btn btn-gold" onclick="showBuild()">+ Forge New Character</button>
+    <button class="btn btn-outline" onclick="showCharImport()">↓ Import Character</button>
     <button class="btn btn-outline" onclick="nav('party')">⚔ View Party</button>
   </div>
 
@@ -704,12 +705,14 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <button class="tab-btn" onclick="sheetTab('spells')">Spells</button>
       <button class="tab-btn" onclick="sheetTab('gear')">Gear</button>
       <button class="tab-btn" onclick="sheetTab('lore')">Lore</button>
+      <button class="tab-btn" onclick="sheetTab('progress')" style="color:var(--gold)">⬆ Level</button>
     </div>
     <div class="tab-pane active" id="stab-combat"></div>
     <div class="tab-pane" id="stab-skills"></div>
     <div class="tab-pane" id="stab-spells"></div>
     <div class="tab-pane" id="stab-gear"></div>
     <div class="tab-pane" id="stab-lore"></div>
+    <div class="tab-pane" id="stab-progress"></div>
     <button class="btn btn-outline" onclick="nav('roster')">← Roster</button>
   </div>
 
@@ -1167,7 +1170,7 @@ function renderSheetHero(char,cls,elId){
 }
 
 function sheetTab(t){
-  document.querySelectorAll('#scr-sheet .tab-btn').forEach((b,i)=>b.classList.toggle('active',['combat','skills','spells','gear','lore'][i]===t));
+  document.querySelectorAll('#scr-sheet .tab-btn').forEach((b,i)=>b.classList.toggle('active',['combat','skills','spells','gear','lore','progress'][i]===t));
   document.querySelectorAll('#scr-sheet .tab-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('stab-'+t).classList.add('active');
   const char=getChars().find(c=>c.id===sheetCharId);if(!char)return;
@@ -1177,6 +1180,7 @@ function sheetTab(t){
   if(t==='spells')renderSpellsTab(char,cls,'stab-spells',true);
   if(t==='gear')renderGearTab(char,cls,'stab-gear',true);
   if(t==='lore')renderLoreTab(char,cls,'stab-lore',true);
+  if(t==='progress')renderProgressTab(char,cls);
 }
 
 /* ══ COMBAT TAB ══ */
@@ -1792,14 +1796,550 @@ function resetMode(){
   bootApp();
 }
 
+/* ══════════════════════════════════════════════════════
+   PROGRESSION SYSTEM — Level Up, Feats, ASI, DM Effects
+══════════════════════════════════════════════════════ */
+
+const FEATS_5E = [
+  'Alert','Athlete','Actor','Charger','Crossbow Expert','Defensive Duelist',
+  'Dual Wielder','Dungeon Delver','Durable','Elemental Adept','Grappler',
+  'Great Weapon Master','Healer','Heavily Armored','Heavy Armor Master',
+  'Inspiring Leader','Keen Mind','Lightly Armored','Linguist','Lucky',
+  'Mage Slayer','Magic Initiate','Martial Adept','Medium Armor Master',
+  'Mobile','Moderately Armored','Mounted Combatant','Observant',
+  'Polearm Master','Resilient','Ritual Caster','Savage Attacker',
+  'Sentinel','Sharpshooter','Shield Master','Skilled','Skulker',
+  'Spell Sniper','Tavern Brawler','Tough','War Caster','Weapon Master',
+  // Tasha\'s
+  'Artificer Initiate','Chef','Crusher','Eldritch Adept','Fey Touched',
+  'Fighting Initiate','Gunner','Metamagic Adept','Piercer','Poisoner',
+  'Shadow Touched','Shield Training','Slasher','Telekinetic','Telepathic',
+  // Xanathar\'s
+  'Bountiful Luck','Dragon Fear','Dragon Hide','Dwarven Fortitude',
+  'Elven Accuracy','Fade Away','Fey Teleportation','Flames of Phlegethos',
+  'Infernal Constitution','Orcish Fury','Orcish Aggression','Prodigy',
+  'Second Chance','Squat Nimbleness','Wood Elf Magic'
+];
+
+// ASI levels per class — when the class gets +2 points to distribute
+const ASI_LEVELS = {
+  Fighter:[4,6,8,10,12,14,16,19],
+  Rogue:[4,8,10,12,16,18],
+  default:[4,8,12,16,19]
+};
+
+function getASILevels(className){
+  return ASI_LEVELS[className] || ASI_LEVELS.default;
+}
+
+function renderProgressTab(char, cls){
+  const el = document.getElementById('stab-progress');
+  const isDM = !isPlayerMode();
+  const pb = getPB(char.level);
+  const asiLevels = getASILevels(cls.name);
+  const feats = char.feats || [];
+  const effects = char.effects || {};
+
+  let html = '';
+
+  // ── DM CONTROLS (DM only) ──
+  if(isDM){
+    html += `<div class="divider"><span>👑 DM Controls</span></div>`;
+
+    // Level up button
+    if(char.level < 20){
+      html += `<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:12px;padding:14px;margin-bottom:12px">
+        <div style="font-family:'Cinzel',serif;font-size:12px;color:var(--gold);letter-spacing:1px;margin-bottom:6px">LEVEL UP</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Current: Level ${char.level} → Level ${char.level+1}</div>
+        <button class="btn btn-gold" onclick="levelUp(${char.id})" style="margin:0">⬆ Level Up to ${char.level+1}</button>
+      </div>`;
+    } else {
+      html += `<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:12px;padding:14px;margin-bottom:12px;text-align:center">
+        <div style="font-family:'Cinzel',serif;font-size:12px;color:var(--gold)">⭐ Max Level 20 Reached</div>
+      </div>`;
+    }
+
+    // XP Award
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">AWARD XP</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="xpAward_${char.id}" type="number" min="0" placeholder="e.g. 300" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:14px">
+        <button class="btn btn-primary" style="width:auto;padding:8px 14px;margin:0" onclick="awardXP(${char.id})">+XP</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Total XP: <strong style="color:var(--gold)">${(char.xp||0).toLocaleString()}</strong></div>
+    </div>`;
+
+    // DM Effects
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:10px">DM EFFECTS</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        ${[
+          {k:'inspiration',label:'Inspiration',icon:'🌟',desc:'Advantage on one roll'},
+          {k:'exhaustion',label:'Exhaustion',icon:'💤',desc:`Level ${effects.exhaustion||0}/6`},
+          {k:'concentration',label:'Concentrating',icon:'🎯',desc:'Maintaining a spell'},
+          {k:'raging',label:'Raging',icon:'🔥',desc:'+2 STR dmg, resistance'},
+          {k:'blessed',label:'Blessed',icon:'✨',desc:'+1d4 attacks & saves'},
+          {k:'cursed',label:'Cursed',icon:'🩸',desc:'DM-assigned curse'},
+          {k:'polymorphed',label:'Polymorphed',icon:'🦎',desc:'Shape changed'},
+          {k:'hidden',label:'Hidden',icon:'🗡',desc:'Advantage on attacks'},
+        ].map(e => {
+          const active = effects[e.k];
+          return `<div onclick="toggleEffect(${char.id},'${e.k}')" style="background:${active?'var(--gold-dim)':'var(--surface)'};border:1px solid ${active?'var(--gold)':'var(--border)'};border-radius:10px;padding:10px;cursor:pointer;transition:var(--trans);text-align:center">
+            <div style="font-size:22px">${e.icon}</div>
+            <div style="font-family:'Cinzel',serif;font-size:9px;color:${active?'var(--gold)':'var(--muted)'};letter-spacing:0.5px;margin-top:3px">${e.label}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">${e.k==='exhaustion'?`Level ${effects.exhaustion||0}/6`:e.desc}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      ${(effects.exhaustion||0) > 0 ? `<div style="margin-top:8px;display:flex;gap:6px;align-items:center">
+        <span style="font-size:12px;color:var(--muted)">Exhaustion:</span>
+        <button class="icon-btn" onclick="adjustExhaustion(${char.id},-1)" style="width:28px;height:28px;font-size:16px">−</button>
+        <span style="font-family:'Cinzel',serif;color:var(--red);font-size:14px">${effects.exhaustion}</span>
+        <button class="icon-btn" onclick="adjustExhaustion(${char.id},1)" style="width:28px;height:28px;font-size:16px">+</button>
+      </div>`:''}
+      <div style="margin-top:10px">
+        <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">CUSTOM EFFECT</div>
+        <div style="display:flex;gap:6px">
+          <input id="customEffect_${char.id}" placeholder="e.g. Blessed by Tymora" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:12px">
+          <button class="btn btn-primary" style="width:auto;padding:7px 12px;margin:0;font-size:11px" onclick="addCustomEffect(${char.id})">Add</button>
+        </div>
+        ${(char.customEffects||[]).map((e,i)=>`<div style="display:flex;align-items:center;gap:6px;margin-top:6px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px">
+          <span style="font-size:12px;flex:1;color:var(--purple)">✦ ${e}</span>
+          <span class="icon-btn" style="color:var(--red);font-size:14px" onclick="removeCustomEffect(${char.id},${i})">✕</span>
+        </div>`).join('')}
+      </div>
+    </div>`;
+
+    // Ability Score edit
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:10px">EDIT ABILITY SCORES</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+        ${['STR','DEX','CON','INT','WIS','CHA'].map(ab=>`
+          <div style="text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px">
+            <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px">${ab}</div>
+            <input type="number" min="1" max="30" value="${char.abilities[ab]}"
+              style="width:100%;text-align:center;background:transparent;border:none;font-family:'Cinzel',serif;font-size:18px;color:var(--text)"
+              onchange="updateAbility(${char.id},'${ab}',+this.value)">
+            <div style="font-size:11px;color:var(--gold)">${getMod(char.abilities[ab])}</div>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  // ── LEVEL & PROFICIENCY (always visible) ──
+  html += `<div class="divider"><span>Progression</span></div>
+  <div class="stat-strip-sm" style="margin-bottom:12px">
+    <div class="stat-pill-sm"><strong>LEVEL</strong>${char.level}</div>
+    <div class="stat-pill-sm"><strong>PROF BONUS</strong>+${pb}</div>
+    <div class="stat-pill-sm"><strong>XP</strong>${(char.xp||0).toLocaleString()}</div>
+    ${char.level<20?`<div class="stat-pill-sm"><strong>NEXT</strong>${xpForLevel(char.level+1).toLocaleString()}</div>`:''}
+  </div>`;
+
+  // XP progress bar
+  if(char.level < 20){
+    const xpNow = char.xp||0;
+    const xpCurr = xpForLevel(char.level);
+    const xpNext = xpForLevel(char.level+1);
+    const pct = Math.min(100, Math.round((xpNow-xpCurr)/(xpNext-xpCurr)*100));
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:6px">
+        <span style="font-family:'Cinzel',serif;font-size:10px">XP TO LEVEL ${char.level+1}</span>
+        <span>${xpNow.toLocaleString()} / ${xpNext.toLocaleString()}</span>
+      </div>
+      <div style="height:6px;background:var(--surface);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:var(--gold);border-radius:3px;transition:width 0.5s"></div>
+      </div>
+    </div>`;
+  }
+
+  // ── FEATS ──
+  html += `<div class="divider"><span>Feats</span></div>`;
+  if(feats.length){
+    html += feats.map((f,i)=>`<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:10px 12px;margin-bottom:7px">
+      <span style="font-size:18px">⚡</span>
+      <span style="font-family:'Cinzel',serif;font-size:12px;color:var(--purple);flex:1">${f}</span>
+      ${isDM?`<span class="icon-btn" style="color:var(--red)" onclick="removeFeat(${char.id},${i})">✕</span>`:''}
+    </div>`).join('');
+  } else {
+    html += `<div style="font-size:12px;color:var(--muted);font-style:italic;margin-bottom:10px">No feats yet.</div>`;
+  }
+  if(isDM){
+    html += `<div style="display:flex;gap:6px;margin-bottom:14px">
+      <select id="featPick_${char.id}" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px">
+        <option value="">Select a feat…</option>
+        ${FEATS_5E.map(f=>`<option value="${f}">${f}</option>`).join('')}
+      </select>
+      <button class="btn btn-primary" style="width:auto;padding:8px 12px;margin:0" onclick="grantFeat(${char.id})">Grant</button>
+    </div>`;
+  }
+
+  // ── ACTIVE EFFECTS DISPLAY (always) ──
+  const activeEffects = Object.entries(effects||{}).filter(([k,v])=>v);
+  const customFx = char.customEffects||[];
+  if(activeEffects.length || customFx.length){
+    html += `<div class="divider"><span>Active Effects</span></div>`;
+    const effectLabels = {inspiration:'🌟 Inspiration',exhaustion:`💤 Exhaustion Lv${effects.exhaustion||1}`,
+      concentration:'🎯 Concentrating',raging:'🔥 Raging',blessed:'✨ Blessed',cursed:'🩸 Cursed',
+      polymorphed:'🦎 Polymorphed',hidden:'🗡 Hidden'};
+    activeEffects.forEach(([k])=>{if(effectLabels[k]) html+=`<div class="cond-tag" style="--chip-c:var(--gold);display:inline-flex;margin:3px">${effectLabels[k]}</div>`;});
+    customFx.forEach(e=>{ html+=`<div class="cond-tag" style="--chip-c:var(--purple);display:inline-flex;margin:3px">✦ ${e}</div>`;});
+    html += '<div style="margin-bottom:12px"></div>';
+  }
+
+  // ── ASI HISTORY ──
+  const asiHistory = char.asiHistory || [];
+  if(asiHistory.length){
+    html += `<div class="divider"><span>Ability Score History</span></div>`;
+    html += asiHistory.map(a=>`<div style="font-size:12px;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--border)">Lv${a.level}: ${a.desc}</div>`).join('');
+    html += '<div style="margin-bottom:12px"></div>';
+  }
+
+  document.getElementById('stab-progress').innerHTML = html;
+}
+
+function xpForLevel(level){
+  const xpTable=[0,0,300,900,2700,6500,14000,23000,34000,48000,64000,85000,100000,120000,140000,165000,195000,225000,265000,305000,355000];
+  return xpTable[Math.min(level,20)]||0;
+}
+
+function awardXP(charId){
+  const el = document.getElementById(`xpAward_${charId}`);
+  const amount = parseInt(el?.value)||0;
+  if(!amount){toast('Enter an XP amount','var(--red)');return;}
+  const chars = getChars();
+  const ci = chars.findIndex(c=>c.id===charId);
+  if(ci<0) return;
+  chars[ci].xp = (chars[ci].xp||0) + amount;
+  saveChars(chars);
+  el.value='';
+  toast(`+${amount} XP awarded!`);
+  const char = chars[ci];
+  const cls = CLASSES[char.classIdx];
+  renderProgressTab(char, cls);
+  // Auto level-up suggestion
+  if(char.level < 20 && char.xp >= xpForLevel(char.level+1)){
+    toast(`⬆ ${char.name} has enough XP for Level ${char.level+1}!`,'var(--gold)');
+  }
+}
+
+function levelUp(charId){
+  const chars = getChars();
+  const ci = chars.findIndex(c=>c.id===charId);
+  if(ci<0) return;
+  const char = chars[ci];
+  const cls = CLASSES[char.classIdx];
+  if(char.level >= 20){toast('Already max level!','var(--gold)');return;}
+
+  const newLevel = char.level + 1;
+  const conMod = parseInt(getMod(char.abilities.CON))||0;
+  const hpGain = Math.ceil(cls.hit/2)+1+conMod; // average HP gain
+  chars[ci].level = newLevel;
+  chars[ci].maxHP = (chars[ci].maxHP||0) + hpGain;
+  chars[ci].currentHP = Math.min(chars[ci].currentHP + hpGain, chars[ci].maxHP);
+
+  // Auto-set XP to minimum for new level
+  const xpMin = xpForLevel(newLevel);
+  if((chars[ci].xp||0) < xpMin) chars[ci].xp = xpMin;
+
+  saveChars(chars);
+  toast(`⬆ ${char.name} is now Level ${newLevel}! +${hpGain} HP`,'var(--gold)');
+  renderSheetHero(chars[ci], cls, 'sheetHero');
+  renderProgressTab(chars[ci], cls);
+
+  // Check if this level grants ASI/Feat
+  const asiLevels = getASILevels(cls.name);
+  if(asiLevels.includes(newLevel)){
+    setTimeout(()=>showASIModal(charId, newLevel), 500);
+  }
+}
+
+function showASIModal(charId, level){
+  const char = getChars().find(c=>c.id===charId);
+  if(!char) return;
+  const cls = CLASSES[char.classIdx];
+
+  // Build modal
+  const modal = document.createElement('div');
+  modal.id = 'asiModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--gold);border-radius:16px;padding:24px;max-width:380px;width:100%">
+      <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold);margin-bottom:4px">Level ${level} — ASI or Feat</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Choose: increase ability scores (+2 to one or +1/+1 to two), or take a feat.</p>
+      <div class="tab-row" style="margin-bottom:14px">
+        <button class="tab-btn active" onclick="asiModalTab('scores')">Ability Scores</button>
+        <button class="tab-btn" onclick="asiModalTab('feat')">Feat</button>
+      </div>
+      <div id="asiScoresPane">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Distribute 2 points:</p>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+          ${['STR','DEX','CON','INT','WIS','CHA'].map(ab=>`
+            <div style="text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px">
+              <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted)">${ab}</div>
+              <div style="font-family:'Cinzel',serif;font-size:18px;color:var(--text)">${char.abilities[ab]}</div>
+              <div style="display:flex;justify-content:center;gap:4px;margin-top:4px">
+                <button onclick="asiAdjust('${ab}',-1)" style="width:22px;height:22px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:14px">−</button>
+                <span id="asiDelta_${ab}" style="font-size:14px;color:var(--gold);min-width:16px;text-align:center">0</span>
+                <button onclick="asiAdjust('${ab}',+1)" style="width:22px;height:22px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:14px">+</button>
+              </div>
+            </div>`).join('')}
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Points remaining: <span id="asiPointsLeft" style="color:var(--gold);font-family:'Cinzel',serif">2</span></div>
+        <button class="btn btn-gold" onclick="confirmASI(${charId},${level})">Apply Ability Score Increase</button>
+      </div>
+      <div id="asiFeatPane" style="display:none">
+        <select id="asiModalFeat" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;margin-bottom:12px">
+          <option value="">Select a feat…</option>
+          ${FEATS_5E.map(f=>`<option>${f}</option>`).join('')}
+        </select>
+        <button class="btn btn-gold" onclick="confirmFeatFromASI(${charId},${level})">Take Feat</button>
+      </div>
+      <button class="btn btn-outline" onclick="document.getElementById('asiModal').remove()" style="margin-top:8px">Decide Later</button>
+    </div>`;
+  document.body.appendChild(modal);
+  window._asiDeltas = {STR:0,DEX:0,CON:0,INT:0,WIS:0,CHA:0};
+}
+
+function asiModalTab(t){
+  document.getElementById('asiScoresPane').style.display = t==='scores'?'':'none';
+  document.getElementById('asiFeatPane').style.display = t==='feat'?'':'none';
+  const btns = document.querySelectorAll('#asiModal .tab-btn');
+  btns[0].classList.toggle('active', t==='scores');
+  btns[1].classList.toggle('active', t==='feat');
+}
+
+function asiAdjust(ab, delta){
+  if(!window._asiDeltas) return;
+  const total = Object.values(window._asiDeltas).reduce((a,b)=>a+b,0);
+  const cur = window._asiDeltas[ab];
+  if(delta > 0 && total >= 2) return;
+  if(delta < 0 && cur <= 0) return;
+  window._asiDeltas[ab] = cur + delta;
+  document.getElementById(`asiDelta_${ab}`).textContent = window._asiDeltas[ab]||'0';
+  document.getElementById('asiPointsLeft').textContent = 2 - Object.values(window._asiDeltas).reduce((a,b)=>a+b,0);
+}
+
+function confirmASI(charId, level){
+  const deltas = window._asiDeltas||{};
+  const total = Object.values(deltas).reduce((a,b)=>a+b,0);
+  if(total !== 2){toast('Must use exactly 2 points','var(--red)');return;}
+  const chars = getChars();
+  const ci = chars.findIndex(c=>c.id===charId);
+  if(ci<0) return;
+  const changes = [];
+  Object.entries(deltas).forEach(([ab,d])=>{
+    if(d>0){ chars[ci].abilities[ab] = Math.min(20,(chars[ci].abilities[ab]||10)+d); changes.push(`${ab}+${d}`); }
+  });
+  chars[ci].asiHistory = chars[ci].asiHistory||[];
+  chars[ci].asiHistory.push({level, desc:'ASI: '+changes.join(', ')});
+  saveChars(chars);
+  document.getElementById('asiModal')?.remove();
+  toast('✦ Ability scores increased: '+changes.join(', '),'var(--gold)');
+  renderProgressTab(chars[ci], CLASSES[chars[ci].classIdx]);
+  renderSheetHero(chars[ci], CLASSES[chars[ci].classIdx], 'sheetHero');
+}
+
+function confirmFeatFromASI(charId, level){
+  const feat = document.getElementById('asiModalFeat')?.value;
+  if(!feat){toast('Select a feat','var(--red)');return;}
+  const chars = getChars();
+  const ci = chars.findIndex(c=>c.id===charId);
+  if(ci<0) return;
+  chars[ci].feats = chars[ci].feats||[];
+  chars[ci].feats.push(feat);
+  chars[ci].asiHistory = chars[ci].asiHistory||[];
+  chars[ci].asiHistory.push({level, desc:'Feat: '+feat});
+  saveChars(chars);
+  document.getElementById('asiModal')?.remove();
+  toast('✦ Feat granted: '+feat,'var(--purple)');
+  renderProgressTab(chars[ci], CLASSES[chars[ci].classIdx]);
+}
+
+function grantFeat(charId){
+  const sel = document.getElementById(`featPick_${charId}`);
+  const feat = sel?.value;
+  if(!feat){toast('Select a feat first','var(--red)');return;}
+  const chars = getChars();
+  const ci = chars.findIndex(c=>c.id===charId);
+  if(ci<0) return;
+  chars[ci].feats = chars[ci].feats||[];
+  if(chars[ci].feats.includes(feat)){toast('Already has this feat','var(--gold)');return;}
+  chars[ci].feats.push(feat);
+  saveChars(chars);
+  sel.value='';
+  toast('✦ Feat granted: '+feat,'var(--purple)');
+  renderProgressTab(chars[ci], CLASSES[chars[ci].classIdx]);
+}
+
+function removeFeat(charId, idx){
+  const chars = getChars();
+  const ci = chars.findIndex(c=>c.id===charId);
+  if(ci<0) return;
+  chars[ci].feats.splice(idx,1);
+  saveChars(chars);
+  renderProgressTab(chars[ci], CLASSES[chars[ci].classIdx]);
+}
+
+function toggleEffect(charId, effectKey){
+  const chars = getChars();
+  const ci = chars.findIndex(c=>c.id===charId);
+  if(ci<0) return;
+  chars[ci].effects = chars[ci].effects||{};
+  if(effectKey==='exhaustion'){
+    // cycle exhaustion 0->1->...->6->0
+    const cur = chars[ci].effects.exhaustion||0;
+    chars[ci].effects.exhaustion = cur >= 6 ? 0 : cur+1;
+    if(!chars[ci].effects.exhaustion) delete chars[ci].effects.exhaustion;
+  } else {
+    chars[ci].effects[effectKey] = !chars[ci].effects[effectKey];
+    if(!chars[ci].effects[effectKey]) delete chars[ci].effects[effectKey];
+  }
+  saveChars(chars);
+  renderProgressTab(chars[ci], CLASSES[chars[ci].classIdx]);
+}
+
+function adjustExhaustion(charId, delta){
+  const chars = getChars();
+  const ci = chars.findIndex(c=>c.id===charId);
+  if(ci<0) return;
+  chars[ci].effects = chars[ci].effects||{};
+  const cur = chars[ci].effects.exhaustion||0;
+  const newVal = Math.max(0, Math.min(6, cur+delta));
+  if(newVal===0) delete chars[ci].effects.exhaustion;
+  else chars[ci].effects.exhaustion = newVal;
+  saveChars(chars);
+  renderProgressTab(chars[ci], CLASSES[chars[ci].classIdx]);
+}
+
+function updateAbility(charId, ab, val){
+  const chars = getChars();
+  const ci = chars.findIndex(c=>c.id===charId);
+  if(ci<0) return;
+  chars[ci].abilities[ab] = Math.max(1, Math.min(30, val||10));
+  // Recalculate max HP on CON change
+  if(ab==='CON'){
+    const cls = CLASSES[chars[ci].classIdx];
+    chars[ci].maxHP = getMaxHP(cls, chars[ci].level, chars[ci].abilities.CON);
+    chars[ci].currentHP = Math.min(chars[ci].currentHP, chars[ci].maxHP);
+  }
+  saveChars(chars);
+  renderSheetHero(chars[ci], CLASSES[chars[ci].classIdx], 'sheetHero');
+}
+
+function addCustomEffect(charId){
+  const el = document.getElementById(`customEffect_${charId}`);
+  const text = el?.value.trim();
+  if(!text){toast('Enter an effect name','var(--red)');return;}
+  const chars = getChars();
+  const ci = chars.findIndex(c=>c.id===charId);
+  if(ci<0) return;
+  chars[ci].customEffects = chars[ci].customEffects||[];
+  chars[ci].customEffects.push(text);
+  saveChars(chars);
+  el.value='';
+  renderProgressTab(chars[ci], CLASSES[chars[ci].classIdx]);
+  toast('Effect added');
+}
+
+function removeCustomEffect(charId, idx){
+  const chars = getChars();
+  const ci = chars.findIndex(c=>c.id===charId);
+  if(ci<0) return;
+  chars[ci].customEffects.splice(idx,1);
+  saveChars(chars);
+  renderProgressTab(chars[ci], CLASSES[chars[ci].classIdx]);
+}
+
+/* ══ COMBAT TAB: show active effects ══ */
+// Patch renderCombatTab to show effects badge (called after original)
+const _origRenderCombatTab = renderCombatTab;
+function renderCombatTab(char, cls, elId, editable){
+  _origRenderCombatTab(char, cls, elId, editable);
+  // Append effects to combat tab
+  const effects = char.effects||{};
+  const customFx = char.customEffects||[];
+  const active = Object.entries(effects).filter(([,v])=>v);
+  if(active.length || customFx.length){
+    const el = document.getElementById(elId);
+    const effectLabels = {inspiration:'🌟 Inspiration',exhaustion:`💤 Exhaustion Lv${effects.exhaustion}`,
+      concentration:'🎯 Concentrating',raging:'🔥 Raging',blessed:'✨ Blessed',cursed:'🩸 Cursed',
+      polymorphed:'🦎 Polymorphed',hidden:'🗡 Hidden'};
+    let badge = '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:10px">';
+    active.forEach(([k])=>{ if(effectLabels[k]) badge+=`<span class="cond-tag" style="--chip-c:var(--gold)">${effectLabels[k]}</span>`;});
+    customFx.forEach(e=>{ badge+=`<span class="cond-tag" style="--chip-c:var(--purple)">✦ ${e}</span>`;});
+    badge += '</div>';
+    el.innerHTML += badge;
+  }
+}
+
+/* ══ CHARACTER SHEET IMPORT ══ */
+function showCharImport(){
+  const modal = document.createElement('div');
+  modal.id = 'charImportModal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:0';
+  modal.innerHTML=`
+    <div style="background:var(--bg2);border-top:1px solid var(--border);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto">
+      <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold);margin-bottom:8px">Import Character Sheet</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.5">Paste a character export code (from another device or DM), or paste raw JSON character data.</p>
+      <div class="field"><label>Export Code or JSON</label>
+        <textarea id="charImportData" placeholder="Paste export code or JSON here…" style="min-height:100px;font-size:12px;word-break:break-all"></textarea>
+      </div>
+      <button class="btn btn-gold" onclick="doCharImport()">Import Character</button>
+      <button class="btn btn-outline" onclick="document.getElementById('charImportModal').remove()">Cancel</button>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function doCharImport(){
+  const raw = document.getElementById('charImportData')?.value.trim();
+  if(!raw){toast('Paste some data first','var(--red)');return;}
+  let char = null;
+  // Try base64 decode first
+  try {
+    char = decodeChar(raw);
+  } catch(e){}
+  // Try raw JSON
+  if(!char || !char.name){
+    try { char = JSON.parse(raw); } catch(e){}
+  }
+  if(!char || !char.name){toast('Could not parse character data','var(--red)');return;}
+  // Ensure required fields
+  char.id = Date.now();
+  char.shareCode = char.shareCode||genCode();
+  char.currentHP = char.currentHP||char.maxHP||10;
+  char.statuses = char.statuses||[];
+  char.spells = char.spells||[];
+  char.attacks = char.attacks||[];
+  char.equipment = char.equipment||[];
+  char.feats = char.feats||[];
+  char.effects = char.effects||{};
+  char.customEffects = char.customEffects||[];
+  char.xp = char.xp||0;
+  // Validate classIdx
+  if(char.classIdx===undefined && char.class){
+    char.classIdx = CLASSES.findIndex(c=>c.name.toLowerCase()===char.class.toLowerCase());
+    if(char.classIdx<0) char.classIdx=0;
+  }
+  if(char.classIdx===undefined) char.classIdx=0;
+  const chars = getChars();
+  chars.push(char);
+  saveChars(chars);
+  document.getElementById('charImportModal')?.remove();
+  toast('✦ '+char.name+' imported!');
+  renderRoster();
+}
+
 function bootApp(){
   const mode=S.get('toh_mode');
   const nav_bar=document.querySelector('.bottomnav');
 
-  // Auto-install preset campaigns on first launch if none exist
-  if(!S.get('toh_camps_seeded') && getCampaigns().length === 0) {
-    const installed = [];
-    PRESET_CAMPAIGNS.forEach(p => {
+  // Ensure preset campaigns are always installed (check by ID, not by flag)
+  const PRESET_IDS = PRESET_CAMPAIGNS.map(p => p.id);
+  const existingIds = getCampaigns().map(c => c.id);
+  const missingPresets = PRESET_CAMPAIGNS.filter(p => !existingIds.includes(p.id));
+  if (missingPresets.length > 0) {
+    const camps = getCampaigns();
+    missingPresets.forEach(p => {
       try {
         const b64 = p.code.replace(/[-_]/g, x => ({'-':'+','_':'/'})[x]);
         const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
@@ -1808,15 +2348,12 @@ function bootApp(){
           camp.sessions = camp.sessions||[]; camp.quests = camp.quests||[];
           camp.npcs = camp.npcs||[]; camp.arcs = camp.arcs||[];
           camp.notes = camp.notes||[]; camp.charIds = camp.charIds||[];
-          installed.push(camp);
+          camps.push(camp);
         }
       } catch(e) {}
     });
-    if (installed.length) {
-      saveCampaigns(installed);
-      setActiveCampId(installed[0].id);
-    }
-    S.set('toh_camps_seeded', true);
+    saveCampaigns(camps);
+    if (!getActiveCampId() && camps.length) setActiveCampId(camps[0].id);
   }
 
   if(!mode){
@@ -2052,22 +2589,30 @@ function showImportCampForm() {
 function renderPresetCampaigns() {
   const el = document.getElementById('presetCampsGrid');
   if (!el) return;
-  el.innerHTML = PRESET_CAMPAIGNS.map(p => `
-    <div onclick="installPreset('${p.id}')" style="background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:13px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:var(--trans);margin-bottom:8px;">
+  const existingIds = getCampaigns().map(c => c.id);
+  el.innerHTML = PRESET_CAMPAIGNS.map(p => {
+    const installed = existingIds.includes(p.id);
+    return `
+    <div onclick="installPreset('${p.id}')" style="background:var(--surface2);border:1px solid ${installed?'var(--green)':'var(--border)'};border-radius:11px;padding:13px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:var(--trans);margin-bottom:8px;">
       <span style="font-size:32px">${p.icon}</span>
       <div style="flex:1">
         <div style="font-family:'Cinzel',serif;font-size:13px;color:var(--gold)">${p.label}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:3px">${p.desc}</div>
+        ${installed?`<div style="font-size:10px;color:var(--green);margin-top:3px">✓ Installed</div>`:''}
       </div>
-      <span style="font-family:'Cinzel',serif;font-size:10px;color:var(--purple);border:1px solid var(--purple);padding:4px 10px;border-radius:8px">Install</span>
-    </div>
-  `).join('');
+      <span style="font-family:'Cinzel',serif;font-size:10px;color:${installed?'var(--green)':'var(--purple)'};border:1px solid ${installed?'var(--green)':'var(--purple)'};padding:4px 10px;border-radius:8px">${installed?'Reinstall':'Install'}</span>
+    </div>`;
+  }).join('');
 }
 
 function installPreset(id) {
   const preset = PRESET_CAMPAIGNS.find(p => p.id === id);
   if (!preset) return;
+  // Remove existing version first so it gets a clean reinstall
+  const camps = getCampaigns().filter(c => c.id !== id);
+  saveCampaigns(camps);
   doImportCampaign(preset.code);
+  setTimeout(renderPresetCampaigns, 300);
 }
 
 function importCampaign() {
