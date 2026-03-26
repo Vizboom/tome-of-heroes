@@ -2635,16 +2635,259 @@ function showCharImport(){
   modal.id = 'charImportModal';
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:0';
   modal.innerHTML=`
-    <div style="background:var(--bg2);border-top:1px solid var(--border);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto">
-      <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold);margin-bottom:4px">Import Character Sheet</div>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Supports: Tome of Heroes export codes, raw character JSON, or <strong style="color:var(--gold)">D&D Beyond JSON format</strong> (schema_version: 1).</p>
-      <div class="field"><label>Export Code or JSON</label>
-        <textarea id="charImportData" placeholder="Paste export code, JSON, or D&D Beyond JSON here…" style="min-height:120px;font-size:12px;word-break:break-all"></textarea>
+    <div style="background:var(--bg2);border-top:1px solid var(--border);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto">
+      <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold);margin-bottom:12px">Import Character Sheet</div>
+      <div class="tab-row" style="margin-bottom:14px">
+        <button class="tab-btn active" onclick="importTab('code',this)">Code / JSON</button>
+        <button class="tab-btn" onclick="importTab('pdf',this)">📄 PDF</button>
       </div>
-      <button class="btn btn-gold" onclick="doCharImport()">Import Character</button>
-      <button class="btn btn-outline" onclick="document.getElementById('charImportModal').remove()">Cancel</button>
+
+      <div id="importPaneCode">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Paste a Tome of Heroes export code, raw JSON, or <strong style="color:var(--gold)">D&D Beyond JSON</strong> (schema_version: 1).</p>
+        <div class="field"><label>Export Code or JSON</label>
+          <textarea id="charImportData" placeholder="Paste export code, JSON, or D&D Beyond JSON here…" style="min-height:120px;font-size:12px;word-break:break-all"></textarea>
+        </div>
+        <button class="btn btn-gold" onclick="doCharImport()">Import Character</button>
+      </div>
+
+      <div id="importPanePdf" style="display:none">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">
+          Upload a <strong style="color:var(--gold)">D&D Beyond PDF character sheet</strong> and it will be parsed automatically.
+        </p>
+        <div onclick="document.getElementById('pdfFileInput').click()"
+          style="border:2px dashed var(--border);border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:var(--trans)"
+          onmouseenter="this.style.borderColor='var(--gold)'" onmouseleave="this.style.borderColor='var(--border)'"
+          id="pdfDropZone">
+          <div style="font-size:36px;margin-bottom:8px">📄</div>
+          <div style="font-family:'Cinzel',serif;font-size:12px;color:var(--gold)">Tap to select PDF</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">D&D Beyond character sheet export</div>
+        </div>
+        <input type="file" id="pdfFileInput" accept=".pdf" style="display:none" onchange="handlePdfUpload(this)">
+        <div id="pdfStatus" style="margin-top:12px;font-size:12px;color:var(--muted);text-align:center;min-height:20px"></div>
+        <div id="pdfPreview" style="margin-top:8px"></div>
+      </div>
+
+      <button class="btn btn-outline" onclick="document.getElementById('charImportModal').remove()" style="margin-top:8px">Cancel</button>
     </div>`;
   document.body.appendChild(modal);
+}
+
+function importTab(tab, btn){
+  document.querySelectorAll('#charImportModal .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('importPaneCode').style.display = tab==='code' ? '' : 'none';
+  document.getElementById('importPanePdf').style.display  = tab==='pdf'  ? '' : 'none';
+}
+
+async function handlePdfUpload(input){
+  const file = input.files[0];
+  if(!file) return;
+  const statusEl = document.getElementById('pdfStatus');
+  const previewEl = document.getElementById('pdfPreview');
+  statusEl.textContent = '⏳ Reading PDF…';
+  previewEl.innerHTML = '';
+
+  try {
+    const text = await extractPdfText(file);
+    if(!text || text.trim().length < 50){
+      statusEl.textContent = '⚠ Could not extract text — is this a scanned PDF?';
+      return;
+    }
+    statusEl.textContent = '🔍 Parsing character data…';
+    const char = parsePdfCharSheet(text);
+    if(!char || !char.name){
+      statusEl.textContent = '⚠ Could not find character data. Try the JSON export from D&D Beyond instead.';
+      return;
+    }
+    statusEl.textContent = '';
+    // Show preview
+    const cls = CLASSES[char.classIdx];
+    previewEl.innerHTML = `
+      <div style="background:var(--surface2);border:1px solid var(--gold);border-radius:12px;padding:14px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:28px">${cls.icon}</span>
+          <div>
+            <div style="font-family:'Cinzel',serif;font-size:15px;color:var(--gold)">${char.name}</div>
+            <div style="font-size:12px;color:var(--muted)">Level ${char.level} ${char.race} ${cls.name}${char.subclass?' · '+char.subclass.replace(/ \(.*?\)/,''):''}</div>
+          </div>
+        </div>
+        <div class="stat-strip-sm" style="margin-bottom:8px">
+          ${['STR','DEX','CON','INT','WIS','CHA'].map(ab=>`<div class="stat-pill-sm"><strong>${ab}</strong>${char.abilities[ab]}</div>`).join('')}
+        </div>
+        <div style="font-size:11px;color:var(--muted)">${char.maxHP} HP · AC ${char.ac||'—'} · ${char.background}</div>
+        ${char.attacks&&char.attacks.length?`<div style="font-size:11px;color:var(--muted);margin-top:4px">Attacks: ${char.attacks.map(a=>a.name).join(', ')}</div>`:''}
+        ${char.feats&&char.feats.length?`<div style="font-size:11px;color:var(--purple);margin-top:4px">Feats: ${char.feats.join(', ')}</div>`:''}
+      </div>
+      <button class="btn btn-gold" onclick="confirmPdfImport()" style="margin-bottom:0">✦ Import ${char.name}</button>`;
+    window._pendingPdfChar = char;
+  } catch(e) {
+    statusEl.textContent = '⚠ Error reading PDF: ' + e.message;
+    console.error(e);
+  }
+}
+
+async function extractPdfText(file){
+  // Use PDF.js via CDN to extract text client-side
+  if(!window.pdfjsLib){
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = '';
+  for(let i = 1; i <= pdf.numPages; i++){
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    // Sort items by y then x for reading order
+    const items = content.items.sort((a,b) => {
+      const dy = Math.round(b.transform[5]) - Math.round(a.transform[5]);
+      return dy !== 0 ? dy : a.transform[4] - b.transform[4];
+    });
+    fullText += items.map(item => item.str).join(' ') + '\n';
+  }
+  return fullText;
+}
+
+function parsePdfCharSheet(text){
+  // Normalise whitespace
+  const t = text.replace(/\s+/g,' ');
+  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+
+  const get = (pattern, group=1, flags='i') => {
+    const m = t.match(new RegExp(pattern, flags));
+    return m ? m[group].trim() : '';
+  };
+
+  // ── Name ── usually one of the first large text items
+  // Try common DDB PDF patterns
+  let name = get(/^([A-Z][a-zA-Z\s'\-]{2,30})\s+CHARACTER\s+NAME/m) ||
+             get(/CHARACTER\s+NAME\s+([A-Z][a-zA-Z\s'\-]{2,30})/m) ||
+             get(/^([A-Z][a-zA-Z\s'\-]{2,30})\s+(?:Level|Lvl|LVL)/m) ||
+             lines.find(l=>l.match(/^[A-Z][a-z]+ [A-Z][a-z]+$/) && l.length < 30) || '';
+
+  // ── Class & Level ──
+  const classLevel = get(/CLASS\s*(?:&\s*LEVEL|AND\s+LEVEL)?\s*([A-Za-z\s]+?)\s+(\d+)/i) ||
+                     get(/([A-Za-z]+(?:\s[A-Za-z]+)?)\s+(\d{1,2})\s+(?:\/|Level)/i);
+  let className = '', level = 1;
+  const clMatch = t.match(/(?:Barbarian|Bard|Cleric|Druid|Fighter|Monk|Paladin|Ranger|Rogue|Sorcerer|Warlock|Wizard)\s+(\d{1,2})/i);
+  if(clMatch){ className = clMatch[0].replace(/\d+/,'').trim(); level = parseInt(clMatch[1])||1; }
+
+  // ── Race ──
+  const race = get(/RACE\s+([A-Za-z\s\-']+?)(?:\s+(?:CLASS|BACKGROUND|ALIGNMENT|EXPERIENCE|STR|DEX))/i) ||
+               get(/([A-Za-z\s\-]+?)\s+RACE/i) || '';
+
+  // ── Background ──
+  const background = get(/BACKGROUND\s+([A-Za-z\s\-]+?)(?:\s+(?:ALIGNMENT|CLASS|RACE|EXPERIENCE))/i) || 'Custom';
+
+  // ── Alignment ──
+  const alignment = get(/ALIGNMENT\s+([A-Za-z\s]+?)(?:\s+(?:EXPERIENCE|CLASS|RACE|BACKGROUND))/i) || '';
+
+  // ── Ability Scores ── DDB PDFs list them as pairs: number then modifier
+  const abOrder = ['STR','DEX','CON','INT','WIS','CHA'];
+  const abilities = {STR:10,DEX:10,CON:10,INT:10,WIS:10,CHA:10};
+  // Try to find each ability
+  abOrder.forEach(ab => {
+    const patterns = [
+      new RegExp(ab + '\\w*\\s+(\\d{1,2})\\s+[+\\-]?\\d'),
+      new RegExp('(\\d{1,2})\\s+[+\\-]?\\d+\\s+' + ab),
+      new RegExp(ab + '[A-Z]*\\s*[:\\-]?\\s*(\\d{1,2})')
+    ];
+    for(const p of patterns){
+      const m = t.match(p);
+      if(m){ abilities[ab] = Math.min(30, Math.max(1, parseInt(m[1]))); break; }
+    }
+  });
+
+  // ── HP ──
+  const maxHP = parseInt(get(/(?:MAX(?:IMUM)?\s+HIT\s+POINTS?|HP\s+MAX|HIT\s+POINT\s+MAX(?:IMUM)?)\s*:?\s*(\d+)/i)) ||
+                parseInt(get(/(\d+)\s+(?:MAX(?:IMUM)?\s+)?HIT\s+POINTS?/i)) || 0;
+  const currentHP = parseInt(get(/CURRENT\s+HIT\s+POINTS?\s*:?\s*(\d+)/i)) || maxHP;
+
+  // ── AC ──
+  const ac = parseInt(get(/(?:ARMOR\s+CLASS|AC)\s*:?\s*(\d+)/i)) || null;
+
+  // ── Proficiency Bonus ──
+  const pb = parseInt(get(/PROFICIENCY\s+BONUS\s*:?\s*[+]?(\d)/i)) || 2;
+
+  // ── Skills (look for proficiency check marks next to skill names) ──
+  const ALL_SKILL_NAMES = ['Acrobatics','Animal Handling','Arcana','Athletics','Deception',
+    'History','Insight','Intimidation','Investigation','Medicine','Nature','Perception',
+    'Performance','Persuasion','Religion','Sleight of Hand','Stealth','Survival'];
+  const proficiencies = ALL_SKILL_NAMES.filter(sk => {
+    // DDB PDFs often show proficient skills with a filled circle or higher bonus
+    const skPat = new RegExp('[+](' + (pb) + '|' + (pb+1) + '|' + (pb+2) + '|' + (pb+3) + '|' + (pb+4) + ')\\s+' + sk.replace(/\s+/g,'\\s+'), 'i');
+    return t.match(skPat);
+  });
+
+  // ── Attacks ──
+  const attacks = [];
+  const atkPattern = /([A-Za-z\s+\-']+?)\s+([+\-]\d+)\s+([\dd+\- ]+(?:piercing|slashing|bludgeoning|fire|cold|necrotic|radiant|psychic|thunder|lightning|acid|poison|force|damage)?)/gi;
+  let atkMatch;
+  while((atkMatch = atkPattern.exec(t)) !== null && attacks.length < 6){
+    const atkName = atkMatch[1].trim();
+    if(atkName.length > 2 && atkName.length < 40 && !atkName.match(/^(STR|DEX|CON|INT|WIS|CHA|SAVE|SKILL)/i)){
+      attacks.push({ name: atkName, bonus: atkMatch[2], damage: atkMatch[3].trim(), type:'melee' });
+    }
+  }
+
+  // ── Subclass ──
+  const subclass = get(/(?:PRIMAL\s+PATH|BARDIC\s+COLLEGE|DIVINE\s+DOMAIN|DRUID\s+CIRCLE|MARTIAL\s+ARCHETYPE|MONASTIC\s+TRADITION|SACRED\s+OATH|RANGER\s+ARCHETYPE|ROGUISH\s+ARCHETYPE|SORCEROUS\s+ORIGIN|OTHERWORLDLY\s+PATRON|ARCANE\s+TRADITION)\s+([A-Za-z\s]+?)(?:\s+[A-Z]{3}|\s*$)/im) || '';
+
+  // ── Feats ──
+  const feats = FEATS_5E.filter(f => t.toLowerCase().includes(f.toLowerCase()));
+
+  // ── Match class to CLASSES array ──
+  const classIdx = Math.max(0, CLASSES.findIndex(c =>
+    c.name.toLowerCase() === className.toLowerCase() ||
+    className.toLowerCase().includes(c.name.toLowerCase())
+  ));
+  const cls = CLASSES[classIdx];
+
+  // Calculate maxHP from class if not found in PDF
+  const calcedHP = maxHP || getMaxHP(cls, level, abilities.CON);
+
+  if(!name && !className) return null;
+
+  return {
+    id: Date.now(),
+    name: name || 'Imported Character',
+    race: race || 'Human',
+    background: background || 'Custom',
+    alignment,
+    level,
+    classIdx,
+    subclass,
+    abilities,
+    proficiencies,
+    maxHP: calcedHP,
+    currentHP: currentHP || calcedHP,
+    ac,
+    statuses: [],
+    shareCode: genCode(),
+    created: Date.now(),
+    xp: 0,
+    attacks: attacks.slice(0,4),
+    spells: [],
+    equipment: [],
+    feats,
+    effects: {},
+    customEffects: [],
+    age: '', height: '', weight: '', eyes: '', hair: '',
+    traits: '', ideals: '', bonds: '', flaws: '', backstory: '', allies: '',
+  };
+}
+
+function confirmPdfImport(){
+  const char = window._pendingPdfChar;
+  if(!char){ toast('No character to import','var(--red)'); return; }
+  _finishCharImport(char, 'PDF');
+  window._pendingPdfChar = null;
 }
 
 /* Convert D&D Beyond JSON format → Tome of Heroes character object */
@@ -3916,6 +4159,11 @@ function renderSessions() {
   if (!camp) return;
   const el = document.getElementById('ctab-sessions');
   const sessions = [...(camp.sessions||[])].reverse();
+
+  // Get campaign characters for presence pills
+  const allChars = getChars();
+  const campChars = allChars.filter(c => (camp.charIds||[]).some(x=>String(x)===String(c.id)));
+
   let html = `<div class="card" style="margin-bottom:14px">
     <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">Add Session</div>
     <div class="form-row two">
@@ -3925,13 +4173,32 @@ function renderSessions() {
     <div class="field"><label>Session Summary</label><textarea id="sSummary" placeholder="What happened this session?" style="min-height:80px"></textarea></div>
     <div class="form-row two">
       <div class="field"><label>XP Awarded</label><input id="sXP" type="number" value="0" min="0"></div>
-      <div class="field"><label>Gold Awarded</label><input id="sGold" type="number" value="0" min="0"></div>
+      <div class="field"><label>Gold Awarded</label>
+        <input id="sGold" type="number" value="0" min="0" oninput="updateGoldHint(this.value)">
+        <div id="goldHint" style="font-size:10px;color:var(--gold);margin-top:3px;min-height:14px"></div>
+      </div>
     </div>
     <div class="field"><label>Highlights (one per line)</label><textarea id="sHighlights" placeholder="Key moments, loot found, decisions made…"></textarea></div>
+    ${campChars.length ? `
+    <div class="field">
+      <label>Characters Present</label>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px" id="sPresenceGrid">
+        ${campChars.map(c => {
+          const cc = classColor(c.classIdx);
+          return `<div id="sp_${c.id}" onclick="toggleSessionPresence('${c.id}')"
+            style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:transparent;cursor:pointer;transition:var(--trans)">
+            <span style="font-size:13px">${classIcon(c.classIdx)}</span>
+            <span style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted)">${c.name}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : ''}
     <button class="btn btn-primary" onclick="addSession()">Log Session</button>
   </div>`;
-  if (!sessions.length) { html += `<div class="empty-state"><div class="es-icon">📜</div><p>No sessions logged yet.<br>Start recording your adventure!</p></div>`; }
-  else {
+
+  if (!sessions.length) {
+    html += `<div class="empty-state"><div class="es-icon">📜</div><p>No sessions logged yet.<br>Start recording your adventure!</p></div>`;
+  } else {
     let totalXP = 0, totalGold = 0;
     camp.sessions.forEach(s => { totalXP += s.xpAwarded||0; totalGold += s.goldAwarded||0; });
     html += `<div class="stat-strip-sm" style="margin-bottom:12px">
@@ -3941,24 +4208,104 @@ function renderSessions() {
     </div>`;
     sessions.forEach((s, i) => {
       const realIdx = camp.sessions.findIndex(x => x.id === s.id);
+      // Build presence pills for this session
+      const presentIds = (s.presentCharIds||[]).map(String);
+      const presentChars = campChars.filter(c => presentIds.includes(String(c.id)));
+      const absentChars  = campChars.filter(c => !presentIds.includes(String(c.id)));
+      const presencePills = campChars.length ? `
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;align-items:center">
+          <span style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-right:2px">PRESENT</span>
+          ${presentChars.length ? presentChars.map(c => {
+            const cc = classColor(c.classIdx);
+            return `<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:10px;border:1px solid ${cc};background:${cc}22;font-family:'Cinzel',serif;font-size:9px;color:${cc}">
+              ${classIcon(c.classIdx)} ${c.name}
+            </span>`;
+          }).join('') : `<span style="font-size:11px;color:var(--muted);font-style:italic">None recorded</span>`}
+          ${absentChars.length && presentChars.length ? absentChars.map(c =>
+            `<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:10px;border:1px solid var(--border);background:transparent;font-family:'Cinzel',serif;font-size:9px;color:var(--muted);opacity:0.5">
+              ${classIcon(c.classIdx)} ${c.name}
+            </span>`).join('') : ''}
+        </div>` : '';
+
       html += `<div class="session-card" id="sc_${s.id}" onclick="toggleCard('sc_${s.id}')">
         <div class="session-header">
           <div class="session-num">${camp.sessions.length - i}</div>
           <div style="flex:1">
             <div class="session-title">${s.title||'Untitled Session'}</div>
             <div class="session-date">${s.date||''} ${s.xpAwarded?'· '+s.xpAwarded+' XP':''} ${s.goldAwarded?'· '+s.goldAwarded+' gp':''}</div>
+            ${presencePills}
           </div>
           <span style="color:var(--muted);font-size:12px">▼</span>
         </div>
         <div class="session-body">
           ${s.summary?`<p style="font-size:13px;line-height:1.6;margin-bottom:10px">${s.summary.replace(/\n/g,'<br>')}</p>`:''}
           ${s.highlights&&s.highlights.length?`<div style="margin-bottom:8px">${s.highlights.map(h=>`<div style="display:flex;gap:6px;align-items:baseline;font-size:12px;margin-bottom:3px"><span style="color:var(--gold)">✦</span><span style="color:var(--muted)">${h}</span></div>`).join('')}</div>`:''}
+          ${campChars.length ? `
+          <div style="margin-top:8px;margin-bottom:8px">
+            <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:5px">EDIT ATTENDANCE</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px">
+              ${campChars.map(c => {
+                const cc = classColor(c.classIdx);
+                const present = presentIds.includes(String(c.id));
+                return `<div onclick="toggleSessionCharPresence('${s.id}','${c.id}');event.stopPropagation()"
+                  style="display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:10px;border:1px solid ${present?cc:'var(--border)'};background:${present?cc+'22':'transparent'};cursor:pointer;transition:var(--trans)">
+                  <span style="font-size:13px">${classIcon(c.classIdx)}</span>
+                  <span style="font-family:'Cinzel',serif;font-size:10px;color:${present?cc:'var(--muted)'}">${c.name}</span>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>` : ''}
           <button class="icon-btn" style="color:var(--red);font-size:12px;margin-top:4px" onclick="deleteSession('${s.id}');event.stopPropagation()">✕ Delete Session</button>
         </div>
       </div>`;
     });
   }
   el.innerHTML = html;
+}
+
+// Toggle presence in the Add Session form
+let _sessionPresence = new Set();
+function toggleSessionPresence(charId){
+  const sid = String(charId);
+  const el = document.getElementById('sp_'+charId);
+  const camp = getCampaigns().find(c=>c.id===editingCampId);
+  const cc = classColor(getChars().find(c=>String(c.id)===sid)?.classIdx||0);
+  if(_sessionPresence.has(sid)){
+    _sessionPresence.delete(sid);
+    if(el){ el.style.borderColor='var(--border)'; el.style.background='transparent'; el.querySelector('span:last-child').style.color='var(--muted)'; }
+  } else {
+    _sessionPresence.add(sid);
+    if(el){ el.style.borderColor=cc; el.style.background=cc+'22'; el.querySelector('span:last-child').style.color=cc; }
+  }
+}
+
+// Toggle presence on an existing session
+function toggleSessionCharPresence(sessionId, charId){
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c=>c.id===editingCampId);
+  if(ci<0) return;
+  const si = camps[ci].sessions.findIndex(s=>s.id===sessionId);
+  if(si<0) return;
+  if(!camps[ci].sessions[si].presentCharIds) camps[ci].sessions[si].presentCharIds=[];
+  const cid = String(charId);
+  const idx = camps[ci].sessions[si].presentCharIds.findIndex(x=>String(x)===cid);
+  if(idx>=0) camps[ci].sessions[si].presentCharIds.splice(idx,1);
+  else camps[ci].sessions[si].presentCharIds.push(charId);
+  saveCampaigns(camps);
+  renderSessions();
+}
+
+// Show live gold preview in session form
+function updateGoldHint(val){
+  const el = document.getElementById('goldHint');
+  if(!el) return;
+  const gp = parseInt(val)||0;
+  if(gp > 0){
+    const current = (getWealth()['party']||{}).gp||0;
+    el.textContent = `→ Party Treasury: ${current} + ${gp} = ${current+gp} gp`;
+  } else {
+    el.textContent = '';
+  }
 }
 
 function addSession() {
@@ -3969,22 +4316,45 @@ function addSession() {
   if (ci < 0) return;
   const highlightsRaw = document.getElementById('sHighlights')?.value||'';
   const highlights = highlightsRaw.split('\n').map(h=>h.trim()).filter(Boolean);
+  const goldAwarded = parseInt(document.getElementById('sGold')?.value)||0;
+  const xpAwarded   = parseInt(document.getElementById('sXP')?.value)||0;
   const session = {
     id: genItemId(),
     title,
     date: document.getElementById('sDate')?.value||'',
     summary: document.getElementById('sSummary')?.value||'',
-    xpAwarded: parseInt(document.getElementById('sXP')?.value)||0,
-    goldAwarded: parseInt(document.getElementById('sGold')?.value)||0,
+    xpAwarded,
+    goldAwarded,
     highlights,
+    presentCharIds: [..._sessionPresence],
+    goldAddedToLoot: false, // track whether we've pushed to loot
   };
+  _sessionPresence = new Set();
   if (!camps[ci].sessions) camps[ci].sessions = [];
   camps[ci].sessions.push(session);
   camps[ci].lastPlayed = Date.now();
   saveCampaigns(camps);
+
+  // Auto-add gold to party treasury
+  if (goldAwarded > 0) {
+    const w = getWealth();
+    if (!w['party']) w['party'] = {gp:0,sp:0,ep:0,cp:0};
+    w['party'].gp = (w['party'].gp||0) + goldAwarded;
+    saveWealth(w);
+    // Mark session so we can reverse on delete
+    const camps2 = getCampaigns();
+    const ci2 = camps2.findIndex(c => c.id === editingCampId);
+    const si = camps2[ci2].sessions.findIndex(s => s.id === session.id);
+    if (si >= 0) camps2[ci2].sessions[si].goldAddedToLoot = true;
+    saveCampaigns(camps2);
+    toast(`Session logged! +${goldAwarded}gp → Party Treasury`,'var(--gold)');
+  } else {
+    toast('Session logged!');
+  }
+
   ['sTitle','sSummary','sHighlights'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
-  document.getElementById('sXP').value='0'; document.getElementById('sGold').value='0';
-  toast('Session logged!');
+  document.getElementById('sXP').value='0';
+  document.getElementById('sGold').value='0';
   renderSessions();
   renderCampDetailHeader();
 }
@@ -3993,6 +4363,15 @@ function deleteSession(sid) {
   const camps = getCampaigns();
   const ci = camps.findIndex(c => c.id === editingCampId);
   if (ci < 0) return;
+  // Reverse gold if it was added to loot
+  const session = camps[ci].sessions?.find(s => s.id === sid);
+  if (session && session.goldAddedToLoot && session.goldAwarded > 0) {
+    const w = getWealth();
+    if (w['party']) {
+      w['party'].gp = Math.max(0, (w['party'].gp||0) - session.goldAwarded);
+      saveWealth(w);
+    }
+  }
   camps[ci].sessions = (camps[ci].sessions||[]).filter(s => s.id !== sid);
   saveCampaigns(camps);
   renderSessions();
