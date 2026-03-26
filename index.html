@@ -538,6 +538,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   <div class="topbar">
     <button class="topbar-back icon-btn" id="backBtn" onclick="goBack()" style="visibility:hidden;font-size:22px">←</button>
     <span class="topbar-title" id="pageTitle">Tome of Heroes</span>
+    <span id="syncIndicator" style="font-size:10px;color:var(--muted);margin-right:4px"></span>
     <button onclick="nav('modegate')" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px 8px;line-height:1" title="Settings">⚙</button>
     <span class="topbar-icon" id="topIcon">⚔</span>
   </div>
@@ -794,6 +795,46 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <div class="tab-pane" id="ltab-bulk"></div>
   </div>
 
+
+  <!-- LOGIN SCREEN -->
+  <div class="screen" id="scr-login">
+    <div style="max-width:340px;width:100%;margin:0 auto;padding:20px">
+      <div style="text-align:center;margin-bottom:32px">
+        <div style="font-size:48px;margin-bottom:8px">📖</div>
+        <div style="font-family:'Cinzel',serif;font-size:22px;color:var(--gold);letter-spacing:2px">Tome of Heroes</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:6px">Sign in to sync your campaign</div>
+      </div>
+
+      <div id="loginPane">
+        <div class="field"><label>Email</label>
+          <input id="loginEmail" type="email" placeholder="your@email.com" autocomplete="email">
+        </div>
+        <div class="field"><label>Password</label>
+          <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
+        </div>
+        <button class="btn btn-gold" onclick="doLogin()" style="margin-bottom:8px">Sign In →</button>
+        <button class="btn btn-outline" onclick="showSignup()">Create Account</button>
+        <button class="btn btn-outline" onclick="skipLogin()" style="margin-top:16px;opacity:0.5;font-size:11px">Use offline (no sync)</button>
+      </div>
+
+      <div id="signupPane" style="display:none">
+        <div class="field"><label>Your Name</label>
+          <input id="signupName" placeholder="e.g. Narog the DM">
+        </div>
+        <div class="field"><label>Email</label>
+          <input id="signupEmail" type="email" placeholder="your@email.com" autocomplete="email">
+        </div>
+        <div class="field"><label>Password</label>
+          <input id="signupPassword" type="password" placeholder="Min 6 characters" autocomplete="new-password">
+        </div>
+        <button class="btn btn-gold" onclick="doSignup()" style="margin-bottom:8px">Create Account →</button>
+        <button class="btn btn-outline" onclick="showLogin()">← Back to Sign In</button>
+      </div>
+
+      <div id="loginMsg" style="font-size:12px;color:var(--red);text-align:center;margin-top:12px;min-height:18px"></div>
+    </div>
+  </div>
+
   <!-- MODE GATE (first launch) -->
   <div class="screen" id="scr-modegate">
     <div class="modegate-rune">📖</div>
@@ -815,6 +856,9 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     </button>
     <button onclick="clearAllData()" style="margin-top:24px;background:none;border:1px solid var(--red);border-radius:8px;color:var(--red);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.6">
       🗑 Clear All Data
+    </button>
+    <button onclick="doLogout()" style="margin-top:8px;background:none;border:1px solid var(--muted);border-radius:8px;color:var(--muted);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.5">
+      ⇥ Sign Out
     </button>
   </div>
 
@@ -893,6 +937,214 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   </div>
 </div>
 
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+/* ══ SUPABASE CONFIG ══ */
+const SUPA_URL = 'https://ndnkfhehtirnbmfpcbwx.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5kbmtmaGVodGlybmJtZnBjYnd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NTIwNzgsImV4cCI6MjA5MDEyODA3OH0.jbR9Oj-yWyXF3BZtC69Qp7S-o1shvAoAWeCgjjNt9ck';
+const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+let _supaUser = null;
+let _realtimeSubs = [];
+let _syncPending = {};
+let _syncTimer = null;
+let _online = navigator.onLine;
+
+window.addEventListener('online',  ()=>{ _online=true;  syncIndicator('live'); _flushPending(); });
+window.addEventListener('offline', ()=>{ _online=false; syncIndicator('offline'); });
+
+function syncIndicator(state){
+  const el = document.getElementById('syncIndicator');
+  if(!el) return;
+  if(state==='live')     { el.textContent='🟢 Live'; el.style.color='var(--green)'; }
+  else if(state==='saving') { el.textContent='💾 Saving…'; el.style.color='var(--gold)'; }
+  else if(state==='offline'){ el.textContent='🔴 Offline'; el.style.color='var(--red)'; }
+  else if(state==='error')  { el.textContent='⚠ Sync error'; el.style.color='var(--red)'; }
+}
+
+/* ── AUTH ── */
+async function supaSignUp(email, password, displayName){
+  const { data, error } = await supa.auth.signUp({ email, password, options:{ data:{ display_name: displayName } } });
+  if(error) throw error;
+  return data;
+}
+
+async function supaSignIn(email, password){
+  const { data, error } = await supa.auth.signInWithPassword({ email, password });
+  if(error) throw error;
+  _supaUser = data.user;
+  return data;
+}
+
+async function supaSignOut(){
+  await supa.auth.signOut();
+  _supaUser = null;
+  _realtimeSubs.forEach(s=>supa.removeChannel(s));
+  _realtimeSubs = [];
+}
+
+async function getSupaUser(){
+  if(_supaUser) return _supaUser;
+  const { data } = await supa.auth.getUser();
+  _supaUser = data?.user || null;
+  return _supaUser;
+}
+
+/* ── PUSH: local → Supabase ── */
+async function pushCampaign(camp){
+  if(!_online) return;
+  const user = await getSupaUser(); if(!user) return;
+  const row = {
+    id: camp.id, dm_id: user.id,
+    name: camp.name, setting: camp.setting||'', description: camp.description||'',
+    data: camp
+  };
+  const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
+  if(error) console.warn('Push campaign error:', error.message);
+}
+
+async function pushCharacter(char, campaignId){
+  if(!_online) return;
+  const user = await getSupaUser(); if(!user) return;
+  const row = {
+    id: String(char.id), dm_id: user.id,
+    campaign_id: campaignId||null,
+    share_code: char.shareCode||null,
+    data: char
+  };
+  const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
+  if(error) console.warn('Push char error:', error.message);
+}
+
+async function pushLoot(campaignId, items, wealth){
+  if(!_online) return;
+  const user = await getSupaUser(); if(!user) return;
+  const row = { id: campaignId, campaign_id: campaignId, data: items, wealth: wealth };
+  const { error } = await supa.from('loot').upsert(row, {onConflict:'id'});
+  if(error) console.warn('Push loot error:', error.message);
+}
+
+/* ── PULL: Supabase → local ── */
+async function pullAll(campaignId){
+  if(!_online) return false;
+  const user = await getSupaUser(); if(!user) return false;
+  try {
+    syncIndicator('saving');
+    // Pull campaigns
+    const { data: camps } = await supa.from('campaigns').select('*').eq('dm_id', user.id);
+    if(camps && camps.length){
+      const existing = S.get('toh_campaigns')||[];
+      const merged = [...camps.map(r=>r.data||r), ...existing.filter(e=>!camps.find(r=>r.id===e.id))];
+      S.set('toh_campaigns', merged);
+    }
+    // Pull characters
+    const { data: chars } = await supa.from('characters').select('*').eq('dm_id', user.id);
+    if(chars && chars.length){
+      const existing = S.get('toh_chars')||[];
+      const merged = [...chars.map(r=>r.data||r), ...existing.filter(e=>!chars.find(r=>String(r.id)===String(e.id)))];
+      S.set('toh_chars', merged);
+    }
+    // Pull loot for active campaign
+    if(campaignId){
+      const { data: loot } = await supa.from('loot').select('*').eq('campaign_id', campaignId).single();
+      if(loot){
+        S.set('toh_items_'+campaignId, loot.data||[]);
+        S.set('toh_wealth_'+campaignId, loot.wealth||{});
+      }
+    }
+    syncIndicator('live');
+    return true;
+  } catch(e) {
+    console.warn('Pull error:', e);
+    syncIndicator('error');
+    return false;
+  }
+}
+
+/* ── DEBOUNCED SYNC ── */
+function schedulePush(type, id, data){
+  _syncPending[type+'_'+id] = { type, id, data };
+  if(_syncTimer) clearTimeout(_syncTimer);
+  syncIndicator('saving');
+  _syncTimer = setTimeout(_flushPending, 800);
+}
+
+async function _flushPending(){
+  if(!_online) return;
+  const pending = Object.values(_syncPending);
+  _syncPending = {};
+  _syncTimer = null;
+  for(const p of pending){
+    if(p.type==='campaign') await pushCampaign(p.data);
+    if(p.type==='character') await pushCharacter(p.data.char, p.data.campaignId);
+    if(p.type==='loot') await pushLoot(p.id, p.data.items, p.data.wealth);
+  }
+  if(!Object.keys(_syncPending).length) syncIndicator('live');
+}
+
+/* ── REALTIME SUBSCRIPTIONS ── */
+function subscribeRealtime(campaignId){
+  _realtimeSubs.forEach(s=>supa.removeChannel(s));
+  _realtimeSubs = [];
+  if(!campaignId) return;
+
+  // Subscribe to character changes (live HP updates)
+  const charSub = supa.channel('chars-'+campaignId)
+    .on('postgres_changes', {
+      event:'UPDATE', schema:'public', table:'characters',
+      filter:'campaign_id=eq.'+campaignId
+    }, payload=>{
+      const updated = payload.new?.data;
+      if(!updated) return;
+      const chars = S.get('toh_chars')||[];
+      const i = chars.findIndex(c=>String(c.id)===String(updated.id));
+      if(i>=0) chars[i] = updated; else chars.push(updated);
+      // Update WITHOUT triggering another push (use raw localStorage)
+      try{ localStorage.setItem('toh_chars', JSON.stringify(chars)); }catch(e){}
+      // Re-render if on roster or party screen
+      if(document.getElementById('rosterList')?.offsetParent) renderRoster();
+      if(document.getElementById('ptab-overview')?.classList.contains('active')) renderPartyOverview();
+    })
+    .subscribe();
+  _realtimeSubs.push(charSub);
+
+  // Subscribe to campaign changes (notes, quests etc)
+  const campSub = supa.channel('camp-'+campaignId)
+    .on('postgres_changes', {
+      event:'UPDATE', schema:'public', table:'campaigns',
+      filter:'id=eq.'+campaignId
+    }, payload=>{
+      const updated = payload.new?.data;
+      if(!updated) return;
+      const camps = S.get('toh_campaigns')||[];
+      const i = camps.findIndex(c=>c.id===campaignId);
+      if(i>=0) camps[i] = updated;
+      try{ localStorage.setItem('toh_campaigns', JSON.stringify(camps)); }catch(e){}
+    })
+    .subscribe();
+  _realtimeSubs.push(campSub);
+
+  // Subscribe to loot changes
+  const lootSub = supa.channel('loot-'+campaignId)
+    .on('postgres_changes', {
+      event:'*', schema:'public', table:'loot',
+      filter:'campaign_id=eq.'+campaignId
+    }, payload=>{
+      const row = payload.new;
+      if(!row) return;
+      try{ 
+        localStorage.setItem('toh_items_'+campaignId, JSON.stringify(row.data||[]));
+        localStorage.setItem('toh_wealth_'+campaignId, JSON.stringify(row.wealth||{}));
+      }catch(e){}
+      if(document.getElementById('ltab-inventory')?.classList.contains('active')) renderInventory();
+      if(document.getElementById('ltab-pool')?.classList.contains('active')) renderPool();
+      if(document.getElementById('ltab-wealth')?.classList.contains('active')) renderWealth();
+    })
+    .subscribe();
+  _realtimeSubs.push(lootSub);
+}
+</script>
 
 <script>
 /* ══ DATA ══ */
@@ -993,15 +1245,32 @@ const S={
   }
 };
 const getChars=()=>S.get('toh_chars')||[];
-const saveChars=c=>S.set('toh_chars',c);
+const saveChars=c=>{
+  S.set('toh_chars',c);
+  // Push changed chars to Supabase
+  const campId=getActiveCampId();
+  if(typeof schedulePush!=='undefined'){
+    c.forEach(char=>{
+      schedulePush('character',String(char.id),{char,campaignId:campId});
+    });
+  }
+};
 const getParty=()=>S.get('toh_party')||[];
 const saveParty=p=>S.set('toh_party',p);
 const _itemsKey=()=>{const c=getActiveCampId();return c?'toh_items_'+c:'toh_items';};
 const _wealthKey=()=>{const c=getActiveCampId();return c?'toh_wealth_'+c:'toh_wealth';};
 const getItems=()=>S.get(_itemsKey())||[];
-const saveItems=i=>S.set(_itemsKey(),i);
 const getWealth=()=>S.get(_wealthKey())||{};
-const saveWealth=w=>S.set(_wealthKey(),w);
+const saveItems=i=>{
+  S.set(_itemsKey(),i);
+  const campId=getActiveCampId();
+  if(campId) schedulePush('loot',campId,{items:i,wealth:getWealth()});
+};
+const saveWealth=w=>{
+  S.set(_wealthKey(),w);
+  const campId=getActiveCampId();
+  if(campId) schedulePush('loot',campId,{items:getItems(),wealth:w});
+};
 const getPartyId=()=>{let id=S.get('toh_pid');if(!id){id='PARTY-'+Math.random().toString(36).slice(2,8).toUpperCase();S.set('toh_pid',id);}return id;};
 
 /* ══ HELPERS ══ */
@@ -2629,21 +2898,45 @@ function bootApp(){
   const mode=S.get('toh_mode');
   const nav_bar=document.querySelector('.bottomnav');
 
+  // Check if user is logged in to Supabase
+  getSupaUser().then(user => {
+    if(user){
+      // Logged in — pull latest data then boot normally
+      const campId = getActiveCampId();
+      pullAll(campId).then(()=>{
+        subscribeRealtime(campId);
+        _bootContinue(mode, nav_bar);
+      });
+    } else {
+      // Not logged in — show login screen
+      document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+      if(nav_bar) nav_bar.style.display='none';
+      const ex=document.getElementById('modeBadge');if(ex)ex.remove();
+      document.getElementById('scr-login').classList.add('active');
+      document.getElementById('pageTitle').textContent='Tome of Heroes';
+      document.getElementById('backBtn').style.visibility='hidden';
+    }
+  }).catch(()=>{
+    // Supabase unreachable — boot offline
+    _bootContinue(mode, nav_bar);
+  });
+  setMode('normal');
+}
+
+function _bootContinue(mode, nav_bar){
   if(!mode){
     document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
     document.getElementById('scr-modegate').classList.add('active');
     document.getElementById('pageTitle').textContent='Tome of Heroes';
     document.getElementById('topIcon').textContent='📖';
     document.getElementById('backBtn').style.visibility='hidden';
-    nav_bar.style.display='none';
+    if(nav_bar) nav_bar.style.display='none';
     const ex=document.getElementById('modeBadge');if(ex)ex.remove();
   } else {
-    // If player mode, re-sync active campaign from stored player camp ID
     if(mode==='player'){
       const playerCampId = S.get('toh_player_camp_id');
       if(playerCampId) setActiveCampId(playerCampId);
       else {
-        // Try to find campaign by char ID in case it was assigned after last login
         const charId = S.get('toh_player_char_id');
         if(charId){
           const camp = getCampaigns().find(c=>(c.charIds||[]).some(x=>String(x)===String(charId)));
@@ -2651,11 +2944,63 @@ function bootApp(){
         }
       }
     }
-    nav_bar.style.display='flex';
+    if(nav_bar) nav_bar.style.display='flex';
     applyModeUI();
     nav('roster');
   }
-  setMode('normal');
+}
+
+/* ── LOGIN SCREEN FUNCTIONS ── */
+function showLogin(){ document.getElementById('loginPane').style.display=''; document.getElementById('signupPane').style.display='none'; document.getElementById('loginMsg').textContent=''; }
+function showSignup(){ document.getElementById('loginPane').style.display='none'; document.getElementById('signupPane').style.display=''; document.getElementById('loginMsg').textContent=''; }
+
+function loginMsg(msg, color='var(--red)'){ const el=document.getElementById('loginMsg'); if(el){el.textContent=msg;el.style.color=color;} }
+
+async function doLogin(){
+  const email = document.getElementById('loginEmail')?.value.trim();
+  const pass  = document.getElementById('loginPassword')?.value;
+  if(!email||!pass){ loginMsg('Enter email and password'); return; }
+  loginMsg('Signing in…','var(--gold)');
+  try{
+    await supaSignIn(email, pass);
+    loginMsg('');
+    const campId = getActiveCampId();
+    await pullAll(campId);
+    subscribeRealtime(campId);
+    bootApp();
+  } catch(e){
+    loginMsg(e.message||'Sign in failed');
+  }
+}
+
+async function doSignup(){
+  const name  = document.getElementById('signupName')?.value.trim();
+  const email = document.getElementById('signupEmail')?.value.trim();
+  const pass  = document.getElementById('signupPassword')?.value;
+  if(!name||!email||!pass){ loginMsg('Fill in all fields'); return; }
+  if(pass.length<6){ loginMsg('Password must be at least 6 characters'); return; }
+  loginMsg('Creating account…','var(--gold)');
+  try{
+    await supaSignUp(email, pass, name);
+    // Auto sign in after signup
+    await supaSignIn(email, pass);
+    loginMsg('');
+    bootApp();
+  } catch(e){
+    loginMsg(e.message||'Sign up failed');
+  }
+}
+
+async function skipLogin(){
+  // Use offline mode — no sync
+  syncIndicator('offline');
+  _bootContinue(S.get('toh_mode'), document.querySelector('.bottomnav'));
+}
+
+async function doLogout(){
+  await supaSignOut();
+  syncIndicator('');
+  bootApp();
 }
 
 function importChar(){const raw=(document.getElementById('importCodeIn')?.value||'').trim();if(!raw){toast('Paste a code first','var(--red)');return;}let char=decodeChar(raw);if(!char||!char.name||char.classIdx===undefined){toast('Invalid code','var(--red)');return;}char.id=Date.now();char.shareCode=genCode();char.currentHP=char.currentHP||char.maxHP;char.statuses=char.statuses||[];char.spells=char.spells||[];char.attacks=char.attacks||[];char.equipment=char.equipment||[];const chars=getChars();chars.push(char);saveChars(chars);toast('✦ '+char.name+' imported!');renderRoster();}
@@ -3228,7 +3573,12 @@ if('serviceWorker' in navigator){
 
 /* ── Storage helpers ── */
 const getCampaigns  = () => S.get('toh_campaigns') || [];
-const saveCampaigns = c  => S.set('toh_campaigns', c);
+const saveCampaigns = c => {
+  S.set('toh_campaigns', c);
+  if(typeof schedulePush!=='undefined'){
+    c.forEach(camp=>schedulePush('campaign',camp.id,camp));
+  }
+};
 const getActiveCampId = () => S.get('toh_active_camp') || null;
 const setActiveCampId = id => S.set('toh_active_camp', id);
 
