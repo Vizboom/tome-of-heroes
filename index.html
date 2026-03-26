@@ -829,6 +829,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <div id="campList"></div>
       <button class="btn btn-gold" onclick="showNewCampForm()">+ New Campaign</button>
       <button class="btn btn-outline" onclick="showImportCampForm()">↓ Import Campaign</button>
+      <button class="btn btn-outline" onclick="forceReinstallPresets()" style="border-color:var(--gold);color:var(--gold)">↺ Restore Built-in Campaigns</button>
     </div>
     <!-- New Campaign form -->
     <div id="campNewForm" style="display:none">
@@ -3430,11 +3431,15 @@ function renderCampaignSwitchBanner() {
 
 // Seed preset campaigns AFTER all consts are defined
 function seedPresetCampaigns(){
-  const existingIds = getCampaigns().map(c => c.id);
-  const missing = PRESET_CAMPAIGNS.filter(p => !existingIds.includes(p.id));
-  if(!missing.length) return;
-  const camps = getCampaigns();
-  missing.forEach(p => {
+  let camps = getCampaigns();
+  let changed = false;
+  PRESET_CAMPAIGNS.forEach(p => {
+    const existing = camps.find(c => c.id === p.id);
+    // Reinstall if missing OR if it looks broken (no sessions AND no npcs)
+    const needsInstall = !existing ||
+      ((!existing.sessions || existing.sessions.length === 0) &&
+       (!existing.npcs || existing.npcs.length === 0));
+    if(!needsInstall) return;
     try {
       const b64 = p.code.replace(/[-_]/g, x=>({'-':'+','_':'/'})[x]);
       const padded = b64 + '='.repeat((4-b64.length%4)%4);
@@ -3443,15 +3448,53 @@ function seedPresetCampaigns(){
         camp.sessions=camp.sessions||[]; camp.quests=camp.quests||[];
         camp.npcs=camp.npcs||[]; camp.arcs=camp.arcs||[];
         camp.notes=camp.notes||[]; camp.charIds=camp.charIds||[];
-        camps.push(camp);
+        if(existing && existing.charIds && existing.charIds.length){
+          camp.charIds = existing.charIds;
+        }
+        const idx = camps.findIndex(c => c.id === p.id);
+        if(idx >= 0) camps[idx] = camp;
+        else camps.push(camp);
+        changed = true;
+      }
+    } catch(e){ console.warn('Preset install failed:', p.id, e); }
+  });
+  if(changed){
+    saveCampaigns(camps);
+    if(!getActiveCampId() && camps.length) setActiveCampId(camps[0].id);
+  }
+}
+
+seedPresetCampaigns();
+
+function forceReinstallPresets(){
+  let camps = getCampaigns();
+  let count = 0;
+  PRESET_CAMPAIGNS.forEach(p => {
+    try {
+      const b64 = p.code.replace(/[-_]/g, x=>({'-':'+','_':'/'})[x]);
+      const padded = b64 + '='.repeat((4-b64.length%4)%4);
+      const camp = JSON.parse(atob(padded));
+      if(camp && camp.name){
+        camp.sessions=camp.sessions||[]; camp.quests=camp.quests||[];
+        camp.npcs=camp.npcs||[]; camp.arcs=camp.arcs||[];
+        camp.notes=camp.notes||[]; camp.charIds=camp.charIds||[];
+        const existing = camps.find(c => c.id === p.id);
+        if(existing && existing.charIds && existing.charIds.length){
+          camp.charIds = existing.charIds;
+        }
+        const idx = camps.findIndex(c => c.id === p.id);
+        if(idx >= 0) camps[idx] = camp;
+        else camps.push(camp);
+        count++;
       }
     } catch(e){}
   });
   saveCampaigns(camps);
   if(!getActiveCampId() && camps.length) setActiveCampId(camps[0].id);
+  toast(`✦ ${count} built-in campaign${count!==1?'s':''} restored!`,'var(--gold)');
+  renderCampList();
 }
 
-seedPresetCampaigns();
 bootApp();
 </script>
 </body>
