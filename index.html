@@ -2279,10 +2279,10 @@ function showCharImport(){
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:0';
   modal.innerHTML=`
     <div style="background:var(--bg2);border-top:1px solid var(--border);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto">
-      <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold);margin-bottom:8px">Import Character Sheet</div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.5">Paste a character export code (from another device or DM), or paste raw JSON character data.</p>
+      <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold);margin-bottom:4px">Import Character Sheet</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5">Supports: Tome of Heroes export codes, raw character JSON, or <strong style="color:var(--gold)">D&D Beyond JSON format</strong> (schema_version: 1).</p>
       <div class="field"><label>Export Code or JSON</label>
-        <textarea id="charImportData" placeholder="Paste export code or JSON here…" style="min-height:100px;font-size:12px;word-break:break-all"></textarea>
+        <textarea id="charImportData" placeholder="Paste export code, JSON, or D&D Beyond JSON here…" style="min-height:120px;font-size:12px;word-break:break-all"></textarea>
       </div>
       <button class="btn btn-gold" onclick="doCharImport()">Import Character</button>
       <button class="btn btn-outline" onclick="document.getElementById('charImportModal').remove()">Cancel</button>
@@ -2290,20 +2290,190 @@ function showCharImport(){
   document.body.appendChild(modal);
 }
 
+/* Convert D&D Beyond JSON format → Tome of Heroes character object */
+function parseDDBJson(data){
+  // Handle both top-level array and {character:[...]} format
+  const charData = data.character ? data.character[0] : (Array.isArray(data) ? data[0] : data);
+  if(!charData || !charData.character_name) return null;
+
+  const SKILL_MAP = {
+    'acrobatics':'Acrobatics','animal-handling':'Animal Handling','arcana':'Arcana',
+    'athletics':'Athletics','deception':'Deception','history':'History','insight':'Insight',
+    'intimidation':'Intimidation','investigation':'Investigation','medicine':'Medicine',
+    'nature':'Nature','perception':'Perception','performance':'Performance',
+    'persuasion':'Persuasion','religion':'Religion','sleight-of-hand':'Sleight of Hand',
+    'stealth':'Stealth','survival':'Survival'
+  };
+
+  // Class
+  const classesObj = charData.classes || {};
+  const classKey = Object.keys(classesObj)[0] || 'fighter';
+  const classData = classesObj[classKey] || {};
+  const className = (classData['class-name'] || classKey).charAt(0).toUpperCase() + (classData['class-name'] || classKey).slice(1).toLowerCase();
+  const classIdx = Math.max(0, CLASSES.findIndex(c => c.name.toLowerCase() === className.toLowerCase()));
+  const cls = CLASSES[classIdx];
+
+  // Abilities
+  const abilObj = (charData.abilities_bonuses||[{}])[0]?.abilities || {};
+  const abilities = {
+    STR: abilObj.str||10, DEX: abilObj.dex||10, CON: abilObj.con||10,
+    INT: abilObj.int||10, WIS: abilObj.wis||10, CHA: abilObj.cha||10
+  };
+
+  // HP
+  const hpData = (charData.hp||[{}])[0] || {};
+  const maxHP = hpData.hp_max || getMaxHP(cls, classData['class-level']||1, abilities.CON);
+  const currentHP = hpData.hp_current || maxHP;
+  const level = classData['class-level'] || 1;
+
+  // Subclass
+  const subclass = classData['subclass-name'] || classData['subclass'] || '';
+  const subclassClean = subclass.replace(/[-_]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+
+  // Proficient skills (check fields = true)
+  const skillsData = charData.skills || {};
+  const proficiencies = Object.entries(skillsData)
+    .filter(([k,v]) => k.endsWith('-check') && v === true)
+    .map(([k]) => SKILL_MAP[k.replace('-check','')])
+    .filter(Boolean);
+
+  // Characteristics
+  const chars = (charData.characteristics||[{}])[0] || {};
+
+  // Attacks
+  const atkData = charData.attacks || {};
+  const attacks = [];
+  for(let i=1; i<=6; i++){
+    const name = atkData[`weapon-name-${i}`];
+    if(!name) break;
+    attacks.push({
+      name, 
+      bonus: atkData[`weapon-attack-bonus-${i}`] || '+0',
+      damage: atkData[`weapon-damage-${i}`] || '1d6',
+      type: 'melee'
+    });
+  }
+
+  // Equipment — weapons + regular items
+  const equipBlock = (charData.equipment||[{}])[0] || {};
+  const equipment = [];
+  
+  // Regular equipment items
+  const equipItems = equipBlock.equipment || {};
+  Object.entries(equipItems).forEach(([k, v]) => {
+    const qty = (typeof v === 'object' ? v.quantity : 1) || 1;
+    const name = k.replace(/-s\b/g,'').replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+    equipment.push({ name, qty, type:'misc', rarity:'common', weight:0, value:0, attune:'none', desc:'' });
+  });
+
+  // Weapons as equipment items
+  const weaponItems = equipBlock.weapons || [];
+  weaponItems.forEach(([k, v]) => {
+    const qty = (typeof v === 'object' ? v.quantity : 1) || 1;
+    const name = k.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+    equipment.push({ name, qty, type:'weapon', rarity:'common', weight:1, value:0, attune:'none', desc:'' });
+  });
+
+  // Magic weapons
+  const magicWeapons = equipBlock['magic-weapons'] || [];
+  magicWeapons.forEach(([k]) => {
+    const name = k.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+    equipment.push({ name, qty:1, type:'weapon', rarity:'rare', weight:1, value:0, attune:'none', desc:'Magic weapon' });
+  });
+
+  // Feats from traits text
+  const traitsText = charData.traits?.['features-and-traits-2'] || charData.traits?.['features-and-traits'] || '';
+  const feats = [];
+  // Look for known feat names in traits
+  const FEAT_NAMES = ['Polearm Master','War Caster','Alert','Lucky','Tough','Sentinel','Sharpshooter','Great Weapon Master','Mobile','Resilient','Observant'];
+  FEAT_NAMES.forEach(f => { if(traitsText.includes(f)) feats.push(f); });
+
+  // Treasure / gold
+  const treasure = charData.treasure || {};
+  const gp = treasure.gp || 0;
+
+  // Build character object
+  const char = {
+    id: Date.now(),
+    name: charData.character_name,
+    race: charData.race || 'Human',
+    background: charData.background || 'Custom',
+    alignment: charData.alignment || '',
+    level,
+    classIdx,
+    subclass: subclassClean,
+    abilities,
+    proficiencies,
+    maxHP,
+    currentHP,
+    statuses: [],
+    shareCode: genCode(),
+    created: Date.now(),
+    xp: charData.experience || 0,
+    // Characteristics
+    age: String(chars.age||''),
+    height: String(chars.height||''),
+    weight: String(chars.weight||''),
+    eyes: String(chars.eyes||''),
+    hair: String(chars.hair||''),
+    backstory: String(chars.character_backstory||''),
+    traits: String(chars.personality_trait_1||''),
+    ideals: String(chars.ideals||''),
+    bonds: String(chars.bonds||''),
+    flaws: String(chars.flaws||''),
+    allies: '',
+    // Combat
+    ac: charData.ac || null,
+    initiative: charData.initiative_bonus || null,
+    attacks,
+    equipment,
+    spells: [],
+    feats,
+    effects: {},
+    customEffects: [],
+    // Gold → wealth
+    wealth: { gp, sp:0, ep:0, cp:0 },
+    // Store raw traits as notes
+    notes: traitsText ? traitsText.substring(0,1000) : '',
+  };
+
+  return char;
+}
+
 function doCharImport(){
   const raw = document.getElementById('charImportData')?.value.trim();
   if(!raw){toast('Paste some data first','var(--red)');return;}
+  
   let char = null;
-  // Try base64 decode first
+
+  // 1. Try D&D Beyond JSON format (has schema_version or character array)
   try {
-    char = decodeChar(raw);
+    const parsed = JSON.parse(raw);
+    if(parsed.schema_version || parsed.character || (Array.isArray(parsed) && parsed[0]?.character_name)){
+      char = parseDDBJson(parsed);
+      if(char) { _finishCharImport(char, 'D&D Beyond'); return; }
+    }
   } catch(e){}
-  // Try raw JSON
+
+  // 2. Try Tome of Heroes export code (base64)
+  try {
+    const decoded = decodeChar(raw);
+    if(decoded && decoded.name){ char = decoded; }
+  } catch(e){}
+
+  // 3. Try raw Tome of Heroes JSON
   if(!char || !char.name){
-    try { char = JSON.parse(raw); } catch(e){}
+    try {
+      const parsed = JSON.parse(raw);
+      if(parsed.name) char = parsed;
+    } catch(e){}
   }
-  if(!char || !char.name){toast('Could not parse character data','var(--red)');return;}
-  // Ensure required fields
+
+  if(!char || !char.name){toast('Could not parse character data — check the format','var(--red)');return;}
+  _finishCharImport(char, 'export code');
+}
+
+function _finishCharImport(char, source){
   char.id = Date.now();
   char.shareCode = char.shareCode||genCode();
   char.currentHP = char.currentHP||char.maxHP||10;
@@ -2315,7 +2485,6 @@ function doCharImport(){
   char.effects = char.effects||{};
   char.customEffects = char.customEffects||[];
   char.xp = char.xp||0;
-  // Validate classIdx
   if(char.classIdx===undefined && char.class){
     char.classIdx = CLASSES.findIndex(c=>c.name.toLowerCase()===char.class.toLowerCase());
     if(char.classIdx<0) char.classIdx=0;
@@ -2325,36 +2494,13 @@ function doCharImport(){
   chars.push(char);
   saveChars(chars);
   document.getElementById('charImportModal')?.remove();
-  toast('✦ '+char.name+' imported!');
+  toast(`✦ ${char.name} imported from ${source}!`);
   renderRoster();
 }
 
 function bootApp(){
   const mode=S.get('toh_mode');
   const nav_bar=document.querySelector('.bottomnav');
-
-  // Ensure preset campaigns are always installed (check by ID, not by flag)
-  const PRESET_IDS = PRESET_CAMPAIGNS.map(p => p.id);
-  const existingIds = getCampaigns().map(c => c.id);
-  const missingPresets = PRESET_CAMPAIGNS.filter(p => !existingIds.includes(p.id));
-  if (missingPresets.length > 0) {
-    const camps = getCampaigns();
-    missingPresets.forEach(p => {
-      try {
-        const b64 = p.code.replace(/[-_]/g, x => ({'-':'+','_':'/'})[x]);
-        const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
-        const camp = JSON.parse(atob(padded));
-        if (camp && camp.name) {
-          camp.sessions = camp.sessions||[]; camp.quests = camp.quests||[];
-          camp.npcs = camp.npcs||[]; camp.arcs = camp.arcs||[];
-          camp.notes = camp.notes||[]; camp.charIds = camp.charIds||[];
-          camps.push(camp);
-        }
-      } catch(e) {}
-    });
-    saveCampaigns(camps);
-    if (!getActiveCampId() && camps.length) setActiveCampId(camps[0].id);
-  }
 
   if(!mode){
     document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -3281,6 +3427,31 @@ function renderCampaignSwitchBanner() {
     <span style="color:var(--gold);font-family:'Cinzel',serif;font-size:10px">→</span>
   </div>`;
 }
+
+// Seed preset campaigns AFTER all consts are defined
+function seedPresetCampaigns(){
+  const existingIds = getCampaigns().map(c => c.id);
+  const missing = PRESET_CAMPAIGNS.filter(p => !existingIds.includes(p.id));
+  if(!missing.length) return;
+  const camps = getCampaigns();
+  missing.forEach(p => {
+    try {
+      const b64 = p.code.replace(/[-_]/g, x=>({'-':'+','_':'/'})[x]);
+      const padded = b64 + '='.repeat((4-b64.length%4)%4);
+      const camp = JSON.parse(atob(padded));
+      if(camp && camp.name){
+        camp.sessions=camp.sessions||[]; camp.quests=camp.quests||[];
+        camp.npcs=camp.npcs||[]; camp.arcs=camp.arcs||[];
+        camp.notes=camp.notes||[]; camp.charIds=camp.charIds||[];
+        camps.push(camp);
+      }
+    } catch(e){}
+  });
+  saveCampaigns(camps);
+  if(!getActiveCampId() && camps.length) setActiveCampId(camps[0].id);
+}
+
+seedPresetCampaigns();
 bootApp();
 </script>
 </body>
