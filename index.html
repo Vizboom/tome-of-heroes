@@ -992,10 +992,12 @@ const getChars=()=>S.get('toh_chars')||[];
 const saveChars=c=>S.set('toh_chars',c);
 const getParty=()=>S.get('toh_party')||[];
 const saveParty=p=>S.set('toh_party',p);
-const getItems=()=>S.get('toh_items')||[];
-const saveItems=i=>S.set('toh_items',i);
-const getWealth=()=>S.get('toh_wealth')||{};
-const saveWealth=w=>S.set('toh_wealth',w);
+const _itemsKey=()=>{const c=getActiveCampId();return c?'toh_items_'+c:'toh_items';};
+const _wealthKey=()=>{const c=getActiveCampId();return c?'toh_wealth_'+c:'toh_wealth';};
+const getItems=()=>S.get(_itemsKey())||[];
+const saveItems=i=>S.set(_itemsKey(),i);
+const getWealth=()=>S.get(_wealthKey())||{};
+const saveWealth=w=>S.set(_wealthKey(),w);
 const getPartyId=()=>{let id=S.get('toh_pid');if(!id){id='PARTY-'+Math.random().toString(36).slice(2,8).toUpperCase();S.set('toh_pid',id);}return id;};
 
 /* ══ HELPERS ══ */
@@ -3057,7 +3059,15 @@ function confirmBulkLoot(){
 }
 function setLootOwner(id){lootOwner=id;lootFilter='all';renderInventory();}
 function setLootFilter(f){lootFilter=f;renderInventory();}
-function renderOwnerPills(activeId){const chars=getChars();return`<div class="owner-pills"><div class="owner-pill ${activeId==='pool'?'active':''}" style="--pill-c:var(--gold)" onclick="setLootOwner('pool')">🎒 Party Pool</div>${chars.map(c=>{const cc=classColor(c.classIdx);return`<div class="owner-pill ${activeId==c.id?'active':''}" style="--pill-c:${cc}" onclick="setLootOwner(${c.id})">${classIcon(c.classIdx)} ${c.name}</div>`;}).join('')}</div>`;}
+function renderOwnerPills(activeId){
+  // Only show characters assigned to the active campaign
+  const camp = getActiveCamp();
+  let chars = getChars();
+  if(camp && camp.charIds && camp.charIds.length){
+    chars = chars.filter(c => camp.charIds.some(x=>String(x)===String(c.id)));
+  }
+  return`<div class="owner-pills"><div class="owner-pill ${activeId==='pool'?'active':''}" style="--pill-c:var(--gold)" onclick="setLootOwner('pool')">🎒 Party Pool</div>${chars.map(c=>{const cc=classColor(c.classIdx);return`<div class="owner-pill ${activeId==c.id?'active':''}" style="--pill-c:${cc}" onclick="setLootOwner(${c.id})">${classIcon(c.classIdx)} ${c.name}</div>`;}).join('')}</div>`;
+}
 function renderInventory(){
   // Reset lootOwner if the selected character no longer exists
   if(lootOwner!=='pool' && !getChars().find(c=>String(c.id)===String(lootOwner))) lootOwner='pool';
@@ -3080,12 +3090,40 @@ function renderInventory(){
 }
 function removeItem(id){saveItems(getItems().filter(i=>i.id!==id));renderInventory();renderPool();toast('Item removed','var(--red)');}
 function itemToPool(id){const items=getItems();const ii=items.findIndex(i=>i.id===id);if(ii>=0){items[ii].owner='pool';saveItems(items);}renderInventory();renderPool();toast('Sent to pool');}
-function assignFromPool(id){const chars=getChars();if(!chars.length){toast('No characters','var(--red)');return;}const pick=prompt(chars.map((c,i)=>`${i+1}. ${c.name}`).join('\n')+'\n\nAssign to (number):');const idx=parseInt(pick)-1;if(idx>=0&&idx<chars.length){const items=getItems();const ii=items.findIndex(i=>i.id===id);if(ii>=0){items[ii].owner=chars[idx].id;saveItems(items);}renderPool();renderInventory();toast('Assigned to '+chars[idx].name);}}
-function renderAddTab(){const chars=getChars();const el=document.getElementById('ltab-add');el.innerHTML=`<div class="card"><div class="form-row two"><div class="field"><label>Item Name</label><input id="iName" placeholder="e.g. Longsword +1"></div><div class="field"><label>Type</label><select id="iType">${Object.entries(TYPE_ICONS).map(([k,v])=>`<option value="${k}">${v} ${k}</option>`).join('')}</select></div></div><div class="form-row three"><div class="field"><label>Rarity</label><select id="iRarity"><option value="common">Common</option><option value="uncommon">Uncommon</option><option value="rare" selected>Rare</option><option value="very-rare">Very Rare</option><option value="legendary">Legendary</option><option value="artifact">Artifact</option></select></div><div class="field"><label>Qty</label><input id="iQty" type="number" value="1" min="1"></div><div class="field"><label>Weight</label><input id="iWt" type="number" value="1" min="0" step="0.5"></div></div><div class="form-row two"><div class="field"><label>Value (gp)</label><input id="iVal" type="number" value="0" min="0"></div><div class="field"><label>Attunement</label><select id="iAttune"><option value="none">None</option><option value="required">Required</option><option value="attuned">Attuned</option></select></div></div><div class="field"><label>Description</label><textarea id="iDesc" placeholder="Properties, abilities…"></textarea></div><div class="field"><label>Assign To</label><select id="iOwner"><option value="pool">Party Pool</option>${chars.map(c=>`<option value="${c.id}">${classIcon(c.classIdx)} ${c.name}</option>`).join('')}</select></div><button class="btn btn-gold" onclick="addItem()">Add to Inventory ✦</button></div><div class="divider"><span>Quick Add</span></div><div class="quick-grid">${QUICK_ITEMS.map((q,qi)=>`<div class="quick-tile" onclick="quickAdd(${qi})"><span style="font-size:22px">${TYPE_ICONS[q.type]}</span><div><div style="font-family:'Cinzel',serif;font-size:11px">${q.name}</div><div style="font-size:10px;color:var(--muted)" class="rtext-${q.rarity}">${q.rarity} · ${q.value} gp</div></div></div>`).join('')}</div>`;}
+function assignFromPool(id){
+  const camp = getActiveCamp();
+  let chars = getChars();
+  if(camp && camp.charIds && camp.charIds.length){
+    chars = chars.filter(c => camp.charIds.some(x=>String(x)===String(c.id)));
+  }
+  if(!chars.length){toast('No characters in campaign','var(--red)');return;}
+  const pick=prompt(chars.map((c,i)=>`${i+1}. ${c.name}`).join('\n')+'\n\nAssign to (number):');
+  const idx=parseInt(pick)-1;
+  if(idx>=0&&idx<chars.length){
+    const items=getItems();const ii=items.findIndex(i=>i.id===id);
+    if(ii>=0){items[ii].owner=chars[idx].id;saveItems(items);}
+    renderPool();renderInventory();toast('Assigned to '+chars[idx].name);
+  }
+}
+function renderAddTab(){
+  const camp = getActiveCamp();
+  let chars = getChars();
+  if(camp && camp.charIds && camp.charIds.length){
+    chars = chars.filter(c => camp.charIds.some(x=>String(x)===String(c.id)));
+  }
+  const el=document.getElementById('ltab-add');el.innerHTML=`<div class="card"><div class="form-row two"><div class="field"><label>Item Name</label><input id="iName" placeholder="e.g. Longsword +1"></div><div class="field"><label>Type</label><select id="iType">${Object.entries(TYPE_ICONS).map(([k,v])=>`<option value="${k}">${v} ${k}</option>`).join('')}</select></div></div><div class="form-row three"><div class="field"><label>Rarity</label><select id="iRarity"><option value="common">Common</option><option value="uncommon">Uncommon</option><option value="rare" selected>Rare</option><option value="very-rare">Very Rare</option><option value="legendary">Legendary</option><option value="artifact">Artifact</option></select></div><div class="field"><label>Qty</label><input id="iQty" type="number" value="1" min="1"></div><div class="field"><label>Weight</label><input id="iWt" type="number" value="1" min="0" step="0.5"></div></div><div class="form-row two"><div class="field"><label>Value (gp)</label><input id="iVal" type="number" value="0" min="0"></div><div class="field"><label>Attunement</label><select id="iAttune"><option value="none">None</option><option value="required">Required</option><option value="attuned">Attuned</option></select></div></div><div class="field"><label>Description</label><textarea id="iDesc" placeholder="Properties, abilities…"></textarea></div><div class="field"><label>Assign To</label><select id="iOwner"><option value="pool">Party Pool</option>${chars.map(c=>`<option value="${c.id}">${classIcon(c.classIdx)} ${c.name}</option>`).join('')}</select></div><button class="btn btn-gold" onclick="addItem()">Add to Inventory ✦</button></div><div class="divider"><span>Quick Add</span></div><div class="quick-grid">${QUICK_ITEMS.map((q,qi)=>`<div class="quick-tile" onclick="quickAdd(${qi})"><span style="font-size:22px">${TYPE_ICONS[q.type]}</span><div><div style="font-family:'Cinzel',serif;font-size:11px">${q.name}</div><div style="font-size:10px;color:var(--muted)" class="rtext-${q.rarity}">${q.rarity} · ${q.value} gp</div></div></div>`).join('')}</div>`;
+}
 function addItem(){const name=(document.getElementById('iName')?.value||'').trim();if(!name){toast('Enter item name','var(--red)');return;}const item={id:'i'+Date.now(),name,type:document.getElementById('iType').value,rarity:document.getElementById('iRarity').value,qty:Math.max(1,parseInt(document.getElementById('iQty').value)||1),weight:parseFloat(document.getElementById('iWt').value)||0,value:parseFloat(document.getElementById('iVal').value)||0,attune:document.getElementById('iAttune').value,desc:(document.getElementById('iDesc').value||'').trim(),owner:document.getElementById('iOwner').value};const items=getItems();items.push(item);saveItems(items);document.getElementById('iName').value='';document.getElementById('iDesc').value='';document.getElementById('iQty').value='1';toast('✦ '+name+' added!');renderInventory();renderPool();}
 function quickAdd(qi){const q=QUICK_ITEMS[qi];const ownerEl=document.querySelector('#ltab-add #iOwner');const owner=ownerEl?.value||'pool';const item={...q,id:'i'+Date.now()+qi,owner};const items=getItems();items.push(item);saveItems(items);toast('✦ '+q.name+' added!');renderInventory();renderPool();}
 function renderPool(){const items=getItems().filter(i=>i.owner==='pool');const el=document.getElementById('ltab-pool');const totVal=items.reduce((s,i)=>s+(parseFloat(i.value)||0)*i.qty,0);let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px"><div class="inv-sum-card"><div class="isc-label">UNASSIGNED</div><div class="isc-val">${items.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val">${fmtGP(totVal)} <span style="font-size:9px;color:var(--muted)">gp</span></div></div></div>`;if(!items.length)html+=`<div class="empty-state"><div class="es-icon">🪙</div><p>Pool is empty!</p></div>`;else html+=`<div class="card">`+items.map(item=>`<div class="pool-row"><span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${item.name}${item.qty>1?` ×${item.qty}`:''}</div><div style="font-size:10px"><span class="rtext-${item.rarity}">${item.rarity}</span>${item.value>0?' · '+item.value+' gp':''}</div></div><button class="pool-assign-btn" onclick="assignFromPool('${item.id}')">Assign →</button><button class="icon-btn" style="color:var(--red)" onclick="removeItem('${item.id}')">✕</button></div>`).join('')+`</div>`;el.innerHTML=html;}
-function renderWealth(){const chars=getChars();const wealth=getWealth();const pw=wealth['party']||{gp:0,sp:0,ep:0,cp:0};const chars_w=getChars();
+function renderWealth(){
+  // Scope to campaign characters only
+  const camp = getActiveCamp();
+  let chars = getChars();
+  if(camp && camp.charIds && camp.charIds.length){
+    chars = chars.filter(c => camp.charIds.some(x=>String(x)===String(c.id)));
+  }
+  const wealth=getWealth();const pw=wealth['party']||{gp:0,sp:0,ep:0,cp:0};const chars_w=chars;
   // Clean up wealth entries for deleted characters
   const w_all=getWealth(); let w_changed=false;
   Object.keys(w_all).forEach(k=>{ if(k!=='party' && !chars_w.find(c=>String(c.id)===k)){ delete w_all[k]; w_changed=true; }});
@@ -3388,6 +3426,7 @@ function deleteCampaign(id) {
 
 function switchCampaign(id) {
   setActiveCampId(id);
+  lootOwner = 'pool'; // reset loot view to pool on campaign switch
   const camp = getCampaigns().find(c => c.id === id);
   toast('✦ Switched to: '+(camp?.name||'campaign'));
   renderCampList();
