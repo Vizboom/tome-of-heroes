@@ -781,11 +781,13 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <button class="tab-btn" onclick="lootTab('add')">Add Item</button>
       <button class="tab-btn" onclick="lootTab('pool')">Pool</button>
       <button class="tab-btn" onclick="lootTab('wealth')">Wealth</button>
+      <button class="tab-btn" onclick="lootTab('bulk')" style="color:var(--gold)">⬇ Bulk</button>
     </div>
     <div class="tab-pane active" id="ltab-inventory"></div>
     <div class="tab-pane" id="ltab-add"></div>
     <div class="tab-pane" id="ltab-pool"></div>
     <div class="tab-pane" id="ltab-wealth"></div>
+    <div class="tab-pane" id="ltab-bulk"></div>
   </div>
 
   <!-- MODE GATE (first launch) -->
@@ -2838,7 +2840,197 @@ function renderDiceHistory(){const el=document.getElementById('rollHistory');if(
 
 /* ══ LOOT ══ */
 let lootOwner='pool',lootFilter='all';
-function lootTab(t){document.querySelectorAll('#scr-loot .tab-btn').forEach((b,i)=>b.classList.toggle('active',['inventory','add','pool','wealth'][i]===t));document.querySelectorAll('#scr-loot .tab-pane').forEach(p=>p.classList.remove('active'));document.getElementById('ltab-'+t).classList.add('active');if(t==='inventory')renderInventory();if(t==='add')renderAddTab();if(t==='pool')renderPool();if(t==='wealth')renderWealth();}
+function lootTab(t){document.querySelectorAll('#scr-loot .tab-btn').forEach((b,i)=>b.classList.toggle('active',['inventory','add','pool','wealth','bulk'][i]===t));document.querySelectorAll('#scr-loot .tab-pane').forEach(p=>p.classList.remove('active'));document.getElementById('ltab-'+t).classList.add('active');if(t==='inventory')renderInventory();if(t==='add')renderAddTab();if(t==='pool')renderPool();if(t==='wealth')renderWealth();if(t==='bulk')renderBulkImportTab();}
+
+function renderBulkImportTab(){
+  const el = document.getElementById('ltab-bulk');
+  el.innerHTML = `
+    <div class="card">
+      <div style="font-family:'Cinzel',serif;font-size:13px;color:var(--gold);margin-bottom:6px">Bulk Loot Import</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">
+        Paste a loot list — one item per line. Everything goes to the party pool.<br>
+        Gold amounts (gp/sp/ep/cp) go to the party treasury automatically.
+      </p>
+      <div class="field">
+        <label>Loot List</label>
+        <textarea id="bulkLootText" placeholder="- Longsword +1&#10;- 3x Healing Potion&#10;- 1800gp from Burgomaster&#10;- Tome of Strahd (worth 500gp)" style="min-height:160px;font-size:12px;line-height:1.6"></textarea>
+      </div>
+      <button class="btn btn-gold" onclick="parseBulkLoot()">⬇ Preview Import</button>
+    </div>
+    <div id="bulkLootPreview"></div>`;
+}
+
+function parseBulkLoot(){
+  const raw = document.getElementById('bulkLootText')?.value||'';
+  const lines = raw.split('\n').map(l=>l.trim()).filter(l=>l && !l.match(/^[-–—=*#\s]+$/));
+
+  const items = [];
+  let goldGP=0, goldSP=0, goldEP=0, goldCP=0;
+
+  lines.forEach(line => {
+    let text = line.replace(/^[-–•*]\s*/, '').trim();
+    if(!text) return;
+    if(text.match(/^total/i)) return;
+
+    // Extract currency
+    const gpMatch = text.match(/(\d[\d,]*)\s*gp/i);
+    const spMatch = text.match(/(\d[\d,]*)\s*sp/i);
+    const epMatch = text.match(/(\d[\d,]*)\s*ep/i);
+    const cpMatch = text.match(/(\d[\d,]*)\s*cp/i);
+
+    // Pure currency line?
+    const isCurrencyLine = text.match(/^[\d,\s]*(gp|sp|ep|cp|gold|silver|electrum|copper)/i);
+    if(isCurrencyLine){
+      if(gpMatch) goldGP += parseInt(gpMatch[1].replace(/,/g,''));
+      if(spMatch) goldSP += parseInt(spMatch[1].replace(/,/g,''));
+      if(epMatch) goldEP += parseInt(epMatch[1].replace(/,/g,''));
+      if(cpMatch) goldCP += parseInt(cpMatch[1].replace(/,/g,''));
+      return;
+    }
+
+    // Strip "- w CharName" hints (no longer needed but clean up name)
+    text = text.replace(/\s*[-–]\s*w\/?\.?\s+\w+$/i,'').trim();
+
+    // Quantity prefix
+    let qty = 1;
+    const qtyMatch = text.match(/^(\d+)\s*[x×]\s+/i);
+    if(qtyMatch){ qty = parseInt(qtyMatch[1])||1; text = text.replace(qtyMatch[0],'').trim(); }
+
+    // Extract gp value
+    let value = 0;
+    const valMatch = text.match(/\((?:worth\s*)?(\d[\d,]*)\s*gp\)/i);
+    if(valMatch) value = parseInt(valMatch[1].replace(/,/g,''));
+    else if(gpMatch && !isCurrencyLine) value = parseInt(gpMatch[1].replace(/,/g,''));
+
+    // Clean currency text from name
+    text = text.replace(/\((?:worth\s*)?\d[\d,]*\s*(?:gp|sp|ep|cp)\)/gi,'')
+               .replace(/\d[\d,]*\s*gp/gi,'').replace(/\s+/g,' ').replace(/[,.]$/,'').trim();
+    if(!text) return;
+
+    // Detect type
+    let type = 'misc';
+    if(text.match(/potion|elixir|vial/i)) type='potion';
+    else if(text.match(/scroll|spell/i)) type='scroll';
+    else if(text.match(/sword|axe|bow|dagger|spear|halberd|mace|wand|rod|glaive|crossbow|javelin|maul|flail|whip/i)) type='weapon';
+    else if(text.match(/armou?r|shield|plate|chain|leather|helm|gauntlet|breastplate/i)) type='armor';
+    else if(text.match(/ring/i)) type='ring';
+    else if(text.match(/staff/i)) type='staff';
+    else if(text.match(/gem|diamond|ruby|emerald|sapphire|pearl|crystal/i)) type='gem';
+    else if(text.match(/coin|treasure|electrum/i)) type='treasure';
+
+    // Detect rarity
+    let rarity = 'common';
+    if(text.match(/legendary|artifact/i)) rarity='legendary';
+    else if(text.match(/very.?rare/i)) rarity='very-rare';
+    else if(text.match(/rare|\+[23]/i)) rarity='rare';
+    else if(text.match(/uncommon|\+1/i)) rarity='uncommon';
+    else if(value >= 5000) rarity='legendary';
+    else if(value >= 500) rarity='rare';
+    else if(value >= 100) rarity='uncommon';
+
+    items.push({id:'i'+Date.now()+Math.random(), name:text, type, rarity, qty, weight:0, value, attune:'none', desc:'', owner:'pool'});
+  });
+
+  if(!items.length && !goldGP && !goldSP && !goldEP && !goldCP){
+    toast('Nothing to import — check the format','var(--red)');
+    return;
+  }
+
+  window._bulkLootItems = items;
+  window._bulkLootGold = {gp:goldGP, sp:goldSP, ep:goldEP, cp:goldCP};
+
+  // Show preview
+  const preview = document.getElementById('bulkLootPreview');
+  let html = `<div class="divider"><span>Preview — ${items.length} item${items.length!==1?'s':''}${goldGP||goldSP||goldEP||goldCP?' + currency':''}</span></div>`;
+
+  if(goldGP||goldSP||goldEP||goldCP){
+    html += `<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:10px;padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:20px">🪙</span>
+      <div>
+        <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold)">→ Party Treasury</div>
+        <div style="font-size:13px;color:var(--text)">${[goldGP&&goldGP+'gp',goldSP&&goldSP+'sp',goldEP&&goldEP+'ep',goldCP&&goldCP+'cp'].filter(Boolean).join(' · ')}</div>
+      </div>
+    </div>`;
+  }
+
+  items.forEach((item,i) => {
+    html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px">
+      <span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-family:'Cinzel',serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.qty>1?item.qty+'× ':''}${item.name}</div>
+        <div style="font-size:10px;color:var(--muted)">${item.rarity}${item.value?' · '+item.value+'gp':''} → Party Pool</div>
+      </div>
+      <span onclick="removeBulkPreviewItem(${i})" style="color:var(--red);cursor:pointer;font-size:16px;padding:0 6px;flex-shrink:0">✕</span>
+    </div>`;
+  });
+
+  html += `<button class="btn btn-gold" onclick="confirmBulkLoot()" style="margin-top:8px">✦ Confirm Import</button>
+           <button class="btn btn-outline" onclick="document.getElementById('bulkLootPreview').innerHTML=''" style="margin-top:4px">Clear</button>`;
+  preview.innerHTML = html;
+}
+
+function removeBulkPreviewItem(idx){
+  if(window._bulkLootItems) window._bulkLootItems.splice(idx,1);
+  // Re-render preview
+  parseBulkLootPreviewOnly();
+}
+
+function parseBulkLootPreviewOnly(){
+  const items = window._bulkLootItems||[];
+  const gold = window._bulkLootGold||{};
+  const preview = document.getElementById('bulkLootPreview');
+  if(!preview) return;
+  let html = `<div class="divider"><span>Preview — ${items.length} item${items.length!==1?'s':''}${gold.gp||gold.sp?' + currency':''}</span></div>`;
+  if(gold.gp||gold.sp||gold.ep||gold.cp){
+    html += `<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:10px;padding:10px 14px;margin-bottom:8px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold)">🪙 → Party Treasury</div>
+      <div style="font-size:13px;color:var(--text)">${[gold.gp&&gold.gp+'gp',gold.sp&&gold.sp+'sp',gold.ep&&gold.ep+'ep',gold.cp&&gold.cp+'cp'].filter(Boolean).join(' · ')}</div>
+    </div>`;
+  }
+  items.forEach((item,i) => {
+    html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px">
+      <span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span>
+      <div style="flex:1;min-width:0"><div style="font-size:12px;font-family:'Cinzel',serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.qty>1?item.qty+'× ':''}${item.name}</div>
+      <div style="font-size:10px;color:var(--muted)">${item.rarity}${item.value?' · '+item.value+'gp':''} → Party Pool</div></div>
+      <span onclick="removeBulkPreviewItem(${i})" style="color:var(--red);cursor:pointer;font-size:16px;padding:0 6px;flex-shrink:0">✕</span>
+    </div>`;
+  });
+  if(items.length||gold.gp||gold.sp){
+    html += `<button class="btn btn-gold" onclick="confirmBulkLoot()" style="margin-top:8px">✦ Confirm Import</button>
+             <button class="btn btn-outline" onclick="document.getElementById('bulkLootPreview').innerHTML=''" style="margin-top:4px">Clear</button>`;
+  }
+  preview.innerHTML = html;
+}
+
+function confirmBulkLoot(){
+  const items = window._bulkLootItems||[];
+  const gold = window._bulkLootGold||{};
+
+  // Save items
+  if(items.length){
+    const existing = getItems();
+    items.forEach(item => existing.push(item));
+    saveItems(existing);
+  }
+
+  // Add gold to party treasury
+  if(gold.gp||gold.sp||gold.ep||gold.cp){
+    const w = getWealth();
+    if(!w['party']) w['party']={gp:0,sp:0,ep:0,cp:0};
+    w['party'].gp = (w['party'].gp||0) + (gold.gp||0);
+    w['party'].sp = (w['party'].sp||0) + (gold.sp||0);
+    w['party'].ep = (w['party'].ep||0) + (gold.ep||0);
+    w['party'].cp = (w['party'].cp||0) + (gold.cp||0);
+    saveWealth(w);
+  }
+
+  window._bulkLootItems = [];
+  window._bulkLootGold = {};
+  document.getElementById('bulkLootText').value='';
+  document.getElementById('bulkLootPreview').innerHTML='';
+  toast(`✦ ${items.length} items imported!`,'var(--gold)');
+  lootTab('inventory');
+}
 function setLootOwner(id){lootOwner=id;lootFilter='all';renderInventory();}
 function setLootFilter(f){lootFilter=f;renderInventory();}
 function renderOwnerPills(activeId){const chars=getChars();return`<div class="owner-pills"><div class="owner-pill ${activeId==='pool'?'active':''}" style="--pill-c:var(--gold)" onclick="setLootOwner('pool')">🎒 Party Pool</div>${chars.map(c=>{const cc=classColor(c.classIdx);return`<div class="owner-pill ${activeId==c.id?'active':''}" style="--pill-c:${cc}" onclick="setLootOwner(${c.id})">${classIcon(c.classIdx)} ${c.name}</div>`;}).join('')}</div>`;}
