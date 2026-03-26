@@ -2,6 +2,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <meta name="theme-color" content="#0d0a1a">
@@ -3099,8 +3102,58 @@ let deferredPrompt=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;renderInstallBanner();});
 function renderInstallBanner(){const el=document.getElementById('installBanner');if(!el)return;if(deferredPrompt&&!S.get('toh_install_dismissed')){el.innerHTML=`<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:12px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px"><span style="font-size:28px">📲</span><p style="font-size:12px;color:var(--gold);flex:1;line-height:1.4"><strong style="font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;display:block;margin-bottom:3px">Install App</strong>Add to home screen for offline use.</p><button class="btn btn-primary" style="width:auto;padding:8px 14px;margin:0;font-size:10px" onclick="installApp()">Install</button><span style="font-size:16px;cursor:pointer;opacity:0.6" onclick="S.set('toh_install_dismissed',true);document.getElementById('installBanner').innerHTML=''">✕</span></div>`;}else if(!S.get('toh_install_dismissed')){el.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 14px;margin-bottom:12px;font-size:12px;color:var(--muted);text-align:center"><strong style="font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;color:var(--gold);display:block;margin-bottom:4px">📲 Install as App</strong>Tap your browser's share button → "Add to Home Screen"</div>`;}else{el.innerHTML='';}}
 function installApp(){if(!deferredPrompt)return;deferredPrompt.prompt();deferredPrompt.userChoice.then(r=>{if(r.outcome==='accepted'){toast('✦ App installed!');document.getElementById('installBanner').innerHTML='';}deferredPrompt=null;});}
-if('serviceWorker' in navigator){const swCode=`const CACHE='toh-v5';const ASSETS=[self.location.pathname];self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));self.skipWaiting();});self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{const c=res.clone();caches.open(CACHE).then(cache=>cache.put(e.request,c));return res;})));});`;const blob=new Blob([swCode],{type:'application/javascript'});navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});}
-
+// Auto-versioned service worker — cache busts on every file change
+const _APP_VERSION = 'ceb73851';
+if('serviceWorker' in navigator){
+  const swCode = `
+    const CACHE = 'toh-ceb73851';
+    const HTML_URL = self.location.pathname;
+    self.addEventListener('install', e => {
+      e.waitUntil(caches.open(CACHE).then(c => c.addAll([HTML_URL])));
+      self.skipWaiting();
+    });
+    self.addEventListener('activate', e => {
+      e.waitUntil(
+        caches.keys().then(keys =>
+          Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+        )
+      );
+      self.clients.claim();
+    });
+    self.addEventListener('fetch', e => {
+      if(e.request.method !== 'GET') return;
+      const isHTML = e.request.destination === 'document' ||
+                     e.request.url.endsWith('.html') ||
+                     e.request.url === self.location.origin + HTML_URL;
+      if(isHTML) {
+        // Network-first for HTML: always try to get fresh version
+        e.respondWith(
+          fetch(e.request).then(res => {
+            const clone = res.clone();
+            caches.open(CACHE).then(c => c.put(e.request, clone));
+            return res;
+          }).catch(() => caches.match(e.request))
+        );
+      } else {
+        // Cache-first for other assets
+        e.respondWith(
+          caches.match(e.request).then(r => r || fetch(e.request).then(res => {
+            const clone = res.clone();
+            caches.open(CACHE).then(c => c.put(e.request, clone));
+            return res;
+          }))
+        );
+      }
+    });
+  `;
+  const blob = new Blob([swCode], {type:'application/javascript'});
+  navigator.serviceWorker.register(URL.createObjectURL(blob))
+    .then(reg => {
+      // Check for updates immediately and every 60 seconds
+      reg.update();
+      setInterval(() => reg.update(), 60000);
+    }).catch(() => {});
+}
 /* ══════════════════════════════════════════════════════
    CAMPAIGN MANAGEMENT SYSTEM
 ══════════════════════════════════════════════════════ */
@@ -3370,8 +3423,15 @@ function renderCampDetailHeader() {
   if (!camp) return;
   const isActive = getActiveCampId() === camp.id;
   const el = document.getElementById('campDetailHeader');
-  const chars = getChars().filter(c => (camp.charIds||[]).includes(c.id));
   const allChars = getChars();
+  // Clean stale charIds (deleted characters)
+  const validCharIds = (camp.charIds||[]).filter(x=>allChars.find(c=>String(c.id)===String(x)));
+  if(validCharIds.length !== (camp.charIds||[]).length){
+    const camps = getCampaigns();
+    const ci = camps.findIndex(c=>c.id===camp.id);
+    if(ci>=0){ camps[ci].charIds = validCharIds; saveCampaigns(camps); }
+    camp.charIds = validCharIds;
+  }
   el.innerHTML = `
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:13px;padding:14px;margin-bottom:14px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
