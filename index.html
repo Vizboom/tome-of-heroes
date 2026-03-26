@@ -967,7 +967,20 @@ const QUICK_ITEMS=[
 ];
 
 /* ══ STORAGE ══ */
-const S={get:k=>{try{return JSON.parse(localStorage.getItem(k)||'null');}catch{return null;}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}}};
+const S={
+  get:k=>{try{return JSON.parse(localStorage.getItem(k)||'null');}catch{return null;}},
+  set:(k,v)=>{
+    try{
+      // Before saving anything, snapshot campaigns so we can restore if they vanish
+      const campsBefore = k!=='toh_campaigns' ? localStorage.getItem('toh_campaigns') : null;
+      localStorage.setItem(k,JSON.stringify(v));
+      // If campaigns disappeared after a non-campaign save, restore them
+      if(campsBefore && k!=='toh_campaigns' && !localStorage.getItem('toh_campaigns')){
+        try{ localStorage.setItem('toh_campaigns', campsBefore); }catch(e){}
+      }
+    }catch(e){}
+  }
+};
 const getChars=()=>S.get('toh_chars')||[];
 const saveChars=c=>S.set('toh_chars',c);
 const getParty=()=>S.get('toh_party')||[];
@@ -2497,6 +2510,10 @@ function _finishCharImport(char, source){
   const chars = getChars();
   chars.push(char);
   saveChars(chars);
+  // Integrity check: if campaigns vanished after char save, re-seed them
+  if(getCampaigns().length === 0 && PRESET_CAMPAIGNS && PRESET_CAMPAIGNS.length){
+    seedPresetCampaigns();
+  }
   document.getElementById('charImportModal')?.remove();
   toast(`✦ ${char.name} imported from ${source}!`);
   renderRoster();
@@ -3427,32 +3444,30 @@ function renderCampaignSwitchBanner() {
 
 // Seed preset campaigns AFTER all consts are defined
 function seedPresetCampaigns(){
+  if(!PRESET_CAMPAIGNS || !PRESET_CAMPAIGNS.length){
+    console.warn('PRESET_CAMPAIGNS empty or not loaded');
+    return;
+  }
   let camps = getCampaigns();
   let changed = false;
   PRESET_CAMPAIGNS.forEach(p => {
     const existing = camps.find(c => c.id === p.id);
-    // Reinstall if missing OR if it looks broken (no sessions AND no npcs)
     const needsInstall = !existing ||
       ((!existing.sessions || existing.sessions.length === 0) &&
        (!existing.npcs || existing.npcs.length === 0));
     if(!needsInstall) return;
-    try {
-      const b64 = p.code.replace(/[-_]/g, x=>({'-':'+','_':'/'})[x]);
-      const padded = b64 + '='.repeat((4-b64.length%4)%4);
-      const camp = JSON.parse(atob(padded));
-      if(camp && camp.name){
-        camp.sessions=camp.sessions||[]; camp.quests=camp.quests||[];
-        camp.npcs=camp.npcs||[]; camp.arcs=camp.arcs||[];
-        camp.notes=camp.notes||[]; camp.charIds=camp.charIds||[];
-        if(existing && existing.charIds && existing.charIds.length){
-          camp.charIds = existing.charIds;
-        }
-        const idx = camps.findIndex(c => c.id === p.id);
-        if(idx >= 0) camps[idx] = camp;
-        else camps.push(camp);
-        changed = true;
-      }
-    } catch(e){ console.warn('Preset install failed:', p.id, e); }
+    // Deep clone so we don't mutate the master
+    const camp = JSON.parse(JSON.stringify(p));
+    camp.sessions = camp.sessions||[]; camp.quests = camp.quests||[];
+    camp.npcs = camp.npcs||[]; camp.arcs = camp.arcs||[];
+    camp.notes = camp.notes||[]; camp.charIds = camp.charIds||[];
+    if(existing && existing.charIds && existing.charIds.length){
+      camp.charIds = existing.charIds;
+    }
+    const idx = camps.findIndex(c => c.id === p.id);
+    if(idx >= 0) camps[idx] = camp;
+    else camps.push(camp);
+    changed = true;
   });
   if(changed){
     saveCampaigns(camps);
@@ -3463,27 +3478,25 @@ function seedPresetCampaigns(){
 seedPresetCampaigns();
 
 function forceReinstallPresets(){
+  if(!PRESET_CAMPAIGNS || !PRESET_CAMPAIGNS.length){
+    alert('Preset data not found. Try reloading the page.');
+    return;
+  }
   let camps = getCampaigns();
   let count = 0;
   PRESET_CAMPAIGNS.forEach(p => {
-    try {
-      const b64 = p.code.replace(/[-_]/g, x=>({'-':'+','_':'/'})[x]);
-      const padded = b64 + '='.repeat((4-b64.length%4)%4);
-      const camp = JSON.parse(atob(padded));
-      if(camp && camp.name){
-        camp.sessions=camp.sessions||[]; camp.quests=camp.quests||[];
-        camp.npcs=camp.npcs||[]; camp.arcs=camp.arcs||[];
-        camp.notes=camp.notes||[]; camp.charIds=camp.charIds||[];
-        const existing = camps.find(c => c.id === p.id);
-        if(existing && existing.charIds && existing.charIds.length){
-          camp.charIds = existing.charIds;
-        }
-        const idx = camps.findIndex(c => c.id === p.id);
-        if(idx >= 0) camps[idx] = camp;
-        else camps.push(camp);
-        count++;
-      }
-    } catch(e){}
+    const camp = JSON.parse(JSON.stringify(p));
+    camp.sessions = camp.sessions||[]; camp.quests = camp.quests||[];
+    camp.npcs = camp.npcs||[]; camp.arcs = camp.arcs||[];
+    camp.notes = camp.notes||[]; camp.charIds = camp.charIds||[];
+    const existing = camps.find(c => c.id === p.id);
+    if(existing && existing.charIds && existing.charIds.length){
+      camp.charIds = existing.charIds;
+    }
+    const idx = camps.findIndex(c => c.id === p.id);
+    if(idx >= 0) camps[idx] = camp;
+    else camps.push(camp);
+    count++;
   });
   saveCampaigns(camps);
   if(!getActiveCampId() && camps.length) setActiveCampId(camps[0].id);
