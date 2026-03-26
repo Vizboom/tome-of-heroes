@@ -1094,7 +1094,25 @@ function renderRoster(){
   }).join('');
   renderInstallBanner();
 }
-function deleteChar(id){if(!confirm('Remove this character?'))return;saveChars(getChars().filter(c=>c.id!==id));saveParty(getParty().filter(c=>c.id!==id));saveItems(getItems().filter(i=>i.owner!=id));renderRoster();toast('Removed','var(--red)');}
+function deleteChar(id){
+  if(!confirm('Remove this character?'))return;
+  saveChars(getChars().filter(c=>c.id!==id));
+  saveParty(getParty().filter(c=>c.id!==id));
+  saveItems(getItems().filter(i=>i.owner!=id));
+  // Remove from all campaign charIds
+  const camps = getCampaigns();
+  const sid = String(id);
+  let changed = false;
+  camps.forEach(c=>{
+    if(c.charIds && c.charIds.some(x=>String(x)===sid)){
+      c.charIds = c.charIds.filter(x=>String(x)!==sid);
+      changed = true;
+    }
+  });
+  if(changed) saveCampaigns(camps);
+  renderRoster();
+  toast('Removed','var(--red)');
+}
 
 /* ══ BUILD ══ */
 let B={cls:null,scores:{STR:10,DEX:10,CON:10,INT:10,WIS:10,CHA:10},profs:new Set()};
