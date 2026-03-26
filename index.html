@@ -1098,20 +1098,41 @@ function renderRoster(){
 }
 function deleteChar(id){
   if(!confirm('Remove this character?'))return;
-  saveChars(getChars().filter(c=>c.id!==id));
-  saveParty(getParty().filter(c=>c.id!==id));
-  saveItems(getItems().filter(i=>i.owner!=id));
-  // Remove from all campaign charIds
-  const camps = getCampaigns();
   const sid = String(id);
-  let changed = false;
-  camps.forEach(c=>{
-    if(c.charIds && c.charIds.some(x=>String(x)===sid)){
-      c.charIds = c.charIds.filter(x=>String(x)!==sid);
-      changed = true;
-    }
+
+  // 1. Remove from characters
+  saveChars(getChars().filter(c=>c.id!==id));
+
+  // 2. Remove from party
+  saveParty(getParty().filter(c=>c.id!==id));
+
+  // 3. Remove their items (move to pool rather than delete)
+  const items = getItems().map(i=>{
+    if(String(i.owner)===sid){ i.owner='pool'; }
+    return i;
   });
-  if(changed) saveCampaigns(camps);
+  saveItems(items);
+
+  // 4. Remove from all campaign charIds
+  const camps = getCampaigns();
+  camps.forEach(c=>{
+    if(c.charIds) c.charIds = c.charIds.filter(x=>String(x)!==sid);
+  });
+  saveCampaigns(camps);
+
+  // 5. Clear wealth entry
+  const w = getWealth();
+  if(w[id] || w[sid]){ delete w[id]; delete w[sid]; saveWealth(w); }
+
+  // 6. Clear dice char selection if it was this character
+  if(String(S.get('toh_dice_char'))===sid) S.set('toh_dice_char', null);
+
+  // 7. Clear player char if it was this character
+  if(String(S.get('toh_player_char_id'))===sid){
+    S.set('toh_player_char_id', null);
+    S.set('toh_player_camp_id', null);
+  }
+
   renderRoster();
   toast('Removed','var(--red)');
 }
@@ -3035,6 +3056,8 @@ function setLootOwner(id){lootOwner=id;lootFilter='all';renderInventory();}
 function setLootFilter(f){lootFilter=f;renderInventory();}
 function renderOwnerPills(activeId){const chars=getChars();return`<div class="owner-pills"><div class="owner-pill ${activeId==='pool'?'active':''}" style="--pill-c:var(--gold)" onclick="setLootOwner('pool')">🎒 Party Pool</div>${chars.map(c=>{const cc=classColor(c.classIdx);return`<div class="owner-pill ${activeId==c.id?'active':''}" style="--pill-c:${cc}" onclick="setLootOwner(${c.id})">${classIcon(c.classIdx)} ${c.name}</div>`;}).join('')}</div>`;}
 function renderInventory(){
+  // Reset lootOwner if the selected character no longer exists
+  if(lootOwner!=='pool' && !getChars().find(c=>String(c.id)===String(lootOwner))) lootOwner='pool';
   const el=document.getElementById('ltab-inventory');const allItems=getItems();
   const owned=allItems.filter(i=>lootOwner==='pool'?i.owner==='pool':i.owner==lootOwner);
   const filtered=owned.filter(i=>lootFilter==='all'||i.type===lootFilter);
@@ -3059,7 +3082,12 @@ function renderAddTab(){const chars=getChars();const el=document.getElementById(
 function addItem(){const name=(document.getElementById('iName')?.value||'').trim();if(!name){toast('Enter item name','var(--red)');return;}const item={id:'i'+Date.now(),name,type:document.getElementById('iType').value,rarity:document.getElementById('iRarity').value,qty:Math.max(1,parseInt(document.getElementById('iQty').value)||1),weight:parseFloat(document.getElementById('iWt').value)||0,value:parseFloat(document.getElementById('iVal').value)||0,attune:document.getElementById('iAttune').value,desc:(document.getElementById('iDesc').value||'').trim(),owner:document.getElementById('iOwner').value};const items=getItems();items.push(item);saveItems(items);document.getElementById('iName').value='';document.getElementById('iDesc').value='';document.getElementById('iQty').value='1';toast('✦ '+name+' added!');renderInventory();renderPool();}
 function quickAdd(qi){const q=QUICK_ITEMS[qi];const ownerEl=document.querySelector('#ltab-add #iOwner');const owner=ownerEl?.value||'pool';const item={...q,id:'i'+Date.now()+qi,owner};const items=getItems();items.push(item);saveItems(items);toast('✦ '+q.name+' added!');renderInventory();renderPool();}
 function renderPool(){const items=getItems().filter(i=>i.owner==='pool');const el=document.getElementById('ltab-pool');const totVal=items.reduce((s,i)=>s+(parseFloat(i.value)||0)*i.qty,0);let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px"><div class="inv-sum-card"><div class="isc-label">UNASSIGNED</div><div class="isc-val">${items.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val">${fmtGP(totVal)} <span style="font-size:9px;color:var(--muted)">gp</span></div></div></div>`;if(!items.length)html+=`<div class="empty-state"><div class="es-icon">🪙</div><p>Pool is empty!</p></div>`;else html+=`<div class="card">`+items.map(item=>`<div class="pool-row"><span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${item.name}${item.qty>1?` ×${item.qty}`:''}</div><div style="font-size:10px"><span class="rtext-${item.rarity}">${item.rarity}</span>${item.value>0?' · '+item.value+' gp':''}</div></div><button class="pool-assign-btn" onclick="assignFromPool('${item.id}')">Assign →</button><button class="icon-btn" style="color:var(--red)" onclick="removeItem('${item.id}')">✕</button></div>`).join('')+`</div>`;el.innerHTML=html;}
-function renderWealth(){const chars=getChars();const wealth=getWealth();const pw=wealth['party']||{gp:0,sp:0,ep:0,cp:0};const el=document.getElementById('ltab-wealth');let html=`<div class="divider"><span>Party Treasury</span></div><div class="coin-grid"><div class="coin-cell coin-gp"><label>GP</label><input type="number" min="0" value="${pw.gp||0}" onchange="updateWealth('party','gp',+this.value)"></div><div class="coin-cell coin-sp"><label>SP</label><input type="number" min="0" value="${pw.sp||0}" onchange="updateWealth('party','sp',+this.value)"></div><div class="coin-cell coin-ep"><label>EP</label><input type="number" min="0" value="${pw.ep||0}" onchange="updateWealth('party','ep',+this.value)"></div><div class="coin-cell coin-cp"><label>CP</label><input type="number" min="0" value="${pw.cp||0}" onchange="updateWealth('party','cp',+this.value)"></div></div><div class="wealth-total"><div><div class="wealth-total-label">TOTAL VALUE</div><div class="wealth-total-val">${fmtGP(calcGP(pw))} gp</div></div><button onclick="splitGold()" style="padding:7px 13px;background:var(--gold-dim);border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:9px;cursor:pointer;letter-spacing:1px">Split Evenly</button></div><div class="divider"><span>Per Character</span></div>`;
+function renderWealth(){const chars=getChars();const wealth=getWealth();const pw=wealth['party']||{gp:0,sp:0,ep:0,cp:0};const chars_w=getChars();
+  // Clean up wealth entries for deleted characters
+  const w_all=getWealth(); let w_changed=false;
+  Object.keys(w_all).forEach(k=>{ if(k!=='party' && !chars_w.find(c=>String(c.id)===k)){ delete w_all[k]; w_changed=true; }});
+  if(w_changed) saveWealth(w_all);
+  const el=document.getElementById('ltab-wealth');let html=`<div class="divider"><span>Party Treasury</span></div><div class="coin-grid"><div class="coin-cell coin-gp"><label>GP</label><input type="number" min="0" value="${pw.gp||0}" onchange="updateWealth('party','gp',+this.value)"></div><div class="coin-cell coin-sp"><label>SP</label><input type="number" min="0" value="${pw.sp||0}" onchange="updateWealth('party','sp',+this.value)"></div><div class="coin-cell coin-ep"><label>EP</label><input type="number" min="0" value="${pw.ep||0}" onchange="updateWealth('party','ep',+this.value)"></div><div class="coin-cell coin-cp"><label>CP</label><input type="number" min="0" value="${pw.cp||0}" onchange="updateWealth('party','cp',+this.value)"></div></div><div class="wealth-total"><div><div class="wealth-total-label">TOTAL VALUE</div><div class="wealth-total-val">${fmtGP(calcGP(pw))} gp</div></div><button onclick="splitGold()" style="padding:7px 13px;background:var(--gold-dim);border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:9px;cursor:pointer;letter-spacing:1px">Split Evenly</button></div><div class="divider"><span>Per Character</span></div>`;
 if(!chars.length)html+=`<div class="empty-state" style="padding:20px"><p>Create characters first.</p></div>`;
 chars.forEach(c=>{const cw=wealth[c.id]||{gp:0,sp:0,ep:0,cp:0};const items=getItems().filter(i=>i.owner==c.id);const itemVal=items.reduce((s,i)=>s+(parseFloat(i.value)||0)*i.qty,0);const cc=classColor(c.classIdx);html+=`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;border-left:4px solid ${cc}"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span style="font-size:18px">${classIcon(c.classIdx)}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:13px">${c.name}</div><div style="font-size:10px;color:var(--muted)">Items worth ${fmtGP(itemVal)} gp</div></div><div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold)">${fmtGP(calcGP(cw))} gp</div></div><div class="coin-grid"><div class="coin-cell coin-gp"><label>GP</label><input type="number" min="0" value="${cw.gp||0}" onchange="updateWealth(${c.id},'gp',+this.value)"></div><div class="coin-cell coin-sp"><label>SP</label><input type="number" min="0" value="${cw.sp||0}" onchange="updateWealth(${c.id},'sp',+this.value)"></div><div class="coin-cell coin-ep"><label>EP</label><input type="number" min="0" value="${cw.ep||0}" onchange="updateWealth(${c.id},'ep',+this.value)"></div><div class="coin-cell coin-cp"><label>CP</label><input type="number" min="0" value="${cw.cp||0}" onchange="updateWealth(${c.id},'cp',+this.value)"></div></div></div>`;});
 el.innerHTML=html;}
