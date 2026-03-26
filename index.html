@@ -830,6 +830,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <button class="btn btn-gold" onclick="showNewCampForm()">+ New Campaign</button>
       <button class="btn btn-outline" onclick="showImportCampForm()">↓ Import Campaign</button>
       <button class="btn btn-outline btn-restore-presets" onclick="forceReinstallPresets()" style="border-color:var(--gold);color:var(--gold)">↺ Restore Built-in Campaigns</button>
+      <button class="btn btn-outline" onclick="diagCampaigns()" style="border-color:var(--red);color:var(--red);font-size:11px">🔍 Diagnose</button>
     </div>
     <!-- New Campaign form -->
     <div id="campNewForm" style="display:none">
@@ -2517,6 +2518,41 @@ function _finishCharImport(char, source){
   document.getElementById('charImportModal')?.remove();
   toast(`✦ ${char.name} imported from ${source}!`);
   renderRoster();
+}
+
+function diagCampaigns(){
+  const lines = [];
+  lines.push('=== CAMPAIGN DIAGNOSTICS ===');
+  // localStorage raw
+  const raw = localStorage.getItem('toh_campaigns');
+  lines.push('toh_campaigns raw: ' + (raw ? raw.length + ' chars' : 'NULL/MISSING'));
+  if(raw){
+    try {
+      const parsed = JSON.parse(raw);
+      lines.push('Parsed OK: ' + parsed.length + ' campaigns');
+      parsed.forEach((c,i) => lines.push('  ['+i+'] id='+c.id+' name='+c.name+' sessions='+(c.sessions||[]).length));
+    } catch(e){ lines.push('Parse FAILED: '+e.message); }
+  }
+  // PRESET_CAMPAIGNS
+  lines.push('PRESET_CAMPAIGNS: ' + (PRESET_CAMPAIGNS ? PRESET_CAMPAIGNS.length + ' items' : 'UNDEFINED'));
+  if(PRESET_CAMPAIGNS && PRESET_CAMPAIGNS.length){
+    PRESET_CAMPAIGNS.forEach((p,i) => lines.push('  ['+i+'] id='+p.id+' name='+p.name+' sessions='+(p.sessions||[]).length));
+  }
+  // JSON tag
+  const tag = document.getElementById('preset-campaigns-data');
+  lines.push('JSON tag element: ' + (tag ? 'FOUND ('+tag.textContent.length+' chars)' : 'MISSING'));
+  // Other keys
+  lines.push('toh_mode: ' + localStorage.getItem('toh_mode'));
+  lines.push('toh_active_camp: ' + localStorage.getItem('toh_active_camp'));
+  lines.push('toh_chars: ' + (localStorage.getItem('toh_chars')||'null').length + ' chars');
+  // localStorage total
+  let total = 0;
+  for(let k in localStorage){ try{ total += (localStorage.getItem(k)||'').length; }catch(e){} }
+  lines.push('localStorage total: ~' + Math.round(total/1024) + 'KB');
+
+  const msg = lines.join('\n');
+  console.log(msg);
+  alert(msg);
 }
 
 function bootApp(){
