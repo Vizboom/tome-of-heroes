@@ -735,8 +735,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 
   <!-- DICE -->
   <div class="scroll-region screen" id="scr-dice">
-    <div class="divider"><span>Dice Oracle</span></div>
-    <div class="section-label">Roll Mode</div>
+    <div id="diceCharPanel"></div>
+    <div class="divider"><span>Roll Mode</span></div>
     <div class="mode-row">
       <button class="mode-btn adv-on" id="mAdv" onclick="setMode('advantage')"><span class="mi">↑</span>Advantage</button>
       <button class="mode-btn neu-on" id="mNeu" onclick="setMode('normal')"><span class="mi">⬡</span>Normal</button>
@@ -1052,15 +1052,29 @@ function goBack(){const m=SCREEN_META[currentScreen];if(m?.back)nav(m.back);}
 /* ══ ROSTER ══ */
 function renderRoster(){
   let chars=getChars();
-  // In player mode, only show the player's own character(s)
+  // In player mode, only show the player's own character
   if(isPlayerMode()){
     const pCharId=getPlayerCharId();
     chars=chars.filter(c=>c.id==pCharId);
+  } else {
+    // In DM mode, if there's an active campaign with assigned characters,
+    // only show those characters on the roster
+    const activeCamp = getActiveCamp();
+    if(activeCamp && activeCamp.charIds && activeCamp.charIds.length){
+      const campCharIds = activeCamp.charIds.map(String);
+      chars=chars.filter(c=>campCharIds.includes(String(c.id)));
+    }
   }
   const el=document.getElementById('rosterList');
   if(!chars.length){
-    el.innerHTML=`<div class="empty-state fadein"><div class="es-icon">📜</div><p>${isPlayerMode()?'No character found.<br>Ask your DM for your access code.':'Your tome is empty.<br>Forge your first hero below.'}</p></div>`;
-    if(!isPlayerMode())renderInstallBanner();
+    const activeCamp = getActiveCamp();
+    const hasCampFilter = !isPlayerMode() && activeCamp && activeCamp.charIds && activeCamp.charIds.length;
+    el.innerHTML=`<div class="empty-state fadein"><div class="es-icon">📜</div><p>${
+      isPlayerMode()?'No character found.<br>Ask your DM for your access code.':
+      hasCampFilter?`No characters assigned to <strong>${activeCamp.name}</strong>.<br>Assign characters in the Campaign tab.`:
+      'Your tome is empty.<br>Forge your first hero below.'
+    }</p></div>`;
+    if(!isPlayerMode() && !hasCampFilter)renderInstallBanner();
     return;
   }
   el.innerHTML=chars.map(c=>{
@@ -2584,7 +2598,210 @@ function copyText(txt){navigator.clipboard?.writeText(txt).then(()=>toast('Copie
 
 /* ══ DICE ══ */
 let diceState={mode:'normal',die:20,activeConds:new Set(),history:[]};
-function renderDiceScreen(){document.getElementById('dieStrip').innerHTML=[4,6,8,10,12,20,100].map(d=>`<button class="die-btn ${d===diceState.die?'sel':''}" onclick="selectDie(${d})">d${d}</button>`).join('');renderCondGrid();renderActiveConds();updateRollBtn();renderDiceHistory();}
+function renderDiceScreen(){
+  renderDiceCharPanel();
+  document.getElementById('dieStrip').innerHTML=[4,6,8,10,12,20,100].map(d=>`<button class="die-btn ${d===diceState.die?'sel':''}" onclick="selectDie(${d})">d${d}</button>`).join('');
+  renderCondGrid();renderActiveConds();updateRollBtn();renderDiceHistory();
+}
+
+function getActiveDiceChar(){
+  // Check for manually selected character
+  const sel = S.get('toh_dice_char');
+  if(sel){
+    const c = getChars().find(c=>String(c.id)===String(sel));
+    if(c) return c;
+  }
+  // Player mode: use their character
+  if(isPlayerMode()){
+    const id = getPlayerCharId();
+    return getChars().find(c=>String(c.id)===String(id))||null;
+  }
+  // DM mode: use first character in active campaign, or first char overall
+  const camp = getActiveCamp();
+  const chars = getChars();
+  if(camp && camp.charIds && camp.charIds.length){
+    const c = chars.find(c=>String(c.id)===String(camp.charIds[0]));
+    if(c) return c;
+  }
+  return chars[0]||null;
+}
+
+function renderDiceCharPanel(){
+  const el = document.getElementById('diceCharPanel');
+  if(!el) return;
+  const char = getActiveDiceChar();
+  if(!char){ el.innerHTML=''; return; }
+  const cls = CLASSES[char.classIdx];
+  const cc = classColor(char.classIdx);
+  const pb = getPB(char.level);
+
+  // Build ability quick-rolls
+  const abMods = {};
+  ['STR','DEX','CON','INT','WIS','CHA'].forEach(ab=>{
+    abMods[ab] = parseInt(getMod(char.abilities[ab]))||0;
+  });
+
+  // Skill list with ability and proficiency
+  const skillList = [
+    {n:'Acrobatics',a:'DEX'},{n:'Animal Handling',a:'WIS'},{n:'Arcana',a:'INT'},
+    {n:'Athletics',a:'STR'},{n:'Deception',a:'CHA'},{n:'History',a:'INT'},
+    {n:'Insight',a:'WIS'},{n:'Intimidation',a:'CHA'},{n:'Investigation',a:'INT'},
+    {n:'Medicine',a:'WIS'},{n:'Nature',a:'INT'},{n:'Perception',a:'WIS'},
+    {n:'Performance',a:'CHA'},{n:'Persuasion',a:'CHA'},{n:'Religion',a:'INT'},
+    {n:'Sleight of Hand',a:'DEX'},{n:'Stealth',a:'DEX'},{n:'Survival',a:'WIS'}
+  ];
+
+  const profs = char.proficiencies||[];
+  const saves = cls.saves||[];
+
+  // Active DM effects on this char
+  const effects = char.effects||{};
+  const activeEffects = Object.entries(effects).filter(([,v])=>v);
+  const customFx = char.customEffects||[];
+
+  el.innerHTML = `
+    <div style="background:var(--surface2);border:1px solid ${cc};border-radius:13px;padding:14px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <div style="width:40px;height:40px;border-radius:50%;background:${cc}22;border:2px solid ${cc};display:flex;align-items:center;justify-content:center;font-size:20px">${cls.icon}</div>
+        <div style="flex:1">
+          <div style="font-family:'Cinzel',serif;font-size:14px;color:var(--gold)">${char.name}</div>
+          <div style="font-size:11px;color:var(--muted)">Lv${char.level} ${cls.name} · PB +${pb} · ${char.currentHP}/${char.maxHP} HP</div>
+        </div>
+        <select id="diceCharSelect" onchange="switchDiceChar(this.value)" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px 8px;color:var(--text);font-size:11px;max-width:100px">
+          ${(()=>{
+            const camp = getActiveCamp();
+            const allChars = getChars();
+            let pool = allChars;
+            if(camp && camp.charIds && camp.charIds.length){
+              const filtered = allChars.filter(c=>camp.charIds.some(x=>String(x)===String(c.id)));
+              if(filtered.length) pool = filtered;
+            }
+            return pool.map(c=>`<option value="${c.id}" ${String(c.id)===String(char.id)?'selected':''}>${c.name}</option>`).join('');
+          })()}
+        </select>
+      </div>
+
+      ${activeEffects.length||customFx.length?`
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
+        ${activeEffects.map(([k])=>{
+          const labels={inspiration:'🌟 Inspired',exhaustion:`💤 Exhausted Lv${effects.exhaustion}`,
+            concentration:'🎯 Concentrating',raging:'🔥 Raging',blessed:'✨ Blessed',
+            cursed:'🩸 Cursed',polymorphed:'🦎 Polymorphed',hidden:'🗡 Hidden'};
+          return labels[k]?`<span class="cond-tag" style="--chip-c:var(--gold);font-size:10px">${labels[k]}</span>`:'';
+        }).join('')}
+        ${customFx.map(e=>`<span class="cond-tag" style="--chip-c:var(--purple);font-size:10px">✦ ${e}</span>`).join('')}
+      </div>`:''}
+
+      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">ABILITY CHECKS</div>
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-bottom:10px">
+        ${['STR','DEX','CON','INT','WIS','CHA'].map(ab=>{
+          const mod = abMods[ab];
+          const sign = mod>=0?'+':'';
+          return `<div onclick="quickRoll('${ab} Check',${mod})" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 2px;text-align:center;cursor:pointer;transition:var(--trans)" onmouseenter="this.style.borderColor='${cc}'" onmouseleave="this.style.borderColor='var(--border)'">
+            <div style="font-family:'Cinzel',serif;font-size:8px;color:var(--muted)">${ab}</div>
+            <div style="font-family:'Cinzel',serif;font-size:13px;color:${cc}">${sign}${mod}</div>
+          </div>`;
+        }).join('')}
+      </div>
+
+      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">SAVING THROWS</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">
+        ${['STR','DEX','CON','INT','WIS','CHA'].map(ab=>{
+          const isProf = saves.includes(ab);
+          const mod = abMods[ab] + (isProf?pb:0);
+          const sign = mod>=0?'+':'';
+          return `<div onclick="quickRoll('${ab} Save',${mod})" style="background:var(--surface);border:1px solid ${isProf?cc:'var(--border)'};border-radius:8px;padding:5px 8px;cursor:pointer;transition:var(--trans);display:flex;align-items:center;gap:4px">
+            <span style="font-family:'Cinzel',serif;font-size:9px;color:${isProf?cc:'var(--muted)'}">SAVE</span>
+            <span style="font-family:'Cinzel',serif;font-size:10px;color:var(--text)">${ab}</span>
+            <span style="font-family:'Cinzel',serif;font-size:12px;color:${cc}">${sign}${mod}</span>
+          </div>`;
+        }).join('')}
+      </div>
+
+      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">SKILLS</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:10px">
+        ${skillList.map(sk=>{
+          const isProf = profs.some(p=>p.toLowerCase()===sk.n.toLowerCase());
+          const mod = abMods[sk.a] + (isProf?pb:0);
+          const sign = mod>=0?'+':'';
+          return `<div onclick="quickRoll('${sk.n}',${mod})" style="display:flex;align-items:center;gap:5px;padding:4px 6px;border-radius:6px;cursor:pointer;background:var(--surface);border:1px solid ${isProf?cc+'44':'var(--border)'}">
+            <span style="width:6px;height:6px;border-radius:50%;background:${isProf?cc:'var(--border)'};flex-shrink:0"></span>
+            <span style="font-size:11px;flex:1;color:var(--text)">${sk.n}</span>
+            <span style="font-family:'Cinzel',serif;font-size:11px;color:${cc};font-weight:bold">${sign}${mod}</span>
+          </div>`;
+        }).join('')}
+      </div>
+
+      ${(char.attacks||[]).length?`
+      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">ATTACKS</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${(char.attacks||[]).map(atk=>{
+          const bonus = parseInt((atk.bonus||'+0').replace(/[^-+\d]/g,''))||0;
+          return `<div onclick="quickRoll('${atk.name} Attack',${bonus})" style="background:var(--surface);border:1px solid var(--red);border-radius:8px;padding:5px 10px;cursor:pointer;transition:var(--trans)">
+            <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--red)">${atk.name}</div>
+            <div style="font-size:10px;color:var(--muted)">${atk.bonus||'+0'} · ${atk.damage||'—'}</div>
+          </div>`;
+        }).join('')}
+      </div>`:''}
+    </div>`;
+}
+
+function quickRoll(label, mod){
+  // Set the modifier and roll
+  const modEl = document.getElementById('dMod');
+  if(modEl) modEl.value = mod;
+  updateRollBtn();
+  // Show what we're rolling
+  const descEl = document.getElementById('rollDesc');
+  if(descEl) descEl.textContent = `${label} (d20${mod>=0?'+':''}${mod})`;
+  // Actually roll
+  doRollLabelled(label, mod);
+}
+
+function doRollLabelled(label, mod){
+  const em = getEffMode();
+  const d = 20; // skill/save/attack rolls are always d20
+  const r1 = Math.ceil(Math.random()*d);
+  let r2=null, kept, dropped;
+  if(em!=='normal'){
+    r2=Math.ceil(Math.random()*d);
+    kept=em==='advantage'?Math.max(r1,r2):Math.min(r1,r2);
+    dropped=em==='advantage'?Math.min(r1,r2):Math.max(r1,r2);
+  } else { kept=r1; }
+  let bonusTotal=0, bonusBreak=[];
+  for(const id of diceState.activeConds){
+    const c=CONDITIONS.find(x=>x.id===id);
+    if(!c?.bonus) continue;
+    if(c.bonus.startsWith('+d')){const sides=parseInt(c.bonus.slice(2));const rolled=Math.ceil(Math.random()*sides);bonusTotal+=rolled;bonusBreak.push(`${c.n}:+${rolled}`);}
+    else if(c.bonus.startsWith('+')){const v=parseInt(c.bonus.slice(1))||0;bonusTotal+=v;bonusBreak.push(`${c.n}:+${v}`);}
+  }
+  const total = kept + mod + bonusTotal;
+  const isCrit = kept===20 && d===20;
+  const isFail = kept===1 && d===20;
+  const resultEl = document.getElementById('rollResult');
+  if(resultEl){
+    const tc = isCrit?'var(--green)':isFail?'var(--red)':'var(--text)';
+    resultEl.style.display='block';
+    resultEl.innerHTML=`<div class="roll-result-box" style="--rc:${tc}">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--muted);margin-bottom:4px">${label}</div>
+      <div class="roll-total" style="color:${tc}">${total}</div>
+      <div style="font-size:12px;color:var(--muted)">${em!=='normal'?`[${r1},${r2}]→`:``}${kept}${mod!==0?(mod>0?' +'+mod:' '+mod):''} ${bonusBreak.length?'+ bonuses':''}</div>
+      ${isCrit?`<div style="color:var(--green);font-family:'Cinzel',serif;font-size:12px;letter-spacing:1px">CRITICAL!</div>`:''}
+      ${isFail?`<div style="color:var(--red);font-family:'Cinzel',serif;font-size:12px;letter-spacing:1px">FUMBLE</div>`:''}
+    </div>`;
+  }
+  diceState.history.unshift({d,kept,total,mode:em,mod,bonuses:bonusBreak,isCrit,isFail,conds:[...diceState.activeConds],label});
+  if(diceState.history.length>8) diceState.history.pop();
+  renderDiceHistory();
+}
+
+function switchDiceChar(charId){
+  // Store selected char for dice screen
+  S.set('toh_dice_char', charId);
+  renderDiceCharPanel();
+}
+
+
 function selectDie(d){diceState.die=d;renderDiceScreen();}
 function setMode(m){diceState.mode=m;document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('adv-on','dis-on','neu-on'));if(m==='advantage')document.getElementById('mAdv').classList.add('adv-on');else if(m==='disadvantage')document.getElementById('mDis').classList.add('dis-on');else document.getElementById('mNeu').classList.add('neu-on');updateRollBtn();}
 function getEffMode(){let adv=false,dis=false;for(const id of diceState.activeConds){const c=CONDITIONS.find(x=>x.id===id);if(c?.force==='advantage')adv=true;if(c?.force==='disadvantage')dis=true;}if(adv&&dis)return diceState.mode;if(adv)return'advantage';if(dis)return'disadvantage';return diceState.mode;}
@@ -2599,7 +2816,7 @@ let diceHTML='';if(r2!==null){const f1=em==='advantage'?(r1>=r2?'kept':'dropped'
 const numColor=isCrit?'var(--green)':isFail?'var(--red)':'var(--gold)';let breakdown=`d${d}: ${kept}`;if(mod!==0)breakdown+=(mod>0?' + '+mod:' − '+Math.abs(mod));if(bonusBreak.length)breakdown+=' + '+bonusBreak.join(', ');if(em!=='normal')breakdown+=` (${em})`;const verdict=isCrit?`<span style="background:rgba(39,174,96,0.15);color:var(--green);border:1px solid var(--green);border-radius:12px;padding:4px 14px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px">✦ CRITICAL HIT ✦</span>`:isFail?`<span style="background:rgba(192,57,43,0.15);color:var(--red);border:1px solid var(--red);border-radius:12px;padding:4px 14px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px">💀 CRITICAL FAIL</span>`:'';
 const el=document.getElementById('rollResult');el.style.display='block';el.innerHTML=`<div class="result-box fadein"><div class="result-dice">${diceHTML}</div><div class="result-total" style="color:${numColor}">${total}</div><div class="result-break">${breakdown}</div>${verdict?`<div class="verdict">${verdict}</div>`:''}</div>`;
 diceState.history.unshift({d,kept,total,mode:em,mod,bonuses:bonusBreak,isCrit,isFail,conds:[...diceState.activeConds]});if(diceState.history.length>8)diceState.history.pop();renderDiceHistory();}
-function renderDiceHistory(){const el=document.getElementById('rollHistory');if(!el)return;if(!diceState.history.length){el.innerHTML=`<p style="font-size:13px;color:var(--muted);font-style:italic;text-align:center;padding:12px 0">No rolls yet.</p>`;return;}el.innerHTML=diceState.history.map(r=>{const mc=r.mode==='advantage'?'var(--green)':r.mode==='disadvantage'?'var(--red)':'var(--muted)';const ml=r.mode==='advantage'?'↑ADV':r.mode==='disadvantage'?'↓DIS':'NRM';const tc=r.isCrit?'var(--green)':r.isFail?'var(--red)':'var(--text)';const ci=r.conds.map(id=>{const c=CONDITIONS.find(x=>x.id===id);return c?c.i:'';}).join('');return`<div class="hist-row"><div class="hist-die">d${r.d}</div><div class="hist-val" style="color:${tc}">${r.total}</div><div class="hist-info">rolled ${r.kept}${r.mod!==0?(r.mod>0?' +'+r.mod:' '+r.mod):''}${r.bonuses.length?' + bonuses':''} ${ci}</div><span class="hist-mode" style="color:${mc};border-color:${mc}">${ml}</span></div>`;}).join('');}
+function renderDiceHistory(){const el=document.getElementById('rollHistory');if(!el)return;if(!diceState.history.length){el.innerHTML=`<p style="font-size:13px;color:var(--muted);font-style:italic;text-align:center;padding:12px 0">No rolls yet.</p>`;return;}el.innerHTML=diceState.history.map(r=>{const mc=r.mode==='advantage'?'var(--green)':r.mode==='disadvantage'?'var(--red)':'var(--muted)';const ml=r.mode==='advantage'?'↑ADV':r.mode==='disadvantage'?'↓DIS':'NRM';const tc=r.isCrit?'var(--green)':r.isFail?'var(--red)':'var(--text)';const ci=r.conds.map(id=>{const c=CONDITIONS.find(x=>x.id===id);return c?c.i:'';}).join('');return`<div class="hist-row"><div class="hist-die">${r.label?`<span style="font-size:9px;color:var(--muted);display:block;line-height:1">${r.label.split(' ')[0]}</span>`:''}d${r.d}</div><div class="hist-val" style="color:${tc}">${r.total}</div><div class="hist-info">${r.label||('rolled '+r.kept)}${r.mod!==0?(r.mod>0?' +'+r.mod:' '+r.mod):''}${r.bonuses.length?' + bonuses':''} ${ci}</div><span class="hist-mode" style="color:${mc};border-color:${mc}">${ml}</span></div>`;}).join('');}
 
 /* ══ LOOT ══ */
 let lootOwner='pool',lootFilter='all';
@@ -2645,8 +2862,6 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPro
 function renderInstallBanner(){const el=document.getElementById('installBanner');if(!el)return;if(deferredPrompt&&!S.get('toh_install_dismissed')){el.innerHTML=`<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:12px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px"><span style="font-size:28px">📲</span><p style="font-size:12px;color:var(--gold);flex:1;line-height:1.4"><strong style="font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;display:block;margin-bottom:3px">Install App</strong>Add to home screen for offline use.</p><button class="btn btn-primary" style="width:auto;padding:8px 14px;margin:0;font-size:10px" onclick="installApp()">Install</button><span style="font-size:16px;cursor:pointer;opacity:0.6" onclick="S.set('toh_install_dismissed',true);document.getElementById('installBanner').innerHTML=''">✕</span></div>`;}else if(!S.get('toh_install_dismissed')){el.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 14px;margin-bottom:12px;font-size:12px;color:var(--muted);text-align:center"><strong style="font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;color:var(--gold);display:block;margin-bottom:4px">📲 Install as App</strong>Tap your browser's share button → "Add to Home Screen"</div>`;}else{el.innerHTML='';}}
 function installApp(){if(!deferredPrompt)return;deferredPrompt.prompt();deferredPrompt.userChoice.then(r=>{if(r.outcome==='accepted'){toast('✦ App installed!');document.getElementById('installBanner').innerHTML='';}deferredPrompt=null;});}
 if('serviceWorker' in navigator){const swCode=`const CACHE='toh-v5';const ASSETS=[self.location.pathname];self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)));self.skipWaiting();});self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));self.clients.claim();});self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{const c=res.clone();caches.open(CACHE).then(cache=>cache.put(e.request,c));return res;})));});`;const blob=new Blob([swCode],{type:'application/javascript'});navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});}
-
-bootApp();
 
 /* ══════════════════════════════════════════════════════
    CAMPAIGN MANAGEMENT SYSTEM
@@ -2964,6 +3179,7 @@ function toggleCampChar(campId, charId) {
   else camps[ci].charIds.push(charId);
   saveCampaigns(camps);
   renderCampDetailHeader();
+  renderRoster(); // update roster to reflect campaign filter
 }
 
 function campTab(t) {
