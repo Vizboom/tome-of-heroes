@@ -2899,6 +2899,14 @@ function openCamp(id) {
   campTab('sessions');
 }
 
+function hideCampForm() {
+  document.getElementById('campListView').style.display = 'block';
+  document.getElementById('campNewForm').style.display = 'none';
+  document.getElementById('campImportForm').style.display = 'none';
+  document.getElementById('campDetailView').style.display = 'none';
+  renderCampList();
+}
+
 function showCampList() {
   editingCampId = null;
   renderCampList();
