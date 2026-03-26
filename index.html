@@ -2940,7 +2940,7 @@ function renderCampDetailHeader() {
         <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">PARTY CHARACTERS</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
           ${allChars.map(c=>{
-            const inCamp=(camp.charIds||[]).includes(c.id);
+            const inCamp=(camp.charIds||[]).some(x=>String(x)===String(c.id));
             const cc=classColor(c.classIdx);
             return `<div onclick="toggleCampChar('${camp.id}','${c.id}')" style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid ${inCamp?cc:'var(--border)'};background:${inCamp?cc+'22':'transparent'};cursor:pointer;transition:var(--trans)">
               <span style="font-size:14px">${classIcon(c.classIdx)}</span>
@@ -2957,7 +2957,9 @@ function toggleCampChar(campId, charId) {
   const ci = camps.findIndex(c => c.id === campId);
   if (ci < 0) return;
   if (!camps[ci].charIds) camps[ci].charIds = [];
-  const idx = camps[ci].charIds.indexOf(charId);
+  // Normalise to string for consistent comparison
+  const cid = String(charId);
+  const idx = camps[ci].charIds.findIndex(x => String(x) === cid);
   if (idx >= 0) camps[ci].charIds.splice(idx, 1);
   else camps[ci].charIds.push(charId);
   saveCampaigns(camps);
