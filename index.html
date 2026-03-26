@@ -1262,6 +1262,19 @@ function renderCombatTab(char,cls,elId,editable){
   cls.features.forEach(f=>{html+=`<div class="feature-card" style="--cc:${cls.color}"><div class="feature-name">${f.n}</div><div class="feature-desc">${f.d}</div></div>`;});
   if(char.subclass){html+=`<div class="feature-card" style="--cc:var(--purple);border-color:var(--purple)"><div class="feature-name" style="color:var(--purple)">⚡ ${char.subclass.replace(/ \(.*?\)/,'')}</div><div class="feature-desc">${char.subclass} — see sourcebook for full subclass features.</div></div>`;}
   html+=`<div class="feature-card" style="--cc:${cls.color}"><div class="feature-name">Hit Dice</div><div class="feature-desc">1d${cls.hit} per ${cls.name} level. Total: ${char.level}d${cls.hit}.</div></div>`;
+  // Show active DM effects
+  const _eff = char.effects||{};
+  const _cfx = char.customEffects||[];
+  const _activeEff = Object.entries(_eff).filter(([,v])=>v);
+  if(_activeEff.length || _cfx.length){
+    const _eLabels = {inspiration:'🌟 Inspiration',exhaustion:`💤 Exhaustion Lv${_eff.exhaustion}`,
+      concentration:'🎯 Concentrating',raging:'🔥 Raging',blessed:'✨ Blessed',cursed:'🩸 Cursed',
+      polymorphed:'🦎 Polymorphed',hidden:'🗡 Hidden'};
+    html+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:10px">';
+    _activeEff.forEach(([k])=>{ if(_eLabels[k]) html+=`<span class="cond-tag" style="--chip-c:var(--gold)">${_eLabels[k]}</span>`;});
+    _cfx.forEach(e=>{ html+=`<span class="cond-tag" style="--chip-c:var(--purple)">✦ ${e}</span>`;});
+    html+='</div>';
+  }
   document.getElementById(elId).innerHTML=html;
 }
 
@@ -2268,27 +2281,6 @@ function removeCustomEffect(charId, idx){
   renderProgressTab(chars[ci], CLASSES[chars[ci].classIdx]);
 }
 
-/* ══ COMBAT TAB: show active effects ══ */
-// Patch renderCombatTab to show effects badge (called after original)
-const _origRenderCombatTab = renderCombatTab;
-function renderCombatTab(char, cls, elId, editable){
-  _origRenderCombatTab(char, cls, elId, editable);
-  // Append effects to combat tab
-  const effects = char.effects||{};
-  const customFx = char.customEffects||[];
-  const active = Object.entries(effects).filter(([,v])=>v);
-  if(active.length || customFx.length){
-    const el = document.getElementById(elId);
-    const effectLabels = {inspiration:'🌟 Inspiration',exhaustion:`💤 Exhaustion Lv${effects.exhaustion}`,
-      concentration:'🎯 Concentrating',raging:'🔥 Raging',blessed:'✨ Blessed',cursed:'🩸 Cursed',
-      polymorphed:'🦎 Polymorphed',hidden:'🗡 Hidden'};
-    let badge = '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:10px">';
-    active.forEach(([k])=>{ if(effectLabels[k]) badge+=`<span class="cond-tag" style="--chip-c:var(--gold)">${effectLabels[k]}</span>`;});
-    customFx.forEach(e=>{ badge+=`<span class="cond-tag" style="--chip-c:var(--purple)">✦ ${e}</span>`;});
-    badge += '</div>';
-    el.innerHTML += badge;
-  }
-}
 
 /* ══ CHARACTER SHEET IMPORT ══ */
 function showCharImport(){
@@ -2811,11 +2803,7 @@ function installPreset(id) {
   setTimeout(renderPresetCampaigns, 300);
 }
 
-function importCampaign() {
-  const raw = (document.getElementById('campImportCode')?.value||'').trim();
-  if (!raw) { toast('Paste an import code first', 'var(--red)'); return; }
-  doImportCampaign(raw);
-}
+
 
 function doImportCampaign(raw) {
   let camp;
