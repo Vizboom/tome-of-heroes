@@ -1670,6 +1670,30 @@ function resetMode(){
 function bootApp(){
   const mode=S.get('toh_mode');
   const nav_bar=document.querySelector('.bottomnav');
+
+  // Auto-install preset campaigns on first launch if none exist
+  if(!S.get('toh_camps_seeded') && getCampaigns().length === 0) {
+    const installed = [];
+    PRESET_CAMPAIGNS.forEach(p => {
+      try {
+        const b64 = p.code.replace(/[-_]/g, x => ({'-':'+','_':'/'})[x]);
+        const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
+        const camp = JSON.parse(atob(padded));
+        if (camp && camp.name) {
+          camp.sessions = camp.sessions||[]; camp.quests = camp.quests||[];
+          camp.npcs = camp.npcs||[]; camp.arcs = camp.arcs||[];
+          camp.notes = camp.notes||[]; camp.charIds = camp.charIds||[];
+          installed.push(camp);
+        }
+      } catch(e) {}
+    });
+    if (installed.length) {
+      saveCampaigns(installed);
+      setActiveCampId(installed[0].id);
+    }
+    S.set('toh_camps_seeded', true);
+  }
+
   if(!mode){
     document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
     document.getElementById('scr-modegate').classList.add('active');
