@@ -1856,7 +1856,24 @@ function importCampaign() {
     const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
     camp = JSON.parse(atob(padded));
   } catch (e) {
-   
+    toast('Invalid import code', 'var(--red)'); return;
+  }
+  if (!camp || !camp.name) { toast('Invalid campaign data', 'var(--red)'); return; }
+  camp.id = camp.id || genCampId();
+  camp.sessions = camp.sessions || []; camp.quests = camp.quests || [];
+  camp.npcs = camp.npcs || []; camp.arcs = camp.arcs || [];
+  camp.notes = camp.notes || []; camp.charIds = camp.charIds || [];
+  const camps = getCampaigns();
+  const existing = camps.findIndex(c => c.id === camp.id);
+  if (existing >= 0) { if (!confirm('Campaign already exists. Overwrite?')) return; camps[existing] = camp; }
+  else { camps.push(camp); }
+  saveCampaigns(camps);
+  if (!getActiveCampId()) setActiveCampId(camp.id);
+  toast('✦ ' + camp.name + ' imported!');
+  hideCampForm();
+  openCamp(camp.id);
+}
+
 /* ══ PRESET CAMPAIGNS ══ */
 const PRESET_CAMPAIGNS = [
   {
@@ -2570,6 +2587,7 @@ function renderCampaignSwitchBanner() {
     <span style="color:var(--gold);font-family:'Cinzel',serif;font-size:10px">→</span>
   </div>`;
 }
+bootApp();
 </script>
 </body>
 </html>
