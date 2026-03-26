@@ -557,20 +557,114 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <div class="field"><label>Character Name</label><input id="bName" placeholder="Enter name…" maxlength="30"></div>
       <div class="field"><label>Race</label>
         <select id="bRace"><option value="">Select Race…</option>
-          <option>Human</option><option>Elf</option><option>Dwarf</option><option>Halfling</option><option>Gnome</option>
-          <option>Half-Elf</option><option>Half-Orc</option><option>Tiefling</option><option>Dragonborn</option>
-          <option>Aasimar</option><option>Genasi</option><option>Goliath</option><option>Tabaxi</option>
-          <option>Firbolg</option><option>Kenku</option><option>Lizardfolk</option><option>Yuan-ti Pureblood</option><option>Triton</option><option>Custom</option>
+          <optgroup label="Player's Handbook">
+            <option>Dragonborn</option><option>Dwarf (Hill)</option><option>Dwarf (Mountain)</option>
+            <option>Elf (High)</option><option>Elf (Wood)</option><option>Elf (Drow)</option>
+            <option>Gnome (Forest)</option><option>Gnome (Rock)</option>
+            <option>Half-Elf</option><option>Half-Orc</option>
+            <option>Halfling (Lightfoot)</option><option>Halfling (Stout)</option>
+            <option>Human</option><option>Human (Variant)</option><option>Tiefling</option>
+          </optgroup>
+          <optgroup label="Volo's Guide to Monsters">
+            <option>Aasimar (Fallen)</option><option>Aasimar (Protector)</option><option>Aasimar (Scourge)</option>
+            <option>Bugbear</option><option>Firbolg</option><option>Goblin</option><option>Hobgoblin</option>
+            <option>Kenku</option><option>Kobold</option><option>Lizardfolk</option><option>Orc</option>
+            <option>Tabaxi</option><option>Triton</option><option>Yuan-ti Pureblood</option>
+          </optgroup>
+          <optgroup label="Elemental Evil / Sword Coast">
+            <option>Aarakocra</option><option>Deep Gnome (Svirfneblin)</option>
+            <option>Genasi (Air)</option><option>Genasi (Earth)</option><option>Genasi (Fire)</option><option>Genasi (Water)</option>
+            <option>Goliath</option>
+            <option>Bladesinging Elf</option><option>Ghost Wise Halfling</option><option>Strongheart Halfling</option>
+          </optgroup>
+          <optgroup label="Mordenkainen's Tome of Foes">
+            <option>Dwarf (Duergar)</option><option>Elf (Eladrin)</option><option>Elf (Sea)</option><option>Elf (Shadar-kai)</option>
+            <option>Gith (Githyanki)</option><option>Gith (Githzerai)</option>
+            <option>Gnome (Deep)</option><option>Tiefling (Variant — Baalzebul)</option>
+            <option>Tiefling (Variant — Dispater)</option><option>Tiefling (Variant — Fierna)</option>
+            <option>Tiefling (Variant — Glasya)</option><option>Tiefling (Variant — Levistus)</option>
+            <option>Tiefling (Variant — Mammon)</option><option>Tiefling (Variant — Mephistopheles)</option>
+            <option>Tiefling (Variant — Zariel)</option>
+          </optgroup>
+          <optgroup label="Eberron: Rising from the Last War">
+            <option>Changeling</option><option>Kalashtar</option>
+            <option>Shifter (Beasthide)</option><option>Shifter (Longtooth)</option>
+            <option>Shifter (Swiftstride)</option><option>Shifter (Wildhunt)</option>
+            <option>Warforged</option>
+          </optgroup>
+          <optgroup label="Explorer's Guide to Wildemount">
+            <option>Draconblood Dragonborn</option><option>Ravenite Dragonborn</option>
+            <option>Pallid Elf</option><option>Lotusden Halfling</option>
+          </optgroup>
+          <optgroup label="Mythic Odysseys of Theros">
+            <option>Leonin</option><option>Satyr</option>
+          </optgroup>
+          <optgroup label="Guildmasters' Guide to Ravnica">
+            <option>Centaur</option><option>Loxodon</option><option>Minotaur</option>
+            <option>Simic Hybrid</option><option>Vedalken</option>
+          </optgroup>
+          <optgroup label="Acquisitions Incorporated">
+            <option>Verdan</option>
+          </optgroup>
+          <optgroup label="Tasha's Cauldron of Everything">
+            <option>Custom Lineage</option>
+          </optgroup>
+          <optgroup label="Xanathar's Guide to Everything">
+            <option>Tortle</option>
+          </optgroup>
+          <optgroup label="Other">
+            <option>Custom</option>
+          </optgroup>
         </select>
       </div>
       <div class="field"><label>Background</label>
         <select id="bBg"><option value="">Select Background…</option>
-          <option>Acolyte</option><option>Charlatan</option><option>Criminal</option><option>Entertainer</option>
-          <option>Folk Hero</option><option>Guild Artisan</option><option>Hermit</option><option>Noble</option>
-          <option>Outlander</option><option>Sage</option><option>Sailor</option><option>Soldier</option><option>Urchin</option>
+          <optgroup label="Player's Handbook">
+            <option>Acolyte</option><option>Charlatan</option><option>Criminal</option><option>Entertainer</option>
+            <option>Folk Hero</option><option>Guild Artisan</option><option>Hermit</option><option>Noble</option>
+            <option>Outlander</option><option>Sage</option><option>Sailor</option><option>Soldier</option><option>Urchin</option>
+          </optgroup>
+          <optgroup label="Sword Coast Adventurer's Guide">
+            <option>City Watch</option><option>Clan Crafter</option><option>Cloistered Scholar</option>
+            <option>Courtier</option><option>Faction Agent</option><option>Far Traveller</option>
+            <option>Haunted One</option><option>Inheritor</option><option>Investigator</option>
+            <option>Knight of the Order</option><option>Mercenary Veteran</option><option>Urban Bounty Hunter</option>
+            <option>Uthgardt Tribe Member</option><option>Waterdhavian Noble</option>
+          </optgroup>
+          <optgroup label="Guildmasters' Guide to Ravnica">
+            <option>Azorius Functionary</option><option>Boros Legionnaire</option><option>Dimir Operative</option>
+            <option>Golgari Agent</option><option>Gruul Anarch</option><option>Izzet Engineer</option>
+            <option>Orzhov Representative</option><option>Rakdos Cultist</option><option>Selesnya Initiate</option>
+            <option>Simic Scientist</option>
+          </optgroup>
+          <optgroup label="Eberron: Rising from the Last War">
+            <option>House Agent</option>
+          </optgroup>
+          <optgroup label="Explorer's Guide to Wildemount">
+            <option>Grinner</option><option>Locked Away</option><option>Mirkur Deepstone Diver</option>
+            <option>Revelry Pirate</option><option>Ruined</option><option>Soldier (Wildemount)</option>
+            <option>Volstrucker Agent</option>
+          </optgroup>
+          <optgroup label="Mythic Odysseys of Theros">
+            <option>Athlete</option><option>Oracle</option>
+          </optgroup>
+          <optgroup label="Acquisitions Incorporated">
+            <option>Failed Merchant</option><option>Gambler</option><option>Plaintiff</option>
+            <option>Rival Intern</option>
+          </optgroup>
+          <optgroup label="Tasha's Cauldron of Everything">
+            <option>Custom Background</option>
+          </optgroup>
+          <optgroup label="Other">
+            <option>Pirate</option><option>Spy</option><option>Gladiator</option><option>Knight</option>
+          </optgroup>
         </select>
       </div>
       <div class="field"><label>Level (1–20)</label><input id="bLevel" type="number" value="1" min="1" max="20"></div>
+      <div class="field" id="bSubclassField" style="display:none">
+        <label>Subclass <span style="font-size:10px;color:var(--muted);font-weight:normal">(optional)</span></label>
+        <select id="bSubclass"><option value="">Select Subclass…</option></select>
+      </div>
       <div class="divider"><span>Appearance & Identity</span></div>
       <div class="form-row two">
         <div class="field"><label>Age</label><input id="bAge" placeholder="e.g. 28"></div>
@@ -788,29 +882,41 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 /* ══ DATA ══ */
 const CLASSES=[
   {name:'Barbarian',icon:'🪓',hit:12,primary:['STR','CON'],theme:'barbarian',color:'#c0392b',saves:['STR','CON'],spellcaster:false,
-   features:[{n:'Rage',d:'Bonus damage on STR attacks, resistance to physical damage. Uses = CON mod. Lasts 1 minute.'},{n:'Unarmored Defense',d:'When not wearing armour, AC = 10 + DEX mod + CON mod.'},{n:'Reckless Attack',d:'When attacking, can choose to attack recklessly. Gain advantage on STR attacks this turn, but attacks against you have advantage until your next turn.'}]},
+   subclasses:['Path of the Berserker (PHB)','Path of the Totem Warrior (PHB)','Path of the Ancestral Guardian (XGE)','Path of the Battlerager (SCAG)','Path of the Beast (TCE)','Path of the Storm Herald (XGE)','Path of the Zealot (XGE)','Path of Wild Magic (TCE)','Path of the Giant (BGotG)'],
+   features:[{n:'Rage',d:'Bonus damage on STR attacks, resistance to physical damage. Uses = CON mod. Lasts 1 minute.'},{n:'Unarmored Defense',d:'When not wearing armour, AC = 10 + DEX mod + CON mod.'},{n:'Reckless Attack',d:'When attacking, can choose to attack recklessly. Gain advantage on STR attacks this turn, but attacks against you also have advantage.'},{n:'Primal Path',d:'Choose a subclass at level 3.'}]},
   {name:'Bard',icon:'🎭',hit:8,primary:['CHA','DEX'],theme:'bard',color:'#8e44ad',saves:['DEX','CHA'],spellcaster:true,
-   features:[{n:'Bardic Inspiration',d:'Grant a d6 inspiration die to a creature within 60 ft as a bonus action. Uses = CHA mod per long rest.'},{n:'Jack of All Trades',d:'Add half proficiency bonus (round down) to ability checks that do not use proficiency.'},{n:'Song of Rest',d:'If you or any friendly creatures regain HP at the end of short rest while you perform, each regains extra 1d6.'}]},
+   subclasses:['College of Lore (PHB)','College of Valor (PHB)','College of Creation (TCE)','College of Eloquence (TCE)','College of Glamour (XGE)','College of Swords (XGE)','College of Whispers (XGE)','College of Spirits (VRGR)'],
+   features:[{n:'Bardic Inspiration',d:'Grant a d6 inspiration die to a creature within 60 ft as a bonus action. Uses = CHA mod per long rest.'},{n:'Jack of All Trades',d:'Add half proficiency bonus (rounded down) to any ability check you are not already proficient in.'},{n:'Song of Rest',d:'During a short rest, allies who hear your performance regain extra hit points.'},{n:'Bard College',d:'Choose a subclass at level 3.'}]},
   {name:'Cleric',icon:'✝',hit:8,primary:['WIS','CON'],theme:'cleric',color:'#d4ac0d',saves:['WIS','CHA'],spellcaster:true,
-   features:[{n:'Divine Domain',d:'Choose a domain at 1st level granting domain spells and special features at 1st, 2nd, 6th, 8th, and 17th level.'},{n:'Channel Divinity',d:'Invoke divine energy. Turn Undead and domain feature. Recharges on short or long rest.'},{n:'Spellcasting',d:'WIS-based. Prepare WIS mod + cleric level spells daily from the full cleric list.'}]},
+   subclasses:['Arcana Domain (SCAG)','Death Domain (DMG)','Forge Domain (XGE)','Grave Domain (XGE)','Knowledge Domain (PHB)','Life Domain (PHB)','Light Domain (PHB)','Nature Domain (PHB)','Order Domain (TCE/GGtR)','Peace Domain (TCE)','Tempest Domain (PHB)','Trickery Domain (PHB)','Twilight Domain (TCE)','War Domain (PHB)'],
+   features:[{n:'Divine Domain',d:'Choose a domain at level 1 — grants domain spells and features.'},{n:'Channel Divinity',d:'Use divine energy to fuel magical effects. Recharges on short or long rest.'},{n:'Spellcasting',d:'WIS-based. Prepare WIS mod + cleric level spells from the full cleric list.'}]},
   {name:'Druid',icon:'🌿',hit:8,primary:['WIS','CON'],theme:'druid',color:'#27ae60',saves:['INT','WIS'],spellcaster:true,
-   features:[{n:'Druidic',d:'Know the secret Druidic language. Only other druids can understand it.'},{n:'Spellcasting',d:'WIS-based. Prepare WIS mod + druid level spells daily. Can cast rituals.'},{n:'Wild Shape',d:'Transform into a beast you have seen. CR limit and form restrictions ease with level.'}]},
-  {name:'Fighter',icon:'🛡',hit:10,primary:['STR','CON'],theme:'fighter',color:'#c0392b',saves:['STR','CON'],spellcaster:false,
-   features:[{n:'Fighting Style',d:'Choose: Archery (+2 ranged), Defense (+1 AC), Dueling (+2 one-handed), Great Weapon Fighting (reroll 1/2 on damage), Protection (impose disadvantage on attack vs ally), Two-Weapon (+STR/DEX mod to off-hand damage).'},{n:'Second Wind',d:'Regain 1d10 + fighter level HP as a bonus action. Recharges on short rest.'},{n:'Action Surge',d:'Take one additional action on your turn. Recharges on short rest (2 uses at level 17).'}]},
-  {name:'Monk',icon:'☯',hit:8,primary:['DEX','WIS'],theme:'monk',color:'#16a085',saves:['STR','DEX'],spellcaster:false,
-   features:[{n:'Martial Arts',d:'Use DEX for unarmed strikes and monk weapons. Deal 1d4 unarmed at level 1 (scales to 1d10 at level 17).'},{n:'Ki',d:'Ki points = monk level. Fuel Flurry of Blows (2 bonus unarmed strikes), Patient Defense (Dodge), Step of the Wind (Dash/Disengage as bonus action).'},{n:'Unarmored Defense',d:'AC = 10 + DEX mod + WIS mod when unarmoured and unshielded.'}]},
-  {name:'Paladin',icon:'⚜',hit:10,primary:['STR','CHA'],theme:'paladin',color:'#d4ac0d',saves:['WIS','CHA'],spellcaster:true,
-   features:[{n:'Divine Sense',d:"Detect the presence of celestials, fiends, and undead within 60 ft as an action. Uses = 1 + CHA mod per long rest."},{n:'Lay on Hands',d:'Pool = paladin level × 5 HP. Touch to restore HP, cure disease, or neutralise poison (5 HP pool each).'},{n:'Divine Smite',d:'When you hit with a melee attack, expend a spell slot to deal extra 2d8 radiant (or 3d8 vs undead/fiends) per slot level above 1st.'}]},
-  {name:'Ranger',icon:'🏹',hit:10,primary:['DEX','WIS'],theme:'ranger',color:'#27ae60',saves:['STR','DEX'],spellcaster:true,
-   features:[{n:'Favored Enemy',d:'Advantage on Survival checks to track and Intelligence checks to recall info about chosen enemy type.'},{n:'Natural Explorer',d:'Favored terrain benefits: double proficiency on INT/WIS checks, difficult terrain does not slow, cannot get lost, alert to danger, find twice as much food.'},{n:'Spellcasting',d:'WIS-based. Known spells from the ranger list. Spell slots recharge on long rest.'}]},
+   subclasses:['Circle of the Land (PHB)','Circle of the Moon (PHB)','Circle of Dreams (XGE)','Circle of the Shepherd (XGE)','Circle of Spores (TCE/GGtR)','Circle of Stars (TCE)','Circle of Wildfire (TCE)','Circle of the Sea (PHB 2024)'],
+   features:[{n:'Druidic',d:'Know the secret Druidic language. Leaves secret messages in nature.'},{n:'Spellcasting',d:'WIS-based. Prepare WIS mod + druid level spells from the druid list.'},{n:'Wild Shape',d:'Transform into a beast you have seen. CR limit and features scale with level.'},{n:'Druid Circle',d:'Choose a subclass at level 2.'}]},
+  {name:'Fighter',icon:'⚔',hit:10,primary:['STR','DEX'],theme:'fighter',color:'#e67e22',saves:['STR','CON'],spellcaster:false,
+   subclasses:['Arcane Archer (XGE)','Battle Master (PHB)','Cavalier (XGE)','Champion (PHB)','Echo Knight (EGtW)','Eldritch Knight (PHB)','Psi Warrior (TCE)','Purple Dragon Knight (SCAG)','Rune Knight (TCE)','Samurai (XGE)'],
+   features:[{n:'Fighting Style',d:'Choose a combat specialty: Archery, Defense, Dueling, Great Weapon Fighting, Protection, or Two-Weapon Fighting.'},{n:'Second Wind',d:'Bonus action: regain 1d10 + fighter level HP. Recharges on short rest.'},{n:'Action Surge',d:'Take one additional action on your turn. Recharges on short rest.'},{n:'Martial Archetype',d:'Choose a subclass at level 3.'}]},
+  {name:'Monk',icon:'🥷',hit:8,primary:['DEX','WIS'],theme:'monk',color:'#16a085',saves:['STR','DEX'],spellcaster:false,
+   subclasses:['Way of the Astral Self (TCE)','Way of the Drunken Master (XGE)','Way of the Four Elements (PHB)','Way of the Kensei (XGE)','Way of the Long Death (SCAG)','Way of the Mercy (TCE)','Way of the Open Hand (PHB)','Way of Shadow (PHB)','Way of the Sun Soul (XGE/SCAG)','Way of the Cobalt Soul (EGtW)'],
+   features:[{n:'Unarmored Defense',d:'AC = 10 + DEX mod + WIS mod when not wearing armour.'},{n:'Martial Arts',d:'Use DEX for unarmed strikes. Unarmed strike damage scales with Martial Arts die.'},{n:'Ki',d:'Spend ki points to fuel special features. Ki points = monk level. Recharges on short rest.'},{n:'Monastic Tradition',d:'Choose a subclass at level 3.'}]},
+  {name:'Paladin',icon:'🛡',hit:10,primary:['STR','CHA'],theme:'paladin',color:'#f1c40f',saves:['WIS','CHA'],spellcaster:true,
+   subclasses:['Oath of the Ancients (PHB)','Oath of Conquest (XGE)','Oath of the Crown (SCAG)','Oath of Devotion (PHB)','Oath of Glory (TCE/MOoT)','Oath of the Open Sea (EGtW)','Oath of Redemption (XGE)','Oath of Vengeance (PHB)','Oath of the Watchers (TCE)','Oathbreaker (DMG)'],
+   features:[{n:'Divine Sense',d:'Detect celestials, fiends, and undead within 60 ft. Uses = 1 + CHA mod per long rest.'},{n:'Lay on Hands',d:'Pool of HP equal to 5 × paladin level. Use to heal or cure disease/poison.'},{n:'Divine Smite',d:'Expend a spell slot after a melee hit to deal extra radiant damage.'},{n:'Sacred Oath',d:'Choose a subclass at level 3.'}]},
+  {name:'Ranger',icon:'🏹',hit:10,primary:['DEX','WIS'],theme:'ranger',color:'#2ecc71',saves:['STR','DEX'],spellcaster:true,
+   subclasses:['Beast Master (PHB)','Fey Wanderer (TCE)','Gloom Stalker (XGE)','Horizon Walker (XGE)','Hunter (PHB)','Monster Slayer (XGE)','Swarmkeeper (TCE)','Drakewarden (FToD)'],
+   features:[{n:'Favored Enemy',d:'Advantage on Survival checks to track chosen enemy type, and INT checks to recall information about them.'},{n:'Natural Explorer',d:'Expertise in one terrain type: ignore difficult terrain, always alert, better foraging.'},{n:'Spellcasting',d:'WIS-based. Prepare WIS mod + half ranger level spells.'},{n:'Ranger Archetype',d:'Choose a subclass at level 3.'}]},
   {name:'Rogue',icon:'🗡',hit:8,primary:['DEX','INT'],theme:'rogue',color:'#7f8c8d',saves:['DEX','INT'],spellcaster:false,
-   features:[{n:'Sneak Attack',d:'Extra 1d6 per 2 rogue levels when you have advantage or an ally is adjacent to the target. Once per turn.'},{n:"Thieves' Cant",d:"Know the secret language and hand signals of rogues and thieves' guilds worldwide."},{n:'Cunning Action',d:'Dash, Disengage, or Hide as a bonus action on each turn.'}]},
-  {name:'Sorcerer',icon:'🔮',hit:6,primary:['CHA','CON'],theme:'sorcerer',color:'#c0392b',saves:['CON','CHA'],spellcaster:true,
-   features:[{n:'Sorcerous Origin',d:'Choose your origin (Draconic Bloodline, Wild Magic, Storm Sorcery, etc.) at 1st level. Grants features at 1st, 6th, 14th, and 18th level.'},{n:'Font of Magic',d:'Sorcery points = sorcerer level. Spend to create spell slots or fuel metamagic options.'},{n:'Metamagic',d:'Choose 2 options at level 3 (and more later): Careful, Distant, Empowered, Extended, Heightened, Quickened, Subtle, Twinned.'}]},
-  {name:'Warlock',icon:'👁',hit:8,primary:['CHA','CON'],theme:'warlock',color:'#6c3483',saves:['WIS','CHA'],spellcaster:true,
-   features:[{n:'Otherworldly Patron',d:'Choose Archfey, Fiend, or Great Old One at level 1. Grants Expanded Spells and unique features.'},{n:'Pact Magic',d:'Short-rest spell slots. All slots cast at your highest slot level. Regain all slots on short or long rest.'},{n:'Eldritch Invocations',d:'Choose 2 invocations at level 2, gaining more as you level. Customise combat style, utility, and power.'}]},
+   subclasses:['Arcane Trickster (PHB)','Assassin (PHB)','Inquisitive (XGE)','Mastermind (XGE/SCAG)','Phantom (TCE)','Scout (XGE)','Soulknife (TCE)','Swashbuckler (XGE/SCAG)','Thief (PHB)'],
+   features:[{n:'Expertise',d:'Double proficiency bonus in two chosen skills (or one skill + thieves tools).'},{n:'Sneak Attack',d:'Once per turn, deal extra damage when you have advantage or an ally is adjacent to your target. Scales from 1d6 to 10d6.'},{n:'Thieves Cant',d:'Secret language of rogues. Can encode messages in normal conversation.'},{n:'Roguish Archetype',d:'Choose a subclass at level 3.'}]},
+  {name:'Sorcerer',icon:'🔮',hit:6,primary:['CHA','CON'],theme:'sorcerer',color:'#9b59b6',saves:['CON','CHA'],spellcaster:true,
+   subclasses:['Aberrant Mind (TCE)','Clockwork Soul (TCE)','Divine Soul (XGE)','Draconic Bloodline (PHB)','Lunar Sorcery (DSotDQ)','Shadow Magic (XGE)','Storm Sorcery (XGE/SCAG)','Wild Magic (PHB)'],
+   features:[{n:'Spellcasting',d:'CHA-based. Know a limited number of spells permanently (no preparation).'},{n:'Sorcery Points',d:'Pool of points equal to sorcerer level. Used to fuel Metamagic and create spell slots.'},{n:'Metamagic',d:'Modify spells using sorcery points: Careful, Distant, Empowered, Extended, Heightened, Quickened, Seeking, Subtle, Twinned.'},{n:'Sorcerous Origin',d:'Choose a subclass at level 1.'}]},
+  {name:'Warlock',icon:'👹',hit:8,primary:['CHA','CON'],theme:'warlock',color:'#6c3483',saves:['WIS','CHA'],spellcaster:true,
+   subclasses:['The Archfey (PHB)','The Celestial (XGE)','The Fathomless (TCE)','The Fiend (PHB)','The Genie (TCE)','The Great Old One (PHB)','The Hexblade (XGE)','The Undead (VRGtR)','The Undying (SCAG)'],
+   features:[{n:'Otherworldly Patron',d:'Choose a patron at level 1 — determines expanded spell list and features.'},{n:'Pact Magic',d:'CHA-based. Short rest spell slot recovery. Slots are always at highest available level.'},{n:'Eldritch Invocations',d:'Choose 2 invocations at level 2. Gain more as you level up. Customise your abilities greatly.'},{n:'Pact Boon',d:'Choose a boon at level 3: Pact of the Blade, Chain, or Tome.'}]},
   {name:'Wizard',icon:'🧙',hit:6,primary:['INT','CON'],theme:'wizard',color:'#2980b9',saves:['INT','WIS'],spellcaster:true,
-   features:[{n:'Spellbook',d:'Contains 6 spells at level 1. Add 2 free spells each level up, plus any spells you copy. Spell preparation = INT mod + wizard level.'},{n:'Arcane Recovery',d:'On a short rest, recover spell slots totalling up to half wizard level (round up), once per long rest.'},{n:'Arcane Tradition',d:'Choose a school of magic at level 2 (Abjuration, Chronurgy, Conjuration, Divination, Enchantment, Evocation, Illusion, Necromancy, Transmutation, War Magic).'}]},
+   subclasses:['School of Abjuration (PHB)','School of Bladesinging (TCE/SCAG)','School of Chronurgy (EGtW)','School of Conjuration (PHB)','School of Divination (PHB)','School of Enchantment (PHB)','School of Evocation (PHB)','School of Graviturgy (EGtW)','School of Illusion (PHB)','School of Necromancy (PHB)','School of Order of Scribes (TCE)','School of Transmutation (PHB)','School of War Magic (XGE)','Arcane Tradition: Lore Mastery (UA)'],
+   features:[{n:'Spellbook',d:'Contains 6 spells at level 1. Add 2 free spells each level up, plus any spells you copy. Spell preparation = INT mod + wizard level.'},{n:'Arcane Recovery',d:'On a short rest, recover spell slots totalling up to half wizard level (round up), once per long rest.'},{n:'Arcane Tradition',d:'Choose a subclass at level 2.'}]},
 ];
 
 const ABILITIES=['STR','DEX','CON','INT','WIS','CHA'];
@@ -943,7 +1049,7 @@ function renderRoster(){
       <div class="char-avatar">${cls.icon}</div>
       <div style="flex:1;min-width:0">
         <div class="char-name">${c.name}</div>
-        <div class="char-sub">${c.race} · ${c.background}</div>
+        <div class="char-sub">${c.race} · ${c.background}${c.subclass?` · <span style="color:var(--purple);font-size:11px">${c.subclass.replace(/ \(.*?\)/,'')}</span>`:''}</div>
         <div class="char-tags"><span class="ctag">${cls.name}</span><span class="ctag">Lvl ${c.level}</span><span class="ctag">${c.currentHP}/${c.maxHP} HP</span></div>
       </div>
       <div class="char-card-actions">
@@ -975,7 +1081,23 @@ function renderClassGrid(){
       <div class="class-tile-name">${c.name}</div>
     </div>`).join('');
 }
-function selectClass(i){B.cls=i;const cls=CLASSES[i];document.getElementById('scr-build').className=`scroll-region screen active theme-${cls.theme}`;renderClassGrid();if(document.getElementById('bstep2').classList.contains('active')){renderAbilityGrid();renderBuildSkills();}}
+function selectClass(i){
+  B.cls=i;
+  const cls=CLASSES[i];
+  document.getElementById('scr-build').className=`scroll-region screen active theme-${cls.theme}`;
+  renderClassGrid();
+  // Populate subclass dropdown
+  const field = document.getElementById('bSubclassField');
+  const sel = document.getElementById('bSubclass');
+  if(cls.subclasses && cls.subclasses.length){
+    sel.innerHTML='<option value="">Select Subclass…</option>'+cls.subclasses.map(s=>`<option>${s}</option>`).join('');
+    field.style.display='';
+  } else {
+    field.style.display='none';
+    sel.innerHTML='<option value="">None</option>';
+  }
+  if(document.getElementById('bstep2').classList.contains('active')){renderAbilityGrid();renderBuildSkills();}
+}
 function renderAbilityGrid(){
   if(B.cls===null)return;const cls=CLASSES[B.cls];
   document.getElementById('abilityGrid').innerHTML=ABILITIES.map(ab=>`
@@ -997,10 +1119,11 @@ function saveCharacter(){
   const race=document.getElementById('bRace').value;
   const bg=document.getElementById('bBg').value;
   const level=Math.max(1,Math.min(20,parseInt(document.getElementById('bLevel').value)||1));
+  const subclass=document.getElementById('bSubclass')?.value||'';
   const cls=CLASSES[B.cls];
   const maxHP=getMaxHP(cls,level,B.scores.CON);
   const char={
-    id:Date.now(),name,race,background:bg,level,classIdx:B.cls,
+    id:Date.now(),name,race,background:bg,level,classIdx:B.cls,subclass,
     abilities:{...B.scores},proficiencies:[...B.profs],
     maxHP,currentHP:maxHP,statuses:[],shareCode:genCode(),created:Date.now(),
     age:document.getElementById('bAge').value,height:document.getElementById('bHeight').value,
@@ -1035,10 +1158,11 @@ function renderSheetHero(char,cls,elId){
     <div class="sheet-avatar-lg" style="--cc:${cls.color};--cc-dim:${cls.color}22">${cls.icon}</div>
     <div class="sheet-charname">${char.name}</div>
     <div class="sheet-meta">Level ${char.level} ${char.race} ${cls.name}</div>
+    ${char.subclass?`<div style="font-family:'Cinzel',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-top:2px">${char.subclass.replace(/ \(.*?\)/,'')}</div>`:''}
     <div class="sheet-badges">
       <span class="sheet-badge">${char.background}</span>
-      ${char.age?`<span class="sheet-badge">Age ${char.age}</span>`:''}
-      ${char.alignment?`<span class="sheet-badge">${char.alignment}</span>`:''}
+      ${char.age?`<span class="sheet-badge">Age ${char.age}`+'</span>':''}
+      ${char.alignment?`<span class="sheet-badge">${char.alignment}`+'</span>':''}
     </div>`;
 }
 
@@ -1116,6 +1240,7 @@ function renderCombatTab(char,cls,elId,editable){
   }
   html+=`<div class="divider"><span>Class Features</span></div>`;
   cls.features.forEach(f=>{html+=`<div class="feature-card" style="--cc:${cls.color}"><div class="feature-name">${f.n}</div><div class="feature-desc">${f.d}</div></div>`;});
+  if(char.subclass){html+=`<div class="feature-card" style="--cc:var(--purple);border-color:var(--purple)"><div class="feature-name" style="color:var(--purple)">⚡ ${char.subclass.replace(/ \(.*?\)/,'')}</div><div class="feature-desc">${char.subclass} — see sourcebook for full subclass features.</div></div>`;}
   html+=`<div class="feature-card" style="--cc:${cls.color}"><div class="feature-name">Hit Dice</div><div class="feature-desc">1d${cls.hit} per ${cls.name} level. Total: ${char.level}d${cls.hit}.</div></div>`;
   document.getElementById(elId).innerHTML=html;
 }
