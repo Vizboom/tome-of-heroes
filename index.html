@@ -538,6 +538,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   <div class="topbar">
     <button class="topbar-back icon-btn" id="backBtn" onclick="goBack()" style="visibility:hidden;font-size:22px">←</button>
     <span class="topbar-title" id="pageTitle">Tome of Heroes</span>
+    <button onclick="nav('modegate')" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px 8px;line-height:1" title="Settings">⚙</button>
     <span class="topbar-icon" id="topIcon">⚔</span>
   </div>
   <div class="toast" id="toast"></div>
@@ -811,6 +812,9 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
         <span class="mb-label">Player</span>
         <span class="mb-desc">Enter your character access code to join your campaign</span>
       </span>
+    </button>
+    <button onclick="clearAllData()" style="margin-top:24px;background:none;border:1px solid var(--red);border-radius:8px;color:var(--red);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.6">
+      🗑 Clear All Data
     </button>
   </div>
 
@@ -1886,6 +1890,16 @@ function applyModeUI(){
 function resetMode(){
   ['toh_mode','toh_player_char_id','toh_player_camp_id'].forEach(k=>localStorage.removeItem(k));
   bootApp();
+}
+
+function clearAllData(){
+  if(!confirm('⚠ This will permanently delete ALL characters, campaigns, loot and settings.\n\nThis cannot be undone. Are you sure?')) return;
+  if(!confirm('Last chance — delete everything?')) return;
+  // Clear all toh_ keys from localStorage
+  const keys = Object.keys(localStorage).filter(k=>k.startsWith('toh_'));
+  keys.forEach(k=>localStorage.removeItem(k));
+  toast('All data cleared');
+  setTimeout(()=>bootApp(), 800);
 }
 
 /* ══════════════════════════════════════════════════════
