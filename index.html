@@ -731,6 +731,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <div class="divider"><span>Your Campaigns</span></div>
       <div id="campList"></div>
       <button class="btn btn-gold" onclick="showNewCampForm()">+ New Campaign</button>
+      <button class="btn btn-outline" onclick="showImportCampForm()">↓ Import Campaign</button>
     </div>
     <!-- New Campaign form -->
     <div id="campNewForm" style="display:none">
@@ -740,6 +741,16 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <div class="field"><label>DM Name</label><input id="cDM" placeholder="Dungeon Master's name"></div>
       <div class="field"><label>Description</label><textarea id="cDesc" placeholder="What's this campaign about?"></textarea></div>
       <button class="btn btn-gold" onclick="createCampaign()">Create Campaign</button>
+      <button class="btn btn-outline" onclick="hideCampForm()">← Cancel</button>
+    </div>
+    <!-- Import Campaign form -->
+    <div id="campImportForm" style="display:none">
+      <div class="divider"><span>Import Campaign</span></div>
+      <p style="font-size:13px;color:var(--muted);font-style:italic;margin-bottom:14px;line-height:1.5">Paste a campaign export code to import all sessions, quests, NPCs, arcs and notes at once.</p>
+      <div class="field"><label>Campaign Import Code</label>
+        <textarea id="campImportCode" placeholder="Paste campaign export code here…" style="min-height:80px;font-family:'Crimson Pro',serif;font-size:12px;word-break:break-all;"></textarea>
+      </div>
+      <button class="btn btn-gold" onclick="importCampaign()">Import Campaign ✦</button>
       <button class="btn btn-outline" onclick="hideCampForm()">← Cancel</button>
     </div>
     <!-- Campaign detail view -->
@@ -1826,12 +1837,58 @@ function showNewCampForm() {
   if(isPlayerMode()){toast('Only the DM can create campaigns','var(--red)');return;}
   document.getElementById('campListView').style.display = 'none';
   document.getElementById('campNewForm').style.display = 'block';
+  document.getElementById('campImportForm').style.display = 'none';
   document.getElementById('campDetailView').style.display = 'none';
+}
+
+function showImportCampForm() {
+  if(isPlayerMode()){toast('Only the DM can import campaigns','var(--red)');return;}
+  document.getElementById('campListView').style.display = 'none';
+  document.getElementById('campNewForm').style.display = 'none';
+  document.getElementById('campImportForm').style.display = 'block';
+  document.getElementById('campDetailView').style.display = 'none';
+}
+
+function importCampaign() {
+  const raw = (document.getElementById('campImportCode')?.value||'').trim();
+  if (!raw) { toast('Paste an import code first', 'var(--red)'); return; }
+  let camp;
+  try {
+    const b64 = raw.replace(/[-_]/g, x => ({'-':'+','_':'/'})[x]);
+    const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
+    camp = JSON.parse(atob(padded));
+  } catch (e) {
+    toast('Invalid import code', 'var(--red)'); return;
+  }
+  if (!camp || !camp.name) { toast('Invalid campaign data', 'var(--red)'); return; }
+  // Assign fresh ID to avoid collisions, preserve all data
+  camp.id = camp.id || genCampId();
+  camp.sessions = camp.sessions || [];
+  camp.quests = camp.quests || [];
+  camp.npcs = camp.npcs || [];
+  camp.arcs = camp.arcs || [];
+  camp.notes = camp.notes || [];
+  camp.charIds = camp.charIds || [];
+  const camps = getCampaigns();
+  const existing = camps.findIndex(c => c.id === camp.id);
+  if (existing >= 0) {
+    if (!confirm('A campaign with this ID already exists. Overwrite it?')) return;
+    camps[existing] = camp;
+  } else {
+    camps.push(camp);
+  }
+  saveCampaigns(camps);
+  if (!getActiveCampId()) setActiveCampId(camp.id);
+  document.getElementById('campImportCode').value = '';
+  toast('✦ ' + camp.name + ' imported! ' + camp.sessions.length + ' sessions, ' + camp.npcs.length + ' NPCs, ' + camp.quests.length + ' quests.');
+  hideCampForm();
+  openCamp(camp.id);
 }
 
 function hideCampForm() {
   document.getElementById('campListView').style.display = 'block';
   document.getElementById('campNewForm').style.display = 'none';
+  document.getElementById('campImportForm').style.display = 'none';
   ['cName','cSetting','cDM','cDesc'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
 }
 
