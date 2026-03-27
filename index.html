@@ -2748,9 +2748,12 @@ function parseDMVFields(f){
   const clRaw = get('class-level','class_level');
   const CLASS_NAMES=['Barbarian','Bard','Cleric','Druid','Fighter','Monk','Paladin','Ranger','Rogue','Sorcerer','Warlock','Wizard'];
   let className='Fighter',subclass='',level=1;
-  const clSub=clRaw.match(new RegExp('('+CLASS_NAMES.join('|')+')\s*\[([^\]]+)\]\s*\((\d+)\)','i'));
-  if(clSub){className=clSub[1];subclass=clSub[2];level=parseInt(clSub[3]);}
-  else{const clOnly=clRaw.match(new RegExp('('+CLASS_NAMES.join('|')+')\s*\((\d+)\)','i'));if(clOnly){className=clOnly[1];level=parseInt(clOnly[2]);}else{const justC=clRaw.match(new RegExp('('+CLASS_NAMES.join('|')+')','i'));if(justC)className=justC[1];const lvlM=clRaw.match(/(\d+)/);if(lvlM)level=parseInt(lvlM[1]);}}
+  const foundClass=CLASS_NAMES.find(c=>clRaw.toLowerCase().includes(c.toLowerCase()));
+  if(foundClass) className=foundClass;
+  const subM=clRaw.match(/\[([^\]]+)\]/);
+  if(subM) subclass=subM[1];
+  const lvlM2=clRaw.match(/\((\d+)\)/)||clRaw.match(/(\d+)/);
+  if(lvlM2) level=parseInt(lvlM2[1]);
   const classIdx=Math.max(0,CLASSES.findIndex(c=>c.name.toLowerCase()===className.toLowerCase()));
   // Abilities
   const abilities={STR:parseInt(get('str-mod'))||10,DEX:parseInt(get('dex-mod'))||10,CON:parseInt(get('con-mod'))||10,INT:parseInt(get('int-mod'))||10,WIS:parseInt(get('wis-mod'))||10,CHA:parseInt(get('cha-mod'))||10};
