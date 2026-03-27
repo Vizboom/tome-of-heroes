@@ -2755,134 +2755,162 @@ async function extractPdfText(file){
 }
 
 function parsePdfCharSheet(text){
-  // Normalise whitespace
-  const t = text.replace(/\s+/g,' ');
-  const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
+  // Detect DMV (Dungeon Master's Vault) format vs generic
+  if(text.includes('Wizard Cantrip') || text.includes('Wizard Level') ||
+     text.includes('PROFICIENCY BONUS') && text.includes('SAVING THROWS')){
+    return parseDMVPdfCharSheet(text);
+  }
+  return null;
+}
 
-  const get = (pattern, group=1, flags='i') => {
-    const m = t.match(new RegExp(pattern, flags));
-    return m ? m[group].trim() : '';
-  };
+function parseDMVPdfCharSheet(text){
+  const pages = text.split('\f');
+  const p1 = pages[0]||'';
+  const p2 = pages[1]||'';
+  const spellPages = pages.slice(4).filter(p=>p.trim()&&!p.trim().startsWith('(reverse)'));
 
-  // ── Name ── usually one of the first large text items
-  // Try common DDB PDF patterns
-  let name = get(/^([A-Z][a-zA-Z\s'\-]{2,30})\s+CHARACTER\s+NAME/m) ||
-             get(/CHARACTER\s+NAME\s+([A-Z][a-zA-Z\s'\-]{2,30})/m) ||
-             get(/^([A-Z][a-zA-Z\s'\-]{2,30})\s+(?:Level|Lvl|LVL)/m) ||
-             lines.find(l=>l.match(/^[A-Z][a-z]+ [A-Z][a-z]+$/) && l.length < 30) || '';
+  // Name
+  const name = p1.split('\n')[0].trim();
 
-  // ── Class & Level ──
-  const classLevel = get(/CLASS\s*(?:&\s*LEVEL|AND\s+LEVEL)?\s*([A-Za-z\s]+?)\s+(\d+)/i) ||
-                     get(/([A-Za-z]+(?:\s[A-Za-z]+)?)\s+(\d{1,2})\s+(?:\/|Level)/i);
-  let className = '', level = 1;
-  const clMatch = t.match(/(?:Barbarian|Bard|Cleric|Druid|Fighter|Monk|Paladin|Ranger|Rogue|Sorcerer|Warlock|Wizard)\s+(\d{1,2})/i);
-  if(clMatch){ className = clMatch[0].replace(/\d+/,'').trim(); level = parseInt(clMatch[1])||1; }
+  // Class, Subclass, Level
+  const CLASS_NAMES = ['Barbarian','Bard','Cleric','Druid','Fighter','Monk','Paladin','Ranger','Rogue','Sorcerer','Warlock','Wizard'];
+  let className='Fighter', subclass='', level=1;
+  const clSub = p1.match(new RegExp('('+CLASS_NAMES.join('|')+')\\s*\\[([^\\]]+)\\]\\s*\\((\\d+)\\)','i'));
+  if(clSub){ className=clSub[1]; subclass=clSub[2]; level=parseInt(clSub[3]); }
+  else {
+    const clOnly = p1.match(new RegExp('('+CLASS_NAMES.join('|')+')\\s*\\((\\d+)\\)','i'));
+    if(clOnly){ className=clOnly[1]; level=parseInt(clOnly[2]); }
+  }
 
-  // ── Race ──
-  const race = get(/RACE\s+([A-Za-z\s\-']+?)(?:\s+(?:CLASS|BACKGROUND|ALIGNMENT|EXPERIENCE|STR|DEX))/i) ||
-               get(/([A-Za-z\s\-]+?)\s+RACE/i) || '';
+  // Background
+  const bgM = p1.match(/\[.*?\] \(\d+\)\s*\n\n([^\n]+)\n/) || p1.match(/\(\d+\)\s*\n\n([^\n]+)\n\nCLASS/);
+  const background = bgM ? bgM[1].trim() : 'Custom';
 
-  // ── Background ──
-  const background = get(/BACKGROUND\s+([A-Za-z\s\-]+?)(?:\s+(?:ALIGNMENT|CLASS|RACE|EXPERIENCE))/i) || 'Custom';
+  // Race
+  const raceM = p1.match(/\n([\w/\- ]+?)\n\n(?:Chaotic|Lawful|True|Neutral)/);
+  const race = raceM ? raceM[1].split('\n')[0].trim() : 'Human';
 
-  // ── Alignment ──
-  const alignment = get(/ALIGNMENT\s+([A-Za-z\s]+?)(?:\s+(?:EXPERIENCE|CLASS|RACE|BACKGROUND))/i) || '';
+  // Alignment & XP
+  const alignM = p1.match(/((?:Chaotic|Lawful|True|Neutral) (?:Good|Evil|Neutral))\s+(\d+)/);
+  const alignment = alignM ? alignM[1] : '';
+  const xp = alignM ? parseInt(alignM[2]) : 0;
 
-  // ── Ability Scores ── DDB PDFs list them as pairs: number then modifier
-  const abOrder = ['STR','DEX','CON','INT','WIS','CHA'];
+  // Proficiency Bonus
+  const pbM = p1.match(/\+(\d+)\s*\n\nPROFICIENCY BONUS/);
+  const pb = pbM ? parseInt(pbM[1]) : 2;
+
+  // AC
+  const acM = p1.match(/STRENGTH\s*\n\n[+-]?\d+\s*\n\n(\d+)\n/);
+  const ac = acM ? parseInt(acM[1]) : null;
+
+  // Speed
+  const speedM = p1.match(/ARMOR\nCLASS\s*\n\nPROFICIENCY BONUS\s*\n\n\d+\s*\n\n[+-]?\d+\s*\n\n(\d+)/);
+  const speed = speedM ? parseInt(speedM[1]) : 30;
+
+  // HP — take last 2 isolated numbers before CURRENT HIT POINTS
+  const hpSection = p1.slice(0, p1.indexOf('CURRENT HIT POINTS'));
+  const hpNums = [...hpSection.matchAll(/\n\n(\d{1,3})\n\n/g)].map(m=>parseInt(m[1])).filter(n=>n>=1&&n<=500);
+  const maxHP  = hpNums.length ? hpNums[hpNums.length-1] : 0;
+  const currentHP = hpNums.length>=2 ? hpNums[hpNums.length-2] : maxHP;
+
+  // Ability Scores via saving throws
+  const profSaves = new Set([...p1.matchAll(/●\s*\n\n([+-]\d+)\s+(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\n/g)].map(m=>({Strength:'STR',Dexterity:'DEX',Constitution:'CON',Intelligence:'INT',Wisdom:'WIS',Charisma:'CHA'})[m[2]]));
+  const allSaves = [...p1.matchAll(/\n([+-]?\d+)\s+(Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)\n/g)];
+  const abKeyMap = {Strength:'STR',Dexterity:'DEX',Constitution:'CON',Intelligence:'INT',Wisdom:'WIS',Charisma:'CHA'};
   const abilities = {STR:10,DEX:10,CON:10,INT:10,WIS:10,CHA:10};
-  // Try to find each ability
-  abOrder.forEach(ab => {
-    const patterns = [
-      new RegExp(ab + '\\w*\\s+(\\d{1,2})\\s+[+\\-]?\\d'),
-      new RegExp('(\\d{1,2})\\s+[+\\-]?\\d+\\s+' + ab),
-      new RegExp(ab + '[A-Z]*\\s*[:\\-]?\\s*(\\d{1,2})')
-    ];
-    for(const p of patterns){
-      const m = t.match(p);
-      if(m){ abilities[ab] = Math.min(30, Math.max(1, parseInt(m[1]))); break; }
-    }
+  allSaves.forEach(m=>{
+    const k = abKeyMap[m[2]];
+    const saveMod = parseInt(m[1]);
+    const baseMod = saveMod - (profSaves.has(k)?pb:0);
+    abilities[k] = Math.max(1,Math.min(30, 10+2*baseMod));
+  });
+  // CON may not be in save list
+  if(abilities.CON===10){
+    const conM = p1.match(/([+-]?\d+)\s+Constitution/);
+    if(conM){ const bm=parseInt(conM[1]); abilities.CON=Math.max(1,Math.min(30,10+2*bm)); }
+  }
+
+  // Proficient Skills
+  const SKILL_AB = {Acrobatics:'DEX','Animal Handling':'WIS',Arcana:'INT',Athletics:'STR',Deception:'CHA',History:'INT',Insight:'WIS',Intimidation:'CHA',Investigation:'INT',Medicine:'WIS',Nature:'INT',Perception:'WIS',Performance:'CHA',Persuasion:'CHA',Religion:'INT','Sleight of Hand':'DEX',Stealth:'DEX',Survival:'WIS'};
+  const skillEntries = [...p1.matchAll(/\n([+-]?\d+)\s+([\w ]+?)\s*\((?:Dex|Str|Con|Int|Wis|Cha)\)/g)];
+  const proficiencies = [];
+  skillEntries.forEach(m=>{
+    const sk = m[2].trim(), mod = parseInt(m[1]);
+    const abKey = SKILL_AB[sk];
+    if(abKey){ const base=Math.floor((abilities[abKey]-10)/2); if(mod>=base+pb) proficiencies.push(sk); }
   });
 
-  // ── HP ──
-  const maxHP = parseInt(get(/(?:MAX(?:IMUM)?\s+HIT\s+POINTS?|HP\s+MAX|HIT\s+POINT\s+MAX(?:IMUM)?)\s*:?\s*(\d+)/i)) ||
-                parseInt(get(/(\d+)\s+(?:MAX(?:IMUM)?\s+)?HIT\s+POINTS?/i)) || 0;
-  const currentHP = parseInt(get(/CURRENT\s+HIT\s+POINTS?\s*:?\s*(\d+)/i)) || maxHP;
-
-  // ── AC ──
-  const ac = parseInt(get(/(?:ARMOR\s+CLASS|AC)\s*:?\s*(\d+)/i)) || null;
-
-  // ── Proficiency Bonus ──
-  const pb = parseInt(get(/PROFICIENCY\s+BONUS\s*:?\s*[+]?(\d)/i)) || 2;
-
-  // ── Skills (look for proficiency check marks next to skill names) ──
-  const ALL_SKILL_NAMES = ['Acrobatics','Animal Handling','Arcana','Athletics','Deception',
-    'History','Insight','Intimidation','Investigation','Medicine','Nature','Perception',
-    'Performance','Persuasion','Religion','Sleight of Hand','Stealth','Survival'];
-  const proficiencies = ALL_SKILL_NAMES.filter(sk => {
-    // DDB PDFs often show proficient skills with a filled circle or higher bonus
-    const skPat = new RegExp('[+](' + (pb) + '|' + (pb+1) + '|' + (pb+2) + '|' + (pb+3) + '|' + (pb+4) + ')\\s+' + sk.replace(/\s+/g,'\\s+'), 'i');
-    return t.match(skPat);
-  });
-
-  // ── Attacks ──
+  // Attacks
   const attacks = [];
-  const atkPattern = /([A-Za-z\s+\-']+?)\s+([+\-]\d+)\s+([\dd+\- ]+(?:piercing|slashing|bludgeoning|fire|cold|necrotic|radiant|psychic|thunder|lightning|acid|poison|force|damage)?)/gi;
-  let atkMatch;
-  while((atkMatch = atkPattern.exec(t)) !== null && attacks.length < 6){
-    const atkName = atkMatch[1].trim();
-    if(atkName.length > 2 && atkName.length < 40 && !atkName.match(/^(STR|DEX|CON|INT|WIS|CHA|SAVE|SKILL)/i)){
-      attacks.push({ name: atkName, bonus: atkMatch[2], damage: atkMatch[3].trim(), type:'melee' });
+  const atkSection = p1.match(/NAME\s*\n\nATK BONUS DAMAGE\/TYPE\s*\n([\s\S]*?)(?:\nNumber of Attacks|\nSKILLS)/);
+  if(atkSection){
+    const atkLines = atkSection[1].split('\n').map(l=>l.trim()).filter(Boolean);
+    let i=0;
+    while(i<atkLines.length-2){
+      if(/^[+-]\d+$/.test(atkLines[i+1])){
+        attacks.push({name:atkLines[i],bonus:atkLines[i+1],damage:atkLines[i+2],type:'melee'});
+        i+=3;
+      } else i++;
     }
   }
 
-  // ── Subclass ──
-  const subclass = get(/(?:PRIMAL\s+PATH|BARDIC\s+COLLEGE|DIVINE\s+DOMAIN|DRUID\s+CIRCLE|MARTIAL\s+ARCHETYPE|MONASTIC\s+TRADITION|SACRED\s+OATH|RANGER\s+ARCHETYPE|ROGUISH\s+ARCHETYPE|SORCEROUS\s+ORIGIN|OTHERWORLDLY\s+PATRON|ARCANE\s+TRADITION)\s+([A-Za-z\s]+?)(?:\s+[A-Z]{3}|\s*$)/im) || '';
+  // Equipment
+  const equipment = [];
+  const equipStart = p1.indexOf('Backpack');
+  if(equipStart>=0){
+    let equipText = p1.slice(equipStart);
+    const equipStop = equipText.search(/\n\d+\s*\nPP|\nTREASURE|\nEQUIPMENT/);
+    if(equipStop>=0) equipText=equipText.slice(0,equipStop);
+    equipText.split('\n').forEach(l=>{ l=l.trim(); if(l&&!/^\d+$/.test(l)) equipment.push(l); });
+  }
 
-  // ── Feats ──
-  const feats = FEATS_5E.filter(f => t.toLowerCase().includes(f.toLowerCase()));
+  // Spells — pair each Wizard line with nearest preceding spell name
+  const WIZARD_PAT = /^Wizard\s+(?:Cantrip|Level \d+)\s+\w+\s+DC\s+\d+\s+Spell Mod\s+[+-]\d+/;
+  const SPELL_NAME_PAT = /^[A-Z][a-z][a-zA-Z\s\(\)]+$/;
+  const SKIP_PAT = /^(You |The |A |An |For |Choose|This |When |If |Each |At |Until |Page |\d|V,|S,|Inst|Conc|Charcoal|Pinch|Pearl|Small|Piece|Bit |Powder|A small|A piece|Choose up)/;
+  const spells = [];
+  const seenSpells = new Set();
+  spellPages.forEach(spPage=>{
+    if(spPage.includes('(reverse)')) return;
+    const chunks = spPage.split(/\n\n/).map(c=>c.trim()).filter(Boolean);
+    chunks.forEach((chunk,i)=>{
+      if(!WIZARD_PAT.test(chunk)) return;
+      const lvlM = chunk.match(/Level (\d+)/);
+      const spLevel = chunk.includes('Cantrip') ? 0 : (lvlM?parseInt(lvlM[1]):1);
+      for(let j=i-1;j>=0;j--){
+        const lastLine = chunks[j].split('\n').pop().trim();
+        if(SPELL_NAME_PAT.test(lastLine) && !SKIP_PAT.test(lastLine) &&
+           lastLine.length<60 && !seenSpells.has(lastLine) && !WIZARD_PAT.test(lastLine)){
+          spells.push({id:'s'+spells.length,name:lastLine,level:spLevel,prepared:true,desc:''});
+          seenSpells.add(lastLine);
+          break;
+        }
+      }
+    });
+  });
 
-  // ── Match class to CLASSES array ──
-  const classIdx = Math.max(0, CLASSES.findIndex(c =>
-    c.name.toLowerCase() === className.toLowerCase() ||
-    className.toLowerCase().includes(c.name.toLowerCase())
-  ));
-  const cls = CLASSES[classIdx];
+  // Page 2 physical
+  const p2vals = p2.match(/CHARACTER NAME\n\n(\d{1,3})\n\n(\S+)\n\n(\S+)\n\nAGE\n\nHEIGHT\n\nWEIGHT\n\n(\w+)\n\n(\w+)\n\n(\w+)\n\nEYES\n\nSKIN\n\nHAIR/);
+  const [,age='',height='',weight='',eyes='',skin='',hair=''] = p2vals||[];
+  const alliesM = p2.match(/\n([A-Za-z ]+)\n\nSYMBOL/);
+  const allies = alliesM ? alliesM[1].trim() : '';
+  const bsM = p2.match(/CHARACTER BACKSTORY\s*\n\n([\s\S]+?)(?:\n\nTREASURE|\s*$)/);
+  const backstory = bsM ? bsM[1].trim() : '';
 
-  // Calculate maxHP from class if not found in PDF
-  const calcedHP = maxHP || getMaxHP(cls, level, abilities.CON);
-
-  if(!name && !className) return null;
+  // Map class name to CLASSES index
+  const classIdx = Math.max(0, CLASSES.findIndex(c=>c.name.toLowerCase()===className.toLowerCase()));
 
   return {
     id: Date.now(),
-    name: name || 'Imported Character',
-    race: race || 'Human',
-    background: background || 'Custom',
-    alignment,
-    level,
-    classIdx,
-    subclass,
-    abilities,
-    proficiencies,
-    maxHP: calcedHP,
-    currentHP: currentHP || calcedHP,
-    ac,
-    statuses: [],
-    shareCode: genCode(),
-    created: Date.now(),
-    xp: 0,
-    attacks: attacks.slice(0,4),
-    spells: [],
-    equipment: [],
-    feats,
-    effects: {},
-    customEffects: [],
-    age: '', height: '', weight: '', eyes: '', hair: '',
-    traits: '', ideals: '', bonds: '', flaws: '', backstory: '', allies: '',
+    name, race, background, alignment, level, classIdx, subclass, xp,
+    ac, speed, maxHP, currentHP,
+    abilities, proficiencies, attacks, equipment, spells,
+    statuses:[], shareCode:genCode(), created:Date.now(),
+    effects:{}, customEffects:[],
+    age, height, weight, eyes, hair, skin,
+    traits: '', ideals: '', bonds: '', flaws: '', backstory, allies,
   };
 }
-
 function confirmPdfImport(){
   const char = window._pendingPdfChar;
   if(!char){ toast('No character to import','var(--red)'); return; }
