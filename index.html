@@ -2688,46 +2688,128 @@ async function handlePdfUpload(input){
   previewEl.innerHTML = '';
 
   try {
-    const text = await extractPdfText(file);
-    if(!text || text.trim().length < 50){
-      statusEl.textContent = '⚠ Could not extract text — is this a scanned PDF?';
-      return;
+    // Try form fields first (DMV format stores all values as PDF form fields)
+    statusEl.textContent = '🔍 Reading form fields…';
+    const fields = await extractPdfFields(file);
+    let char = null;
+
+    if(fields['character-name'] || fields['class-level']){
+      statusEl.textContent = '🔍 Parsing character…';
+      char = parseDMVFields(fields);
+    } else {
+      // Fallback: text extraction
+      statusEl.textContent = '🔍 Extracting text…';
+      const text = await extractPdfText(file);
+      if(!text || text.trim().length < 50){
+        statusEl.textContent = '⚠ Could not extract data — try the JSON export instead.';
+        return;
+      }
+      char = parseDMVPdfCharSheet(text);
     }
-    statusEl.textContent = '🔍 Parsing character data…';
-    const char = parsePdfCharSheet(text);
+
     if(!char || !char.name){
-      statusEl.textContent = '⚠ Could not find character data. Try the JSON export from D&D Beyond instead.';
+      statusEl.textContent = '⚠ Could not find character data. Is this a DMV character sheet?';
       return;
     }
     statusEl.textContent = '';
-    // Show preview
     const cls = CLASSES[char.classIdx];
+    const cc = classColor(char.classIdx);
     previewEl.innerHTML = `
-      <div style="background:var(--surface2);border:1px solid var(--gold);border-radius:12px;padding:14px;margin-bottom:10px">
+      <div style="background:var(--surface2);border:1px solid ${cc};border-radius:12px;padding:14px;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
           <span style="font-size:28px">${cls.icon}</span>
           <div>
             <div style="font-family:'Cinzel',serif;font-size:15px;color:var(--gold)">${char.name}</div>
-            <div style="font-size:12px;color:var(--muted)">Level ${char.level} ${char.race} ${cls.name}${char.subclass?' · '+char.subclass.replace(/ \(.*?\)/,''):''}</div>
+            <div style="font-size:12px;color:var(--muted)">Level ${char.level} ${char.race} ${cls.name}${char.subclass?' · '+char.subclass:''}</div>
           </div>
         </div>
-        <div class="stat-strip-sm" style="margin-bottom:8px">
-          ${['STR','DEX','CON','INT','WIS','CHA'].map(ab=>`<div class="stat-pill-sm"><strong>${ab}</strong>${char.abilities[ab]}</div>`).join('')}
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-bottom:8px">
+          ${['STR','DEX','CON','INT','WIS','CHA'].map(ab=>`
+            <div style="background:var(--surface);border-radius:6px;padding:4px;text-align:center">
+              <div style="font-size:9px;color:var(--muted)">${ab}</div>
+              <div style="font-family:'Cinzel',serif;font-size:13px;color:${cc}">${char.abilities[ab]||10}</div>
+            </div>`).join('')}
         </div>
-        <div style="font-size:11px;color:var(--muted)">${char.maxHP} HP · AC ${char.ac||'—'} · ${char.background}</div>
-        ${char.attacks&&char.attacks.length?`<div style="font-size:11px;color:var(--muted);margin-top:4px">Attacks: ${char.attacks.map(a=>a.name).join(', ')}</div>`:''}
-        ${char.feats&&char.feats.length?`<div style="font-size:11px;color:var(--purple);margin-top:4px">Feats: ${char.feats.join(', ')}</div>`:''}
+        <div style="font-size:11px;color:var(--muted)">${char.maxHP} HP · AC ${char.ac||'—'} · Speed ${char.speed||30}</div>
+        ${char.spells&&char.spells.length?`<div style="font-size:11px;color:var(--muted);margin-top:4px">⚡ ${char.spells.length} spells imported</div>`:''}
+        ${char.attacks&&char.attacks.length?`<div style="font-size:11px;color:var(--muted);margin-top:2px">⚔ ${char.attacks.map(a=>a.name).join(', ')}</div>`:''}
       </div>
-      <button class="btn btn-gold" onclick="confirmPdfImport()" style="margin-bottom:0">✦ Import ${char.name}</button>`;
+      <button class="btn btn-gold" onclick="confirmPdfImport()">✦ Import ${char.name}</button>`;
     window._pendingPdfChar = char;
   } catch(e) {
-    statusEl.textContent = '⚠ Error reading PDF: ' + e.message;
+    statusEl.textContent = '⚠ Error: ' + e.message;
     console.error(e);
   }
 }
 
+function parseDMVFields(f){
+  const get = (...keys) => { for(const k of keys){ if(f[k]&&String(f[k]).trim()) return String(f[k]).trim(); } return ''; };
+  // Class & Level
+  const clRaw = get('class-level','class_level');
+  const CLASS_NAMES=['Barbarian','Bard','Cleric','Druid','Fighter','Monk','Paladin','Ranger','Rogue','Sorcerer','Warlock','Wizard'];
+  let className='Fighter',subclass='',level=1;
+  const clSub=clRaw.match(new RegExp('('+CLASS_NAMES.join('|')+')\s*\[([^\]]+)\]\s*\((\d+)\)','i'));
+  if(clSub){className=clSub[1];subclass=clSub[2];level=parseInt(clSub[3]);}
+  else{const clOnly=clRaw.match(new RegExp('('+CLASS_NAMES.join('|')+')\s*\((\d+)\)','i'));if(clOnly){className=clOnly[1];level=parseInt(clOnly[2]);}else{const justC=clRaw.match(new RegExp('('+CLASS_NAMES.join('|')+')','i'));if(justC)className=justC[1];const lvlM=clRaw.match(/(\d+)/);if(lvlM)level=parseInt(lvlM[1]);}}
+  const classIdx=Math.max(0,CLASSES.findIndex(c=>c.name.toLowerCase()===className.toLowerCase()));
+  // Abilities
+  const abilities={STR:parseInt(get('str-mod'))||10,DEX:parseInt(get('dex-mod'))||10,CON:parseInt(get('con-mod'))||10,INT:parseInt(get('int-mod'))||10,WIS:parseInt(get('wis-mod'))||10,CHA:parseInt(get('cha-mod'))||10};
+  // Proficiency bonus
+  const pb=parseInt((get('prof-bonus')||'+2').replace('+',''))||2;
+  // Proficient skills
+  const SKILL_AB={acrobatics:'DEX','animal-handling':'WIS',arcana:'INT',athletics:'STR',deception:'CHA',history:'INT',insight:'WIS',intimidation:'CHA',investigation:'INT',medicine:'WIS',nature:'INT',perception:'WIS',performance:'CHA',persuasion:'CHA',religion:'INT','sleight-of-hand':'DEX',stealth:'DEX',survival:'WIS'};
+  const SKILL_DISPLAY={acrobatics:'Acrobatics','animal-handling':'Animal Handling',arcana:'Arcana',athletics:'Athletics',deception:'Deception',history:'History',insight:'Insight',intimidation:'Intimidation',investigation:'Investigation',medicine:'Medicine',nature:'Nature',perception:'Perception',performance:'Performance',persuasion:'Persuasion',religion:'Religion','sleight-of-hand':'Sleight of Hand',stealth:'Stealth',survival:'Survival'};
+  const proficiencies=[];
+  for(const[sk,ab]of Object.entries(SKILL_AB)){const mod=parseInt((get(sk)||'').replace('+',''));if(isNaN(mod))continue;const base=Math.floor((abilities[ab]-10)/2);if(mod>=base+pb)proficiencies.push(SKILL_DISPLAY[sk]);}
+  // Attacks
+  const attacks=[];
+  for(let i=1;i<=6;i++){const name=get(`weapon-name-${i}`);const bonus=get(`weapon-attack-bonus-${i}`);const damage=get(`weapon-damage-${i}`);if(name)attacks.push({name,bonus,damage,type:'melee'});}
+  // Equipment
+  const equipRaw=get('features-and-traits');
+  const equipment=equipRaw?equipRaw.split('\n').map(l=>l.replace('\r','').trim()).filter(l=>l&&l.length<60&&!l.startsWith('-')).slice(0,20):[];
+  // Spells
+  const spells=[];const seenSp=new Set();
+  for(let lvl=0;lvl<=9;lvl++){for(let slot=1;slot<=20;slot++){const spName=get(`spells-${lvl}-${slot}-1`,`spells-${lvl}-${slot}`);if(spName&&!seenSp.has(spName)){spells.push({id:'s'+spells.length,name:spName,level:lvl,prepared:true,desc:''});seenSp.add(spName);}}}
+  return{id:Date.now(),name:get('character-name','character_name')||'Imported Character',race:get('race')||'Human',background:get('background')||'Custom',alignment:get('alignment')||'',level,classIdx,subclass,xp:parseInt(get('xp'))||0,ac:parseInt(get('ac'))||null,speed:parseInt(get('speed'))||30,maxHP:parseInt(get('hp-max'))||0,currentHP:parseInt(get('hp-current','hp-max'))||0,abilities,proficiencies,attacks,equipment,spells,statuses:[],shareCode:genCode(),created:Date.now(),effects:{},customEffects:[],age:get('age'),height:get('height'),weight:get('weight'),eyes:get('eyes'),hair:get('hair'),skin:get('skin'),traits:get('personality-traits').replace(/[\r\n]+/g,' ').trim(),ideals:'',bonds:'',flaws:get('flaws'),backstory:get('backstory'),allies:get('faction-name')};
+}
+
+async function extractPdfFields(file){
+  // Load PDF.js if needed
+  if(!window.pdfjsLib){
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  // Collect form field values from all pages
+  const fields = {};
+  for(let i = 1; i <= pdf.numPages; i++){
+    const page = await pdf.getPage(i);
+    const annotations = await page.getAnnotations();
+    for(const annot of annotations){
+      if(annot.subtype === 'Widget' && annot.fieldName && annot.fieldValue !== undefined){
+        const key = annot.fieldName.toLowerCase().replace(/\s+/g,'-');
+        const val = Array.isArray(annot.fieldValue)
+          ? annot.fieldValue.join('\n')
+          : String(annot.fieldValue || '').trim();
+        if(val) fields[key] = val;
+        // Also store under original name
+        if(annot.fieldName) fields[annot.fieldName] = val;
+      }
+    }
+  }
+  return fields;
+}
+
 async function extractPdfText(file){
-  // Use PDF.js via CDN to extract text client-side
+  // For text-based parsing fallback — reconstruct lines from PDF.js positions
   if(!window.pdfjsLib){
     await new Promise((resolve, reject) => {
       const s = document.createElement('script');
@@ -2741,61 +2823,37 @@ async function extractPdfText(file){
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   let fullText = '';
-
   for(let i = 1; i <= pdf.numPages; i++){
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-
-    // Sort items top-to-bottom, left-to-right
-    const items = content.items
-      .filter(item => item.str.trim())
+    const items = content.items.filter(item => item.str.trim())
       .sort((a,b) => {
         const dy = Math.round(b.transform[5]) - Math.round(a.transform[5]);
         return dy !== 0 ? dy : a.transform[4] - b.transform[4];
       });
-
     if(!items.length) continue;
-
-    // Group items into lines by Y coordinate (within 4px tolerance)
     const lines = [];
-    let currentLine = [items[0]];
-    let currentY = Math.round(items[0].transform[5]);
-
+    let currentLine = [items[0]], currentY = Math.round(items[0].transform[5]);
     for(let j = 1; j < items.length; j++){
       const itemY = Math.round(items[j].transform[5]);
-      if(Math.abs(itemY - currentY) <= 4){
-        currentLine.push(items[j]);
-      } else {
-        lines.push({ y: currentY, items: currentLine });
-        currentLine = [items[j]];
-        currentY = itemY;
-      }
+      if(Math.abs(itemY - currentY) <= 4){ currentLine.push(items[j]); }
+      else { lines.push({y:currentY, items:currentLine}); currentLine=[items[j]]; currentY=itemY; }
     }
-    lines.push({ y: currentY, items: currentLine });
-
-    // Build page text: double-newline when Y gap > 10px (paragraph break)
+    lines.push({y:currentY, items:currentLine});
     let pageText = '';
     for(let j = 0; j < lines.length; j++){
-      const lineText = lines[j].items.map(it => it.str).join('');
-      if(j > 0){
-        const yGap = lines[j-1].y - lines[j].y;
-        pageText += yGap > 10 ? '\n\n' : '\n';
-      }
+      const lineText = lines[j].items.map(it=>it.str).join('');
+      if(j > 0){ const yGap = lines[j-1].y - lines[j].y; pageText += yGap > 10 ? '\n\n' : '\n'; }
       pageText += lineText;
     }
-
     fullText += pageText + '\f';
   }
   return fullText;
 }
 
 function parsePdfCharSheet(text){
-  // Detect DMV (Dungeon Master's Vault) format
-  // Key markers: has class declaration with brackets or parens, has D&D stat block labels
-  const isDMV = (text.includes('CLASS & LEVEL') || text.includes('PROFICIENCY BONUS')) &&
-                (text.includes('SAVING THROWS') || text.includes('CURRENT HIT POINTS')) &&
-                (text.includes('ATK BONUS') || text.includes('DAMAGE/TYPE') || text.includes('Hit Point Maximum'));
-  if(isDMV) return parseDMVPdfCharSheet(text);
+  // This is now only used for spell page text parsing
+  // The main parsing is done via form fields in handlePdfUpload
   return null;
 }
 
