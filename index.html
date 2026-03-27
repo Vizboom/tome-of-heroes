@@ -2871,13 +2871,10 @@ function parseDMVPdfCharSheet(text){
 
   // Class, Subclass, Level
   const CLASS_NAMES = ['Barbarian','Bard','Cleric','Druid','Fighter','Monk','Paladin','Ranger','Rogue','Sorcerer','Warlock','Wizard'];
-  let className='Fighter', subclass='', level=1;
-  const clSub = p1.match(new RegExp('('+CLASS_NAMES.join('|')+')\\s*\\[([^\\]]+)\\]\\s*\\((\\d+)\\)','i'));
-  if(clSub){ className=clSub[1]; subclass=clSub[2]; level=parseInt(clSub[3]); }
-  else {
-    const clOnly = p1.match(new RegExp('('+CLASS_NAMES.join('|')+')\\s*\\((\\d+)\\)','i'));
-    if(clOnly){ className=clOnly[1]; level=parseInt(clOnly[2]); }
-  }
+  let className='Fighter',subclass='',level=1;
+  const fc=CLASS_NAMES.find(c=>p1.includes(c));if(fc)className=fc;
+  const sm=p1.match(/\[([^\]]+)\]/);if(sm)subclass=sm[1];
+  const lm=p1.match(/\((\d+)\)/)||p1.match(/(\d+)/);if(lm)level=parseInt(lm[1]);
 
   // Background
   const bgM = p1.match(/\[.*?\] \(\d+\)\s*\n\n([^\n]+)\n/) || p1.match(/\(\d+\)\s*\n\n([^\n]+)\n\nCLASS/);
