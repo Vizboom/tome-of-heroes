@@ -2717,6 +2717,7 @@ function showCharImport(){
       <div class="tab-row" style="margin-bottom:14px">
         <button class="tab-btn active" onclick="importTab('code',this)">Code / JSON</button>
         <button class="tab-btn" onclick="importTab('pdf',this)">📄 PDF</button>
+        <button class="tab-btn" onclick="importTab('claude',this)">🤖 Claude</button>
       </div>
 
       <div id="importPaneCode">
@@ -2729,7 +2730,7 @@ function showCharImport(){
 
       <div id="importPanePdf" style="display:none">
         <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">
-          Upload a <strong style="color:var(--gold)">D&D Beyond PDF character sheet</strong> and it will be parsed automatically.
+          Upload a <strong style="color:var(--gold)">DMV PDF character sheet</strong> and it will be parsed automatically.
         </p>
         <div onclick="document.getElementById('pdfFileInput').click()"
           style="border:2px dashed var(--border);border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:var(--trans)"
@@ -2737,11 +2738,46 @@ function showCharImport(){
           id="pdfDropZone">
           <div style="font-size:36px;margin-bottom:8px">📄</div>
           <div style="font-family:'Cinzel',serif;font-size:12px;color:var(--gold)">Tap to select PDF</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">D&D Beyond character sheet export</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px">Dungeon Master's Vault character sheet</div>
         </div>
         <input type="file" id="pdfFileInput" accept=".pdf" style="display:none" onchange="handlePdfUpload(this)">
         <div id="pdfStatus" style="margin-top:12px;font-size:12px;color:var(--muted);text-align:center;min-height:20px"></div>
         <div id="pdfPreview" style="margin-top:8px"></div>
+      </div>
+
+      <div id="importPaneClaude" style="display:none">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">
+          Describe your character, paste a screenshot, or upload a photo of your character sheet.
+        </p>
+
+        <!-- Image drop/paste zone -->
+        <div id="claudeImageZone" onclick="document.getElementById('claudeImageInput').click()"
+          style="border:2px dashed var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer;margin-bottom:10px;transition:var(--trans);position:relative"
+          onmouseenter="this.style.borderColor='var(--gold)'" onmouseleave="this.style.borderColor=document.getElementById('claudeImagePreviewImg').src?'var(--gold)':'var(--border)'"
+          ondragover="event.preventDefault();this.style.borderColor='var(--gold)'"
+          ondragleave="this.style.borderColor='var(--border)'"
+          ondrop="handleClaudeImageDrop(event)">
+          <input type="file" id="claudeImageInput" accept="image/*" style="display:none" onchange="handleClaudeImageFile(this.files[0])">
+          <div id="claudeImagePlaceholder">
+            <div style="font-size:24px;margin-bottom:4px">📸</div>
+            <div style="font-size:11px;color:var(--muted)">Tap to upload · Drag & drop · <strong style="color:var(--gold)">Ctrl+V to paste</strong> a screenshot</div>
+          </div>
+          <img id="claudeImagePreviewImg" src="" alt="" style="display:none;max-width:100%;max-height:160px;border-radius:6px;object-fit:contain">
+          <button id="claudeImageClear" onclick="clearClaudeImage(event)" style="display:none;position:absolute;top:6px;right:8px;background:rgba(0,0,0,0.6);border:none;color:white;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:13px;line-height:1">✕</button>
+        </div>
+
+        <div class="field">
+          <label>Additional Notes <span style="color:var(--muted);font-weight:normal">(optional)</span></label>
+          <textarea id="claudeImportDesc" placeholder="Any extra details, corrections, or context…" style="min-height:60px;font-size:12px;line-height:1.6"></textarea>
+        </div>
+        <button class="btn btn-gold" onclick="doClaudeImport()" id="claudeImportBtn">🤖 Generate Character</button>
+        <div id="claudeImportStatus" style="margin-top:10px;font-size:12px;text-align:center;min-height:18px"></div>
+        <div id="claudeImportPreview" style="margin-top:8px"></div>
+        <div style="margin-top:14px;padding:10px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+          <div style="font-size:10px;color:var(--muted);line-height:1.6">
+            💡 Works with screenshots of any character sheet, photos of paper sheets, or plain text descriptions.
+          </div>
+        </div>
       </div>
 
       <button class="btn btn-outline" onclick="document.getElementById('charImportModal').remove()" style="margin-top:8px">Cancel</button>
@@ -2752,8 +2788,225 @@ function showCharImport(){
 function importTab(tab, btn){
   document.querySelectorAll('#charImportModal .tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('importPaneCode').style.display = tab==='code' ? '' : 'none';
-  document.getElementById('importPanePdf').style.display  = tab==='pdf'  ? '' : 'none';
+  document.getElementById('importPaneCode').style.display    = tab==='code'   ? '' : 'none';
+  document.getElementById('importPanePdf').style.display     = tab==='pdf'    ? '' : 'none';
+  document.getElementById('importPaneClaude').style.display  = tab==='claude' ? '' : 'none';
+}
+
+// ── Claude image paste/upload helpers ──
+let _claudeImageB64 = null;
+let _claudeImageMime = 'image/png';
+
+function handleClaudeImageFile(file){
+  if(!file || !file.type.startsWith('image/')) return;
+  _claudeImageMime = file.type;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _claudeImageB64 = e.target.result.split(',')[1];
+    showClaudeImagePreview(e.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleClaudeImageDrop(e){
+  e.preventDefault();
+  e.currentTarget.style.borderColor = 'var(--border)';
+  const file = e.dataTransfer.files[0];
+  if(file) handleClaudeImageFile(file);
+}
+
+function showClaudeImagePreview(dataUrl){
+  const img = document.getElementById('claudeImagePreviewImg');
+  const placeholder = document.getElementById('claudeImagePlaceholder');
+  const clearBtn = document.getElementById('claudeImageClear');
+  const zone = document.getElementById('claudeImageZone');
+  if(img){ img.src = dataUrl; img.style.display = 'block'; }
+  if(placeholder) placeholder.style.display = 'none';
+  if(clearBtn) clearBtn.style.display = 'block';
+  if(zone) zone.style.borderColor = 'var(--gold)';
+}
+
+function clearClaudeImage(e){
+  e.stopPropagation();
+  _claudeImageB64 = null;
+  const img = document.getElementById('claudeImagePreviewImg');
+  const placeholder = document.getElementById('claudeImagePlaceholder');
+  const clearBtn = document.getElementById('claudeImageClear');
+  const zone = document.getElementById('claudeImageZone');
+  if(img){ img.src = ''; img.style.display = 'none'; }
+  if(placeholder) placeholder.style.display = '';
+  if(clearBtn) clearBtn.style.display = 'none';
+  if(zone) zone.style.borderColor = 'var(--border)';
+}
+
+// Global paste listener — captures Ctrl+V image when Claude tab is open
+document.addEventListener('paste', e => {
+  if(!document.getElementById('importPaneClaude') ||
+     document.getElementById('importPaneClaude').style.display === 'none') return;
+  const items = e.clipboardData?.items;
+  if(!items) return;
+  for(const item of items){
+    if(item.type.startsWith('image/')){
+      e.preventDefault();
+      handleClaudeImageFile(item.getAsFile());
+      return;
+    }
+  }
+});
+
+async function doClaudeImport(){
+  const desc = (document.getElementById('claudeImportDesc')?.value||'').trim();
+  if(!desc && !_claudeImageB64){
+    toast('Add an image or describe your character first','var(--red)');
+    return;
+  }
+
+  const statusEl = document.getElementById('claudeImportStatus');
+  const previewEl = document.getElementById('claudeImportPreview');
+  const btn = document.getElementById('claudeImportBtn');
+  btn.disabled = true;
+  statusEl.innerHTML = '<span style="color:var(--gold)">🤖 Asking Claude…</span>';
+  previewEl.innerHTML = '';
+
+  const CLASS_NAMES = ['Barbarian','Bard','Cleric','Druid','Fighter','Monk','Paladin','Ranger','Rogue','Sorcerer','Warlock','Wizard'];
+  const systemPrompt = `You are a D&D 5e character sheet parser for the Tome of Heroes app. Given a character description or image of a character sheet, extract or infer all character details and return ONLY valid JSON with NO markdown, NO backticks, NO explanation — just the raw JSON object.
+
+Return exactly this structure:
+{
+  "name": "string",
+  "race": "string",
+  "background": "string",
+  "alignment": "string",
+  "level": number,
+  "className": "one of: ${CLASS_NAMES.join(', ')}",
+  "subclass": "string or empty",
+  "xp": number,
+  "ac": number,
+  "speed": number,
+  "maxHP": number,
+  "currentHP": number,
+  "abilities": { "STR": number, "DEX": number, "CON": number, "INT": number, "WIS": number, "CHA": number },
+  "proficiencies": ["array of proficient skill names"],
+  "attacks": [{ "name": "string", "bonus": "+N", "damage": "NdN+N type", "type": "melee or ranged" }],
+  "equipment": ["array of item strings"],
+  "traits": "personality traits string",
+  "ideals": "string",
+  "bonds": "string",
+  "flaws": "string",
+  "backstory": "string",
+  "allies": "string"
+}
+
+Rules:
+- If given an image, read ALL visible values carefully — ability scores, modifiers, skill proficiencies (marked with dots/circles), attacks, equipment, HP, AC, speed
+- className MUST be exactly one of the 12 listed classes
+- proficiencies must use exact skill names: Acrobatics, Animal Handling, Arcana, Athletics, Deception, History, Insight, Intimidation, Investigation, Medicine, Nature, Perception, Performance, Persuasion, Religion, Sleight of Hand, Stealth, Survival
+- Infer missing values sensibly
+- Return ONLY the JSON. No other text.`;
+
+  // Build message content — image + optional text
+  const userContent = [];
+  if(_claudeImageB64){
+    userContent.push({
+      type: 'image',
+      source: { type: 'base64', media_type: _claudeImageMime, data: _claudeImageB64 }
+    });
+  }
+  userContent.push({
+    type: 'text',
+    text: desc || 'Please extract the character data from this image.'
+  });
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1500,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userContent }]
+      })
+    });
+
+    if(!response.ok){ throw new Error('API error ' + response.status); }
+    const data = await response.json();
+    const rawText = data.content?.find(b=>b.type==='text')?.text||'';
+    const cleaned = rawText.replace(/^```[a-z]*\n?/,'').replace(/```$/,'').trim();
+    const charData = JSON.parse(cleaned);
+
+    const classIdx = Math.max(0, CLASS_NAMES.findIndex(c=>c.toLowerCase()===(charData.className||'').toLowerCase()));
+    const cls = CLASSES[classIdx];
+    const cc = classColor(classIdx);
+
+    const char = {
+      id: Date.now(),
+      name: charData.name||'Imported Character',
+      race: charData.race||'Human',
+      background: charData.background||'Custom',
+      alignment: charData.alignment||'',
+      level: parseInt(charData.level)||1,
+      classIdx, subclass: charData.subclass||'',
+      xp: parseInt(charData.xp)||0,
+      ac: parseInt(charData.ac)||10,
+      speed: parseInt(charData.speed)||30,
+      maxHP: parseInt(charData.maxHP)||0,
+      currentHP: parseInt(charData.currentHP||charData.maxHP)||0,
+      abilities: {
+        STR:charData.abilities?.STR||10, DEX:charData.abilities?.DEX||10,
+        CON:charData.abilities?.CON||10, INT:charData.abilities?.INT||10,
+        WIS:charData.abilities?.WIS||10, CHA:charData.abilities?.CHA||10,
+      },
+      proficiencies: charData.proficiencies||[],
+      attacks: (charData.attacks||[]).slice(0,6),
+      equipment: charData.equipment||[],
+      spells:[], statuses:[], shareCode:genCode(), created:Date.now(),
+      effects:{}, customEffects:[],
+      age:'', height:'', weight:'', eyes:'', hair:'', skin:'',
+      traits:charData.traits||'', ideals:charData.ideals||'',
+      bonds:charData.bonds||'', flaws:charData.flaws||'',
+      backstory:charData.backstory||'', allies:charData.allies||'',
+    };
+
+    enrichCharSpells(char);
+    statusEl.innerHTML = '';
+    previewEl.innerHTML = `
+      <div style="background:var(--surface2);border:1px solid ${cc};border-radius:12px;padding:14px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:28px">${cls.icon}</span>
+          <div>
+            <div style="font-family:'Cinzel',serif;font-size:15px;color:var(--gold)">${char.name}</div>
+            <div style="font-size:12px;color:var(--muted)">Level ${char.level} ${char.race} ${cls.name}${char.subclass?' · '+char.subclass:''}</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-bottom:8px">
+          ${['STR','DEX','CON','INT','WIS','CHA'].map(ab=>`
+            <div style="background:var(--surface);border-radius:6px;padding:4px;text-align:center">
+              <div style="font-size:9px;color:var(--muted)">${ab}</div>
+              <div style="font-family:'Cinzel',serif;font-size:13px;color:${cc}">${char.abilities[ab]}</div>
+            </div>`).join('')}
+        </div>
+        <div style="font-size:11px;color:var(--muted)">${char.maxHP} HP · AC ${char.ac} · Speed ${char.speed}</div>
+        ${char.proficiencies.length?`<div style="font-size:11px;color:var(--muted);margin-top:3px">Prof: ${char.proficiencies.slice(0,5).join(', ')}${char.proficiencies.length>5?' +more':''}</div>`:''}
+        ${char.attacks.length?`<div style="font-size:11px;color:var(--muted);margin-top:3px">⚔ ${char.attacks.map(a=>a.name).join(', ')}</div>`:''}
+      </div>
+      <button class="btn btn-gold" onclick="confirmClaudeImport()">✦ Import ${char.name}</button>`;
+
+    window._pendingClaudeChar = char;
+    btn.disabled = false;
+
+  } catch(e){
+    statusEl.innerHTML = `<span style="color:var(--red)">⚠ ${e.message||'Something went wrong'}</span>`;
+    btn.disabled = false;
+    console.error(e);
+  }
+}
+
+function confirmClaudeImport(){
+  const char = window._pendingClaudeChar;
+  if(!char){ toast('No character to import','var(--red)'); return; }
+  _finishCharImport(char, 'Claude');
+  window._pendingClaudeChar = null;
 }
 
 async function handlePdfUpload(input){
