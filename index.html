@@ -2812,19 +2812,29 @@ function showCharImport(){
           Describe your character, paste a screenshot, or upload a photo of your character sheet.
         </p>
 
-        <!-- Image drop/paste zone -->
+        <!-- Universal file drop/paste zone -->
         <div id="claudeImageZone" onclick="document.getElementById('claudeImageInput').click()"
-          style="border:2px dashed var(--border);border-radius:10px;padding:14px;text-align:center;cursor:pointer;margin-bottom:10px;transition:var(--trans);position:relative"
-          onmouseenter="this.style.borderColor='var(--gold)'" onmouseleave="this.style.borderColor=document.getElementById('claudeImagePreviewImg').src?'var(--gold)':'var(--border)'"
+          style="border:2px dashed var(--border);border-radius:10px;padding:18px;text-align:center;cursor:pointer;margin-bottom:10px;transition:var(--trans);position:relative"
+          onmouseenter="this.style.borderColor='var(--gold)'" onmouseleave="this.style.borderColor=_claudeFileLoaded?'var(--gold)':'var(--border)'"
           ondragover="event.preventDefault();this.style.borderColor='var(--gold)'"
           ondragleave="this.style.borderColor='var(--border)'"
-          ondrop="handleClaudeImageDrop(event)">
-          <input type="file" id="claudeImageInput" accept="image/*" style="display:none" onchange="handleClaudeImageFile(this.files[0])">
+          ondrop="handleClaudeFileDrop(event)">
+          <input type="file" id="claudeImageInput" accept="image/*,.pdf,.docx,.doc,.txt,.md" style="display:none" onchange="handleClaudeFileSelect(this.files[0])">
           <div id="claudeImagePlaceholder">
-            <div style="font-size:24px;margin-bottom:4px">📸</div>
-            <div style="font-size:11px;color:var(--muted)">Tap to upload · Drag & drop · <strong style="color:var(--gold)">Ctrl+V to paste</strong> a screenshot</div>
+            <div style="font-size:28px;margin-bottom:6px">📎</div>
+            <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);margin-bottom:3px">Tap to attach a file</div>
+            <div style="font-size:10px;color:var(--muted)">Image · PDF · Word doc · Text · or <strong style="color:var(--gold)">Ctrl+V</strong> screenshot</div>
           </div>
-          <img id="claudeImagePreviewImg" src="" alt="" style="display:none;max-width:100%;max-height:160px;border-radius:6px;object-fit:contain">
+          <!-- Image preview -->
+          <img id="claudeImagePreviewImg" src="" alt="" style="display:none;max-width:100%;max-height:140px;border-radius:6px;object-fit:contain">
+          <!-- Non-image file preview -->
+          <div id="claudeFilePreview" style="display:none;align-items:center;gap:10px;padding:6px 10px;background:var(--surface);border-radius:8px;text-align:left">
+            <span id="claudeFileIcon" style="font-size:28px">📄</span>
+            <div>
+              <div id="claudeFileName" style="font-family:'Cinzel',serif;font-size:12px;color:var(--gold)"></div>
+              <div id="claudeFileSize" style="font-size:10px;color:var(--muted)"></div>
+            </div>
+          </div>
           <button id="claudeImageClear" onclick="clearClaudeImage(event)" style="display:none;position:absolute;top:6px;right:8px;background:rgba(0,0,0,0.6);border:none;color:white;border-radius:50%;width:22px;height:22px;cursor:pointer;font-size:13px;line-height:1">✕</button>
         </div>
 
@@ -2858,50 +2868,109 @@ function importTab(tab, btn){
   document.getElementById('importPaneCode').style.display   = tab==='code'   ? '' : 'none';
 }
 
-// ── Claude image paste/upload helpers ──
+// ── Claude universal file attach helpers ──
 let _claudeImageB64 = null;
 let _claudeImageMime = 'image/png';
+let _claudeFileText = null;   // extracted text from PDF/docx/txt
+let _claudeFileLoaded = false;
 
-function handleClaudeImageFile(file){
-  if(!file || !file.type.startsWith('image/')) return;
-  _claudeImageMime = file.type;
-  const reader = new FileReader();
-  reader.onload = e => {
-    _claudeImageB64 = e.target.result.split(',')[1];
-    showClaudeImagePreview(e.target.result);
-  };
-  reader.readAsDataURL(file);
+function handleClaudeFileSelect(file){ if(file) handleClaudeFileAttach(file); }
+function handleClaudeFileDrop(e){ e.preventDefault(); e.currentTarget.style.borderColor='var(--border)'; handleClaudeFileAttach(e.dataTransfer.files[0]); }
+
+async function handleClaudeFileAttach(file){
+  if(!file) return;
+  _claudeImageB64 = null; _claudeFileText = null; _claudeFileLoaded = false;
+
+  const ext = file.name.split('.').pop().toLowerCase();
+  const isImage = file.type.startsWith('image/');
+  const fileIcon = isImage ? '🖼' : ext==='pdf' ? '📄' : ext==='docx'||ext==='doc' ? '📝' : '📋';
+
+  if(isImage){
+    // Image — send as vision
+    _claudeImageMime = file.type;
+    const reader = new FileReader();
+    reader.onload = e => {
+      _claudeImageB64 = e.target.result.split(',')[1];
+      _claudeFileLoaded = true;
+      showClaudeImagePreview(e.target.result);
+    };
+    reader.readAsDataURL(file);
+  } else if(ext === 'pdf'){
+    // PDF — extract text via PDF.js
+    showClaudeFileFeedback(fileIcon, file.name, file.size, 'Extracting text…');
+    try {
+      _claudeFileText = await extractPdfText(file);
+      _claudeFileLoaded = true;
+      showClaudeFileFeedback(fileIcon, file.name, file.size, 'Text extracted ✓');
+    } catch(e) {
+      showClaudeFileFeedback('⚠', file.name, file.size, 'Could not read PDF');
+    }
+  } else if(ext === 'docx' || ext === 'doc'){
+    // DOCX — extract text via mammoth.js
+    showClaudeFileFeedback(fileIcon, file.name, file.size, 'Reading document…');
+    try {
+      if(!window.mammoth){
+        await new Promise((res,rej)=>{
+          const s=document.createElement('script');
+          s.src='https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js';
+          s.onload=res; s.onerror=rej;
+          document.head.appendChild(s);
+        });
+      }
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({arrayBuffer});
+      _claudeFileText = result.value;
+      _claudeFileLoaded = true;
+      showClaudeFileFeedback(fileIcon, file.name, file.size, 'Document read ✓');
+    } catch(e) {
+      showClaudeFileFeedback('⚠', file.name, file.size, 'Could not read document');
+    }
+  } else {
+    // Plain text / markdown / other
+    const reader = new FileReader();
+    reader.onload = e => {
+      _claudeFileText = e.target.result;
+      _claudeFileLoaded = true;
+      showClaudeFileFeedback(fileIcon, file.name, file.size, 'File loaded ✓');
+    };
+    reader.readAsText(file);
+  }
 }
 
-function handleClaudeImageDrop(e){
-  e.preventDefault();
-  e.currentTarget.style.borderColor = 'var(--border)';
-  const file = e.dataTransfer.files[0];
-  if(file) handleClaudeImageFile(file);
+function showClaudeFileFeedback(icon, name, size, status){
+  document.getElementById('claudeImagePlaceholder').style.display = 'none';
+  document.getElementById('claudeImagePreviewImg').style.display = 'none';
+  const fp = document.getElementById('claudeFilePreview');
+  fp.style.display = 'flex';
+  document.getElementById('claudeFileIcon').textContent = icon;
+  document.getElementById('claudeFileName').textContent = name;
+  document.getElementById('claudeFileSize').textContent = status + ' · ' + (size > 1024*1024 ? (size/1024/1024).toFixed(1)+'MB' : Math.round(size/1024)+'KB');
+  document.getElementById('claudeImageClear').style.display = 'block';
+  document.getElementById('claudeImageZone').style.borderColor = 'var(--gold)';
 }
+
+function handleClaudeImageFile(file){ handleClaudeFileAttach(file); }
+function handleClaudeImageDrop(e){ handleClaudeFileDrop(e); }
 
 function showClaudeImagePreview(dataUrl){
+  document.getElementById('claudeImagePlaceholder').style.display = 'none';
+  document.getElementById('claudeFilePreview').style.display = 'none';
   const img = document.getElementById('claudeImagePreviewImg');
-  const placeholder = document.getElementById('claudeImagePlaceholder');
-  const clearBtn = document.getElementById('claudeImageClear');
-  const zone = document.getElementById('claudeImageZone');
-  if(img){ img.src = dataUrl; img.style.display = 'block'; }
-  if(placeholder) placeholder.style.display = 'none';
-  if(clearBtn) clearBtn.style.display = 'block';
-  if(zone) zone.style.borderColor = 'var(--gold)';
+  img.src = dataUrl; img.style.display = 'block';
+  document.getElementById('claudeImageClear').style.display = 'block';
+  document.getElementById('claudeImageZone').style.borderColor = 'var(--gold)';
 }
 
 function clearClaudeImage(e){
   e.stopPropagation();
-  _claudeImageB64 = null;
-  const img = document.getElementById('claudeImagePreviewImg');
-  const placeholder = document.getElementById('claudeImagePlaceholder');
-  const clearBtn = document.getElementById('claudeImageClear');
-  const zone = document.getElementById('claudeImageZone');
-  if(img){ img.src = ''; img.style.display = 'none'; }
-  if(placeholder) placeholder.style.display = '';
-  if(clearBtn) clearBtn.style.display = 'none';
-  if(zone) zone.style.borderColor = 'var(--border)';
+  _claudeImageB64 = null; _claudeFileText = null; _claudeFileLoaded = false;
+  document.getElementById('claudeImagePreviewImg').style.display = 'none';
+  document.getElementById('claudeImagePreviewImg').src = '';
+  document.getElementById('claudeFilePreview').style.display = 'none';
+  document.getElementById('claudeImagePlaceholder').style.display = '';
+  document.getElementById('claudeImageClear').style.display = 'none';
+  document.getElementById('claudeImageZone').style.borderColor = 'var(--border)';
+  document.getElementById('claudeImageInput').value = '';
 }
 
 // Global paste listener — captures Ctrl+V image when Claude tab is open
@@ -2913,7 +2982,7 @@ document.addEventListener('paste', e => {
   for(const item of items){
     if(item.type.startsWith('image/')){
       e.preventDefault();
-      handleClaudeImageFile(item.getAsFile());
+      handleClaudeFileAttach(item.getAsFile());
       return;
     }
   }
@@ -2921,8 +2990,8 @@ document.addEventListener('paste', e => {
 
 async function doClaudeImport(){
   const desc = (document.getElementById('claudeImportDesc')?.value||'').trim();
-  if(!desc && !_claudeImageB64){
-    toast('Add an image or describe your character first','var(--red)');
+  if(!desc && !_claudeImageB64 && !_claudeFileText){
+    toast('Attach a file or describe your character first','var(--red)');
     return;
   }
 
@@ -2934,7 +3003,7 @@ async function doClaudeImport(){
   previewEl.innerHTML = '';
 
   const CLASS_NAMES = ['Barbarian','Bard','Cleric','Druid','Fighter','Monk','Paladin','Ranger','Rogue','Sorcerer','Warlock','Wizard'];
-  const systemPrompt = `You are a D&D 5e character sheet parser for the Tome of Heroes app. Given a character description or image of a character sheet, extract or infer all character details and return ONLY valid JSON with NO markdown, NO backticks, NO explanation — just the raw JSON object.
+  const systemPrompt = `You are a D&D 5e character sheet parser for the Tome of Heroes app. Given a character description, document text, or image of a character sheet, extract or infer all character details and return ONLY valid JSON with NO markdown, NO backticks, NO explanation — just the raw JSON object.
 
 Return exactly this structure:
 {
@@ -2964,12 +3033,13 @@ Return exactly this structure:
 
 Rules:
 - If given an image, read ALL visible values carefully — ability scores, modifiers, skill proficiencies (marked with dots/circles), attacks, equipment, HP, AC, speed
+- If given document text, extract all character data from it carefully
 - className MUST be exactly one of the 12 listed classes
 - proficiencies must use exact skill names: Acrobatics, Animal Handling, Arcana, Athletics, Deception, History, Insight, Intimidation, Investigation, Medicine, Nature, Perception, Performance, Persuasion, Religion, Sleight of Hand, Stealth, Survival
 - Infer missing values sensibly
 - Return ONLY the JSON. No other text.`;
 
-  // Build message content — image + optional text
+  // Build message content — image, extracted text, or typed description
   const userContent = [];
   if(_claudeImageB64){
     userContent.push({
@@ -2977,9 +3047,13 @@ Rules:
       source: { type: 'base64', media_type: _claudeImageMime, data: _claudeImageB64 }
     });
   }
+  // Combine file text + typed notes into one text block
+  const textParts = [];
+  if(_claudeFileText) textParts.push(_claudeFileText.slice(0, 15000)); // cap at ~15k chars
+  if(desc) textParts.push(desc);
   userContent.push({
     type: 'text',
-    text: desc || 'Please extract the character data from this image.'
+    text: textParts.join('\n\n---\n\n') || 'Please extract the character data from this image.'
   });
 
   try {
