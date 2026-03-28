@@ -2845,6 +2845,9 @@ function showCharImport(){
       <button class="btn btn-outline" onclick="document.getElementById('charImportModal').remove()" style="margin-top:8px">Cancel</button>
     </div>`;
   document.body.appendChild(modal);
+  // Force correct initial tab state after DOM insertion
+  const claudeBtn = modal.querySelector('.tab-btn');
+  if(claudeBtn) importTab('claude', claudeBtn);
 }
 
 function importTab(tab, btn){
