@@ -854,7 +854,15 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
         <span class="mb-desc">Enter your character access code to join your campaign</span>
       </span>
     </button>
-    <button onclick="clearAllData()" style="margin-top:24px;background:none;border:1px solid var(--red);border-radius:8px;color:var(--red);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.6">
+    <div style="margin-top:24px;width:100%;max-width:280px">
+      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;text-align:left">CLAUDE API KEY <span style="color:var(--muted);font-style:italic;font-family:'Crimson Pro',serif;letter-spacing:0">(for 🤖 AI imports)</span></div>
+      <input id="claudeApiKeyInput" type="password" placeholder="sk-ant-api03-…"
+        style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace"
+        oninput="saveClaudeApiKey(this.value)"
+        value="">
+      <div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.5">Get a key at <a href="https://console.anthropic.com" target="_blank" style="color:var(--gold)">console.anthropic.com</a>. Stored locally only.</div>
+    </div>
+    <button onclick="clearAllData()" style="margin-top:16px;background:none;border:1px solid var(--red);border-radius:8px;color:var(--red);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.6">
       🗑 Clear All Data
     </button>
     <button onclick="doLogout()" style="margin-top:8px;background:none;border:1px solid var(--muted);border-radius:8px;color:var(--muted);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.5">
@@ -1382,6 +1390,10 @@ function nav(id){
   if(id==='roster'){renderRoster();renderCampaignSwitchBanner();}
   if(id==='campaign'){renderCampList();}
   if(id==='party'){partyTab('overview');}
+  if(id==='modegate'){
+    const keyInput = document.getElementById('claudeApiKeyInput');
+    if(keyInput) keyInput.value = getClaudeApiKey();
+  }
   if(id==='loot'){lootTab('inventory');}
   if(id==='dice')renderDiceScreen();
   if(id==='modegate'){}
@@ -2263,6 +2275,34 @@ function resetMode(){
   bootApp();
 }
 
+function saveClaudeApiKey(val){
+  localStorage.setItem('toh_claude_key', val.trim());
+}
+function getClaudeApiKey(){
+  return localStorage.getItem('toh_claude_key')||'';
+}
+
+// Helper for all Claude API calls — adds required headers
+async function callClaude(body){
+  const key = getClaudeApiKey();
+  if(!key) throw new Error('No API key set — tap ⚙ → enter your Claude API key');
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify(body)
+  });
+  if(!res.ok){
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err.error?.message || 'API error ' + res.status);
+  }
+  return res.json();
+}
+
 function clearAllData(){
   if(!confirm('⚠ This will permanently delete ALL characters, campaigns, loot and settings.\n\nThis cannot be undone. Are you sure?')) return;
   if(!confirm('Last chance — delete everything?')) return;
@@ -2940,19 +2980,12 @@ Rules:
   });
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const data = await callClaude({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1500,
         system: systemPrompt,
         messages: [{ role: 'user', content: userContent }]
-      })
     });
-
-    if(!response.ok){ throw new Error('API error ' + response.status); }
-    const data = await response.json();
     const rawText = data.content?.find(b=>b.type==='text')?.text||'';
     const cleaned = rawText.replace(/^```[a-z]*\n?/,'').replace(/```$/,'').trim();
     const charData = JSON.parse(cleaned);
@@ -4140,12 +4173,8 @@ Rules:
   content.push({ type:'text', text: text || 'Extract all loot and currency from this image.' });
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000, system:systemPrompt, messages:[{role:'user',content}] })
-    });
-    if(!res.ok) throw new Error('API error '+res.status);
-    const data = await res.json();
+    const res = await callClaude({ model:'claude-sonnet-4-20250514', max_tokens:1000, system:systemPrompt, messages:[{role:'user',content}] });
+    const data = res;
     const raw = (data.content?.find(b=>b.type==='text')?.text||'').replace(/^```[a-z]*\n?/,'').replace(/```$/,'').trim();
     const parsed = JSON.parse(raw);
 
@@ -4695,13 +4724,9 @@ Rules:
 - Return ONLY the JSON.`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1500, system:systemPrompt,
-        messages:[{ role:'user', content: desc }] })
-    });
-    if(!res.ok) throw new Error('API error '+res.status);
-    const data = await res.json();
+    const res = await callClaude({ model:'claude-sonnet-4-20250514', max_tokens:1500, system:systemPrompt,
+        messages:[{ role:'user', content: desc }] });
+    const data = res;
     const raw = (data.content?.find(b=>b.type==='text')?.text||'').replace(/^```[a-z]*\n?/,'').replace(/```$/,'').trim();
     const camp = JSON.parse(raw);
     window._pendingClaudeCamp = camp;
@@ -5189,13 +5214,9 @@ Rules:
 - Return ONLY the JSON.`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:800, system:systemPrompt,
-        messages:[{ role:'user', content: `Session ${sessionNum} notes:\n\n${notes}` }] })
-    });
-    if(!res.ok) throw new Error('API error '+res.status);
-    const data = await res.json();
+    const res = await callClaude({ model:'claude-sonnet-4-20250514', max_tokens:800, system:systemPrompt,
+        messages:[{ role:'user', content: `Session ${sessionNum} notes:\n\n${notes}` }] });
+    const data = res;
     const raw = (data.content?.find(b=>b.type==='text')?.text||'').replace(/^```[a-z]*\n?/,'').replace(/```$/,'').trim();
     const s = JSON.parse(raw);
     window._pendingClaudeSession = s;
