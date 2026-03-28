@@ -741,6 +741,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   <!-- DICE -->
   <div class="scroll-region screen" id="scr-dice">
     <div id="diceCharPanel"></div>
+    <button class="roll-btn roll-n" id="rollBtn" onclick="doRoll()" style="margin-bottom:12px">Roll ⬡</button>
     <div class="divider"><span>Roll Mode</span></div>
     <div class="mode-row">
       <button class="mode-btn adv-on" id="mAdv" onclick="setMode('advantage')"><span class="mi">↑</span>Advantage</button>
@@ -754,7 +755,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <input type="number" id="dMod" value="0" min="-10" max="20" step="1">
       <span style="font-size:12px;color:var(--muted);font-style:italic;flex:1;text-align:right" id="rollDesc">rolling 1d20</span>
     </div>
-    <button class="roll-btn roll-n" id="rollBtn" onclick="doRoll()">Roll ⬡</button>
     <div class="section-label">Conditions</div>
     <div class="active-conds" id="activeConds"></div>
     <div class="condition-grid" id="condGrid"></div>
