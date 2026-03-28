@@ -899,15 +899,37 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <!-- Import Campaign form -->
     <div id="campImportForm" style="display:none">
       <div class="divider"><span>Import Campaign</span></div>
-      <div class="section-label" style="margin-bottom:8px">Ready-Made Campaigns</div>
-      <div id="presetCampsGrid"></div>
-      <div class="divider"><span>Import via Code</span></div>
-      <p style="font-size:13px;color:var(--muted);font-style:italic;margin-bottom:12px;line-height:1.5">Have a campaign export code? Paste it below.</p>
-      <div class="field"><label>Campaign Export Code</label>
-        <textarea id="campImportCode" placeholder="Paste campaign export code here…" style="min-height:72px;font-family:'Crimson Pro',serif;font-size:12px;word-break:break-all;"></textarea>
+
+      <div class="tab-row" style="margin-bottom:12px">
+        <button class="tab-btn active" onclick="campImportTab('claude',this)">🤖 Claude</button>
+        <button class="tab-btn" onclick="campImportTab('presets',this)">⚔ Presets</button>
+        <button class="tab-btn" onclick="campImportTab('code',this)">📋 Code</button>
       </div>
-      <button class="btn btn-primary" onclick="importCampaign()">Import from Code</button>
-      <button class="btn btn-outline" onclick="hideCampForm()">← Cancel</button>
+
+      <div id="campImportPaneClaude">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Describe your campaign — setting, premise, current arc, players. Claude will generate a full campaign with quests, NPCs, and session notes.</p>
+        <div class="field"><label>Campaign Description</label>
+          <textarea id="claudeCampDesc" placeholder="e.g. Curse of Strahd — gothic horror campaign set in Barovia. Party of 5 at level 4. Strahd is the BBEG, they've just arrived in the village of Barovia and met Ireena. Current quest: find the Tome of Strahd. Key NPCs: Strahd von Zarovich, Ireena Kolyana, Padre Donavich..." style="min-height:120px;font-size:12px;line-height:1.6"></textarea>
+        </div>
+        <button class="btn btn-gold" onclick="doClaudeCampImport()" id="claudeCampBtn">🤖 Generate Campaign</button>
+        <div id="claudeCampStatus" style="margin-top:8px;font-size:12px;text-align:center;min-height:16px"></div>
+        <div id="claudeCampPreview" style="margin-top:8px"></div>
+      </div>
+
+      <div id="campImportPanePresets" style="display:none">
+        <div class="section-label" style="margin-bottom:8px">Ready-Made Campaigns</div>
+        <div id="presetCampsGrid"></div>
+      </div>
+
+      <div id="campImportPaneCode" style="display:none">
+        <p style="font-size:13px;color:var(--muted);font-style:italic;margin-bottom:12px;line-height:1.5">Have a campaign export code? Paste it below.</p>
+        <div class="field"><label>Campaign Export Code</label>
+          <textarea id="campImportCode" placeholder="Paste campaign export code here…" style="min-height:72px;font-family:'Crimson Pro',serif;font-size:12px;word-break:break-all;"></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="importCampaign()">Import from Code</button>
+      </div>
+
+      <button class="btn btn-outline" onclick="hideCampForm()" style="margin-top:10px">← Cancel</button>
     </div>
     <!-- Campaign detail view -->
     <div id="campDetailView" style="display:none">
@@ -2715,12 +2737,12 @@ function showCharImport(){
     <div style="background:var(--bg2);border-top:1px solid var(--border);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto">
       <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold);margin-bottom:12px">Import Character Sheet</div>
       <div class="tab-row" style="margin-bottom:14px">
-        <button class="tab-btn active" onclick="importTab('code',this)">Code / JSON</button>
+        <button class="tab-btn active" onclick="importTab('claude',this)">🤖 Claude</button>
         <button class="tab-btn" onclick="importTab('pdf',this)">📄 PDF</button>
-        <button class="tab-btn" onclick="importTab('claude',this)">🤖 Claude</button>
+        <button class="tab-btn" onclick="importTab('code',this)">Code / JSON</button>
       </div>
 
-      <div id="importPaneCode">
+      <div id="importPaneClaude">
         <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Paste a Tome of Heroes export code, raw JSON, or <strong style="color:var(--gold)">D&D Beyond JSON</strong> (schema_version: 1).</p>
         <div class="field"><label>Export Code or JSON</label>
           <textarea id="charImportData" placeholder="Paste export code, JSON, or D&D Beyond JSON here…" style="min-height:120px;font-size:12px;word-break:break-all"></textarea>
@@ -2788,9 +2810,9 @@ function showCharImport(){
 function importTab(tab, btn){
   document.querySelectorAll('#charImportModal .tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('importPaneCode').style.display    = tab==='code'   ? '' : 'none';
-  document.getElementById('importPanePdf').style.display     = tab==='pdf'    ? '' : 'none';
-  document.getElementById('importPaneClaude').style.display  = tab==='claude' ? '' : 'none';
+  document.getElementById('importPaneClaude').style.display = tab==='claude' ? '' : 'none';
+  document.getElementById('importPanePdf').style.display    = tab==='pdf'    ? '' : 'none';
+  document.getElementById('importPaneCode').style.display   = tab==='code'   ? '' : 'none';
 }
 
 // ── Claude image paste/upload helpers ──
@@ -3997,19 +4019,200 @@ function lootTab(t){document.querySelectorAll('#scr-loot .tab-btn').forEach((b,i
 function renderBulkImportTab(){
   const el = document.getElementById('ltab-bulk');
   el.innerHTML = `
-    <div class="card">
-      <div style="font-family:'Cinzel',serif;font-size:13px;color:var(--gold);margin-bottom:6px">Bulk Loot Import</div>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">
-        Paste a loot list — one item per line. Everything goes to the party pool.<br>
-        Gold amounts (gp/sp/ep/cp) go to the party treasury automatically.
-      </p>
-      <div class="field">
-        <label>Loot List</label>
-        <textarea id="bulkLootText" placeholder="- Longsword +1&#10;- 3x Healing Potion&#10;- 1800gp from Burgomaster&#10;- Tome of Strahd (worth 500gp)" style="min-height:160px;font-size:12px;line-height:1.6"></textarea>
-      </div>
-      <button class="btn btn-gold" onclick="parseBulkLoot()">⬇ Preview Import</button>
+    <div class="tab-row" style="margin-bottom:12px">
+      <button class="tab-btn active" id="lootBulkTabClaude" onclick="lootBulkTab('claude',this)">🤖 Claude</button>
+      <button class="tab-btn" id="lootBulkTabText" onclick="lootBulkTab('text',this)">📋 Text List</button>
     </div>
-    <div id="bulkLootPreview"></div>`;
+
+    <div id="lootBulkPaneClaude">
+      <div class="card">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">
+          Paste any loot description — session notes, DM text, a photo of handwritten notes, or a screenshot. Claude will extract all items and gold into the party pool.
+        </p>
+        <div id="lootImageZone" onclick="document.getElementById('lootImageInput').click()"
+          style="border:2px dashed var(--border);border-radius:10px;padding:12px;text-align:center;cursor:pointer;margin-bottom:10px;transition:var(--trans)"
+          onmouseenter="this.style.borderColor='var(--gold)'" onmouseleave="this.style.borderColor=_lootImageB64?'var(--gold)':'var(--border)'"
+          ondragover="event.preventDefault();this.style.borderColor='var(--gold)'"
+          ondragleave="this.style.borderColor='var(--border)'" ondrop="handleLootImageDrop(event)">
+          <input type="file" id="lootImageInput" accept="image/*" style="display:none" onchange="handleLootImageFile(this.files[0])">
+          <div id="lootImagePlaceholder" style="font-size:11px;color:var(--muted)">📸 Tap · Drag & drop · <strong style="color:var(--gold)">Ctrl+V</strong> to paste screenshot</div>
+          <img id="lootImagePreviewImg" src="" style="display:none;max-width:100%;max-height:120px;border-radius:6px;object-fit:contain">
+          <button id="lootImageClear" onclick="clearLootImage(event)" style="display:none;margin-top:4px;background:none;border:1px solid var(--red);color:var(--red);border-radius:6px;font-size:10px;padding:2px 8px;cursor:pointer">✕ Clear image</button>
+        </div>
+        <div class="field">
+          <label>Loot description <span style="color:var(--muted);font-weight:normal">(optional if image provided)</span></label>
+          <textarea id="lootClaudeText" placeholder="e.g. The party looted the dragon's hoard: a +2 longsword, 600gp in mixed coins, fancy wine glasses worth 125gp, a potion of healing, and a mysterious black tome..." style="min-height:80px;font-size:12px;line-height:1.6"></textarea>
+        </div>
+        <button class="btn btn-gold" onclick="doClaudeLootImport()" id="claudeLootBtn">🤖 Extract Loot</button>
+        <div id="claudeLootStatus" style="margin-top:8px;font-size:12px;text-align:center;min-height:16px"></div>
+        <div id="claudeLootPreview" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div id="lootBulkPaneText" style="display:none">
+      <div class="card">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">
+          Paste a loot list — one item per line. Everything goes to the party pool.<br>
+          Gold amounts (gp/sp/ep/cp) go to the party treasury automatically.
+        </p>
+        <div class="field">
+          <label>Loot List</label>
+          <textarea id="bulkLootText" placeholder="- Longsword +1&#10;- 3x Healing Potion&#10;- 1800gp from Burgomaster&#10;- Tome of Strahd (worth 500gp)" style="min-height:160px;font-size:12px;line-height:1.6"></textarea>
+        </div>
+        <button class="btn btn-gold" onclick="parseBulkLoot()">⬇ Preview Import</button>
+      </div>
+      <div id="bulkLootPreview"></div>
+    </div>`;
+}
+
+function lootBulkTab(tab, btn){
+  document.querySelectorAll('#ltab-bulk .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('lootBulkPaneClaude').style.display = tab==='claude' ? '' : 'none';
+  document.getElementById('lootBulkPaneText').style.display   = tab==='text'   ? '' : 'none';
+}
+
+// Loot image helpers
+let _lootImageB64 = null, _lootImageMime = 'image/png';
+function handleLootImageFile(file){
+  if(!file||!file.type.startsWith('image/')) return;
+  _lootImageMime = file.type;
+  const r = new FileReader();
+  r.onload = e => { _lootImageB64 = e.target.result.split(',')[1]; showLootImagePreview(e.target.result); };
+  r.readAsDataURL(file);
+}
+function handleLootImageDrop(e){ e.preventDefault(); e.currentTarget.style.borderColor='var(--border)'; handleLootImageFile(e.dataTransfer.files[0]); }
+function showLootImagePreview(dataUrl){
+  document.getElementById('lootImagePreviewImg').src = dataUrl;
+  document.getElementById('lootImagePreviewImg').style.display = 'block';
+  document.getElementById('lootImagePlaceholder').style.display = 'none';
+  document.getElementById('lootImageClear').style.display = 'block';
+  document.getElementById('lootImageZone').style.borderColor = 'var(--gold)';
+}
+function clearLootImage(e){
+  e.stopPropagation(); _lootImageB64 = null;
+  document.getElementById('lootImagePreviewImg').style.display = 'none';
+  document.getElementById('lootImagePreviewImg').src = '';
+  document.getElementById('lootImagePlaceholder').style.display = '';
+  document.getElementById('lootImageClear').style.display = 'none';
+  document.getElementById('lootImageZone').style.borderColor = 'var(--border)';
+}
+
+document.addEventListener('paste', e => {
+  const pane = document.getElementById('lootBulkPaneClaude');
+  if(!pane || pane.style.display === 'none') return;
+  const ltab = document.getElementById('ltab-bulk');
+  if(!ltab || !ltab.classList.contains('active')) return;
+  for(const item of (e.clipboardData?.items||[])){
+    if(item.type.startsWith('image/')){ e.preventDefault(); handleLootImageFile(item.getAsFile()); return; }
+  }
+});
+
+async function doClaudeLootImport(){
+  const text = (document.getElementById('lootClaudeText')?.value||'').trim();
+  if(!text && !_lootImageB64){ toast('Add an image or describe the loot','var(--red)'); return; }
+  const btn = document.getElementById('claudeLootBtn');
+  const statusEl = document.getElementById('claudeLootStatus');
+  const previewEl = document.getElementById('claudeLootPreview');
+  btn.disabled = true;
+  statusEl.innerHTML = '<span style="color:var(--gold)">🤖 Extracting loot…</span>';
+  previewEl.innerHTML = '';
+
+  const systemPrompt = `You are a D&D 5e loot extractor. Given a description or image of loot/treasure, extract all items and currency and return ONLY valid JSON with NO markdown, NO backticks — just raw JSON.
+
+Return this structure:
+{
+  "items": [
+    { "name": "item name", "qty": 1, "value": 0, "rarity": "common", "type": "weapon|armor|potion|scroll|ring|staff|wand|gem|treasure|misc" }
+  ],
+  "gold": { "gp": 0, "sp": 0, "ep": 0, "cp": 0 }
+}
+
+Rules:
+- Extract every distinct item. For "3x Healing Potion" use qty:3
+- Currency goes in gold object (gp/sp/ep/cp). Parse "600gp", "5 gold pieces", "1800 gold" etc.
+- Estimate value in gp if mentioned or implied (e.g. "fancy wine glasses worth 125gp" → value:125)
+- rarity: common/uncommon/rare/very-rare/legendary based on item power or value (>5000gp=legendary, >500=rare, >100=uncommon)
+- Return ONLY the JSON.`;
+
+  const content = [];
+  if(_lootImageB64) content.push({ type:'image', source:{ type:'base64', media_type:_lootImageMime, data:_lootImageB64 }});
+  content.push({ type:'text', text: text || 'Extract all loot and currency from this image.' });
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000, system:systemPrompt, messages:[{role:'user',content}] })
+    });
+    if(!res.ok) throw new Error('API error '+res.status);
+    const data = await res.json();
+    const raw = (data.content?.find(b=>b.type==='text')?.text||'').replace(/^```[a-z]*\n?/,'').replace(/```$/,'').trim();
+    const parsed = JSON.parse(raw);
+
+    window._pendingClaudeLoot = parsed;
+    // Show preview
+    const gold = parsed.gold||{};
+    const items = parsed.items||[];
+    let html = `<div class="divider"><span>Preview — ${items.length} item${items.length!==1?'s':''}${Object.values(gold).some(v=>v>0)?' + currency':''}</span></div>`;
+    if(Object.values(gold).some(v=>v>0)){
+      html += `<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:10px;padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:20px">🪙</span>
+        <div><div style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold)">→ Party Treasury</div>
+        <div style="font-size:13px">${[gold.gp&&gold.gp+'gp',gold.sp&&gold.sp+'sp',gold.ep&&gold.ep+'ep',gold.cp&&gold.cp+'cp'].filter(Boolean).join(' · ')}</div></div>
+      </div>`;
+    }
+    items.forEach((item,i) => {
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px">
+        <span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-family:'Cinzel',serif">${item.qty>1?item.qty+'× ':''}${item.name}</div>
+          <div style="font-size:10px;color:var(--muted)">${item.rarity}${item.value?' · '+item.value+'gp':''}</div>
+        </div>
+        <span onclick="this.parentElement.remove()" style="color:var(--red);cursor:pointer;font-size:16px;padding:0 6px">✕</span>
+      </div>`;
+    });
+    html += `<button class="btn btn-gold" onclick="confirmClaudeLootImport()" style="margin-top:8px">✦ Add to Party Pool</button>
+             <button class="btn btn-outline" onclick="document.getElementById('claudeLootPreview').innerHTML=''" style="margin-top:4px">Clear</button>`;
+    previewEl.innerHTML = html;
+    statusEl.innerHTML = '';
+  } catch(e) {
+    statusEl.innerHTML = `<span style="color:var(--red)">⚠ ${e.message}</span>`;
+    console.error(e);
+  }
+  btn.disabled = false;
+}
+
+function confirmClaudeLootImport(){
+  const parsed = window._pendingClaudeLoot;
+  if(!parsed) return;
+  const items = parsed.items||[];
+  const gold = parsed.gold||{};
+  // Add items to pool
+  if(items.length){
+    const existing = getItems();
+    items.forEach(item => existing.push({
+      id:'i'+Date.now()+Math.random(), name:item.name, type:item.type||'misc',
+      rarity:item.rarity||'common', qty:item.qty||1, weight:0,
+      value:item.value||0, attune:'none', desc:'', owner:'pool'
+    }));
+    saveItems(existing);
+  }
+  // Add gold to party treasury
+  if(Object.values(gold).some(v=>v>0)){
+    const w = getWealth();
+    if(!w['party']) w['party']={gp:0,sp:0,ep:0,cp:0};
+    w['party'].gp = (w['party'].gp||0) + (gold.gp||0);
+    w['party'].sp = (w['party'].sp||0) + (gold.sp||0);
+    w['party'].ep = (w['party'].ep||0) + (gold.ep||0);
+    w['party'].cp = (w['party'].cp||0) + (gold.cp||0);
+    saveWealth(w);
+  }
+  window._pendingClaudeLoot = null;
+  document.getElementById('lootClaudeText').value = '';
+  clearLootImage({stopPropagation:()=>{}});
+  document.getElementById('claudeLootPreview').innerHTML = '';
+  toast(`✦ ${items.length} items imported!`,'var(--gold)');
+  lootTab('inventory');
 }
 
 function parseBulkLoot(){
@@ -4444,12 +4647,122 @@ const PRESET_CAMPAIGNS = (()=>{
     return [];
   }
 })();
+function campImportTab(tab, btn){
+  document.querySelectorAll('#campImportForm .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('campImportPaneClaude').style.display  = tab==='claude'  ? '' : 'none';
+  document.getElementById('campImportPanePresets').style.display = tab==='presets' ? '' : 'none';
+  document.getElementById('campImportPaneCode').style.display    = tab==='code'    ? '' : 'none';
+  if(tab==='presets'){
+    // Populate preset grid
+    const grid = document.getElementById('presetCampsGrid');
+    if(grid) renderPresetGrid(grid);
+  }
+}
+
+async function doClaudeCampImport(){
+  const desc = (document.getElementById('claudeCampDesc')?.value||'').trim();
+  if(!desc){ toast('Describe your campaign first','var(--red)'); return; }
+  const btn = document.getElementById('claudeCampBtn');
+  const statusEl = document.getElementById('claudeCampStatus');
+  const previewEl = document.getElementById('claudeCampPreview');
+  btn.disabled = true;
+  statusEl.innerHTML = '<span style="color:var(--gold)">🤖 Generating campaign…</span>';
+  previewEl.innerHTML = '';
+
+  const systemPrompt = `You are a D&D campaign creator. Given a campaign description, generate a full campaign structure and return ONLY valid JSON, no markdown, no backticks.
+
+Return this structure:
+{
+  "name": "campaign name",
+  "setting": "world/setting name",
+  "description": "2-3 sentence campaign premise",
+  "quests": [
+    { "title": "quest title", "desc": "1-2 sentence description", "status": "active" }
+  ],
+  "npcs": [
+    { "name": "NPC name", "role": "role/title", "desc": "1 sentence description", "disposition": "friendly|neutral|hostile|unknown" }
+  ],
+  "arcs": [
+    { "title": "story arc title", "desc": "brief description", "status": "active" }
+  ],
+  "notes": "any additional campaign notes"
+}
+
+Rules:
+- Generate 3-6 quests (mix of main quest and side quests), 4-8 NPCs, 2-3 story arcs
+- Make everything specific to the described campaign
+- Return ONLY the JSON.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1500, system:systemPrompt,
+        messages:[{ role:'user', content: desc }] })
+    });
+    if(!res.ok) throw new Error('API error '+res.status);
+    const data = await res.json();
+    const raw = (data.content?.find(b=>b.type==='text')?.text||'').replace(/^```[a-z]*\n?/,'').replace(/```$/,'').trim();
+    const camp = JSON.parse(raw);
+    window._pendingClaudeCamp = camp;
+
+    previewEl.innerHTML = `
+      <div style="background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;margin-bottom:8px">
+        <div style="font-family:'Cinzel',serif;font-size:14px;color:var(--gold);margin-bottom:4px">${camp.name}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${camp.setting}</div>
+        <p style="font-size:12px;line-height:1.6;margin-bottom:8px">${camp.description}</p>
+        <div style="font-size:11px;color:var(--muted)">
+          📜 ${camp.quests?.length||0} quests · 👥 ${camp.npcs?.length||0} NPCs · ⚔ ${camp.arcs?.length||0} story arcs
+        </div>
+      </div>
+      <button class="btn btn-gold" onclick="confirmClaudeCamp()">✦ Create This Campaign</button>`;
+    statusEl.innerHTML = '';
+  } catch(e) {
+    statusEl.innerHTML = `<span style="color:var(--red)">⚠ ${e.message}</span>`;
+    console.error(e);
+  }
+  btn.disabled = false;
+}
+
+function confirmClaudeCamp(){
+  const c = window._pendingClaudeCamp;
+  if(!c) return;
+  const camps = getCampaigns();
+  const newCamp = {
+    id: 'camp_' + Date.now(),
+    name: c.name || 'New Campaign',
+    setting: c.setting || '',
+    description: c.description || '',
+    dm: '', created: Date.now(), lastPlayed: null,
+    charIds: [], sessions: [],
+    quests: (c.quests||[]).map((q,i) => ({ id:'q'+i, title:q.title, desc:q.desc, status:q.status||'active' })),
+    npcs: (c.npcs||[]).map((n,i) => ({ id:'n'+i, name:n.name, role:n.role, desc:n.desc, disposition:n.disposition||'neutral' })),
+    arcs: (c.arcs||[]).map((a,i) => ({ id:'a'+i, title:a.title, desc:a.desc, status:a.status||'active' })),
+    notes: c.notes || '',
+  };
+  camps.push(newCamp);
+  saveCampaigns(camps);
+  setActiveCampId(newCamp.id);
+  window._pendingClaudeCamp = null;
+  hideCampForm();
+  toast('✦ ' + newCamp.name + ' created!');
+  renderCampList();
+}
+
 function showImportCampForm() {
   if(isPlayerMode()){toast('Only the DM can import campaigns','var(--red)');return;}
   document.getElementById('campListView').style.display = 'none';
   document.getElementById('campNewForm').style.display = 'none';
   document.getElementById('campImportForm').style.display = 'block';
   document.getElementById('campDetailView').style.display = 'none';
+  // Default to Claude tab
+  document.getElementById('campImportPaneClaude').style.display = '';
+  document.getElementById('campImportPanePresets').style.display = 'none';
+  document.getElementById('campImportPaneCode').style.display = 'none';
+  document.querySelectorAll('#campImportForm .tab-btn').forEach((b,i)=>{b.classList.toggle('active',i===0);});
+}
+
+function renderPresetGrid(grid){
   renderPresetCampaigns();
 }
 
@@ -4676,7 +4989,13 @@ function renderSessions() {
   const allChars = getChars();
   const campChars = allChars.filter(c => (camp.charIds||[]).some(x=>String(x)===String(c.id)));
 
-  let html = `<div class="card" style="margin-bottom:14px">
+  let html = `
+  <div class="tab-row" style="margin-bottom:12px">
+    <button class="tab-btn active" id="sessTabManual" onclick="sessImportTab('manual',this)">✏ Manual</button>
+    <button class="tab-btn" id="sessTabClaude" onclick="sessImportTab('claude',this)">🤖 Claude</button>
+  </div>
+
+  <div id="sessFormManual"><div class="card" style="margin-bottom:14px">
     <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">Add Session</div>
     <div class="form-row two">
       <div class="field"><label>Session Title</label><input id="sTitle" placeholder="e.g. The Goblin Ambush"></div>
@@ -4706,7 +5025,18 @@ function renderSessions() {
       </div>
     </div>` : ''}
     <button class="btn btn-primary" onclick="addSession()">Log Session</button>
-  </div>`;
+  </div></div>
+
+  <div id="sessFormClaude" style="display:none"><div class="card" style="margin-bottom:14px">
+    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:8px">Import Session via Claude</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Paste raw session notes, a chat log, or any description. Claude will extract the title, summary, XP, gold, and key highlights.</p>
+    <div class="field"><label>Raw Session Notes</label>
+      <textarea id="claudeSessionNotes" placeholder="e.g. Session 7 - The party arrived at Barovia. They met Ireena at the church, fought 3 zombies (450 XP each), found 1800gp from the burgomaster's safe. Spike almost died. Key moment: Vizboom's familiar spotted Strahd watching from the castle..." style="min-height:120px;font-size:12px;line-height:1.6"></textarea>
+    </div>
+    <button class="btn btn-gold" onclick="doClaudeSessionImport()" id="claudeSessionBtn">🤖 Extract Session</button>
+    <div id="claudeSessionStatus" style="margin-top:8px;font-size:12px;text-align:center;min-height:16px"></div>
+    <div id="claudeSessionPreview" style="margin-top:8px"></div>
+  </div></div>`;
 
   if (!sessions.length) {
     html += `<div class="empty-state"><div class="es-icon">📜</div><p>No sessions logged yet.<br>Start recording your adventure!</p></div>`;
@@ -4818,6 +5148,108 @@ function updateGoldHint(val){
   } else {
     el.textContent = '';
   }
+}
+
+function sessImportTab(tab, btn){
+  document.querySelectorAll('#ctab-sessions .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('sessFormManual').style.display = tab==='manual' ? '' : 'none';
+  document.getElementById('sessFormClaude').style.display  = tab==='claude' ? '' : 'none';
+}
+
+async function doClaudeSessionImport(){
+  const notes = (document.getElementById('claudeSessionNotes')?.value||'').trim();
+  if(!notes){ toast('Paste session notes first','var(--red)'); return; }
+  const btn = document.getElementById('claudeSessionBtn');
+  const statusEl = document.getElementById('claudeSessionStatus');
+  const previewEl = document.getElementById('claudeSessionPreview');
+  btn.disabled = true;
+  statusEl.innerHTML = '<span style="color:var(--gold)">🤖 Extracting session…</span>';
+  previewEl.innerHTML = '';
+
+  const camp = getCampaigns().find(c=>c.id===editingCampId);
+  const sessionNum = (camp?.sessions?.length||0) + 1;
+
+  const systemPrompt = `You are a D&D session notes parser. Extract session details from raw notes and return ONLY valid JSON, no markdown, no backticks.
+
+Return this structure:
+{
+  "title": "short evocative session title (if not given, invent one based on content)",
+  "date": "YYYY-MM-DD or empty string",
+  "summary": "2-4 sentence prose summary of what happened",
+  "xpAwarded": number (total XP for the session, 0 if not mentioned),
+  "goldAwarded": number (total gp awarded, 0 if not mentioned),
+  "highlights": ["array of 3-6 key moments, decisions, or memorable quotes as short strings"]
+}
+
+Rules:
+- Parse XP from things like "450 XP each × 3 = 1350" or "800 XP" etc.
+- Parse gold from "1800gp", "1800 gold", "800 gold pieces" etc.
+- Highlights should be punchy 1-line summaries of key moments
+- Return ONLY the JSON.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:800, system:systemPrompt,
+        messages:[{ role:'user', content: `Session ${sessionNum} notes:\n\n${notes}` }] })
+    });
+    if(!res.ok) throw new Error('API error '+res.status);
+    const data = await res.json();
+    const raw = (data.content?.find(b=>b.type==='text')?.text||'').replace(/^```[a-z]*\n?/,'').replace(/```$/,'').trim();
+    const s = JSON.parse(raw);
+    window._pendingClaudeSession = s;
+
+    previewEl.innerHTML = `
+      <div style="background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px;margin-bottom:8px">
+        <div style="font-family:'Cinzel',serif;font-size:13px;color:var(--gold);margin-bottom:4px">Session ${sessionNum}: ${s.title}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${s.date||'No date'} · ${s.xpAwarded?s.xpAwarded+' XP':''} ${s.goldAwarded?'· '+s.goldAwarded+'gp':''}</div>
+        <p style="font-size:12px;line-height:1.6;margin-bottom:8px">${s.summary}</p>
+        ${s.highlights?.length?'<div style="font-size:11px;color:var(--muted)">'+s.highlights.map(h=>`✦ ${h}`).join('<br>')+'</div>':''}
+      </div>
+      <button class="btn btn-gold" onclick="confirmClaudeSession()">✦ Log This Session</button>`;
+    statusEl.innerHTML = '';
+  } catch(e) {
+    statusEl.innerHTML = `<span style="color:var(--red)">⚠ ${e.message}</span>`;
+    console.error(e);
+  }
+  btn.disabled = false;
+}
+
+function confirmClaudeSession(){
+  const s = window._pendingClaudeSession;
+  if(!s) return;
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c=>c.id===editingCampId);
+  if(ci<0) return;
+  const session = {
+    id: genItemId(), title: s.title||'Untitled Session',
+    date: s.date||new Date().toISOString().split('T')[0],
+    summary: s.summary||'', xpAwarded: s.xpAwarded||0,
+    goldAwarded: s.goldAwarded||0, highlights: s.highlights||[],
+    presentCharIds: [..._sessionPresence], goldAddedToLoot: false,
+  };
+  _sessionPresence = new Set();
+  if(!camps[ci].sessions) camps[ci].sessions=[];
+  camps[ci].sessions.push(session);
+  camps[ci].lastPlayed = Date.now();
+  // Auto-add gold
+  if(session.goldAwarded > 0){
+    const w = getWealth();
+    if(!w['party']) w['party']={gp:0,sp:0,ep:0,cp:0};
+    w['party'].gp = (w['party'].gp||0) + session.goldAwarded;
+    saveWealth(w);
+    const ci2 = camps.findIndex(c=>c.id===editingCampId);
+    const si = camps[ci2].sessions.findIndex(x=>x.id===session.id);
+    if(si>=0) camps[ci2].sessions[si].goldAddedToLoot = true;
+  }
+  saveCampaigns(camps);
+  document.getElementById('claudeSessionNotes').value = '';
+  document.getElementById('claudeSessionPreview').innerHTML = '';
+  window._pendingClaudeSession = null;
+  toast('Session logged!');
+  renderSessions();
+  renderCampDetailHeader();
 }
 
 function addSession() {
