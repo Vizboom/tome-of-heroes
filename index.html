@@ -754,10 +754,10 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <input type="number" id="dMod" value="0" min="-10" max="20" step="1">
       <span style="font-size:12px;color:var(--muted);font-style:italic;flex:1;text-align:right" id="rollDesc">rolling 1d20</span>
     </div>
+    <button class="roll-btn roll-n" id="rollBtn" onclick="doRoll()">Roll ⬡</button>
     <div class="section-label">Conditions</div>
     <div class="active-conds" id="activeConds"></div>
     <div class="condition-grid" id="condGrid"></div>
-    <button class="roll-btn roll-n" id="rollBtn" onclick="doRoll()">Roll ⬡</button>
     <div id="rollResult" style="display:none"></div>
     <div class="divider" id="condEffectsDivider" style="display:none"><span>Active Effects</span></div>
     <div id="condEffects"></div>
@@ -1178,39 +1178,51 @@ function enrichCharSpells(char){
 
 const CLASSES=[
   {name:'Barbarian',icon:'🪓',hit:12,primary:['STR','CON'],theme:'barbarian',color:'#c0392b',saves:['STR','CON'],spellcaster:false,
+   resources:[{key:'rage',name:'Rages',icon:'🔥',maxFn:'(l)=>l<3?2:l<6?3:l<12?4:l<17?5:l<20?6:999',reset:'long'},{key:'second_wind',name:'2nd Wind',icon:'💨',maxFn:'(l)=>1',reset:'short'}],
    subclasses:['Path of the Berserker (PHB)','Path of the Totem Warrior (PHB)','Path of the Ancestral Guardian (XGE)','Path of the Battlerager (SCAG)','Path of the Beast (TCE)','Path of the Storm Herald (XGE)','Path of the Zealot (XGE)','Path of Wild Magic (TCE)','Path of the Giant (BGotG)'],
    features:[{n:'Rage',d:'Bonus damage on STR attacks, resistance to physical damage. Uses = CON mod. Lasts 1 minute.'},{n:'Unarmored Defense',d:'When not wearing armour, AC = 10 + DEX mod + CON mod.'},{n:'Reckless Attack',d:'When attacking, can choose to attack recklessly. Gain advantage on STR attacks this turn, but attacks against you also have advantage.'},{n:'Primal Path',d:'Choose a subclass at level 3.'}]},
   {name:'Bard',icon:'🎭',hit:8,primary:['CHA','DEX'],theme:'bard',color:'#8e44ad',saves:['DEX','CHA'],spellcaster:true,
+   resources:[{key:'bardic_insp',name:'Bardic Insp.',icon:'🎶',maxFn:'(l,c)=>Math.max(1,Math.floor((c.abilities&&c.abilities.CHA?c.abilities.CHA:10)-10)/2)',reset:'long'}],
    subclasses:['College of Lore (PHB)','College of Valor (PHB)','College of Creation (TCE)','College of Eloquence (TCE)','College of Glamour (XGE)','College of Swords (XGE)','College of Whispers (XGE)','College of Spirits (VRGR)'],
    features:[{n:'Bardic Inspiration',d:'Grant a d6 inspiration die to a creature within 60 ft as a bonus action. Uses = CHA mod per long rest.'},{n:'Jack of All Trades',d:'Add half proficiency bonus (rounded down) to any ability check you are not already proficient in.'},{n:'Song of Rest',d:'During a short rest, allies who hear your performance regain extra hit points.'},{n:'Bard College',d:'Choose a subclass at level 3.'}]},
   {name:'Cleric',icon:'✝',hit:8,primary:['WIS','CON'],theme:'cleric',color:'#d4ac0d',saves:['WIS','CHA'],spellcaster:true,
+   resources:[{key:'channel_div',name:'Channel Div.',icon:'✝',maxFn:'(l)=>l<6?1:l<18?2:3',reset:'short'}],
    subclasses:['Arcana Domain (SCAG)','Death Domain (DMG)','Forge Domain (XGE)','Grave Domain (XGE)','Knowledge Domain (PHB)','Life Domain (PHB)','Light Domain (PHB)','Nature Domain (PHB)','Order Domain (TCE/GGtR)','Peace Domain (TCE)','Tempest Domain (PHB)','Trickery Domain (PHB)','Twilight Domain (TCE)','War Domain (PHB)'],
    features:[{n:'Divine Domain',d:'Choose a domain at level 1 — grants domain spells and features.'},{n:'Channel Divinity',d:'Use divine energy to fuel magical effects. Recharges on short or long rest.'},{n:'Spellcasting',d:'WIS-based. Prepare WIS mod + cleric level spells from the full cleric list.'}]},
   {name:'Druid',icon:'🌿',hit:8,primary:['WIS','CON'],theme:'druid',color:'#27ae60',saves:['INT','WIS'],spellcaster:true,
+   resources:[{key:'wild_shape',name:'Wild Shape',icon:'🐺',maxFn:'(l)=>l<2?0:2',reset:'short'}],
    subclasses:['Circle of the Land (PHB)','Circle of the Moon (PHB)','Circle of Dreams (XGE)','Circle of the Shepherd (XGE)','Circle of Spores (TCE/GGtR)','Circle of Stars (TCE)','Circle of Wildfire (TCE)','Circle of the Sea (PHB 2024)'],
    features:[{n:'Druidic',d:'Know the secret Druidic language. Leaves secret messages in nature.'},{n:'Spellcasting',d:'WIS-based. Prepare WIS mod + druid level spells from the druid list.'},{n:'Wild Shape',d:'Transform into a beast you have seen. CR limit and features scale with level.'},{n:'Druid Circle',d:'Choose a subclass at level 2.'}]},
   {name:'Fighter',icon:'⚔',hit:10,primary:['STR','DEX'],theme:'fighter',color:'#e67e22',saves:['STR','CON'],spellcaster:false,
+   resources:[{key:'second_wind',name:'2nd Wind',icon:'💨',maxFn:'(l)=>1',reset:'short'},{key:'action_surge',name:'Action Surge',icon:'⚡',maxFn:'(l)=>l<17?1:2',reset:'short'},{key:'sup_dice',name:'Sup. Dice',icon:'🎲',maxFn:'(l)=>l<7?4:l<15?5:6',reset:'short',note:'Battle Master only'}],
    subclasses:['Arcane Archer (XGE)','Battle Master (PHB)','Cavalier (XGE)','Champion (PHB)','Echo Knight (EGtW)','Eldritch Knight (PHB)','Psi Warrior (TCE)','Purple Dragon Knight (SCAG)','Rune Knight (TCE)','Samurai (XGE)'],
    features:[{n:'Fighting Style',d:'Choose a combat specialty: Archery, Defense, Dueling, Great Weapon Fighting, Protection, or Two-Weapon Fighting.'},{n:'Second Wind',d:'Bonus action: regain 1d10 + fighter level HP. Recharges on short rest.'},{n:'Action Surge',d:'Take one additional action on your turn. Recharges on short rest.'},{n:'Martial Archetype',d:'Choose a subclass at level 3.'}]},
   {name:'Monk',icon:'🥷',hit:8,primary:['DEX','WIS'],theme:'monk',color:'#16a085',saves:['STR','DEX'],spellcaster:false,
+   resources:[{key:'ki',name:'Ki Points',icon:'☯',maxFn:'(l)=>l<2?0:l',reset:'short'}],
    subclasses:['Way of the Astral Self (TCE)','Way of the Drunken Master (XGE)','Way of the Four Elements (PHB)','Way of the Kensei (XGE)','Way of the Long Death (SCAG)','Way of the Mercy (TCE)','Way of the Open Hand (PHB)','Way of Shadow (PHB)','Way of the Sun Soul (XGE/SCAG)','Way of the Cobalt Soul (EGtW)'],
    features:[{n:'Unarmored Defense',d:'AC = 10 + DEX mod + WIS mod when not wearing armour.'},{n:'Martial Arts',d:'Use DEX for unarmed strikes. Unarmed strike damage scales with Martial Arts die.'},{n:'Ki',d:'Spend ki points to fuel special features. Ki points = monk level. Recharges on short rest.'},{n:'Monastic Tradition',d:'Choose a subclass at level 3.'}]},
   {name:'Paladin',icon:'🛡',hit:10,primary:['STR','CHA'],theme:'paladin',color:'#f1c40f',saves:['WIS','CHA'],spellcaster:true,
+   resources:[{key:'divine_sense',name:'Divine Sense',icon:'👁',maxFn:'(l,c)=>1+Math.max(0,Math.floor((c.abilities&&c.abilities.CHA?c.abilities.CHA:10)-10)/2)',reset:'long'},{key:'lay_on_hands',name:'Lay on Hands',icon:'🙌',maxFn:'(l)=>l*5',reset:'long',isPool:true,unit:'HP'}],
    subclasses:['Oath of the Ancients (PHB)','Oath of Conquest (XGE)','Oath of the Crown (SCAG)','Oath of Devotion (PHB)','Oath of Glory (TCE/MOoT)','Oath of the Open Sea (EGtW)','Oath of Redemption (XGE)','Oath of Vengeance (PHB)','Oath of the Watchers (TCE)','Oathbreaker (DMG)'],
    features:[{n:'Divine Sense',d:'Detect celestials, fiends, and undead within 60 ft. Uses = 1 + CHA mod per long rest.'},{n:'Lay on Hands',d:'Pool of HP equal to 5 × paladin level. Use to heal or cure disease/poison.'},{n:'Divine Smite',d:'Expend a spell slot after a melee hit to deal extra radiant damage.'},{n:'Sacred Oath',d:'Choose a subclass at level 3.'}]},
   {name:'Ranger',icon:'🏹',hit:10,primary:['DEX','WIS'],theme:'ranger',color:'#2ecc71',saves:['STR','DEX'],spellcaster:true,
+   resources:[],
    subclasses:['Beast Master (PHB)','Fey Wanderer (TCE)','Gloom Stalker (XGE)','Horizon Walker (XGE)','Hunter (PHB)','Monster Slayer (XGE)','Swarmkeeper (TCE)','Drakewarden (FToD)'],
    features:[{n:'Favored Enemy',d:'Advantage on Survival checks to track chosen enemy type, and INT checks to recall information about them.'},{n:'Natural Explorer',d:'Expertise in one terrain type: ignore difficult terrain, always alert, better foraging.'},{n:'Spellcasting',d:'WIS-based. Prepare WIS mod + half ranger level spells.'},{n:'Ranger Archetype',d:'Choose a subclass at level 3.'}]},
   {name:'Rogue',icon:'🗡',hit:8,primary:['DEX','INT'],theme:'rogue',color:'#7f8c8d',saves:['DEX','INT'],spellcaster:false,
+   resources:[{key:'sneak_atk',name:'Sneak Atk',icon:'🗡',maxFn:'(l)=>1',reset:'turn',note:'Once per turn when you have advantage or ally adjacent'}],
    subclasses:['Arcane Trickster (PHB)','Assassin (PHB)','Inquisitive (XGE)','Mastermind (XGE/SCAG)','Phantom (TCE)','Scout (XGE)','Soulknife (TCE)','Swashbuckler (XGE/SCAG)','Thief (PHB)'],
    features:[{n:'Expertise',d:'Double proficiency bonus in two chosen skills (or one skill + thieves tools).'},{n:'Sneak Attack',d:'Once per turn, deal extra damage when you have advantage or an ally is adjacent to your target. Scales from 1d6 to 10d6.'},{n:'Thieves Cant',d:'Secret language of rogues. Can encode messages in normal conversation.'},{n:'Roguish Archetype',d:'Choose a subclass at level 3.'}]},
   {name:'Sorcerer',icon:'🔮',hit:6,primary:['CHA','CON'],theme:'sorcerer',color:'#9b59b6',saves:['CON','CHA'],spellcaster:true,
+   resources:[{key:'sorcery_pts',name:'Sorcery Pts',icon:'✨',maxFn:'(l)=>l<2?0:l',reset:'long'}],
    subclasses:['Aberrant Mind (TCE)','Clockwork Soul (TCE)','Divine Soul (XGE)','Draconic Bloodline (PHB)','Lunar Sorcery (DSotDQ)','Shadow Magic (XGE)','Storm Sorcery (XGE/SCAG)','Wild Magic (PHB)'],
    features:[{n:'Spellcasting',d:'CHA-based. Know a limited number of spells permanently (no preparation).'},{n:'Sorcery Points',d:'Pool of points equal to sorcerer level. Used to fuel Metamagic and create spell slots.'},{n:'Metamagic',d:'Modify spells using sorcery points: Careful, Distant, Empowered, Extended, Heightened, Quickened, Seeking, Subtle, Twinned.'},{n:'Sorcerous Origin',d:'Choose a subclass at level 1.'}]},
   {name:'Warlock',icon:'👹',hit:8,primary:['CHA','CON'],theme:'warlock',color:'#6c3483',saves:['WIS','CHA'],spellcaster:true,
+   resources:[{key:'pact_slots',name:'Pact Slots',icon:'👹',maxFn:'(l)=>l<2?1:l<11?2:l<17?3:4',reset:'short'}],
    subclasses:['The Archfey (PHB)','The Celestial (XGE)','The Fathomless (TCE)','The Fiend (PHB)','The Genie (TCE)','The Great Old One (PHB)','The Hexblade (XGE)','The Undead (VRGtR)','The Undying (SCAG)'],
    features:[{n:'Otherworldly Patron',d:'Choose a patron at level 1 — determines expanded spell list and features.'},{n:'Pact Magic',d:'CHA-based. Short rest spell slot recovery. Slots are always at highest available level.'},{n:'Eldritch Invocations',d:'Choose 2 invocations at level 2. Gain more as you level up. Customise your abilities greatly.'},{n:'Pact Boon',d:'Choose a boon at level 3: Pact of the Blade, Chain, or Tome.'}]},
   {name:'Wizard',icon:'🧙',hit:6,primary:['INT','CON'],theme:'wizard',color:'#2980b9',saves:['INT','WIS'],spellcaster:true,
+   resources:[],
    subclasses:['School of Abjuration (PHB)','School of Bladesinging (TCE/SCAG)','School of Chronurgy (EGtW)','School of Conjuration (PHB)','School of Divination (PHB)','School of Enchantment (PHB)','School of Evocation (PHB)','School of Graviturgy (EGtW)','School of Illusion (PHB)','School of Necromancy (PHB)','School of Order of Scribes (TCE)','School of Transmutation (PHB)','School of War Magic (XGE)','Arcane Tradition: Lore Mastery (UA)'],
    features:[{n:'Spellbook',d:'Contains 6 spells at level 1. Add 2 free spells each level up, plus any spells you copy. Spell preparation = INT mod + wizard level.'},{n:'Arcane Recovery',d:'On a short rest, recover spell slots totalling up to half wizard level (round up), once per long rest.'},{n:'Arcane Tradition',d:'Choose a subclass at level 2.'}]},
 ];
@@ -3594,6 +3606,37 @@ function renderDiceCharPanel(){
           </div>`;
         }).join('')}
       </div>`:''}
+      ${(()=>{
+        const resources = cls.resources||[];
+        if(!resources.length) return '';
+        const resKey = 'toh_res_'+char.id;
+        let resState = {};
+        try{ resState = JSON.parse(localStorage.getItem(resKey)||'{}'); }catch{}
+        const rows = resources.map(r=>{
+          try {
+            const maxFn = new Function('l','c','return ('+r.maxFn+')(l,c)');
+            const max = Math.max(0, maxFn(char.level, char));
+            if(max === 0) return '';
+            const used = resState[r.key]||0;
+            const remaining = Math.max(0, max - used);
+            const resetLabel = r.reset==='short'?'SR':r.reset==='long'?'LR':'';
+            if(r.isPool){
+              const pct = max>0?Math.round((remaining/max)*100):0;
+              const hpC = pct>60?'var(--green)':pct>25?'var(--gold)':'var(--red)';
+              return '<div style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px"><span style="font-size:10px;color:var(--muted)">'+r.icon+' '+r.name+'</span><div style="display:flex;align-items:center;gap:4px"><button onclick="adjustResource(\''+char.id+'\',\''+r.key+'\','+max+',-5);event.stopPropagation()" style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:11px;padding:1px 6px;cursor:pointer">−5</button><span style="font-family:\'Cinzel\',serif;font-size:11px;color:'+hpC+'">'+remaining+'/'+max+(r.unit?' '+r.unit:'')+'</span><button onclick="adjustResource(\''+char.id+'\',\''+r.key+'\','+max+',5);event.stopPropagation()" style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:11px;padding:1px 6px;cursor:pointer">+5</button><span style="font-size:9px;color:var(--muted)">'+resetLabel+'</span></div></div><div style="height:4px;background:var(--border);border-radius:2px"><div style="height:4px;background:'+hpC+';border-radius:2px;width:'+pct+'%;transition:width 0.3s"></div></div></div>';
+            }
+            const pips = Math.min(max, 20);
+            let pipsHtml = '';
+            for(let pi=0;pi<pips;pi++){
+              const isUsed = pi >= remaining;
+              pipsHtml += '<div onclick="toggleResourcePip(\''+char.id+'\',\''+r.key+'\','+max+','+pi+','+remaining+');event.stopPropagation()" style="width:18px;height:18px;border-radius:50%;border:2px solid '+(isUsed?'var(--border)':cc)+';background:'+(isUsed?'transparent':cc+'44')+';cursor:pointer;transition:all 0.15s"></div>';
+            }
+            return '<div style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:10px;color:var(--muted)">'+r.icon+' '+r.name+'</span><div style="display:flex;align-items:center;gap:6px"><span style="font-family:\'Cinzel\',serif;font-size:10px;color:'+cc+'">'+remaining+'/'+max+'</span><button onclick="resetResource(\''+char.id+'\',\''+r.key+'\');event.stopPropagation()" style="background:none;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-size:9px;padding:1px 5px;cursor:pointer">↺ '+resetLabel+'</button></div></div><div style="display:flex;flex-wrap:wrap;gap:4px">'+pipsHtml+(max>20?'<span style="font-size:10px;color:var(--muted);line-height:18px">+' +(max-20)+' more</span>':'')+'</div></div>';
+          } catch(e){ return ''; }
+        }).filter(Boolean).join('');
+        if(!rows) return '';
+        return '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ffffff22"><div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">CLASS RESOURCES</div>'+rows+'</div>';
+      })()}
     </div>`;
 }
 
@@ -3607,6 +3650,31 @@ function quickRoll(label, mod){
   if(descEl) descEl.textContent = `${label} (d20${mod>=0?'+':''}${mod})`;
   // Actually roll
   doRollLabelled(label, mod);
+}
+
+function _getResState(charId){ try{ return JSON.parse(localStorage.getItem('toh_res_'+charId)||'{}'); }catch{ return {}; } }
+function _saveResState(charId, state){ localStorage.setItem('toh_res_'+charId, JSON.stringify(state)); renderDiceCharPanel(); }
+
+function toggleResourcePip(charId, key, max, pipIdx, remaining){
+  const state = _getResState(charId);
+  const used = state[key]||0;
+  // If clicking an unused pip → use one more; if clicking a used pip → restore one
+  if(pipIdx < remaining){ state[key] = Math.min(max, used+1); }
+  else { state[key] = Math.max(0, used-1); }
+  _saveResState(charId, state);
+}
+
+function adjustResource(charId, key, max, delta){
+  const state = _getResState(charId);
+  const used = state[key]||0;
+  state[key] = Math.max(0, Math.min(max, used - delta)); // delta positive = restore
+  _saveResState(charId, state);
+}
+
+function resetResource(charId, key){
+  const state = _getResState(charId);
+  state[key] = 0;
+  _saveResState(charId, state);
 }
 
 function doRollLabelled(label, mod){
