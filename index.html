@@ -1038,6 +1038,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <button class="btn btn-outline" onclick="showImportCampForm()">↓ Import Campaign</button>
       <button class="btn btn-outline btn-restore-presets" onclick="forceReinstallPresets()" style="border-color:var(--gold);color:var(--gold)">↺ Restore Built-in Campaigns</button>
       <button class="btn btn-outline" onclick="diagCampaigns()" style="border-color:var(--red);color:var(--red);font-size:11px">🔍 Diagnose</button>
+      <button class="btn btn-outline" onclick="forceSyncAll()" style="border-color:var(--purple);color:var(--purple);font-size:11px">☁ Force Sync</button>
     </div>
     <!-- New Campaign form -->
     <div id="campNewForm" style="display:none">
@@ -1639,7 +1640,11 @@ function nav(id){
 
   // No cross-screen companion panels — each screen handles its own desktop layout
 
-  if(id==='roster'){renderRoster();renderCampaignSwitchBanner();}
+  if(id==='roster'){
+    // Pull fresh from Supabase if online
+    if(_online && getGroupId()) pullAll(getActiveCampId()).then(()=>{ renderRoster(); renderCampaignSwitchBanner(); });
+    else { renderRoster(); renderCampaignSwitchBanner(); }
+  }
   if(id==='campaign'){renderCampList();}
   if(id==='party'){partyTab('overview');}
   if(id==='modegate'){
@@ -4705,50 +4710,115 @@ function _finishCharImport(char, source){
 async function diagCampaigns(){
   const lines = [];
   lines.push('=== SYNC DIAGNOSTICS ===');
+  const user = await getSupaUser().catch(()=>null);
+  lines.push('auth: ' + (user ? '✓ '+user.email : '✗ NOT LOGGED IN'));
   lines.push('group_id: ' + (getGroupId()||'NOT SET'));
-  lines.push('toh_mode: ' + localStorage.getItem('toh_mode'));
+  lines.push('toh_mode: ' + (localStorage.getItem('toh_mode')||'none'));
   lines.push('online: ' + _online);
 
-  // Local cache
-  const rawChars = localStorage.getItem('toh_chars');
-  const rawCamps = localStorage.getItem('toh_campaigns');
-  lines.push('--- LOCAL CACHE ---');
-  lines.push('characters: ' + (rawChars ? JSON.parse(rawChars).length+' stored' : 'EMPTY'));
-  lines.push('campaigns: ' + (rawCamps ? JSON.parse(rawCamps).length+' stored' : 'EMPTY'));
-  if(rawChars) JSON.parse(rawChars).forEach(c=>lines.push('  char: '+c.name+' (id='+c.id+')'));
-  if(rawCamps) JSON.parse(rawCamps).forEach(c=>lines.push('  camp: '+c.name+' (id='+c.id+')'));
+  lines.push('');
+  lines.push('--- SETTINGS TABLE ---');
+  try {
+    const { data, error } = await supa.from('settings').select('key,value').limit(10);
+    if(error) lines.push('settings READ: ✗ '+error.message+' ('+error.code+')');
+    else {
+      lines.push('settings readable: ✓ ('+data.length+' rows)');
+      if(user){
+        const gkey = 'group_id_'+user.id;
+        const match = (data||[]).find(r=>r.key===gkey);
+        lines.push('group key "'+gkey+'": '+(match?'✓ FOUND = '+match.value:'✗ NOT FOUND'));
+      }
+    }
+  } catch(e){ lines.push('settings EXCEPTION: '+e.message); }
 
-  // Supabase direct query
-  lines.push('--- SUPABASE QUERY ---');
+  lines.push('');
+  lines.push('--- CHARACTERS TABLE ---');
+  try {
+    const { data, error } = await supa.from('characters').select('id,group_id').limit(20);
+    if(error) lines.push('characters READ: ✗ '+error.message+' ('+error.code+')');
+    else {
+      lines.push('characters visible: ✓ ('+data.length+' rows)');
+      const gid = getGroupId();
+      if(gid){
+        const mine = (data||[]).filter(r=>r.group_id===gid);
+        lines.push('with group_id "'+gid+'": '+mine.length+' rows');
+      }
+      (data||[]).forEach(r=>lines.push('  id='+r.id+' group='+r.group_id));
+    }
+  } catch(e){ lines.push('characters EXCEPTION: '+e.message); }
+
+  lines.push('');
+  lines.push('--- WRITE TEST ---');
   const gid = getGroupId();
   if(gid){
+    const testId = 'diag-'+Date.now();
     try {
-      const { data: chars, error: ce } = await supa.from('characters').select('id,group_id,data').eq('group_id', gid);
-      if(ce) lines.push('characters error: '+ce.message);
-      else lines.push('characters in DB: '+(chars||[]).length);
-      (chars||[]).forEach(r=>lines.push('  '+r.id+' group='+r.group_id+' name='+(r.data?.name||'?')));
-    } catch(e){ lines.push('characters query failed: '+e.message); }
-
-    try {
-      const { data: camps, error: ke } = await supa.from('campaigns').select('id,group_id,name').eq('group_id', gid);
-      if(ke) lines.push('campaigns error: '+ke.message);
-      else lines.push('campaigns in DB: '+(camps||[]).length);
-      (camps||[]).forEach(r=>lines.push('  '+r.id+' group='+r.group_id+' name='+r.name));
-    } catch(e){ lines.push('campaigns query failed: '+e.message); }
+      const { error: we } = await supa.from('characters').upsert({id:testId,group_id:gid,data:{name:'_TEST_'}},{onConflict:'id'});
+      if(we) lines.push('write: ✗ '+we.message+' ('+we.code+')');
+      else {
+        lines.push('write: ✓ succeeded');
+        const { data: rd, error: re } = await supa.from('characters').select('id').eq('id',testId).single();
+        lines.push('read back: '+(re?'✗ '+re.message:'✓ confirmed'));
+        await supa.from('characters').delete().eq('id',testId);
+        lines.push('cleanup: ✓');
+      }
+    } catch(e){ lines.push('write EXCEPTION: '+e.message); }
   } else {
-    lines.push('Cannot query — no group_id set');
+    lines.push('skipped — no group_id');
   }
 
-  // Auth
-  try {
-    const user = await getSupaUser();
-    lines.push('--- AUTH ---');
-    lines.push('logged in: '+(user?user.email:'NO'));
-  } catch(e){}
+  lines.push('');
+  lines.push('--- LOCAL CACHE ---');
+  const rawChars = localStorage.getItem('toh_chars');
+  const rawCamps = localStorage.getItem('toh_campaigns');
+  lines.push('characters: ' + (rawChars ? JSON.parse(rawChars).length+' cached' : 'EMPTY'));
+  lines.push('campaigns: ' + (rawCamps ? JSON.parse(rawCamps).length+' cached' : 'EMPTY'));
+  if(rawChars) try{ JSON.parse(rawChars).forEach(c=>lines.push('  '+c.name+' id='+c.id)); }catch(e){}
 
   const msg = lines.join('\n');
   console.log(msg);
   alert(msg);
+}
+
+async function forceSyncAll(){
+  toast('⏳ Force syncing all data…','var(--purple)');
+  // Ensure group id exists
+  const gid = await ensureGroupId();
+  if(!gid){ toast('No group ID — log in as DM first','var(--red)'); return; }
+
+  const chars = JSON.parse(localStorage.getItem('toh_chars')||'[]');
+  const camps = JSON.parse(localStorage.getItem('toh_campaigns')||'[]');
+  const campId = getActiveCampId();
+
+  let pushed = 0, errors = 0;
+
+  // Push all characters
+  for(const char of chars){
+    const row = { id: String(char.id), group_id: gid, campaign_id: campId||null, share_code: char.shareCode||null, data: char };
+    const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
+    if(error){ console.error('char push error:', error.message, error.code); errors++; }
+    else pushed++;
+  }
+
+  // Push all campaigns
+  for(const camp of camps){
+    const row = { id: camp.id, group_id: gid, name: camp.name||'', data: camp };
+    const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
+    if(error){ console.error('camp push error:', error.message, error.code); errors++; }
+    else pushed++;
+  }
+
+  if(errors > 0){
+    toast(`⚠ ${pushed} pushed, ${errors} failed — check console & RLS policies`, 'var(--red)');
+    // Show the SQL needed
+    alert(`${errors} rows failed to push.\n\nRun this SQL in Supabase SQL Editor:\n\n-- Drop old policies\nDROP POLICY IF EXISTS "Users can manage own characters" ON characters;\nDROP POLICY IF EXISTS "Users can manage own campaigns" ON campaigns;\nDROP POLICY IF EXISTS "Users can manage own loot" ON loot;\n\n-- Add group_id columns\nALTER TABLE characters ADD COLUMN IF NOT EXISTS group_id text;\nALTER TABLE campaigns ADD COLUMN IF NOT EXISTS group_id text;\nALTER TABLE loot ADD COLUMN IF NOT EXISTS group_id text;\n\n-- Open policies (group_id is the access control)\nCREATE POLICY "open_chars" ON characters FOR ALL USING (true) WITH CHECK (true);\nCREATE POLICY "open_camps" ON campaigns FOR ALL USING (true) WITH CHECK (true);\nCREATE POLICY "open_loot" ON loot FOR ALL USING (true) WITH CHECK (true);\nCREATE POLICY "open_settings" ON settings FOR ALL USING (true) WITH CHECK (true);`);
+  } else {
+    toast(`✓ Synced ${pushed} records to group ${gid}`, 'var(--green)');
+    // Now pull back to confirm
+    await pullAll(campId);
+    renderRoster();
+    renderCampList();
+  }
 }
 
 function bootApp(){
