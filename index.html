@@ -134,25 +134,30 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   /* All screens hidden by default */
   .screen { display: none !important; }
 
-  /* Primary panel — left column (active screen) */
+  /* Primary panel — left column, 50% */
   .screen.active {
     display: flex !important;
     flex-direction: column;
-    width: 400px;
-    min-width: 300px;
-    max-width: 420px;
-    flex-shrink: 0;
+    flex: 1 1 50%;
+    width: 50%;
+    min-width: 0;
     height: 100%;
     overflow-y: auto;
     border-right: 1px solid var(--border);
   }
 
-  /* Secondary companion panel — right column */
+  /* Secondary companion panel — right column, 50% */
   .screen.desk-secondary {
     display: flex !important;
     flex-direction: column;
-    flex: 1;
+    flex: 1 1 50%;
+    width: 50%;
+    min-width: 0;
     height: 100%;
+    overflow-y: auto;
+    background: var(--bg2);
+    border-left: none;
+  }
     overflow-y: auto;
     background: var(--bg2);
     border-left: 1px solid var(--border);
@@ -166,13 +171,19 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     font-size: 9px;
     letter-spacing: 2px;
     color: var(--muted);
-    padding: 8px 28px 0;
-    opacity: 0.6;
+    padding: 10px 28px 0;
+    opacity: 0.5;
     flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0;
+    padding-bottom: 8px;
   }
 
+  /* Divider between panels */
+  .screen.active { border-right: 1px solid var(--border); }
+
   .scroll-region {
-    padding: 24px 28px 40px;
+    padding: 20px 24px 40px;
     max-width: none;
     flex: 1;
   }
@@ -728,7 +739,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   </div>
 
   <!-- BUILD -->
-  <div class="scroll-region screen" id="scr-build">
+  <div class="scroll-region screen" data-panel-label="FORGE CHARACTER" id="scr-build">
     <div class="step-dots" id="stepDots"></div>
     <div class="build-step active" id="bstep1">
       <div class="divider"><span>Choose Your Path</span></div>
@@ -895,7 +906,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   </div>
 
   <!-- PARTY DEEP SHEET -->
-  <div class="scroll-region screen" id="scr-partysheet">
+  <div class="scroll-region screen" data-panel-label="CHARACTER SHEET" id="scr-partysheet">
     <div class="party-sheet-hero" id="partySheetHero"></div>
     <div class="tab-row">
       <button class="tab-btn active" onclick="partySheetTab('combat')">Combat</button>
@@ -1010,7 +1021,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   </div>
 
   <!-- MODE GATE (first launch) -->
-  <div class="screen" id="scr-modegate">
+  <div class="screen" data-panel-label="SETTINGS" id="scr-modegate">
     <div class="modegate-rune">📖</div>
     <div class="modegate-title">Tome of Heroes</div>
     <div class="modegate-sub">Are you the Dungeon Master<br>or a Player joining a campaign?</div>
@@ -1045,7 +1056,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   </div>
 
   <!-- PLAYER GATE (enter access code) -->
-  <div class="screen" id="scr-playergate">
+  <div class="screen" data-panel-label="JOIN CAMPAIGN" id="scr-playergate">
     <div class="playergate-content">
       <div class="divider"><span>Join Campaign</span></div>
       <p style="font-size:13px;color:var(--muted);font-style:italic;text-align:center;margin-bottom:20px;line-height:1.6">Enter the access code your DM gave you.<br>You'll see only your campaign and character.</p>
