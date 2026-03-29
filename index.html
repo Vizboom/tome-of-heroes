@@ -1297,6 +1297,72 @@ const CONDITIONS=[
   {id:'inspired',n:'Inspired',i:'🌠',c:'#d4ac0d',force:'advantage',d:'Ability check with advantage.'},
 ];
 const TYPE_ICONS={weapon:'⚔',armor:'🛡',potion:'🧪',scroll:'📜',wondrous:'✨',ring:'💍',rod:'🔱',staff:'🪄',wand:'🌟',gem:'💎',treasure:'🪙',tool:'🔧',misc:'📦'};
+
+// Returns all loot items assigned to this character
+function getCharLootItems(char){
+  return getItems().filter(i=>String(i.owner)===String(char.id));
+}
+
+// Derive weapon attacks from a character's assigned loot items
+function getCharLootWeapons(char){
+  const items = getCharLootItems(char);
+  const pb = getPB(char.level);
+  const strMod = parseInt(getMod(char.abilities?.STR||10))||0;
+  const dexMod = parseInt(getMod(char.abilities?.DEX||10))||0;
+  return items
+    .filter(i=>i.type==='weapon')
+    .map(i=>{
+      // Parse magic bonus from name e.g. "+1 Longsword", "Longsword +2"
+      const magicMatch = i.name.match(/[+\-](\d)/);
+      const magicBonus = magicMatch ? parseInt(magicMatch[0]) : 0;
+      // Finesse/ranged → use dex, else str
+      const isFinesse = /rapier|shortsword|dagger|hand crossbow|whip/i.test(i.name);
+      const isRanged  = /bow|crossbow|dart|sling|javelin|thrown/i.test(i.name);
+      const abilityMod = (isFinesse || isRanged) ? Math.max(strMod, dexMod) : strMod;
+      const totalBonus = abilityMod + pb + magicBonus;
+      const bonusStr = (totalBonus >= 0 ? '+' : '') + totalBonus;
+      // Guess damage from common weapons
+      const dmgTable = {
+        'longsword':'1d8','greatsword':'2d6','shortsword':'1d6','dagger':'1d4',
+        'handaxe':'1d6','battleaxe':'1d8','rapier':'1d8','greataxe':'1d12',
+        'mace':'1d6','spear':'1d6','quarterstaff':'1d6','maul':'2d6',
+        'warhammer':'1d8','flail':'1d8','whip':'1d4',
+        'shortbow':'1d6','longbow':'1d8','hand crossbow':'1d6',
+        'light crossbow':'1d8','heavy crossbow':'1d10',
+      };
+      let baseDmg = '1d6';
+      for(const [key, die] of Object.entries(dmgTable)){
+        if(i.name.toLowerCase().includes(key)){ baseDmg = die; break; }
+      }
+      const dmgMod = abilityMod + magicBonus;
+      const dmgStr = `${baseDmg}${dmgMod>=0?'+':''}${dmgMod}`;
+      return {
+        id: i.id,
+        name: i.name,
+        bonus: bonusStr,
+        damage: dmgStr,
+        type: isRanged ? 'ranged' : 'melee',
+        fromLoot: true,
+        rarity: i.rarity,
+      };
+    });
+}
+
+// Get AC bonus from assigned armor/shield loot items
+function getCharLootAC(char){
+  const items = getCharLootItems(char);
+  let bonus = 0;
+  items.forEach(i=>{
+    if(i.type==='armor'){
+      const m = i.name.match(/[+](\d)/);
+      if(m) bonus += parseInt(m[1]);
+    }
+    if(/shield/i.test(i.name)&&i.type==='armor'){
+      bonus += 2; // shield base
+    }
+  });
+  return bonus;
+}
 const QUICK_ITEMS=[
   {name:'Healing Potion',type:'potion',rarity:'common',qty:1,weight:0.5,value:50,attune:'none',desc:'Regain 2d4+2 HP.'},
   {name:'Greater Healing Potion',type:'potion',rarity:'uncommon',qty:1,weight:0.5,value:100,attune:'none',desc:'Regain 4d4+4 HP.'},
@@ -1632,9 +1698,11 @@ function renderCombatTab(char,cls,elId,editable){
   const con=parseInt(getMod(char.abilities.CON))||0;
   const pct=Math.max(0,Math.round((char.currentHP/char.maxHP)*100));
   const hpC=pct>60?'var(--green)':pct>25?'var(--gold)':'var(--red)';
+  const lootAcBonus = getCharLootAC(char);
+  const displayAC = (char.ac || (10+dex)) + lootAcBonus;
   let html=`
     <div class="combat-stats" style="--cc:${cls.color};--cc-dim:${cls.color}22">
-      <div class="cs-box"><div class="cs-val">${10+dex}</div><div class="cs-label">AC</div></div>
+      <div class="cs-box"><div class="cs-val">${displayAC}</div><div class="cs-label">AC${lootAcBonus?` <span style='font-size:9px;color:var(--gold)'>+${lootAcBonus}✦</span>`:''}</div></div>
       <div class="cs-box"><div class="cs-val">${getMod(char.abilities.DEX)}</div><div class="cs-label">Initiative</div></div>
       <div class="cs-box"><div class="cs-val">+${pb}</div><div class="cs-label">Prof Bonus</div></div>
       <div class="cs-box"><div class="cs-val">30</div><div class="cs-label">Speed</div></div>
@@ -1669,8 +1737,24 @@ function renderCombatTab(char,cls,elId,editable){
   });
   html+=`</div><div class="divider"><span>Attacks</span></div><div id="attackList_${char.id}">`;
   const attacks=char.attacks||[];
-  if(!attacks.length){html+=`<div style="color:var(--muted);font-size:13px;font-style:italic;margin-bottom:8px">No attacks added yet.</div>`;}
-  else{attacks.forEach((a,i)=>{html+=`<div class="attack-card"><div class="attack-icon">${a.icon||'⚔'}</div><div style="flex:1"><div class="attack-name">${a.name}</div><div class="attack-meta">${a.type||''}</div></div><div><div class="attack-bonus">${a.atk||'—'}</div><div class="attack-dmg">${a.dmg||'—'}</div></div>${editable?`<button class="icon-btn" style="color:var(--red)" onclick="removeAttack(${char.id},${i})">✕</button>`:''}</div>`;});}
+  const lootWeapons = getCharLootWeapons(char);
+  const allAttacks = [...attacks, ...lootWeapons];
+  if(!allAttacks.length){html+=`<div style="color:var(--muted);font-size:13px;font-style:italic;margin-bottom:8px">No attacks added yet.</div>`;}
+  else{
+    attacks.forEach((a,i)=>{html+=`<div class="attack-card"><div class="attack-icon">${a.icon||'⚔'}</div><div style="flex:1"><div class="attack-name">${a.name}</div><div class="attack-meta">${a.type||''}</div></div><div><div class="attack-bonus">${a.atk||'—'}</div><div class="attack-dmg">${a.dmg||'—'}</div></div>${editable?`<button class="icon-btn" style="color:var(--red)" onclick="removeAttack(${char.id},${i})">✕</button>`:''}</div>`;});
+    if(lootWeapons.length){
+      html+=`<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin:8px 0 5px">FROM INVENTORY</div>`;
+      lootWeapons.forEach(a=>{
+        const rarityColor = a.rarity==='uncommon'?'var(--gold)':a.rarity==='rare'?'var(--purple)':a.rarity==='very-rare'?'#e74c3c':a.rarity==='legendary'?'#f39c12':'var(--muted)';
+        html+=`<div class="attack-card" style="border-color:${rarityColor}33">
+          <div class="attack-icon">⚔</div>
+          <div style="flex:1"><div class="attack-name">${a.name}</div>
+          <div class="attack-meta" style="color:${rarityColor}">${a.rarity} · ${a.type}</div></div>
+          <div><div class="attack-bonus">${a.bonus}</div><div class="attack-dmg">${a.damage}</div></div>
+        </div>`;
+      });
+    }
+  }
   html+=`</div>`;
   if(editable){
     html+=`<div class="card" style="margin-top:8px">
@@ -4165,17 +4249,30 @@ function renderDiceCharPanel(){
         }).join('')}
       </div>
 
-      ${(char.attacks||[]).length?`
-      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">ATTACKS</div>
-      <div style="display:flex;flex-wrap:wrap;gap:4px">
-        ${(char.attacks||[]).map(atk=>{
-          const bonus = parseInt((atk.bonus||'+0').replace(/[^-+\d]/g,''))||0;
-          return `<div onclick="quickRoll('${atk.name} Attack',${bonus})" style="background:var(--surface);border:1px solid var(--red);border-radius:8px;padding:5px 10px;cursor:pointer;transition:var(--trans)">
-            <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--red)">${atk.name}</div>
-            <div style="font-size:10px;color:var(--muted)">${atk.bonus||'+0'} · ${atk.damage||'—'}</div>
-          </div>`;
-        }).join('')}
-      </div>`:''}
+      ${(()=>{
+        const charAtks = char.attacks||[];
+        const lootWpns = getCharLootWeapons(char);
+        const allAtks = [...charAtks, ...lootWpns];
+        if(!allAtks.length) return '';
+        return `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">ATTACKS</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">
+          ${charAtks.map(atk=>{
+            const bonus = parseInt((atk.bonus||atk.atk||'+0').replace(/[^-+\d]/g,''))||0;
+            return `<div onclick="quickRoll('${atk.name} Attack',${bonus})" style="background:var(--surface);border:1px solid var(--red);border-radius:8px;padding:5px 10px;cursor:pointer;transition:var(--trans)">
+              <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--red)">${atk.name}</div>
+              <div style="font-size:10px;color:var(--muted)">${atk.bonus||atk.atk||'+0'} · ${atk.damage||atk.dmg||'—'}</div>
+            </div>`;
+          }).join('')}
+          ${lootWpns.map(atk=>{
+            const bonus = parseInt((atk.bonus||'+0').replace(/[^-+\d]/g,''))||0;
+            const rarityColor = atk.rarity==='uncommon'?'var(--gold)':atk.rarity==='rare'?'var(--purple)':atk.rarity==='very-rare'?'#e74c3c':'var(--red)';
+            return `<div onclick="quickRoll('${atk.name} Attack',${bonus})" style="background:var(--surface);border:1px solid ${rarityColor};border-radius:8px;padding:5px 10px;cursor:pointer;transition:var(--trans)">
+              <div style="font-family:'Cinzel',serif;font-size:10px;color:${rarityColor}">${atk.name}</div>
+              <div style="font-size:10px;color:var(--muted)">${atk.bonus} · ${atk.damage}</div>
+            </div>`;
+          }).join('')}
+        </div>`;
+      })()}
       ${(()=>{
         const resources = cls.resources||[];
         if(!resources.length) return '';
