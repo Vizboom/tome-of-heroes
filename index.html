@@ -1084,6 +1084,13 @@ async function pullAll(campaignId){
       }
     }
     syncIndicator('live');
+    // Pull shared settings (API key etc) — works for all users incl players
+    try {
+      const { data: setting } = await supa.from('settings').select('value').eq('key','claude_api_key').single();
+      if(setting?.value && !localStorage.getItem('toh_claude_key')){
+        localStorage.setItem('toh_claude_key', setting.value);
+      }
+    } catch(e){}
     return true;
   } catch(e) {
     console.warn('Pull error:', e);
@@ -2275,16 +2282,37 @@ function resetMode(){
   bootApp();
 }
 
-function saveClaudeApiKey(val){
-  localStorage.setItem('toh_claude_key', val.trim());
+async function saveClaudeApiKey(val){
+  const trimmed = val.trim();
+  localStorage.setItem('toh_claude_key', trimmed);
+  // Sync to Supabase so all group members get it
+  if(trimmed && _online){
+    try {
+      await supa.from('settings').upsert({ key:'claude_api_key', value:trimmed }, { onConflict:'key' });
+    } catch(e){ console.warn('Could not save API key to Supabase:', e); }
+  }
 }
-function getClaudeApiKey(){
-  return localStorage.getItem('toh_claude_key')||'';
+
+async function getClaudeApiKey(){
+  // Check local first (fast path)
+  const local = localStorage.getItem('toh_claude_key');
+  if(local) return local;
+  // Fall back to Supabase (players who never set it locally)
+  if(_online){
+    try {
+      const { data } = await supa.from('settings').select('value').eq('key','claude_api_key').single();
+      if(data?.value){
+        localStorage.setItem('toh_claude_key', data.value); // cache locally
+        return data.value;
+      }
+    } catch(e){}
+  }
+  return '';
 }
 
 // Helper for all Claude API calls — adds required headers
 async function callClaude(body){
-  const key = getClaudeApiKey();
+  const key = await getClaudeApiKey();
   if(!key) throw new Error('No API key set — tap ⚙ → enter your Claude API key');
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -4022,6 +4050,38 @@ function renderDiceCharPanel(){
         if(!rows) return '';
         return '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ffffff22"><div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">CLASS RESOURCES</div>'+rows+'</div>';
       })()}
+
+      ${(()=>{
+        if(!cls.spellcaster) return '';
+        const slots = SPELL_SLOTS[char.level] || SPELL_SLOTS[20];
+        if(!slots || !slots.length) return '';
+        const slotKey = 'slots_'+char.id;
+        let used = {};
+        try{ used = JSON.parse(localStorage.getItem(slotKey)||'{}'); }catch{}
+
+        // Spell attack bonus and save DC
+        const aMap = {bard:'CHA',cleric:'WIS',druid:'WIS',paladin:'CHA',ranger:'WIS',sorcerer:'CHA',warlock:'CHA',wizard:'INT'};
+        const sab = aMap[cls.name.toLowerCase()]||'WIS';
+        const smod = parseInt(getMod(char.abilities[sab]))||0;
+        const spellBonus = smod + pb;
+        const saveDC = 8 + pb + smod;
+
+        let slotsHtml = '<div style="display:flex;gap:8px;margin-bottom:6px"><span style="font-family:\'Cinzel\',serif;font-size:10px;color:'+cc+'">ATK +'+spellBonus+'</span><span style="font-size:10px;color:var(--muted)">·</span><span style="font-family:\'Cinzel\',serif;font-size:10px;color:'+cc+'">DC '+saveDC+'</span><button onclick="diceResetSlots(\''+char.id+'\');event.stopPropagation()" style="margin-left:auto;background:none;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-size:9px;padding:1px 5px;cursor:pointer">↺ LR</button></div>';
+
+        slots.forEach((total, lvl) => {
+          if(total === 0) return;
+          const usedN = used[lvl]||0;
+          const remaining = total - usedN;
+          let pipsHtml = '';
+          for(let i=0; i<total; i++){
+            const isUsed = i >= remaining;
+            pipsHtml += '<div onclick="diceToggleSlot(\''+char.id+'\','+lvl+','+i+','+total+');event.stopPropagation()" style="width:16px;height:16px;border-radius:3px;border:2px solid '+(isUsed?'var(--border)':cc)+';background:'+(isUsed?'transparent':cc+'55')+';cursor:pointer;transition:all 0.15s"></div>';
+          }
+          slotsHtml += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);width:16px;text-align:center">'+(lvl+1)+'</span><div style="display:flex;gap:3px;flex-wrap:wrap">'+pipsHtml+'</div><span style="font-size:9px;color:var(--muted);margin-left:2px">'+remaining+'/'+total+'</span></div>';
+        });
+
+        return '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ffffff22"><div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">SPELL SLOTS</div>'+slotsHtml+'</div>';
+      })()}
     </div>`;
 }
 
@@ -4039,6 +4099,25 @@ function quickRoll(label, mod){
 
 function _getResState(charId){ try{ return JSON.parse(localStorage.getItem('toh_res_'+charId)||'{}'); }catch{ return {}; } }
 function _saveResState(charId, state){ localStorage.setItem('toh_res_'+charId, JSON.stringify(state)); renderDiceCharPanel(); }
+
+// Spell slot toggle from dice panel — syncs with character sheet
+function diceToggleSlot(charId, lvl, idx, total){
+  const key = 'slots_'+charId;
+  let used = {};
+  try{ used = JSON.parse(localStorage.getItem(key)||'{}'); }catch{}
+  const usedN = used[lvl]||0;
+  const remaining = total - usedN;
+  // clicking an available slot = use it; clicking a used slot = restore it
+  if(idx < remaining){ used[lvl] = Math.min(total, usedN+1); }
+  else { used[lvl] = Math.max(0, usedN-1); }
+  localStorage.setItem(key, JSON.stringify(used));
+  renderDiceCharPanel();
+}
+
+function diceResetSlots(charId){
+  localStorage.removeItem('slots_'+charId);
+  renderDiceCharPanel();
+}
 
 function toggleResourcePip(charId, key, max, pipIdx, remaining){
   const state = _getResState(charId);
