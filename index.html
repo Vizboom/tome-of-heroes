@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v5 2026-03-26 -->
+<!-- Tome of Heroes v6 desktop-split 2026-03-29 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2505,7 +2505,7 @@ function shareSubTab(t,btn){
     // Generate/show per-character access codes for all chars in active campaign
     const camps=getCampaigns();
     const camp=getActiveCamp();
-    const campChars=camp?(getChars().filter(c=>(camp.charIds||[]).some(x=>String(x)===String(c.id)))):[];
+    const campChars2_unused=camp?(getChars().filter(c=>(camp.charIds||[]).some(x=>String(x)===String(c.id)))):[];
     let html=`<div style="font-size:12px;color:var(--muted);font-style:italic;text-align:center;margin-bottom:14px;line-height:1.5">Give each player their character's access code.<br>They enter it when first opening the app.</div>`;
     if(!campChars.length){
       html+=`<div style="color:var(--muted);font-size:13px;font-style:italic;text-align:center;padding:20px 0">No characters assigned to active campaign yet.<br>Add characters in the Campaign tab.</div>`;
@@ -5056,12 +5056,7 @@ function confirmBulkLoot(){
 function setLootOwner(id){lootOwner=id;lootFilter='all';renderInventory();}
 function setLootFilter(f){lootFilter=f;renderInventory();}
 function renderOwnerPills(activeId){
-  // Only show characters assigned to the active campaign
-  const camp = getActiveCamp();
-  let chars = getChars();
-  if(camp && camp.charIds && camp.charIds.length){
-    chars = chars.filter(c => camp.charIds.some(x=>String(x)===String(c.id)));
-  }
+  const chars = getFullParty();
   return`<div class="owner-pills"><div class="owner-pill ${activeId==='pool'?'active':''}" style="--pill-c:var(--gold)" onclick="setLootOwner('pool')">🎒 Party Pool</div>${chars.map(c=>{const cc=classColor(c.classIdx);return`<div class="owner-pill ${activeId==c.id?'active':''}" style="--pill-c:${cc}" onclick="setLootOwner(${c.id})">${classIcon(c.classIdx)} ${c.name}</div>`;}).join('')}</div>`;
 }
 function renderInventory(){
@@ -5088,10 +5083,7 @@ function removeItem(id){saveItems(getItems().filter(i=>i.id!==id));renderInvento
 function itemToPool(id){const items=getItems();const ii=items.findIndex(i=>i.id===id);if(ii>=0){items[ii].owner='pool';saveItems(items);}renderInventory();renderPool();toast('Sent to pool');}
 function assignFromPool(id){
   const camp = getActiveCamp();
-  let chars = getChars();
-  if(camp && camp.charIds && camp.charIds.length){
-    chars = chars.filter(c => camp.charIds.some(x=>String(x)===String(c.id)));
-  }
+  const chars = getFullParty();
   if(!chars.length){toast('No characters in campaign','var(--red)');return;}
   const pick=prompt(chars.map((c,i)=>`${i+1}. ${c.name}`).join('\n')+'\n\nAssign to (number):');
   const idx=parseInt(pick)-1;
@@ -5103,10 +5095,7 @@ function assignFromPool(id){
 }
 function renderAddTab(){
   const camp = getActiveCamp();
-  let chars = getChars();
-  if(camp && camp.charIds && camp.charIds.length){
-    chars = chars.filter(c => camp.charIds.some(x=>String(x)===String(c.id)));
-  }
+  const chars = getFullParty();
   const el=document.getElementById('ltab-add');el.innerHTML=`<div class="card"><div class="form-row two"><div class="field"><label>Item Name</label><input id="iName" placeholder="e.g. Longsword +1"></div><div class="field"><label>Type</label><select id="iType">${Object.entries(TYPE_ICONS).map(([k,v])=>`<option value="${k}">${v} ${k}</option>`).join('')}</select></div></div><div class="form-row three"><div class="field"><label>Rarity</label><select id="iRarity"><option value="common">Common</option><option value="uncommon">Uncommon</option><option value="rare" selected>Rare</option><option value="very-rare">Very Rare</option><option value="legendary">Legendary</option><option value="artifact">Artifact</option></select></div><div class="field"><label>Qty</label><input id="iQty" type="number" value="1" min="1"></div><div class="field"><label>Weight</label><input id="iWt" type="number" value="1" min="0" step="0.5"></div></div><div class="form-row two"><div class="field"><label>Value (gp)</label><input id="iVal" type="number" value="0" min="0"></div><div class="field"><label>Attunement</label><select id="iAttune"><option value="none">None</option><option value="required">Required</option><option value="attuned">Attuned</option></select></div></div><div class="field"><label>Description</label><textarea id="iDesc" placeholder="Properties, abilities…"></textarea></div><div class="field"><label>Assign To</label><select id="iOwner"><option value="pool">Party Pool</option>${chars.map(c=>`<option value="${c.id}">${classIcon(c.classIdx)} ${c.name}</option>`).join('')}</select></div><button class="btn btn-gold" onclick="addItem()">Add to Inventory ✦</button></div><div class="divider"><span>Quick Add</span></div><div class="quick-grid">${QUICK_ITEMS.map((q,qi)=>`<div class="quick-tile" onclick="quickAdd(${qi})"><span style="font-size:22px">${TYPE_ICONS[q.type]}</span><div><div style="font-family:'Cinzel',serif;font-size:11px">${q.name}</div><div style="font-size:10px;color:var(--muted)" class="rtext-${q.rarity}">${q.rarity} · ${q.value} gp</div></div></div>`).join('')}</div>`;
 }
 function addItem(){const name=(document.getElementById('iName')?.value||'').trim();if(!name){toast('Enter item name','var(--red)');return;}const item={id:'i'+Date.now(),name,type:document.getElementById('iType').value,rarity:document.getElementById('iRarity').value,qty:Math.max(1,parseInt(document.getElementById('iQty').value)||1),weight:parseFloat(document.getElementById('iWt').value)||0,value:parseFloat(document.getElementById('iVal').value)||0,attune:document.getElementById('iAttune').value,desc:(document.getElementById('iDesc').value||'').trim(),owner:document.getElementById('iOwner').value};const items=getItems();items.push(item);saveItems(items);document.getElementById('iName').value='';document.getElementById('iDesc').value='';document.getElementById('iQty').value='1';toast('✦ '+name+' added!');renderInventory();renderPool();}
@@ -5115,14 +5104,10 @@ function renderPool(){const items=getItems().filter(i=>i.owner==='pool');const e
 function renderWealth(){
   // Scope to campaign characters only
   const camp = getActiveCamp();
-  let chars = getChars();
-  if(camp && camp.charIds && camp.charIds.length){
-    chars = chars.filter(c => camp.charIds.some(x=>String(x)===String(c.id)));
-  }
-  const wealth=getWealth();const pw=wealth['party']||{gp:0,sp:0,ep:0,cp:0};const chars_w=chars;
-  // Clean up wealth entries for deleted characters
+  const chars = getFullParty();
+  const wealth=getWealth();const pw=wealth['party']||{gp:0,sp:0,ep:0,cp:0};// Clean up wealth entries for deleted characters
   const w_all=getWealth(); let w_changed=false;
-  Object.keys(w_all).forEach(k=>{ if(k!=='party' && !chars_w.find(c=>String(c.id)===k)){ delete w_all[k]; w_changed=true; }});
+  Object.keys(w_all).forEach(k=>{ if(k!=='party' && !chars.find(c=>String(c.id)===k)){ delete w_all[k]; w_changed=true; }});
   if(w_changed) saveWealth(w_all);
   const el=document.getElementById('ltab-wealth');let html=`<div class="divider"><span>Party Treasury</span></div><div class="coin-grid"><div class="coin-cell coin-gp"><label>GP</label><input type="number" min="0" value="${pw.gp||0}" onchange="updateWealth('party','gp',+this.value)"></div><div class="coin-cell coin-sp"><label>SP</label><input type="number" min="0" value="${pw.sp||0}" onchange="updateWealth('party','sp',+this.value)"></div><div class="coin-cell coin-ep"><label>EP</label><input type="number" min="0" value="${pw.ep||0}" onchange="updateWealth('party','ep',+this.value)"></div><div class="coin-cell coin-cp"><label>CP</label><input type="number" min="0" value="${pw.cp||0}" onchange="updateWealth('party','cp',+this.value)"></div></div><div class="wealth-total"><div><div class="wealth-total-label">TOTAL VALUE</div><div class="wealth-total-val">${fmtGP(calcGP(pw))} gp</div></div><button onclick="splitGold()" style="padding:7px 13px;background:var(--gold-dim);border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:9px;cursor:pointer;letter-spacing:1px">Split Evenly</button></div><div class="divider"><span>Per Character</span></div>`;
 if(!chars.length)html+=`<div class="empty-state" style="padding:20px"><p>Create characters first.</p></div>`;
@@ -5140,7 +5125,7 @@ function installApp(){if(!deferredPrompt)return;deferredPrompt.prompt();deferred
 const _APP_VERSION = 'ceb73851';
 if('serviceWorker' in navigator){
   const swCode = `
-    const CACHE = 'toh-ceb73851';
+    const CACHE = 'toh-desktop-v2';
     const HTML_URL = self.location.pathname;
     self.addEventListener('install', e => {
       e.waitUntil(caches.open(CACHE).then(c => c.addAll([HTML_URL])));
@@ -5673,7 +5658,7 @@ function renderSessions() {
 
   // Get campaign characters for presence pills
   const allChars = getChars();
-  const campChars = allChars.filter(c => (camp.charIds||[]).some(x=>String(x)===String(c.id)));
+  const campChars = getFullParty();
 
   let html = `
   <div class="tab-row" style="margin-bottom:12px">
