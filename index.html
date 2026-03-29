@@ -94,8 +94,26 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     width: 100%; height: 100%; overflow-y: auto;
   }
 
-  /* The dice screen uses a split layout — its children handle scrolling */
-  #scr-dice.active { overflow: hidden; }
+  /* Dice screen desktop: char panel LEFT, roll controls RIGHT — pure CSS */
+  #scr-dice.active {
+    display: flex !important;
+    flex-direction: row;
+    overflow: hidden;
+  }
+  #diceCharPanel {
+    flex: 0 0 50%;
+    overflow-y: auto;
+    height: 100%;
+    padding: 16px 20px;
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+  }
+  #diceRollPanel {
+    flex: 0 0 50%;
+    overflow-y: auto;
+    height: 100%;
+    padding: 14px 14px 20px;
+  }
 
   /* Screens that are scroll-regions get extra padding on desktop */
   .scroll-region.screen.active { padding: 20px 28px 40px; }
@@ -856,6 +874,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   <!-- DICE -->
   <div class="scroll-region screen" id="scr-dice" data-panel-label="DICE ORACLE">
     <div id="diceCharPanel"></div>
+    <div id="diceRollPanel">
     <button class="roll-btn roll-n" id="rollBtn" onclick="doRoll()" style="margin-bottom:12px">Roll ⬡</button>
     <div id="rollResult" style="display:none"></div>
     <div class="divider"><span>Roll Mode</span></div>
@@ -878,6 +897,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <div id="condEffects"></div>
     <div class="divider"><span>History</span></div>
     <div class="hist-list" id="rollHistory"></div>
+    </div>
   </div>
 
   <!-- PARTY -->
@@ -2510,39 +2530,7 @@ function joinAsPlayer(){
 }
 
 function applyDesktopSplit(){
-  if(window.innerWidth < 768) return;
-
-  // Dice screen ONLY: character panel LEFT, roll controls RIGHT
-  const diceScreen = document.getElementById('scr-dice');
-  if(diceScreen && !diceScreen.dataset.deskSplit){
-    const allChildren = [...diceScreen.children];
-    const charPanel = diceScreen.querySelector('#diceCharPanel');
-
-    const wrap = document.createElement('div');
-    wrap.className = 'desk-split';
-
-    const leftCol = document.createElement('div');
-    leftCol.className = 'desk-content';
-    leftCol.style.cssText = 'border-right:1px solid var(--border);flex:1;background:var(--bg2);';
-
-    const rightCol = document.createElement('div');
-    rightCol.className = 'desk-content';
-    rightCol.style.cssText = 'flex:1;';
-
-    diceScreen.appendChild(wrap);
-    wrap.appendChild(leftCol);
-    wrap.appendChild(rightCol);
-
-    // Character panel → LEFT
-    if(charPanel) leftCol.appendChild(charPanel);
-
-    // Everything else (roll btn, result, mode, die, mod, conditions, history) → RIGHT
-    allChildren.forEach(el => {
-      if(el !== charPanel && el !== wrap) rightCol.appendChild(el);
-    });
-
-    diceScreen.dataset.deskSplit = '1';
-  }
+  // No-op: desktop dice layout is handled purely via CSS
 }
 
 function applyModeUI(){
@@ -4607,11 +4595,8 @@ function doRollLabelled(label, mod){
       ${isFail?`<div style="color:var(--red);font-family:'Cinzel',serif;font-size:12px;letter-spacing:1px">FUMBLE</div>`:''}
     </div>`;
     // Scroll the dice screen to show the result just below the roll button
-    const diceScreen = document.getElementById('scr-dice');
-    if(diceScreen) diceScreen.scrollTop = diceScreen.scrollTop = (() => {
-      const btn = document.getElementById('rollBtn');
-      return btn ? Math.max(0, btn.offsetTop - 8) : 0;
-    })();
+    const scrollEl = document.getElementById('diceRollPanel') || document.getElementById('scr-dice');
+    if(scrollEl) scrollEl.scrollTop = 0;
   }
   diceState.history.unshift({d,kept,total,mode:em,mod,bonuses:bonusBreak,isCrit,isFail,conds:[...diceState.activeConds],label});
   if(diceState.history.length>8) diceState.history.pop();
@@ -4639,9 +4624,8 @@ let diceHTML='';if(r2!==null){const f1=em==='advantage'?(r1>=r2?'kept':'dropped'
 const numColor=isCrit?'var(--green)':isFail?'var(--red)':'var(--gold)';let breakdown=`d${d}: ${kept}`;if(mod!==0)breakdown+=(mod>0?' + '+mod:' − '+Math.abs(mod));if(bonusBreak.length)breakdown+=' + '+bonusBreak.join(', ');if(em!=='normal')breakdown+=` (${em})`;const verdict=isCrit?`<span style="background:rgba(39,174,96,0.15);color:var(--green);border:1px solid var(--green);border-radius:12px;padding:4px 14px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px">✦ CRITICAL HIT ✦</span>`:isFail?`<span style="background:rgba(192,57,43,0.15);color:var(--red);border:1px solid var(--red);border-radius:12px;padding:4px 14px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px">💀 CRITICAL FAIL</span>`:'';
 const el=document.getElementById('rollResult');el.style.display='block';el.innerHTML=`<div class="result-box fadein"><div class="result-dice">${diceHTML}</div><div class="result-total" style="color:${numColor}">${total}</div><div class="result-break">${breakdown}</div>${verdict?`<div class="verdict">${verdict}</div>`:''}</div>`;
 // Scroll dice screen so roll button + result are in view
-const diceScr = document.getElementById('scr-dice');
-const rollBtnEl = document.getElementById('rollBtn');
-if(diceScr && rollBtnEl) diceScr.scrollTop = Math.max(0, rollBtnEl.offsetTop - 8);
+const scrollEl2 = document.getElementById('diceRollPanel') || document.getElementById('scr-dice');
+if(scrollEl2) scrollEl2.scrollTop = 0;
 diceState.history.unshift({d,kept,total,mode:em,mod,bonuses:bonusBreak,isCrit,isFail,conds:[...diceState.activeConds]});if(diceState.history.length>8)diceState.history.pop();renderDiceHistory();}
 function renderDiceHistory(){const el=document.getElementById('rollHistory');if(!el)return;if(!diceState.history.length){el.innerHTML=`<p style="font-size:13px;color:var(--muted);font-style:italic;text-align:center;padding:12px 0">No rolls yet.</p>`;return;}el.innerHTML=diceState.history.map(r=>{const mc=r.mode==='advantage'?'var(--green)':r.mode==='disadvantage'?'var(--red)':'var(--muted)';const ml=r.mode==='advantage'?'↑ADV':r.mode==='disadvantage'?'↓DIS':'NRM';const tc=r.isCrit?'var(--green)':r.isFail?'var(--red)':'var(--text)';const ci=r.conds.map(id=>{const c=CONDITIONS.find(x=>x.id===id);return c?c.i:'';}).join('');return`<div class="hist-row"><div class="hist-die">${r.label?`<span style="font-size:9px;color:var(--muted);display:block;line-height:1">${r.label.split(' ')[0]}</span>`:''}d${r.d}</div><div class="hist-val" style="color:${tc}">${r.total}</div><div class="hist-info">${r.label||('rolled '+r.kept)}${r.mod!==0?(r.mod>0?' +'+r.mod:' '+r.mod):''}${r.bonuses.length?' + bonuses':''} ${ci}</div><span class="hist-mode" style="color:${mc};border-color:${mc}">${ml}</span></div>`;}).join('');}
 
