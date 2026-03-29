@@ -1211,7 +1211,12 @@ async function pullAll(campaignId){
     const { data: chars } = await supa.from('characters').select('*').eq('dm_id', user.id);
     if(chars && chars.length){
       const existing = S.get('toh_chars')||[];
-      const merged = [...chars.map(r=>r.data||r), ...existing.filter(e=>!chars.find(r=>String(r.id)===String(e.id)))];
+      // Merge: for chars in both, prefer whichever was updated more recently
+      const supaChars = chars.map(r=>r.data||r);
+      const supaIds = new Set(supaChars.map(c=>String(c.id)));
+      const localOnly = existing.filter(e=>!supaIds.has(String(e.id)));
+      // For chars in both: prefer supabase (authoritative server copy)
+      const merged = [...supaChars, ...localOnly];
       S.set('toh_chars', merged);
     }
     // Pull loot for active campaign
@@ -1222,6 +1227,15 @@ async function pullAll(campaignId){
         S.set('toh_wealth_'+campaignId, loot.wealth||{});
       }
     }
+    // Push any local-only chars that didn't make it to Supabase
+    const localAfterMerge = S.get('toh_chars')||[];
+    const supaIds = new Set((chars||[]).map(r=>String(r.id)));
+    const localOnlyChars = localAfterMerge.filter(c=>!supaIds.has(String(c.id)));
+    if(localOnlyChars.length){
+      const campId = getActiveCampId();
+      localOnlyChars.forEach(c=>schedulePush('character',String(c.id),{char:c,campaignId:campId}));
+    }
+
     syncIndicator('live');
     // Pull shared settings (API key etc) — works for all users incl players
     try {
@@ -1552,12 +1566,13 @@ function getVisibleChars(){
     return isInActiveCamp || isUnassigned;
   });
 }
-const saveChars=c=>{
+const saveChars=(c, changedIds)=>{
   S.set('toh_chars',c);
-  // Push changed chars to Supabase
+  // Only push chars that actually changed
   const campId=getActiveCampId();
   if(typeof schedulePush!=='undefined'){
-    c.forEach(char=>{
+    const toPush = changedIds ? c.filter(ch=>changedIds.includes(String(ch.id))) : c;
+    toPush.forEach(char=>{
       schedulePush('character',String(char.id),{char,campaignId:campId});
     });
   }
@@ -2859,6 +2874,300 @@ function awardXP(charId){
   }
 }
 
+// ══ COMPREHENSIVE LEVEL-UP DATA ══════════════════════════════════════════════
+
+const LEVEL_FEATURES = {
+  Barbarian: {
+    1:  { features:['Rage','Unarmored Defense'] },
+    2:  { features:['Reckless Attack','Danger Sense'] },
+    3:  { features:['Primal Path (subclass)'], subclass:true },
+    4:  { asi:true, features:['ASI or Feat'] },
+    5:  { features:['Extra Attack','Fast Movement'] },
+    6:  { features:['Path Feature'] },
+    7:  { features:['Feral Instinct'] },
+    8:  { asi:true, features:['ASI or Feat'] },
+    9:  { features:['Brutal Critical (1 die)'] },
+    10: { features:['Path Feature'] },
+    11: { features:['Relentless Rage'] },
+    12: { asi:true, features:['ASI or Feat'] },
+    13: { features:['Brutal Critical (2 dice)'] },
+    14: { features:['Path Feature'] },
+    15: { features:['Persistent Rage'] },
+    16: { asi:true, features:['ASI or Feat'] },
+    17: { features:['Brutal Critical (3 dice)'] },
+    18: { features:['Indomitable Might'] },
+    19: { asi:true, features:['ASI or Feat'] },
+    20: { features:['Primal Champion (+4 STR, +4 CON)'] },
+  },
+  Bard: {
+    1:  { features:['Bardic Inspiration (d6)','Spellcasting'], spells:2, cantrips:2 },
+    2:  { features:['Jack of All Trades','Song of Rest (d6)'], spells:1 },
+    3:  { features:['Bard College (subclass)','Expertise'], subclass:true, spells:1 },
+    4:  { asi:true, features:['ASI or Feat'], spells:1, cantrips:1 },
+    5:  { features:['Bardic Inspiration (d8)','Font of Inspiration'], spells:1 },
+    6:  { features:['Countercharm','Bard College Feature'], spells:1 },
+    7:  { features:[], spells:1 },
+    8:  { asi:true, features:['ASI or Feat'], spells:1 },
+    9:  { features:['Song of Rest (d8)'], spells:1 },
+    10: { features:['Bardic Inspiration (d10)','Expertise','Magical Secrets'], spells:1, cantrips:1, magicSecrets:2 },
+    11: { features:[], spells:1 },
+    12: { asi:true, features:['ASI or Feat'], spells:1 },
+    13: { features:['Song of Rest (d10)'], spells:1 },
+    14: { features:['Magical Secrets','Bard College Feature'], spells:1, magicSecrets:2 },
+    15: { features:['Bardic Inspiration (d12)'], spells:1 },
+    16: { asi:true, features:['ASI or Feat'], spells:1 },
+    17: { features:['Song of Rest (d12)'], spells:1 },
+    18: { features:['Magical Secrets'], spells:1, magicSecrets:2 },
+    19: { asi:true, features:['ASI or Feat'], spells:1 },
+    20: { features:['Superior Inspiration'], spells:1 },
+  },
+  Cleric: {
+    1:  { features:['Spellcasting','Divine Domain'], spells:3, cantrips:3, domainSpells:true },
+    2:  { features:['Channel Divinity (1/rest)','Divine Domain Feature'], spells:2 },
+    3:  { features:['Channel Divinity (2/rest)'], spells:2 },
+    4:  { asi:true, features:['ASI or Feat'], spells:2, cantrips:1 },
+    5:  { features:['Destroy Undead (CR 1/2)'], spells:2 },
+    6:  { features:['Channel Divinity (3/rest)','Divine Domain Feature'], spells:2 },
+    7:  { features:[], spells:2 },
+    8:  { asi:true, features:['ASI or Feat','Divine Strike or Potent Spellcasting'], spells:2 },
+    9:  { features:['Destroy Undead (CR 1)'], spells:2 },
+    10: { features:['Divine Intervention'], spells:2, cantrips:1 },
+    11: { features:['Destroy Undead (CR 2)'], spells:2 },
+    12: { asi:true, features:['ASI or Feat'], spells:2 },
+    13: { features:['Destroy Undead (CR 3)'], spells:2 },
+    14: { features:['Divine Domain Feature'], spells:2 },
+    15: { features:['Destroy Undead (CR 4)'], spells:2 },
+    16: { asi:true, features:['ASI or Feat'], spells:2 },
+    17: { features:['Destroy Undead (CR 4)','Divine Domain Feature'], spells:2 },
+    18: { features:['Channel Divinity (3/rest)'], spells:2 },
+    19: { asi:true, features:['ASI or Feat'], spells:2 },
+    20: { features:['Divine Intervention (guaranteed)'], spells:2 },
+  },
+  Druid: {
+    1:  { features:['Druidic','Spellcasting'], spells:2, cantrips:2 },
+    2:  { features:['Wild Shape','Druid Circle (subclass)'], subclass:true, spells:2 },
+    3:  { features:[], spells:2 },
+    4:  { asi:true, features:['ASI or Feat','Wild Shape improves'], spells:2, cantrips:1 },
+    5:  { features:[], spells:2 },
+    6:  { features:['Druid Circle Feature'], spells:2 },
+    7:  { features:[], spells:2 },
+    8:  { asi:true, features:['ASI or Feat','Wild Shape improves'], spells:2 },
+    9:  { features:[], spells:2 },
+    10: { features:['Druid Circle Feature'], spells:2, cantrips:1 },
+    11: { features:[], spells:2 },
+    12: { asi:true, features:['ASI or Feat'], spells:2 },
+    13: { features:[], spells:2 },
+    14: { features:['Druid Circle Feature'], spells:2 },
+    15: { features:[], spells:2 },
+    16: { asi:true, features:['ASI or Feat'], spells:2 },
+    17: { features:[], spells:2 },
+    18: { features:['Timeless Body','Beast Spells'], spells:2 },
+    19: { asi:true, features:['ASI or Feat'], spells:2 },
+    20: { features:['Archdruid'], spells:2 },
+  },
+  Fighter: {
+    1:  { features:['Fighting Style','Second Wind'], fightingStyle:true },
+    2:  { features:['Action Surge (1/rest)'] },
+    3:  { features:['Martial Archetype (subclass)'], subclass:true },
+    4:  { asi:true, features:['ASI or Feat'] },
+    5:  { features:['Extra Attack'] },
+    6:  { asi:true, features:['ASI or Feat'] },
+    7:  { features:['Martial Archetype Feature'] },
+    8:  { asi:true, features:['ASI or Feat'] },
+    9:  { features:['Indomitable (1/long rest)'] },
+    10: { features:['Martial Archetype Feature'] },
+    11: { features:['Extra Attack (2)'] },
+    12: { asi:true, features:['ASI or Feat'] },
+    13: { features:['Indomitable (2/long rest)'] },
+    14: { asi:true, features:['ASI or Feat'] },
+    15: { features:['Martial Archetype Feature'] },
+    16: { asi:true, features:['ASI or Feat'] },
+    17: { features:['Action Surge (2/rest)','Indomitable (3/long rest)'] },
+    18: { features:['Martial Archetype Feature'] },
+    19: { asi:true, features:['ASI or Feat'] },
+    20: { features:['Extra Attack (3)'] },
+  },
+  Monk: {
+    1:  { features:['Unarmored Defense','Martial Arts (1d4)'] },
+    2:  { features:['Ki (2 points)','Unarmored Movement +10ft','Flurry of Blows','Patient Defense','Step of the Wind'] },
+    3:  { features:['Monastic Tradition (subclass)','Deflect Missiles','Martial Arts (1d4)'], subclass:true },
+    4:  { asi:true, features:['ASI or Feat','Slow Fall'] },
+    5:  { features:['Extra Attack','Stunning Strike','Martial Arts (1d6)'] },
+    6:  { features:['Ki-Empowered Strikes','Monastic Tradition Feature','Unarmored Movement +15ft'] },
+    7:  { features:['Evasion','Stillness of Mind'] },
+    8:  { asi:true, features:['ASI or Feat'] },
+    9:  { features:['Unarmored Movement +15ft (wall run)','Martial Arts (1d6)'] },
+    10: { features:['Purity of Body','Unarmored Movement +20ft'] },
+    11: { features:['Monastic Tradition Feature','Martial Arts (1d8)'] },
+    12: { asi:true, features:['ASI or Feat'] },
+    13: { features:['Tongue of the Sun and Moon','Unarmored Movement +20ft'] },
+    14: { features:['Diamond Soul'] },
+    15: { features:['Timeless Body','Martial Arts (1d8)','Unarmored Movement +25ft'] },
+    16: { asi:true, features:['ASI or Feat'] },
+    17: { features:['Monastic Tradition Feature','Martial Arts (1d10)'] },
+    18: { features:['Empty Body','Unarmored Movement +30ft'] },
+    19: { asi:true, features:['ASI or Feat'] },
+    20: { features:['Perfect Self','Martial Arts (1d10)'] },
+  },
+  Paladin: {
+    1:  { features:['Divine Sense','Lay on Hands'] },
+    2:  { features:['Fighting Style','Spellcasting','Divine Smite'], spells:2, fightingStyle:true },
+    3:  { features:['Divine Health','Sacred Oath (subclass)'], subclass:true, spells:2 },
+    4:  { asi:true, features:['ASI or Feat'], spells:1 },
+    5:  { features:['Extra Attack','Destroy Undead'], spells:1 },
+    6:  { features:['Aura of Protection'], spells:1 },
+    7:  { features:['Sacred Oath Feature'], spells:1 },
+    8:  { asi:true, features:['ASI or Feat'], spells:1 },
+    9:  { features:[], spells:1 },
+    10: { features:['Aura of Courage'], spells:1 },
+    11: { features:['Improved Divine Smite'], spells:1 },
+    12: { asi:true, features:['ASI or Feat'], spells:1 },
+    13: { features:[], spells:1 },
+    14: { features:['Cleansing Touch'] },
+    15: { features:['Sacred Oath Feature'] },
+    16: { asi:true, features:['ASI or Feat'] },
+    17: { features:[] },
+    18: { features:['Aura improvements (30 ft)'] },
+    19: { asi:true, features:['ASI or Feat'] },
+    20: { features:['Sacred Oath Capstone'] },
+  },
+  Ranger: {
+    1:  { features:['Favored Enemy','Natural Explorer'] },
+    2:  { features:['Fighting Style','Spellcasting'], spells:2, fightingStyle:true },
+    3:  { features:['Ranger Archetype (subclass)','Primeval Awareness'], subclass:true, spells:1 },
+    4:  { asi:true, features:['ASI or Feat'], spells:1 },
+    5:  { features:['Extra Attack'], spells:1 },
+    6:  { features:['Favored Enemy & Natural Explorer improvements'], spells:1 },
+    7:  { features:['Ranger Archetype Feature'], spells:1 },
+    8:  { asi:true, features:['ASI or Feat','Land\'s Stride'], spells:1 },
+    9:  { features:[], spells:1 },
+    10: { features:['Natural Explorer 3rd terrain','Hide in Plain Sight'], spells:1 },
+    11: { features:['Ranger Archetype Feature'], spells:1 },
+    12: { asi:true, features:['ASI or Feat'], spells:1 },
+    13: { features:[], spells:1 },
+    14: { features:['Favored Enemy 3rd type','Vanish'], spells:1 },
+    15: { features:['Ranger Archetype Feature'], spells:1 },
+    16: { asi:true, features:['ASI or Feat'], spells:1 },
+    17: { features:[], spells:1 },
+    18: { features:['Feral Senses'], spells:1 },
+    19: { asi:true, features:['ASI or Feat'], spells:1 },
+    20: { features:['Foe Slayer'] },
+  },
+  Rogue: {
+    1:  { features:['Expertise (2 skills)','Sneak Attack (1d6)','Thieves\' Cant'] },
+    2:  { features:['Cunning Action'] },
+    3:  { features:['Roguish Archetype (subclass)','Sneak Attack (2d6)'], subclass:true },
+    4:  { asi:true, features:['ASI or Feat'] },
+    5:  { features:['Uncanny Dodge','Sneak Attack (3d6)'] },
+    6:  { features:['Expertise (2 more skills)'] },
+    7:  { features:['Evasion','Sneak Attack (4d6)'] },
+    8:  { asi:true, features:['ASI or Feat'] },
+    9:  { features:['Roguish Archetype Feature','Sneak Attack (5d6)'] },
+    10: { asi:true, features:['ASI or Feat'] },
+    11: { features:['Reliable Talent','Sneak Attack (6d6)'] },
+    12: { asi:true, features:['ASI or Feat'] },
+    13: { features:['Roguish Archetype Feature','Sneak Attack (7d6)'] },
+    14: { features:['Blindsense'] },
+    15: { features:['Slippery Mind','Sneak Attack (8d6)'] },
+    16: { asi:true, features:['ASI or Feat'] },
+    17: { features:['Roguish Archetype Feature','Sneak Attack (9d6)'] },
+    18: { features:['Elusive'] },
+    19: { asi:true, features:['ASI or Feat','Sneak Attack (10d6)'] },
+    20: { features:['Stroke of Luck'] },
+  },
+  Sorcerer: {
+    1:  { features:['Sorcerous Origin (subclass)','Spellcasting'], subclass:true, spells:2, cantrips:4 },
+    2:  { features:['Font of Magic (2 sorcery points)'], spells:1 },
+    3:  { features:['Metamagic (2 options)'], spells:1, metamagic:2 },
+    4:  { asi:true, features:['ASI or Feat'], spells:1, cantrips:1 },
+    5:  { features:[], spells:1 },
+    6:  { features:['Sorcerous Origin Feature'], spells:1 },
+    7:  { features:[], spells:1 },
+    8:  { asi:true, features:['ASI or Feat'], spells:1 },
+    9:  { features:[], spells:1 },
+    10: { features:['Metamagic (3rd option)'], spells:1, cantrips:1, metamagic:1 },
+    11: { features:[], spells:1 },
+    12: { asi:true, features:['ASI or Feat'], spells:1 },
+    13: { features:[], spells:1 },
+    14: { features:['Sorcerous Origin Feature'], spells:1 },
+    15: { features:[], spells:1 },
+    16: { asi:true, features:['ASI or Feat'], spells:1 },
+    17: { features:['Metamagic (4th option)'], spells:1, metamagic:1 },
+    18: { features:['Sorcerous Origin Feature'], spells:1 },
+    19: { asi:true, features:['ASI or Feat'], spells:1 },
+    20: { features:['Sorcerous Restoration'], spells:1 },
+  },
+  Warlock: {
+    1:  { features:['Otherworldly Patron (subclass)','Pact Magic'], subclass:true, spells:2, cantrips:2 },
+    2:  { features:['Eldritch Invocations (2)'], spells:1, invocations:2 },
+    3:  { features:['Pact Boon'], spells:1, invocations:1 },
+    4:  { asi:true, features:['ASI or Feat'], spells:1, cantrips:1, invocations:1 },
+    5:  { features:[], spells:1, invocations:1 },
+    6:  { features:['Otherworldly Patron Feature'], spells:1, invocations:1 },
+    7:  { features:[], spells:1, invocations:1 },
+    8:  { asi:true, features:['ASI or Feat'], spells:1, invocations:1 },
+    9:  { features:[], spells:1, invocations:1 },
+    10: { features:['Otherworldly Patron Feature'], spells:1, cantrips:1, invocations:1 },
+    11: { features:['Mystic Arcanum (6th level)'], spells:1 },
+    12: { asi:true, features:['ASI or Feat'], invocations:1 },
+    13: { features:['Mystic Arcanum (7th level)'], spells:1 },
+    14: { features:['Otherworldly Patron Feature'] },
+    15: { features:['Mystic Arcanum (8th level)'], spells:1, invocations:1 },
+    16: { asi:true, features:['ASI or Feat'] },
+    17: { features:['Mystic Arcanum (9th level)'], spells:1, invocations:1 },
+    18: { features:[], invocations:1 },
+    19: { asi:true, features:['ASI or Feat'], spells:1, invocations:1 },
+    20: { features:['Eldritch Master'] },
+  },
+  Wizard: {
+    1:  { features:['Spellcasting','Arcane Recovery'], spells:6, cantrips:3 },
+    2:  { features:['Arcane Tradition (subclass)'], subclass:true, spells:2 },
+    3:  { features:[], spells:2 },
+    4:  { asi:true, features:['ASI or Feat'], spells:2, cantrips:1 },
+    5:  { features:[], spells:2 },
+    6:  { features:['Arcane Tradition Feature'], spells:2 },
+    7:  { features:[], spells:2 },
+    8:  { asi:true, features:['ASI or Feat'], spells:2 },
+    9:  { features:[], spells:2 },
+    10: { features:['Arcane Tradition Feature'], spells:2, cantrips:1 },
+    11: { features:[], spells:2 },
+    12: { asi:true, features:['ASI or Feat'], spells:2 },
+    13: { features:[], spells:2 },
+    14: { features:['Arcane Tradition Feature'], spells:2 },
+    15: { features:[], spells:2 },
+    16: { asi:true, features:['ASI or Feat'], spells:2 },
+    17: { features:[], spells:2 },
+    18: { features:['Spell Mastery'], spells:2 },
+    19: { asi:true, features:['ASI or Feat'], spells:2 },
+    20: { features:['Signature Spells'], spells:2 },
+  },
+};
+
+const SUBCLASSES = {
+  Barbarian:['Path of the Berserker','Path of the Totem Warrior','Path of the Battlerager','Path of the Storm Herald','Path of the Ancestral Guardian','Path of the Zealot','Path of the Beast','Path of Wild Magic','Path of the Giant'],
+  Bard:['College of Lore','College of Valor','College of Creation','College of Eloquence','College of Glamour','College of Swords','College of Whispers','College of Spirits'],
+  Cleric:['Life Domain','Light Domain','War Domain','Trickery Domain','Knowledge Domain','Nature Domain','Tempest Domain','Death Domain','Arcana Domain','Forge Domain','Grave Domain','Order Domain','Peace Domain','Twilight Domain'],
+  Druid:['Circle of the Land','Circle of the Moon','Circle of Dreams','Circle of Spores','Circle of Stars','Circle of Wildfire','Circle of the Shepherd'],
+  Fighter:['Champion','Battle Master','Eldritch Knight','Arcane Archer','Cavalier','Banneret','Echo Knight','Psi Warrior','Rune Knight','Samurai'],
+  Monk:['Way of the Open Hand','Way of Shadow','Way of the Four Elements','Way of the Drunken Master','Way of the Kensei','Way of the Sun Soul','Way of the Mercy','Way of the Astral Self'],
+  Paladin:['Oath of Devotion','Oath of the Ancients','Oath of Vengeance','Oath of Conquest','Oath of Redemption','Oath of Glory','Oath of the Watchers','Oathbreaker'],
+  Ranger:['Hunter','Beast Master','Gloom Stalker','Horizon Walker','Monster Slayer','Fey Wanderer','Swarmkeeper','Drakewarden'],
+  Rogue:['Thief','Assassin','Arcane Trickster','Inquisitive','Mastermind','Scout','Swashbuckler','Phantom','Soulknife'],
+  Sorcerer:['Draconic Bloodline','Wild Magic','Storm Sorcery','Divine Soul','Shadow Magic','Aberrant Mind','Clockwork Soul'],
+  Warlock:['The Fiend','The Great Old One','The Archfey','The Celestial','The Hexblade','The Fathomless','The Genie'],
+  Wizard:['School of Evocation','School of Abjuration','School of Conjuration','School of Divination','School of Enchantment','School of Illusion','School of Necromancy','School of Transmutation','Bladesinging','Order of Scribes','Chronurgy','Graviturgy'],
+};
+
+const FIGHTING_STYLES = ['Archery (+2 ranged attacks)','Defense (+1 AC when armored)','Dueling (+2 damage with one-handed weapon)','Great Weapon Fighting (reroll 1s & 2s on damage)','Protection (use reaction to impose disadvantage on enemy attacks near allies)','Two-Weapon Fighting (add ability mod to off-hand damage)','Blind Fighting','Druidic Warrior','Thrown Weapon Fighting','Unarmed Fighting','Interception'];
+
+const METAMAGIC_OPTIONS = ['Careful Spell (protect allies from your AoE)','Distant Spell (double spell range)','Empowered Spell (reroll damage dice)','Extended Spell (double spell duration)','Heightened Spell (disadvantage on save)','Quickened Spell (cast as bonus action)','Seeking Spell (re-cast a miss)','Subtle Spell (no V/S components)','Twinned Spell (target two creatures)','Transmuted Spell (change damage type)'];
+
+const ELDRITCH_INVOCATIONS = ['Agonizing Blast (add CHA to Eldritch Blast)','Armor of Shadows (cast Mage Armor at will)','Ascendant Step (cast Levitate on self)','Beast Speech (speak with animals)','Beguiling Influence (proficiency in Deception & Persuasion)','Book of Ancient Secrets (ritual spells in Book of Shadows)','Chain Master\'s Ward (improve Find Familiar)','Devil\'s Sight (darkvision 120 ft even in magical darkness)','Dreadful Word (cast Confusion 1/long rest)','Eldritch Mind (advantage on Concentration)','Eldritch Sight (cast Detect Magic at will)','Eldritch Smite (knock prone on hit)','Eldritch Spear (Eldritch Blast range 300ft)','Eyes of the Rune Keeper (read all writing)','Fiendish Vigor (cast False Life at will)','Gaze of Two Minds (use another\'s senses)','Ghostly Gaze (see through walls 30ft)','Gift of the Depths (breathe underwater)','Gift of the Ever-Living Ones (maximize healing dice)','Grasp of Hadar (pull target 10ft)','Improved Pact Weapon (bonus action summon, +1 attack/damage)','Investment of the Chain Master (improve Find Familiar)','Lance of Lethargy (reduce speed 10ft)','Lifedrinker (extra necrotic damage with pact weapon)','Mask of Many Faces (cast Disguise Self at will)','Master of Myriad Forms (cast Alter Self at will)','Minions of Chaos (cast Conjure Elemental 1/long rest)','Mire the Mind (cast Slow 1/long rest)','Misty Visions (cast Silent Image at will)','One with Shadows (invisible in dim light/darkness)','Otherworldly Leap (cast Jump at will)','Repelling Blast (push 10ft with Eldritch Blast)','Sculptor of Flesh (cast Polymorph 1/long rest)','Sign of Ill Omen (cast Bestow Curse 1/long rest)','Thirsting Blade (Extra Attack with pact weapon)','Tomb of Levistus (encase self in ice)','Trickster\'s Escape (cast Freedom of Movement 1/long rest)','Undying Servitude (animate skeleton/zombie)','Visions of Distant Realms (cast Arcane Eye at will)','Voice of the Chain Master (communicate with familiar)','Whispers of the Grave (cast Speak with Dead at will)','Witch Sight (see true forms of shapechangers)'];
+
+const SKILL_LIST = ['Acrobatics','Animal Handling','Arcana','Athletics','Deception','History','Insight','Intimidation','Investigation','Medicine','Nature','Perception','Performance','Persuasion','Religion','Sleight of Hand','Stealth','Survival'];
+
+// ══ LEVEL-UP MODAL ═══════════════════════════════════════════════════════════
+
 function levelUp(charId){
   const chars = getChars();
   const ci = chars.findIndex(c=>c.id===charId);
@@ -2866,75 +3175,366 @@ function levelUp(charId){
   const char = chars[ci];
   const cls = CLASSES[char.classIdx];
   if(char.level >= 20){toast('Already max level!','var(--gold)');return;}
-
-  const newLevel = char.level + 1;
-  const conMod = parseInt(getMod(char.abilities.CON))||0;
-  const hpGain = Math.ceil(cls.hit/2)+1+conMod; // average HP gain
-  chars[ci].level = newLevel;
-  chars[ci].maxHP = (chars[ci].maxHP||0) + hpGain;
-  chars[ci].currentHP = Math.min(chars[ci].currentHP + hpGain, chars[ci].maxHP);
-
-  // Auto-set XP to minimum for new level
-  const xpMin = xpForLevel(newLevel);
-  if((chars[ci].xp||0) < xpMin) chars[ci].xp = xpMin;
-
-  saveChars(chars);
-  toast(`⬆ ${char.name} is now Level ${newLevel}! +${hpGain} HP`,'var(--gold)');
-  renderSheetHero(chars[ci], cls, 'sheetHero');
-  renderProgressTab(chars[ci], cls);
-
-  // Check if this level grants ASI/Feat
-  const asiLevels = getASILevels(cls.name);
-  if(asiLevels.includes(newLevel)){
-    setTimeout(()=>showASIModal(charId, newLevel), 500);
-  }
+  showLevelUpModal(charId);
 }
 
-function showASIModal(charId, level){
+function showLevelUpModal(charId){
   const char = getChars().find(c=>c.id===charId);
   if(!char) return;
   const cls = CLASSES[char.classIdx];
+  const newLevel = char.level + 1;
+  const levelData = (LEVEL_FEATURES[cls.name]||{})[newLevel] || {};
+  const conMod = parseInt(getMod(char.abilities.CON))||0;
+  const hpRoll = Math.ceil(cls.hit/2)+1+conMod;
+  const existing = document.getElementById('levelUpModal');
+  if(existing) existing.remove();
 
-  // Build modal
+  // Build choices state
+  window._lvlUp = {
+    charId, newLevel, cls,
+    hpChoice: 'avg',
+    hpRolled: Math.ceil(Math.random()*cls.hit)+conMod,
+    subclassChoice: char.subclass || '',
+    fightingStyleChoice: '',
+    spellChoices: [],
+    cantripChoices: [],
+    metamagicChoices: [],
+    invocationChoices: [],
+    asiDone: !levelData.asi,
+    asiDeltas: {STR:0,DEX:0,CON:0,INT:0,WIS:0,CHA:0},
+    featChoice: '',
+    asiMode: 'scores', // 'scores' or 'feat'
+    choices: {},
+  };
+
   const modal = document.createElement('div');
-  modal.id = 'asiModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
-  modal.innerHTML = `
-    <div style="background:var(--bg2);border:1px solid var(--gold);border-radius:16px;padding:24px;max-width:380px;width:100%">
-      <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold);margin-bottom:4px">Level ${level} — ASI or Feat</div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Choose: increase ability scores (+2 to one or +1/+1 to two), or take a feat.</p>
-      <div class="tab-row" style="margin-bottom:14px">
-        <button class="tab-btn active" onclick="asiModalTab('scores')">Ability Scores</button>
-        <button class="tab-btn" onclick="asiModalTab('feat')">Feat</button>
+  modal.id = 'levelUpModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto';
+  modal.innerHTML = buildLevelUpHTML(char, cls, newLevel, levelData, hpRoll, conMod);
+  document.body.appendChild(modal);
+}
+
+function buildLevelUpHTML(char, cls, newLevel, ld, avgHP, conMod){
+  const cc = `var(--gold)`;
+  const features = (ld.features||[]).filter(f=>!f.startsWith('ASI'));
+  const needsSubclass = ld.subclass && !char.subclass;
+  const subclasses = SUBCLASSES[cls.name] || [];
+  const spellsNeeded = ld.spells || 0;
+  const cantripsNeeded = ld.cantrips || 0;
+  const metamagicNeeded = ld.metamagic || 0;
+  const invocationsNeeded = ld.invocations || 0;
+  const needsASI = !!ld.asi;
+  const needsFightingStyle = ld.fightingStyle && !char.fightingStyle;
+
+  let html = `
+  <div style="background:var(--bg2);border:2px solid var(--gold);border-radius:16px;padding:0;max-width:520px;width:100%;margin:auto;overflow:hidden">
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#1a1535,#2a1f0a);padding:20px 24px;border-bottom:1px solid var(--gold)33">
+      <div style="font-family:'Cinzel',serif;font-size:22px;color:var(--gold);letter-spacing:2px">⬆ Level ${newLevel}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px">${char.name} · ${cls.name}</div>
+    </div>
+    <div style="padding:20px 24px;max-height:75vh;overflow-y:auto">`;
+
+  // ── WHAT YOU GAIN ──
+  if(features.length){
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">✦ NEW FEATURES</div>
+      ${features.map(f=>`<div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start">
+        <span style="color:var(--gold);font-size:14px;flex-shrink:0">◆</span>
+        <span style="font-size:13px">${f}</span>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  // ── HP ──
+  html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:10px">HIT POINTS</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button id="lvlHpAvg" onclick="lvlHpMode('avg')" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--gold);background:var(--gold-dim);color:var(--gold);font-family:'Cinzel',serif;font-size:10px;cursor:pointer">
+        AVERAGE<br><span style="font-size:20px;display:block;margin-top:4px">+${avgHP}</span>
+      </button>
+      <button id="lvlHpRoll" onclick="lvlHpMode('roll')" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-family:'Cinzel',serif;font-size:10px;cursor:pointer">
+        ROLL 1d${cls.hit}<br><span id="lvlHpRollVal" style="font-size:20px;display:block;margin-top:4px">+${window._lvlUp.hpRolled}</span>
+      </button>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button onclick="lvlRerollHP()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-size:11px;cursor:pointer">🎲 Reroll</button>
+      <span style="font-size:11px;color:var(--muted)">CON modifier: ${conMod >= 0 ? '+' : ''}${conMod}</span>
+    </div>
+  </div>`;
+
+  // ── SUBCLASS ──
+  if(needsSubclass){
+    html += `<div style="background:var(--surface2);border:1px solid var(--purple);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-bottom:10px">⚡ CHOOSE YOUR SUBCLASS</div>
+      <select id="lvlSubclass" onchange="window._lvlUp.subclassChoice=this.value" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px">
+        <option value="">Select a subclass…</option>
+        ${subclasses.map(s=>`<option value="${s}">${s}</option>`).join('')}
+      </select>
+    </div>`;
+  }
+
+  // ── FIGHTING STYLE ──
+  if(needsFightingStyle){
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:10px">⚔ CHOOSE FIGHTING STYLE</div>
+      <select id="lvlFightStyle" onchange="window._lvlUp.fightingStyleChoice=this.value" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px">
+        <option value="">Select a fighting style…</option>
+        ${FIGHTING_STYLES.map(s=>`<option value="${s}">${s}</option>`).join('')}
+      </select>
+    </div>`;
+  }
+
+  // ── NEW SPELLS ──
+  if(spellsNeeded > 0){
+    const availableSpells = Object.keys(SPELL_DB).sort();
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:4px">📚 LEARN NEW SPELLS (${spellsNeeded})</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Choose ${spellsNeeded} spell${spellsNeeded>1?'s':''} to add to your repertoire</div>
+      <div id="lvlSpellPicks" style="display:flex;flex-direction:column;gap:6px">
+        ${Array.from({length:spellsNeeded}).map((_,i)=>`
+          <select onchange="lvlPickSpell(${i},this.value)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px">
+            <option value="">Spell ${i+1}…</option>
+            ${availableSpells.map(s=>`<option value="${s}">${s}</option>`).join('')}
+          </select>`).join('')}
       </div>
-      <div id="asiScoresPane">
-        <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Distribute 2 points:</p>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+    </div>`;
+  }
+
+  // ── NEW CANTRIPS ──
+  if(cantripsNeeded > 0){
+    const availableSpells = Object.keys(SPELL_DB).sort();
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:4px">✨ LEARN CANTRIPS (${cantripsNeeded})</div>
+      <div id="lvlCantripPicks" style="display:flex;flex-direction:column;gap:6px">
+        ${Array.from({length:cantripsNeeded}).map((_,i)=>`
+          <select onchange="lvlPickCantrip(${i},this.value)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px">
+            <option value="">Cantrip ${i+1}…</option>
+            ${availableSpells.map(s=>`<option value="${s}">${s}</option>`).join('')}
+          </select>`).join('')}
+      </div>
+    </div>`;
+  }
+
+  // ── METAMAGIC ──
+  if(metamagicNeeded > 0){
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:10px">🔮 CHOOSE METAMAGIC (${metamagicNeeded})</div>
+      ${Array.from({length:metamagicNeeded}).map((_,i)=>`
+        <select onchange="lvlPickMeta(${i},this.value)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;margin-bottom:6px">
+          <option value="">Metamagic option ${i+1}…</option>
+          ${METAMAGIC_OPTIONS.map(m=>`<option value="${m}">${m}</option>`).join('')}
+        </select>`).join('')}
+    </div>`;
+  }
+
+  // ── ELDRITCH INVOCATIONS ──
+  if(invocationsNeeded > 0){
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:10px">👁 ELDRITCH INVOCATIONS (${invocationsNeeded})</div>
+      ${Array.from({length:invocationsNeeded}).map((_,i)=>`
+        <select onchange="lvlPickInvocation(${i},this.value)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;margin-bottom:6px">
+          <option value="">Invocation ${i+1}…</option>
+          ${ELDRITCH_INVOCATIONS.map(inv=>`<option value="${inv}">${inv}</option>`).join('')}
+        </select>`).join('')}
+    </div>`;
+  }
+
+  // ── ASI / FEAT ──
+  if(needsASI){
+    html += `<div style="background:var(--surface2);border:2px solid var(--gold);border-radius:12px;padding:14px;margin-bottom:16px">
+      <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">⭐ ABILITY SCORE IMPROVEMENT OR FEAT</div>
+      <div style="display:flex;gap:6px;margin-bottom:14px">
+        <button id="lvlAsiBtn" onclick="lvlAsiMode('scores')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--gold);background:var(--gold-dim);color:var(--gold);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;cursor:pointer">ABILITY SCORES</button>
+        <button id="lvlFeatBtn" onclick="lvlAsiMode('feat')" style="flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;cursor:pointer">TAKE A FEAT</button>
+      </div>
+      <div id="lvlAsiScores">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Distribute 2 points (+2 one ability or +1/+1 to two):</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">
           ${['STR','DEX','CON','INT','WIS','CHA'].map(ab=>`
             <div style="text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px">
               <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted)">${ab}</div>
-              <div style="font-family:'Cinzel',serif;font-size:18px;color:var(--text)">${char.abilities[ab]}</div>
-              <div style="display:flex;justify-content:center;gap:4px;margin-top:4px">
-                <button onclick="asiAdjust('${ab}',-1)" style="width:22px;height:22px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:14px">−</button>
-                <span id="asiDelta_${ab}" style="font-size:14px;color:var(--gold);min-width:16px;text-align:center">0</span>
-                <button onclick="asiAdjust('${ab}',+1)" style="width:22px;height:22px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:14px">+</button>
+              <div style="font-family:'Cinzel',serif;font-size:16px">${char.abilities[ab]}</div>
+              <div style="display:flex;justify-content:center;gap:3px;margin-top:4px">
+                <button onclick="lvlAsiAdjust('${ab}',-1)" style="width:20px;height:20px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:12px;line-height:1">−</button>
+                <span id="lvlDelta_${ab}" style="font-size:13px;color:var(--gold);min-width:14px;text-align:center">0</span>
+                <button onclick="lvlAsiAdjust('${ab}',+1)" style="width:20px;height:20px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:12px;line-height:1">+</button>
               </div>
             </div>`).join('')}
         </div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Points remaining: <span id="asiPointsLeft" style="color:var(--gold);font-family:'Cinzel',serif">2</span></div>
-        <button class="btn btn-gold" onclick="confirmASI(${charId},${level})">Apply Ability Score Increase</button>
+        <div style="font-size:11px;color:var(--muted)">Points left: <strong id="lvlAsiLeft" style="color:var(--gold)">2</strong></div>
       </div>
-      <div id="asiFeatPane" style="display:none">
-        <select id="asiModalFeat" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;margin-bottom:12px">
+      <div id="lvlFeatPick" style="display:none">
+        <select id="lvlFeatSelect" onchange="window._lvlUp.featChoice=this.value" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px">
           <option value="">Select a feat…</option>
-          ${FEATS_5E.map(f=>`<option>${f}</option>`).join('')}
+          ${FEATS_5E.map(f=>`<option value="${f}">${f}</option>`).join('')}
         </select>
-        <button class="btn btn-gold" onclick="confirmFeatFromASI(${charId},${level})">Take Feat</button>
       </div>
-      <button class="btn btn-outline" onclick="document.getElementById('asiModal').remove()" style="margin-top:8px">Decide Later</button>
     </div>`;
-  document.body.appendChild(modal);
-  window._asiDeltas = {STR:0,DEX:0,CON:0,INT:0,WIS:0,CHA:0};
+  }
+
+    html += `</div>
+    <!-- Footer -->
+    <div style="padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:10px;background:var(--bg2)">
+      <button class="btn btn-gold" onclick="confirmLevelUp()" style="flex:1">✦ Confirm Level Up</button>
+      <button class="btn btn-outline" onclick="document.getElementById('levelUpModal').remove()" style="width:auto;padding:8px 16px">Cancel</button>
+    </div>
+  </div>`;
+
+  return html;
+}
+
+// ── Level-Up interaction helpers ──────────────────────────────────────────────
+
+function lvlHpMode(mode){
+  window._lvlUp.hpChoice = mode;
+  const avgBtn = document.getElementById('lvlHpAvg');
+  const rollBtn = document.getElementById('lvlHpRoll');
+  if(mode==='avg'){
+    avgBtn.style.cssText = 'flex:1;padding:10px;border-radius:8px;border:1px solid var(--gold);background:var(--gold-dim);color:var(--gold);font-family:\'Cinzel\',serif;font-size:10px;cursor:pointer';
+    rollBtn.style.cssText = 'flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-family:\'Cinzel\',serif;font-size:10px;cursor:pointer';
+  } else {
+    rollBtn.style.cssText = 'flex:1;padding:10px;border-radius:8px;border:1px solid var(--gold);background:var(--gold-dim);color:var(--gold);font-family:\'Cinzel\',serif;font-size:10px;cursor:pointer';
+    avgBtn.style.cssText = 'flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-family:\'Cinzel\',serif;font-size:10px;cursor:pointer';
+  }
+}
+
+function lvlRerollHP(){
+  const cls = window._lvlUp.cls;
+  const char = getChars().find(c=>c.id===window._lvlUp.charId);
+  const conMod = parseInt(getMod(char.abilities.CON))||0;
+  const roll = Math.ceil(Math.random()*cls.hit)+conMod;
+  window._lvlUp.hpRolled = roll;
+  document.getElementById('lvlHpRollVal').textContent = '+'+roll;
+  lvlHpMode('roll');
+}
+
+function lvlPickSpell(i, val){ window._lvlUp.spellChoices[i]=val; }
+function lvlPickCantrip(i, val){ window._lvlUp.cantripChoices[i]=val; }
+function lvlPickMeta(i, val){ window._lvlUp.metamagicChoices[i]=val; }
+function lvlPickInvocation(i, val){ window._lvlUp.invocationChoices[i]=val; }
+
+function lvlAsiMode(mode){
+  window._lvlUp.asiMode = mode;
+  document.getElementById('lvlAsiScores').style.display = mode==='scores'?'':'none';
+  document.getElementById('lvlFeatPick').style.display = mode==='feat'?'':'none';
+  document.getElementById('lvlAsiBtn').style.cssText = mode==='scores'
+    ? 'flex:1;padding:8px;border-radius:8px;border:1px solid var(--gold);background:var(--gold-dim);color:var(--gold);font-family:\'Cinzel\',serif;font-size:9px;letter-spacing:1px;cursor:pointer'
+    : 'flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-family:\'Cinzel\',serif;font-size:9px;letter-spacing:1px;cursor:pointer';
+  document.getElementById('lvlFeatBtn').style.cssText = mode==='feat'
+    ? 'flex:1;padding:8px;border-radius:8px;border:1px solid var(--gold);background:var(--gold-dim);color:var(--gold);font-family:\'Cinzel\',serif;font-size:9px;letter-spacing:1px;cursor:pointer'
+    : 'flex:1;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-family:\'Cinzel\',serif;font-size:9px;letter-spacing:1px;cursor:pointer';
+}
+
+function lvlAsiAdjust(ab, delta){
+  if(!window._lvlUp) return;
+  const d = window._lvlUp.asiDeltas;
+  const total = Object.values(d).reduce((a,b)=>a+b,0);
+  if(delta>0 && total>=2) return;
+  if(delta<0 && d[ab]<=0) return;
+  d[ab] = (d[ab]||0)+delta;
+  const el = document.getElementById('lvlDelta_'+ab);
+  if(el) el.textContent = d[ab]||'0';
+  const leftEl = document.getElementById('lvlAsiLeft');
+  if(leftEl) leftEl.textContent = 2 - Object.values(d).reduce((a,b)=>a+b,0);
+}
+
+function confirmLevelUp(){
+  const s = window._lvlUp;
+  if(!s) return;
+  const chars = getChars();
+  const ci = chars.findIndex(c=>c.id===s.charId);
+  if(ci<0) return;
+  const char = chars[ci];
+  const cls = s.cls;
+  const ld = (LEVEL_FEATURES[cls.name]||{})[s.newLevel]||{};
+
+  // Validate subclass
+  if(ld.subclass && !char.subclass){
+    const sel = document.getElementById('lvlSubclass');
+    s.subclassChoice = sel?.value||'';
+    if(!s.subclassChoice){toast('Choose a subclass first','var(--red)');return;}
+  }
+
+  // Validate fighting style
+  if(ld.fightingStyle && !char.fightingStyle && !s.fightingStyleChoice){
+    toast('Choose a fighting style first','var(--red)');return;
+  }
+
+  // Validate ASI
+  if(ld.asi){
+    if(s.asiMode==='scores'){
+      const total = Object.values(s.asiDeltas).reduce((a,b)=>a+b,0);
+      if(total!==2){toast('Distribute exactly 2 ability score points','var(--red)');return;}
+    } else if(s.asiMode==='feat' && !s.featChoice){
+      toast('Choose a feat','var(--red)');return;
+    }
+  }
+
+  // Apply HP
+  const hpGain = s.hpChoice==='roll' ? Math.max(1, s.hpRolled) : Math.ceil(cls.hit/2)+1+(parseInt(getMod(char.abilities.CON))||0);
+  chars[ci].level = s.newLevel;
+  chars[ci].maxHP = (char.maxHP||0) + hpGain;
+  chars[ci].currentHP = Math.min((char.currentHP||0) + hpGain, chars[ci].maxHP);
+
+  // XP floor
+  const xpMin = xpForLevel(s.newLevel);
+  if((chars[ci].xp||0) < xpMin) chars[ci].xp = xpMin;
+
+  // Subclass
+  if(s.subclassChoice) chars[ci].subclass = s.subclassChoice;
+
+  // Fighting style
+  if(s.fightingStyleChoice) chars[ci].fightingStyle = s.fightingStyleChoice;
+
+  // New spells
+  if(!chars[ci].spells) chars[ci].spells = [];
+  const newSpells = [...(s.spellChoices||[]),...(s.cantripChoices||[])].filter(Boolean);
+  newSpells.forEach(name=>{
+    if(!chars[ci].spells.find(sp=>sp.name===name)){
+      const db = SPELL_DB[name]||{};
+      chars[ci].spells.push({name, prepared:true, school:db.school||'', castTime:db.castTime||'', range:db.range||'', duration:db.duration||'', components:db.components||'', desc:db.desc||''});
+    }
+  });
+
+  // Metamagic
+  if(s.metamagicChoices.length){
+    if(!chars[ci].metamagic) chars[ci].metamagic = [];
+    s.metamagicChoices.filter(Boolean).forEach(m=>{ if(!chars[ci].metamagic.includes(m)) chars[ci].metamagic.push(m); });
+  }
+
+  // Invocations
+  if(s.invocationChoices.length){
+    if(!chars[ci].invocations) chars[ci].invocations = [];
+    s.invocationChoices.filter(Boolean).forEach(inv=>{ if(!chars[ci].invocations.includes(inv)) chars[ci].invocations.push(inv); });
+  }
+
+  // ASI / Feat
+  if(ld.asi){
+    chars[ci].asiHistory = chars[ci].asiHistory||[];
+    if(s.asiMode==='scores'){
+      const changes = [];
+      Object.entries(s.asiDeltas).forEach(([ab,d])=>{
+        if(d>0){ chars[ci].abilities[ab] = Math.min(20,(chars[ci].abilities[ab]||10)+d); changes.push(`${ab}+${d}`); }
+      });
+      chars[ci].asiHistory.push({level:s.newLevel, desc:`ASI: ${changes.join(', ')}`});
+    } else if(s.featChoice){
+      if(!chars[ci].feats) chars[ci].feats=[];
+      chars[ci].feats.push(s.featChoice);
+      chars[ci].asiHistory.push({level:s.newLevel, desc:`Feat: ${s.featChoice}`});
+    }
+  }
+
+  saveChars(chars);
+  document.getElementById('levelUpModal').remove();
+  toast(`⬆ ${char.name} is now Level ${s.newLevel}! +${hpGain} HP`,'var(--gold)');
+
+  const updatedChar = getChars().find(c=>c.id===s.charId);
+  if(updatedChar){
+    renderSheetHero(updatedChar, cls, 'sheetHero');
+    renderProgressTab(updatedChar, cls);
+    sheetTab('progress');
+  }
 }
 
 function asiModalTab(t){
