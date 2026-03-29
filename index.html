@@ -4576,6 +4576,12 @@ function doRollLabelled(label, mod){
       ${isCrit?`<div style="color:var(--green);font-family:'Cinzel',serif;font-size:12px;letter-spacing:1px">CRITICAL!</div>`:''}
       ${isFail?`<div style="color:var(--red);font-family:'Cinzel',serif;font-size:12px;letter-spacing:1px">FUMBLE</div>`:''}
     </div>`;
+    // Scroll the dice screen to show the result just below the roll button
+    const diceScreen = document.getElementById('scr-dice');
+    if(diceScreen) diceScreen.scrollTop = diceScreen.scrollTop = (() => {
+      const btn = document.getElementById('rollBtn');
+      return btn ? Math.max(0, btn.offsetTop - 8) : 0;
+    })();
   }
   diceState.history.unshift({d,kept,total,mode:em,mod,bonuses:bonusBreak,isCrit,isFail,conds:[...diceState.activeConds],label});
   if(diceState.history.length>8) diceState.history.pop();
@@ -4602,6 +4608,10 @@ const total=kept+mod+bonusTotal;const isCrit=d===20&&kept===20;const isFail=d===
 let diceHTML='';if(r2!==null){const f1=em==='advantage'?(r1>=r2?'kept':'dropped'):(r1<=r2?'kept':'dropped');const f2=f1==='kept'?'dropped':'kept';const c1=f1==='kept'&&isCrit?'crit':f1==='kept'&&isFail?'fail':f1;const c2=f2==='kept'&&isCrit?'crit':f2==='kept'&&isFail?'fail':f2;diceHTML=`<div class="die-face ${c1}"><span style="font-size:9px">d${d}</span><span class="dv">${r1}</span></div><span style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted)">${em==='advantage'?'keep↑':'keep↓'}</span><div class="die-face ${c2}"><span style="font-size:9px">d${d}</span><span class="dv">${r2}</span></div>`;}else{const cls=isCrit?'crit':isFail?'fail':'kept';diceHTML=`<div class="die-face ${cls}"><span style="font-size:9px">d${d}</span><span class="dv">${kept}</span></div>`;}
 const numColor=isCrit?'var(--green)':isFail?'var(--red)':'var(--gold)';let breakdown=`d${d}: ${kept}`;if(mod!==0)breakdown+=(mod>0?' + '+mod:' − '+Math.abs(mod));if(bonusBreak.length)breakdown+=' + '+bonusBreak.join(', ');if(em!=='normal')breakdown+=` (${em})`;const verdict=isCrit?`<span style="background:rgba(39,174,96,0.15);color:var(--green);border:1px solid var(--green);border-radius:12px;padding:4px 14px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px">✦ CRITICAL HIT ✦</span>`:isFail?`<span style="background:rgba(192,57,43,0.15);color:var(--red);border:1px solid var(--red);border-radius:12px;padding:4px 14px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px">💀 CRITICAL FAIL</span>`:'';
 const el=document.getElementById('rollResult');el.style.display='block';el.innerHTML=`<div class="result-box fadein"><div class="result-dice">${diceHTML}</div><div class="result-total" style="color:${numColor}">${total}</div><div class="result-break">${breakdown}</div>${verdict?`<div class="verdict">${verdict}</div>`:''}</div>`;
+// Scroll dice screen so roll button + result are in view
+const diceScr = document.getElementById('scr-dice');
+const rollBtnEl = document.getElementById('rollBtn');
+if(diceScr && rollBtnEl) diceScr.scrollTop = Math.max(0, rollBtnEl.offsetTop - 8);
 diceState.history.unshift({d,kept,total,mode:em,mod,bonuses:bonusBreak,isCrit,isFail,conds:[...diceState.activeConds]});if(diceState.history.length>8)diceState.history.pop();renderDiceHistory();}
 function renderDiceHistory(){const el=document.getElementById('rollHistory');if(!el)return;if(!diceState.history.length){el.innerHTML=`<p style="font-size:13px;color:var(--muted);font-style:italic;text-align:center;padding:12px 0">No rolls yet.</p>`;return;}el.innerHTML=diceState.history.map(r=>{const mc=r.mode==='advantage'?'var(--green)':r.mode==='disadvantage'?'var(--red)':'var(--muted)';const ml=r.mode==='advantage'?'↑ADV':r.mode==='disadvantage'?'↓DIS':'NRM';const tc=r.isCrit?'var(--green)':r.isFail?'var(--red)':'var(--text)';const ci=r.conds.map(id=>{const c=CONDITIONS.find(x=>x.id===id);return c?c.i:'';}).join('');return`<div class="hist-row"><div class="hist-die">${r.label?`<span style="font-size:9px;color:var(--muted);display:block;line-height:1">${r.label.split(' ')[0]}</span>`:''}d${r.d}</div><div class="hist-val" style="color:${tc}">${r.total}</div><div class="hist-info">${r.label||('rolled '+r.kept)}${r.mod!==0?(r.mod>0?' +'+r.mod:' '+r.mod):''}${r.bonuses.length?' + bonuses':''} ${ci}</div><span class="hist-mode" style="color:${mc};border-color:${mc}">${ml}</span></div>`;}).join('');}
 
