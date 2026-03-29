@@ -770,11 +770,13 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <div class="tab-row">
       <button class="tab-btn active" onclick="partyTab('overview')">Overview</button>
       <button class="tab-btn" onclick="partyTab('initiative')">Initiative</button>
+      <button class="tab-btn" onclick="partyTab('history')">History</button>
       <button class="tab-btn" onclick="partyTab('share')">Share</button>
       <button class="tab-btn" onclick="partyTab('manage')">Manage</button>
     </div>
     <div class="tab-pane active" id="ptab-overview"></div>
     <div class="tab-pane" id="ptab-initiative"></div>
+    <div class="tab-pane" id="ptab-history"></div>
     <div class="tab-pane" id="ptab-share"></div>
     <div class="tab-pane" id="ptab-manage"></div>
   </div>
@@ -2012,12 +2014,13 @@ let combatants=[],currentTurn=0,combatRound=1;
 function partyTab(t){
   // Player mode: restrict to overview and initiative
   if(isPlayerMode() && (t==='share'||t==='manage')) t='overview';
-  const tabs=isPlayerMode()?['overview','initiative']:['overview','initiative','share','manage'];
-  document.querySelectorAll('#scr-party .tab-btn').forEach((b,i)=>b.classList.toggle('active',['overview','initiative','share','manage'][i]===t));
+  const allTabs=['overview','initiative','history','share','manage'];
+  document.querySelectorAll('#scr-party .tab-btn').forEach((b,i)=>b.classList.toggle('active',allTabs[i]===t));
   document.querySelectorAll('#scr-party .tab-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('ptab-'+t).classList.add('active');
   if(t==='overview')renderPartyOverview();
   if(t==='initiative')renderInitiative();
+  if(t==='history')renderPartyHistory();
   if(t==='share')renderShareTab();
   if(t==='manage')renderPartyManage();
 }
@@ -2053,7 +2056,16 @@ function renderPartyOverview(){
   const totHP=party.reduce((s,c)=>s+c.currentHP,0);
   const maxHP=party.reduce((s,c)=>s+c.maxHP,0);
   const avgLvl=Math.round(party.reduce((s,c)=>s+c.level,0)/party.length);
-  el.innerHTML=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px">
+  const camp=getActiveCamp();
+  const partyName=camp?.partyName||'';
+  el.innerHTML=`
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+    ${partyName
+      ? `<div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold);flex:1">${partyName}</div>`
+      : `<div style="font-family:'Cinzel',serif;font-size:13px;color:var(--muted);font-style:italic;flex:1">Unnamed Party</div>`}
+    ${!isPlayerMode()?`<button onclick="editPartyName()" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;padding:3px 8px;cursor:pointer">✏ Name</button>`:''}
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px">
     <div class="inv-sum-card"><div class="isc-label">MEMBERS</div><div class="isc-val">${party.length}</div></div>
     <div class="inv-sum-card"><div class="isc-label">PARTY HP</div><div class="isc-val" style="font-size:15px">${totHP}<span style="font-size:10px;color:var(--muted)">/${maxHP}</span></div></div>
     <div class="inv-sum-card"><div class="isc-label">AVG LVL</div><div class="isc-val">${avgLvl}</div></div>
@@ -2094,10 +2106,29 @@ function adjHP(id,sign){
   const amt=parseInt(prompt(sign>0?'Heal how many HP?':'Deal how much damage?','5'))||0;
   if(!amt)return;
   const delta=sign*amt;
+  const camps=getCampaigns();
+  const ci_camp=camps.findIndex(c=>c.id===getActiveCampId());
+
+  const applyHP=(char)=>{
+    const prevHP=char.currentHP;
+    char.currentHP=Math.max(0,Math.min(char.maxHP,char.currentHP+delta));
+    // Auto-log to party history
+    if(ci_camp>=0){
+      if(prevHP>0 && char.currentHP===0){
+        addPartyHistoryEvent(camps[ci_camp],'death',`${char.name} fell to 0 HP!`,'💀');
+        saveCampaigns(camps);
+      } else if(prevHP===0 && char.currentHP>0){
+        addPartyHistoryEvent(camps[ci_camp],'revive',`${char.name} was revived!`,'✨');
+        saveCampaigns(camps);
+      }
+    }
+    return char;
+  };
+
   const chars=getChars();const ci=chars.findIndex(c=>c.id===id);
-  if(ci>=0){chars[ci].currentHP=Math.max(0,Math.min(chars[ci].maxHP,chars[ci].currentHP+delta));saveChars(chars);renderPartyOverview();return;}
+  if(ci>=0){chars[ci]=applyHP(chars[ci]);saveChars(chars);renderPartyOverview();return;}
   const party=getParty();const pi=party.findIndex(c=>c.id===id);
-  if(pi>=0){party[pi].currentHP=Math.max(0,Math.min(party[pi].maxHP,party[pi].currentHP+delta));saveParty(party);renderPartyOverview();}
+  if(pi>=0){party[pi]=applyHP(party[pi]);saveParty(party);renderPartyOverview();}
 }
 
 /* ══ INITIATIVE ══ */
@@ -3712,6 +3743,18 @@ function _finishCharImport(char, source){
   document.getElementById('charImportModal')?.remove();
   toast(`✦ ${char.name} imported from ${source}!`);
   renderRoster();
+  // Auto-log to party history
+  const activeCamp = getActiveCamp();
+  if(activeCamp){
+    const camps2 = getCampaigns();
+    const ci2 = camps2.findIndex(c=>c.id===activeCamp.id);
+    if(ci2>=0){
+      const cls = CLASSES[char.classIdx]||CLASSES[0];
+      addPartyHistoryEvent(camps2[ci2],'join',
+        `${char.name} joined the party — Level ${char.level} ${char.race} ${cls.name}`, '⚔');
+      saveCampaigns(camps2);
+    }
+  }
 }
 
 function diagCampaigns(){
@@ -3870,6 +3913,120 @@ function renderPartyManage(){
 }
 function removePartyMember(id){const mine=getChars().find(c=>c.id===id);if(mine){toast("Use Roster × to remove your own characters",'var(--gold)');return;}saveParty(getParty().filter(c=>c.id!==id));renderPartyManage();toast('Removed','var(--red)');}
 function addToParty(){const raw=(document.getElementById('addToPartyIn')?.value||'').trim();if(!raw){toast('Paste a code','var(--red)');return;}let char=decodeChar(raw);if(!char||!char.name){toast('Invalid code','var(--red)');return;}char.id=char.id||Date.now();char.currentHP=char.currentHP||char.maxHP;char.statuses=char.statuses||[];char.spells=char.spells||[];char.attacks=char.attacks||[];char.equipment=char.equipment||[];const party=getParty();if(party.find(c=>c.id===char.id)){toast('Already in party!','var(--gold)');return;}party.push(char);saveParty(party);document.getElementById('addToPartyIn').value='';toast('✦ '+char.name+' joined!');renderPartyManage();}
+
+// ── Party name ──
+function editPartyName(){
+  const camp = getActiveCamp();
+  if(!camp) return;
+  const current = camp.partyName||'';
+  const name = prompt('Party name:', current);
+  if(name === null) return;
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c=>c.id===camp.id);
+  if(ci<0) return;
+  const oldName = camps[ci].partyName||'';
+  camps[ci].partyName = name.trim();
+  if(name.trim() && name.trim() !== oldName){
+    addPartyHistoryEvent(camps[ci], 'name', `Party named "${name.trim()}"${oldName?` (was "${oldName}")`:''}`, '⚔');
+  }
+  saveCampaigns(camps);
+  renderPartyOverview();
+}
+
+// ── Party history ──
+function getPartyHistory(camp){ return camp?.partyHistory||[]; }
+
+function addPartyHistoryEvent(camp, type, text, icon='📜'){
+  if(!camp.partyHistory) camp.partyHistory=[];
+  camp.partyHistory.unshift({
+    id: 'ph'+Date.now(),
+    type, text, icon,
+    date: new Date().toISOString(),
+  });
+  // Cap at 200 events
+  if(camp.partyHistory.length > 200) camp.partyHistory = camp.partyHistory.slice(0,200);
+}
+
+function logPartyEvent(){
+  const text = (document.getElementById('partyEventInput')?.value||'').trim();
+  if(!text){ toast('Enter an event','var(--red)'); return; }
+  const icon = document.getElementById('partyEventIcon')?.value||'📜';
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c=>c.id===getActiveCampId());
+  if(ci<0) return;
+  addPartyHistoryEvent(camps[ci], 'manual', text, icon);
+  saveCampaigns(camps);
+  document.getElementById('partyEventInput').value='';
+  toast('Event logged!');
+  renderPartyHistory();
+}
+
+function deletePartyEvent(eventId){
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c=>c.id===getActiveCampId());
+  if(ci<0) return;
+  camps[ci].partyHistory = (camps[ci].partyHistory||[]).filter(e=>e.id!==eventId);
+  saveCampaigns(camps);
+  renderPartyHistory();
+}
+
+function renderPartyHistory(){
+  const el = document.getElementById('ptab-history');
+  if(!el) return;
+  const camp = getActiveCamp();
+  if(!camp){ el.innerHTML='<div class="empty-state"><div class="es-icon">📜</div><p>No active campaign.</p></div>'; return; }
+  const history = getPartyHistory(camp);
+  const partyName = camp.partyName||'This Party';
+
+  const ICONS = ['📜','⚔','🏆','💀','🐉','🌟','🗡','🛡','💰','🔮','⚡','🩸','🎲','🏰','🗺','👑','🤝','💔','🔥','❄'];
+
+  let html = `
+  <div class="card" style="margin-bottom:12px">
+    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">LOG AN EVENT</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+      <select id="partyEventIcon" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px;font-size:16px;width:52px;cursor:pointer">
+        ${ICONS.map(i=>`<option value="${i}">${i}</option>`).join('')}
+      </select>
+      <input id="partyEventInput" placeholder="What happened? A great victory, a loss, a discovery…"
+        style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px"
+        onkeydown="if(event.key==='Enter')logPartyEvent()">
+    </div>
+    <button class="btn btn-primary" onclick="logPartyEvent()">✦ Log Event</button>
+  </div>`;
+
+  if(!history.length){
+    html += `<div class="empty-state"><div class="es-icon">📜</div><p>No history yet.<br>Events will appear here automatically<br>or log your own above.</p></div>`;
+  } else {
+    // Group by date
+    const groups = {};
+    history.forEach(e => {
+      const d = new Date(e.date);
+      const label = isNaN(d) ? 'Unknown' : d.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+      if(!groups[label]) groups[label]=[];
+      groups[label].push(e);
+    });
+
+    html += `<div style="font-size:11px;color:var(--muted);margin-bottom:8px">${history.length} event${history.length!==1?'s':''} in the chronicle of <strong style="color:var(--gold)">${partyName}</strong></div>`;
+
+    Object.entries(groups).forEach(([dateLabel, events]) => {
+      html += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin:12px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)33">${dateLabel}</div>`;
+      events.forEach(e => {
+        const timeStr = new Date(e.date).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'});
+        html += `
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:10px;margin-bottom:5px;border:1px solid var(--border)33">
+          <span style="font-size:20px;line-height:1.4">${e.icon||'📜'}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;line-height:1.5">${e.text}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">${timeStr}</div>
+          </div>
+          ${!isPlayerMode()?`<button onclick="deletePartyEvent('${e.id}')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:0 4px;opacity:0.5;flex-shrink:0">✕</button>`:''}
+        </div>`;
+      });
+    });
+  }
+
+  el.innerHTML = html;
+}
 function copyText(txt){navigator.clipboard?.writeText(txt).then(()=>toast('Copied!')).catch(()=>{const t=document.createElement('textarea');t.value=txt;document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);toast('Copied!');});}
 
 /* ══ DICE ══ */
@@ -5410,6 +5567,11 @@ function confirmClaudeSession(){
   if(!camps[ci].sessions) camps[ci].sessions=[];
   camps[ci].sessions.push(session);
   camps[ci].lastPlayed = Date.now();
+  // Auto-log to party history
+  const sessionNum3 = camps[ci].sessions.length;
+  addPartyHistoryEvent(camps[ci],'session',
+    `Session ${sessionNum3}: "${session.title}"${session.xpAwarded?' · '+session.xpAwarded+' XP':''}${session.goldAwarded?' · '+session.goldAwarded+'gp':''}`,
+    '📜');
   // Auto-add gold
   if(session.goldAwarded > 0){
     const w = getWealth();
@@ -5454,6 +5616,11 @@ function addSession() {
   if (!camps[ci].sessions) camps[ci].sessions = [];
   camps[ci].sessions.push(session);
   camps[ci].lastPlayed = Date.now();
+  // Auto-log to party history
+  const sessionNum2 = camps[ci].sessions.length;
+  addPartyHistoryEvent(camps[ci],'session',
+    `Session ${sessionNum2}: "${session.title}"${session.xpAwarded?' · '+session.xpAwarded+' XP':''}${session.goldAwarded?' · '+session.goldAwarded+'gp':''}`,
+    '📜');
   saveCampaigns(camps);
 
   // Auto-add gold to party treasury
