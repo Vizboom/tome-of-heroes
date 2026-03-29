@@ -142,29 +142,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     flex-shrink: 0; padding: 16px 28px 0; border-bottom: 1px solid var(--border)33;
   }
 
-  /* Roster right panel — character card grid */
-  #rosterList {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 10px;
-  }
-  #rosterList .char-card { margin-bottom: 0; }
-
-  /* Campaign detail — the inner tabs also become a vertical split */
-  #campDetailView .desk-split > .tab-row { width: 130px; }
-
-  /* History right panel header */
-  .desk-history-label {
-    font-family: 'Cinzel', serif;
-    font-size: 9px;
-    color: var(--muted);
-    letter-spacing: 2px;
-    padding: 14px 20px 8px;
-    opacity: 0.6;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-    flex-shrink: 0;
-  }
-
   /* Toast */
   .toast { left: 50%; transform: translateX(-50%); right: auto; min-width: 220px; }
 
@@ -2532,139 +2509,36 @@ function joinAsPlayer(){
 function applyDesktopSplit(){
   if(window.innerWidth < 768) return;
 
-  // ── Tabbed screens: tab-row becomes left sidebar, tab-panes fill right ──
-  const tabbedScreens = ['scr-sheet','scr-partysheet','scr-party','scr-loot'];
-  tabbedScreens.forEach(screenId => {
-    const screen = document.getElementById(screenId);
-    if(!screen || screen.dataset.deskSplit) return;
-    const tabRow = screen.querySelector(':scope > .tab-row');
-    if(!tabRow) return;
-    const tabPanes = [...screen.querySelectorAll(':scope > .tab-pane')];
-    if(!tabPanes.length) return;
-
-    const wrap = document.createElement('div');
-    wrap.className = 'desk-split';
-    const content = document.createElement('div');
-    content.className = 'desk-content';
-
-    screen.insertBefore(wrap, tabRow);
-    wrap.appendChild(tabRow);
-    wrap.appendChild(content);
-    tabPanes.forEach(p => content.appendChild(p));
-    screen.dataset.deskSplit = '1';
-  });
-
-  // ── Dice screen: left=controls, right=result+history ──
+  // Dice screen ONLY: character panel LEFT, roll controls RIGHT
   const diceScreen = document.getElementById('scr-dice');
   if(diceScreen && !diceScreen.dataset.deskSplit){
-    // Wrap the whole content in a horizontal split
     const allChildren = [...diceScreen.children];
-    // Left column: charPanel, rollBtn, rollResult, Roll Mode, Die Type, Modifier, Conditions
-    // Right column: History
-    const historyDivider = [...allChildren].find(el => el.querySelector && el.querySelector('span') && el.textContent.includes('History'));
-    const historyList = diceScreen.querySelector('#rollHistory');
+    const charPanel = diceScreen.querySelector('#diceCharPanel');
 
     const wrap = document.createElement('div');
     wrap.className = 'desk-split';
+
     const leftCol = document.createElement('div');
     leftCol.className = 'desk-content';
-    leftCol.style.cssText = 'border-right:1px solid var(--border);flex:0 0 50%;max-width:50%;';
+    leftCol.style.cssText = 'border-right:1px solid var(--border);flex:1;background:var(--bg2);';
+
     const rightCol = document.createElement('div');
     rightCol.className = 'desk-content';
-    rightCol.style.cssText = 'flex:1;background:var(--bg2);';
+    rightCol.style.cssText = 'flex:1;';
 
-    // Move all children into left col, then move history divider+list to right
     diceScreen.appendChild(wrap);
-    allChildren.forEach(el => leftCol.appendChild(el));
     wrap.appendChild(leftCol);
     wrap.appendChild(rightCol);
 
-    // Move history section to right
-    if(historyDivider) rightCol.appendChild(historyDivider);
-    if(historyList) rightCol.appendChild(historyList);
+    // Character panel → LEFT
+    if(charPanel) leftCol.appendChild(charPanel);
 
-    // Add a label to right col
-    const label = document.createElement('div');
-    label.style.cssText = 'font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:2px;padding:14px 20px 8px;opacity:0.6;border-bottom:1px solid rgba(255,255,255,0.05)';
-    label.textContent = 'ROLL HISTORY';
-    rightCol.insertBefore(label, rightCol.firstChild);
+    // Everything else (roll btn, result, mode, die, mod, conditions, history) → RIGHT
+    allChildren.forEach(el => {
+      if(el !== charPanel && el !== wrap) rightCol.appendChild(el);
+    });
 
     diceScreen.dataset.deskSplit = '1';
-  }
-
-  // ── Roster: left=header/import btn, right=character cards ──
-  const rosterScreen = document.getElementById('scr-roster');
-  if(rosterScreen && !rosterScreen.dataset.deskSplit){
-    const allChildren = [...rosterScreen.children];
-    const rosterList = document.getElementById('rosterList');
-    if(rosterList){
-      const wrap = document.createElement('div');
-      wrap.className = 'desk-split';
-      const leftCol = document.createElement('div');
-      leftCol.className = 'desk-content';
-      leftCol.style.cssText = 'border-right:1px solid var(--border);flex:0 0 280px;max-width:280px;background:var(--bg2);';
-      const rightCol = document.createElement('div');
-      rightCol.className = 'desk-content';
-
-      rosterScreen.appendChild(wrap);
-      // Left: everything except rosterList
-      allChildren.forEach(el => {
-        if(el !== rosterList) leftCol.appendChild(el);
-        else rightCol.appendChild(el);
-      });
-      wrap.appendChild(leftCol);
-      wrap.appendChild(rightCol);
-
-      // Style roster list as a grid on desktop
-      rosterList.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;';
-
-      rosterScreen.dataset.deskSplit = '1';
-    }
-  }
-
-  // ── Campaign: campListView left, detail/forms right ──
-  const campScreen = document.getElementById('scr-campaign');
-  if(campScreen && !campScreen.dataset.deskSplit){
-    const allChildren = [...campScreen.children];
-    const campListView = document.getElementById('campListView');
-    if(campListView){
-      const wrap = document.createElement('div');
-      wrap.className = 'desk-split';
-      const leftCol = document.createElement('div');
-      leftCol.className = 'desk-content';
-      leftCol.style.cssText = 'border-right:1px solid var(--border);flex:0 0 300px;max-width:300px;background:var(--bg2);';
-      const rightCol = document.createElement('div');
-      rightCol.className = 'desk-content';
-
-      campScreen.appendChild(wrap);
-      allChildren.forEach(el => {
-        if(el === campListView) leftCol.appendChild(el);
-        else rightCol.appendChild(el);
-      });
-      wrap.appendChild(leftCol);
-      wrap.appendChild(rightCol);
-      campScreen.dataset.deskSplit = '1';
-    }
-  }
-
-  // ── Campaign detail inner tabs: sessions/quests/npcs/arcs/notes ──
-  const campDetail = document.getElementById('campDetailView');
-  if(campDetail && !campDetail.dataset.deskSplit){
-    const tabRow = campDetail.querySelector('#campTabRow');
-    if(tabRow){
-      const tabPanes = [...campDetail.querySelectorAll(':scope > .tab-pane')];
-      if(tabPanes.length){
-        const wrap = document.createElement('div');
-        wrap.className = 'desk-split';
-        const content = document.createElement('div');
-        content.className = 'desk-content';
-        campDetail.insertBefore(wrap, tabRow);
-        wrap.appendChild(tabRow);
-        wrap.appendChild(content);
-        tabPanes.forEach(p => content.appendChild(p));
-        campDetail.dataset.deskSplit = '1';
-      }
-    }
   }
 }
 
@@ -5623,7 +5497,6 @@ function openCamp(id) {
   document.getElementById('campDetailView').style.display = 'block';
   renderCampDetailHeader();
   campTab('sessions');
-  setTimeout(applyDesktopSplit, 0);
 }
 
 function hideCampForm() {
