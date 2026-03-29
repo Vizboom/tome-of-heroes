@@ -2430,7 +2430,7 @@ function resetCombat(){combatants=[];currentTurn=0;combatRound=1;renderInitiativ
 let shareForCharId=null;
 function openShareFor(id){shareForCharId=id;nav('party');partyTab('share');}
 function renderShareTab(){
-  const chars=getChars();const char=chars.find(c=>c.id===shareForCharId)||chars[0];
+  const chars=getFullParty();const char=chars.find(c=>c.id===shareForCharId)||chars[0];
   const el=document.getElementById('ptab-share');
   if(!char){el.innerHTML=`<div class="empty-state"><div class="es-icon">🔗</div><p>Create a character first.</p></div>`;return;}
   shareForCharId=char.id;const cc=classColor(char.classIdx);const partyId=getPartyId();
@@ -2444,16 +2444,13 @@ function renderShareTab(){
 }
 function shareSubTab(t,btn){
   if(btn){document.querySelectorAll('#ptab-share .tab-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
-  const char=getChars().find(c=>c.id===shareForCharId);const partyId=getPartyId();const el=document.getElementById('shareSubContent');if(!el)return;
+  const char=getFullParty().find(c=>c.id===shareForCharId);const partyId=getPartyId();const el=document.getElementById('shareSubContent');if(!el)return;
   if(t==='code')el.innerHTML=`<div class="code-box"><div class="code-hint">Short share code</div><div class="code-big">${char?.shareCode||'??????'}</div><div class="code-hint">Read aloud or message to friends</div></div><button class="btn btn-primary" onclick="copyText('${char?.shareCode||''}')">Copy Short Code</button>`;
   else if(t==='full')el.innerHTML=`<div class="code-box"><div class="code-hint">Full character export</div><div class="code-big" style="font-size:11px;letter-spacing:1px;word-break:break-all;color:var(--muted)">${char?encodeChar(char).slice(0,28)+'…':''}</div></div><button class="btn btn-primary" onclick="copyText('${char?encodeChar(char).replace(/'/g,"\\'"):''}')">Copy Full Export Code</button>`;
   else if(t==='import')el.innerHTML=`<div class="field" style="margin-top:8px"><label>Paste Character Code</label><input id="importCodeIn" placeholder="Short code or full export…"></div><button class="btn btn-primary" onclick="importChar()">Import Character</button><div class="divider"><span>Join a Party</span></div><div class="field"><label>Party Code</label><input id="partyJoinIn" placeholder="PARTY-XXXXXX"></div><button class="btn btn-outline" onclick="joinParty()">Join Party</button>`;
   else if(t==='party'){const joined=S.get('toh_joined_party');el.innerHTML=`<div class="section-label">Your Party ID</div><div class="copy-row"><span class="copy-text">${partyId}</span><span class="copy-btn" onclick="copyText('${partyId}')">📋</span></div><div class="code-box"><div class="code-hint">Party invite code</div><div class="code-big" style="font-size:16px;letter-spacing:3px">${partyId}</div></div><button class="btn btn-primary" onclick="copyText('${partyId}')">Copy Party Code</button>${joined?`<div style="font-size:12px;color:var(--muted);font-style:italic;margin-top:10px;text-align:center">Also joined: ${joined}</div>`:''}`;}
   else if(t==='access'){
-    // Generate/show per-character access codes for all chars in active campaign
-    const camps=getCampaigns();
-    const camp=getActiveCamp();
-    const campChars2_unused=camp?(getChars().filter(c=>(camp.charIds||[]).some(x=>String(x)===String(c.id)))):[];
+    const campChars = getFullParty();
     let html=`<div style="font-size:12px;color:var(--muted);font-style:italic;text-align:center;margin-bottom:14px;line-height:1.5">Give each player their character's access code.<br>They enter it when first opening the app.</div>`;
     if(!campChars.length){
       html+=`<div style="color:var(--muted);font-size:13px;font-style:italic;text-align:center;padding:20px 0">No characters assigned to active campaign yet.<br>Add characters in the Campaign tab.</div>`;
