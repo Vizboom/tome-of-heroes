@@ -1168,142 +1168,161 @@ async function getSupaUser(){
   return _supaUser;
 }
 
-/* ── GROUP CODE: shared key scoping all data for a session ── */
+/* ── GROUP ID ── */
 function getGroupId(){ return localStorage.getItem('toh_group_id')||null; }
-function setGroupId(id){ localStorage.setItem('toh_group_id', id); }
+function setGroupId(id){ if(id) localStorage.setItem('toh_group_id', id); }
 
-/* ── PUSH: local cache → Supabase (Supabase is source of truth) ── */
+// Ensure this user has a group_id — create one if DM, or fail silently if player
+async function ensureGroupId(){
+  let gid = getGroupId();
+  if(gid) return gid;
+  const user = await getSupaUser();
+  if(!user) return null;
+  // Check Supabase for existing group
+  try {
+    const { data } = await supa.from('settings').select('value').eq('key','group_id_'+user.id).single();
+    if(data?.value){ setGroupId(data.value); return data.value; }
+  } catch(e){}
+  // Create new group code for this user
+  const code = Math.random().toString(36).slice(2,7).toUpperCase();
+  try {
+    await supa.from('settings').upsert({key:'group_id_'+user.id, value:code, updated_at:new Date().toISOString()},{onConflict:'key'});
+    setGroupId(code);
+    return code;
+  } catch(e){ return null; }
+}
+
+/* ── PUSH to Supabase ── */
+async function pushCharacter(char, campaignId){
+  if(!_online) return;
+  let gid = getGroupId() || await ensureGroupId();
+  if(!gid) return;
+  const row = { id: String(char.id), group_id: gid, campaign_id: campaignId||null, share_code: char.shareCode||null, data: char };
+  const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
+  if(error) console.warn('Push char error:', error.message, row);
+}
+
 async function pushCampaign(camp){
   if(!_online) return;
-  const gid = getGroupId(); if(!gid) return;
+  let gid = getGroupId() || await ensureGroupId();
+  if(!gid) return;
   const row = { id: camp.id, group_id: gid, name: camp.name||'', data: camp };
   const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
   if(error) console.warn('Push campaign error:', error.message);
 }
 
-async function pushCharacter(char, campaignId){
-  if(!_online) return;
-  const gid = getGroupId(); if(!gid) return;
-  const row = { id: String(char.id), group_id: gid, campaign_id: campaignId||null, share_code: char.shareCode||null, data: char };
-  const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
-  if(error) console.warn('Push char error:', error.message);
-}
-
 async function pushLoot(campaignId, items, wealth){
   if(!_online) return;
-  const gid = getGroupId(); if(!gid) return;
+  let gid = getGroupId() || await ensureGroupId();
+  if(!gid) return;
   const row = { id: campaignId, group_id: gid, campaign_id: campaignId, data: items, wealth: wealth };
   const { error } = await supa.from('loot').upsert(row, {onConflict:'id'});
   if(error) console.warn('Push loot error:', error.message);
 }
 
-/* ── PULL: Supabase → local cache (Supabase always wins) ── */
+/* ── PULL from Supabase — overwrites local cache completely ── */
 async function pullAll(campaignId){
   if(!_online) return false;
-  const gid = getGroupId(); if(!gid) return false;
+  const gid = getGroupId();
+  if(!gid){ console.log('pullAll: no group_id'); return false; }
   try {
     syncIndicator('saving');
-    // Pull ALL campaigns for this group
-    const { data: camps, error: campErr } = await supa.from('campaigns').select('*').eq('group_id', gid);
-    if(!campErr && camps){
-      const parsed = camps.map(r => typeof r.data === 'object' ? r.data : r);
-      S.set('toh_campaigns', parsed);
+    const [campsRes, charsRes] = await Promise.all([
+      supa.from('campaigns').select('*').eq('group_id', gid),
+      supa.from('characters').select('*').eq('group_id', gid),
+    ]);
+    if(!campsRes.error && campsRes.data){
+      localStorage.setItem('toh_campaigns', JSON.stringify(campsRes.data.map(r=>r.data||r)));
     }
-    // Pull ALL characters for this group
-    const { data: chars, error: charErr } = await supa.from('characters').select('*').eq('group_id', gid);
-    if(!charErr && chars){
-      const parsed = chars.map(r => typeof r.data === 'object' ? r.data : r);
-      S.set('toh_chars', parsed);
+    if(!charsRes.error && charsRes.data){
+      localStorage.setItem('toh_chars', JSON.stringify(charsRes.data.map(r=>r.data||r)));
     }
-    // Pull loot for the active campaign
     if(campaignId){
       const { data: loot } = await supa.from('loot').select('*').eq('campaign_id', campaignId).single();
       if(loot){
-        S.set('toh_items_'+campaignId, loot.data||[]);
-        S.set('toh_wealth_'+campaignId, loot.wealth||{});
+        localStorage.setItem('toh_items_'+campaignId, JSON.stringify(loot.data||[]));
+        localStorage.setItem('toh_wealth_'+campaignId, JSON.stringify(loot.wealth||{}));
       }
     }
-    // Pull Claude API key from shared settings
     try {
       const { data: setting } = await supa.from('settings').select('value').eq('key','claude_api_key').single();
       if(setting?.value) localStorage.setItem('toh_claude_key', setting.value);
     } catch(e){}
     syncIndicator('live');
     return true;
-  } catch(e) {
-    console.warn('Pull error:', e);
+  } catch(e){
+    console.warn('pullAll error:', e);
     syncIndicator('error');
     return false;
   }
 }
 
-/* ── DEBOUNCED SYNC ── */
+/* ── DEBOUNCED PUSH queue ── */
+const _pending = {};
+let _syncTimer = null;
+
 function schedulePush(type, id, data){
-  _syncPending[id+type] = { type, id, data };
+  _pending[type+':'+id] = {type, id, data};
   clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(_flushPending, 1200);
+  _syncTimer = setTimeout(_flushPending, 800);
   syncIndicator('saving');
 }
 
 async function _flushPending(){
-  if(!_online || !getGroupId()) return;
-  for(const key of Object.keys(_syncPending)){
-    const p = _syncPending[key];
-    delete _syncPending[key];
-    if(p.type==='campaign') await pushCampaign(p.data);
+  const keys = Object.keys(_pending);
+  if(!keys.length) return;
+  for(const key of keys){
+    const p = _pending[key];
+    delete _pending[key];
     if(p.type==='character') await pushCharacter(p.data.char, p.data.campaignId);
-    if(p.type==='loot') await pushLoot(p.id, p.data.items, p.data.wealth);
+    if(p.type==='campaign')  await pushCampaign(p.data);
+    if(p.type==='loot')      await pushLoot(p.id, p.data.items, p.data.wealth);
   }
-  if(!Object.keys(_syncPending).length) syncIndicator('live');
+  syncIndicator('live');
 }
 
-/* ── REALTIME SUBSCRIPTIONS ── */
+/* ── REALTIME — live updates from other devices ── */
 function subscribeRealtime(campaignId){
   _realtimeSubs.forEach(s=>supa.removeChannel(s));
   _realtimeSubs = [];
   const gid = getGroupId();
   if(!gid) return;
 
-  // Characters — any change for this group updates local cache and re-renders
   const charSub = supa.channel('chars-'+gid)
-    .on('postgres_changes', { event:'*', schema:'public', table:'characters', filter:'group_id=eq.'+gid }, payload=>{
-      const updated = payload.new?.data;
-      const deletedId = payload.old?.id;
-      if(payload.eventType === 'DELETE' && deletedId){
-        const chars = S.get('toh_chars')||[];
-        S.set('toh_chars', chars.filter(c=>String(c.id)!==String(deletedId)));
-      } else if(updated){
-        const chars = S.get('toh_chars')||[];
+    .on('postgres_changes',{event:'*',schema:'public',table:'characters',filter:'group_id=eq.'+gid}, payload=>{
+      const chars = JSON.parse(localStorage.getItem('toh_chars')||'[]');
+      if(payload.eventType==='DELETE'){
+        localStorage.setItem('toh_chars', JSON.stringify(chars.filter(c=>String(c.id)!==String(payload.old?.id))));
+      } else if(payload.new?.data){
+        const updated = payload.new.data;
         const i = chars.findIndex(c=>String(c.id)===String(updated.id));
         if(i>=0) chars[i]=updated; else chars.push(updated);
-        S.set('toh_chars', chars);
+        localStorage.setItem('toh_chars', JSON.stringify(chars));
       }
-      if(document.getElementById('rosterList')?.closest('.active')) renderRoster();
+      if(document.getElementById('rosterList')?.closest('.screen.active')) renderRoster();
       if(document.getElementById('ptab-overview')?.classList.contains('active')) renderPartyOverview();
     }).subscribe();
   _realtimeSubs.push(charSub);
 
-  // Campaigns
   const campSub = supa.channel('camps-'+gid)
-    .on('postgres_changes', { event:'*', schema:'public', table:'campaigns', filter:'group_id=eq.'+gid }, payload=>{
-      const updated = payload.new?.data;
-      if(updated){
-        const camps = S.get('toh_campaigns')||[];
+    .on('postgres_changes',{event:'*',schema:'public',table:'campaigns',filter:'group_id=eq.'+gid}, payload=>{
+      if(payload.new?.data){
+        const camps = JSON.parse(localStorage.getItem('toh_campaigns')||'[]');
+        const updated = payload.new.data;
         const i = camps.findIndex(c=>c.id===updated.id);
         if(i>=0) camps[i]=updated; else camps.push(updated);
-        S.set('toh_campaigns', camps);
+        localStorage.setItem('toh_campaigns', JSON.stringify(camps));
+        if(document.getElementById('campList')) renderCampList();
       }
     }).subscribe();
   _realtimeSubs.push(campSub);
 
-  // Loot
   if(campaignId){
     const lootSub = supa.channel('loot-'+campaignId)
-      .on('postgres_changes', { event:'*', schema:'public', table:'loot', filter:'campaign_id=eq.'+campaignId }, payload=>{
-        const row = payload.new;
-        if(row){
-          S.set('toh_items_'+campaignId, row.data||[]);
-          S.set('toh_wealth_'+campaignId, row.wealth||{});
+      .on('postgres_changes',{event:'*',schema:'public',table:'loot',filter:'campaign_id=eq.'+campaignId}, payload=>{
+        if(payload.new){
+          localStorage.setItem('toh_items_'+campaignId, JSON.stringify(payload.new.data||[]));
+          localStorage.setItem('toh_wealth_'+campaignId, JSON.stringify(payload.new.wealth||{}));
           if(document.getElementById('ltab-inventory')?.classList.contains('active')) renderInventory();
           if(document.getElementById('ltab-pool')?.classList.contains('active')) renderPool();
           if(document.getElementById('ltab-wealth')?.classList.contains('active')) renderWealth();
@@ -2542,40 +2561,17 @@ function getPlayerCampId(){ return S.get('toh_player_camp_id'); }
 async function setDMMode(){
   S.set('toh_mode','dm');
 
-  // Generate or retrieve a group ID for this DM
-  let gid = getGroupId();
-  if(!gid){
-    const user = await getSupaUser();
-    if(user){
-      // Check if this DM already has a group code stored in settings
-      try {
-        const { data } = await supa.from('settings').select('value').eq('key','group_id_'+user.id).single();
-        if(data?.value){
-          gid = data.value;
-        }
-      } catch(e){}
-      if(!gid){
-        // Create a new short group code
-        gid = Math.random().toString(36).slice(2,7).toUpperCase();
-        await supa.from('settings').upsert({key:'group_id_'+user.id, value:gid, updated_at:new Date().toISOString()}, {onConflict:'key'});
-      }
-      setGroupId(gid);
-    } else {
-      // Offline fallback
-      gid = 'LOCAL-'+Math.random().toString(36).slice(2,7).toUpperCase();
-      setGroupId(gid);
-    }
-  }
+  // Ensure this DM has a persistent group_id
+  const gid = await ensureGroupId();
 
   // Show the group code in the settings screen
   const codeDisplay = document.getElementById('dmGroupCodeDisplay');
   const codeValue = document.getElementById('dmGroupCodeValue');
-  if(codeDisplay && codeValue){ codeDisplay.style.display='block'; codeValue.textContent=gid; }
+  if(codeDisplay && codeValue && gid){ codeDisplay.style.display='block'; codeValue.textContent=gid; }
 
   // Pull all data for this group then boot
   await pullAll(getActiveCampId());
-  const campId = getActiveCampId();
-  subscribeRealtime(campId);
+  subscribeRealtime(getActiveCampId());
 
   document.querySelector('.bottomnav').style.display='flex';
   applyModeUI();
@@ -4759,17 +4755,13 @@ function bootApp(){
   const mode=S.get('toh_mode');
   const nav_bar=document.querySelector('.bottomnav');
 
-  // Check if user is logged in to Supabase
   getSupaUser().then(async user => {
     if(user){
-      // DM: restore group_id from Supabase settings if not in localStorage
-      if(mode==='dm' && !getGroupId()){
-        try {
-          const { data } = await supa.from('settings').select('value').eq('key','group_id_'+user.id).single();
-          if(data?.value) setGroupId(data.value);
-        } catch(e){}
+      // Always ensure a group_id exists for logged-in DM users
+      if(mode==='dm' || (!mode && !getGroupId())){
+        await ensureGroupId();
       }
-      // Pull latest shared data for this group (if we have a group)
+      // Pull all shared data fresh from Supabase
       const campId = getActiveCampId();
       if(getGroupId()){
         await pullAll(campId);
@@ -4786,7 +4778,6 @@ function bootApp(){
       document.getElementById('backBtn').style.visibility='hidden';
     }
   }).catch(()=>{
-    // Supabase unreachable — boot offline with cached data
     _bootContinue(mode, nav_bar);
   });
   setMode('normal');
