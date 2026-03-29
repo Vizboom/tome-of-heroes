@@ -55,182 +55,134 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 /* ── Desktop responsive layout ── */
 @media (min-width: 768px) {
   html, body { overflow: auto; height: 100%; }
-
-  /* Outer wrapper — dark background, full screen */
   body { background: var(--bg); }
 
-  /* App shell — desktop: full height, wider, side nav */
   #app {
-    max-width: 100%;
-    width: 100%;
-    height: 100vh;
-    margin: 0;
+    max-width: 100%; width: 100%; height: 100vh; margin: 0;
     display: grid;
-    grid-template-rows: var(--top-h) var(--desk-nav-h, 48px) 1fr;
+    grid-template-rows: var(--top-h) 48px 1fr;
     grid-template-columns: 1fr;
-    grid-template-areas:
-      "topbar"
-      "sidenav"
-      "content";
+    grid-template-areas: "topbar" "sidenav" "content";
     overflow: hidden;
   }
 
-  /* Top bar */
-  .topbar {
-    grid-area: topbar;
-    padding: 0 24px;
-    border-bottom: 1px solid var(--border);
-  }
+  .topbar { grid-area: topbar; padding: 0 28px; border-bottom: 1px solid var(--border); }
   .topbar-title { font-size: 16px; letter-spacing: 3px; }
 
-  /* Nav → top horizontal bar below topbar */
+  /* Horizontal nav bar */
   .bottomnav {
-    grid-area: sidenav;
-    flex-direction: row;
-    height: 48px;
-    width: 100%;
-    border-top: none;
-    border-bottom: 1px solid var(--border);
-    border-right: none;
-    padding: 0 16px;
-    justify-content: flex-start;
-    gap: 0;
-    background: var(--bg);
-    overflow: visible;
+    grid-area: sidenav; flex-direction: row; height: 48px; width: 100%;
+    border-top: none; border-bottom: 1px solid var(--border); border-right: none;
+    padding: 0 20px; justify-content: flex-start; gap: 0; background: var(--bg); overflow: visible;
   }
   .nav-item {
-    flex-direction: row;
-    justify-content: center;
-    align-items: center;
-    padding: 0 18px;
-    gap: 7px;
-    font-size: 10px;
-    letter-spacing: 1.5px;
-    border-radius: 0;
-    width: auto;
-    flex: 0 0 auto;
-    text-align: center;
-    border-left: none;
-    border-bottom: 2px solid transparent;
-    height: 100%;
+    flex-direction: row; justify-content: center; align-items: center;
+    padding: 0 20px; gap: 8px; font-size: 10px; letter-spacing: 1.5px;
+    border-radius: 0; width: auto; flex: 0 0 auto;
+    border-left: none; border-bottom: 2px solid transparent; height: 100%;
   }
   .nav-item .nav-icon { font-size: 16px; }
-  .nav-item.active {
-    background: transparent;
-    border-left-color: transparent;
-    border-bottom-color: var(--gold);
-    color: var(--gold);
-  }
+  .nav-item.active { background: transparent; border-left-color: transparent; border-bottom-color: var(--gold); color: var(--gold); }
 
-  /* Content area — side-by-side split layout */
-  #content-area {
-    grid-area: content;
-    overflow: hidden;
-    position: relative;
-    display: flex;
-    flex-direction: row;
-  }
+  /* Content area — single full-width column */
+  #content-area { grid-area: content; overflow: hidden; display: flex; }
 
-  /* All screens hidden by default */
+  /* Screens */
   .screen { display: none !important; }
-
-  /* Primary panel — left column, 50% */
   .screen.active {
-    display: flex !important;
-    flex-direction: column;
-    flex: 1 1 50%;
-    width: 50%;
-    min-width: 0;
-    height: 100%;
-    overflow-y: auto;
-    border-right: 1px solid var(--border);
+    display: flex !important; flex-direction: column;
+    width: 100%; height: 100%; overflow: hidden;
   }
 
-  /* Secondary companion panel — right column, 50% */
-  .screen.desk-secondary {
-    display: flex !important;
-    flex-direction: column;
-    flex: 1 1 50%;
-    width: 50%;
-    min-width: 0;
-    height: 100%;
-    overflow-y: auto;
-    background: var(--bg2);
-    border-left: none;
-  }
-    overflow-y: auto;
-    background: var(--bg2);
-    border-left: 1px solid var(--border);
+  /* Non-tabbed screens scroll normally */
+  .scroll-region { padding: 20px 28px 40px; overflow-y: auto; flex: 1; max-width: none; }
+  .scroll-region::-webkit-scrollbar { width: 5px; }
+  .scroll-region::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* ═══════════════════════════════════════════════════════
+     INTRA-SCREEN SPLIT: tab-row becomes left sidebar,
+     tab content fills right panel — true 50/50 side-by-side
+     ═══════════════════════════════════════════════════════ */
+
+  /* Wrapper added by JS around tab-row + tab panes */
+  .desk-split {
+    display: flex; flex-direction: row; flex: 1; overflow: hidden; min-height: 0;
   }
 
-  /* Secondary panel subtle top label */
-  .screen.desk-secondary::before {
-    content: attr(data-panel-label);
-    display: block;
+  /* Left: tab buttons become vertical sidebar */
+  .desk-split > .tab-row {
+    display: flex !important; flex-direction: column;
+    width: 150px; flex-shrink: 0;
+    background: var(--bg2); border-right: 1px solid var(--border);
+    border-radius: 0; padding: 14px 0; gap: 2px;
+    margin-bottom: 0; overflow-y: auto;
+  }
+  .desk-split > .tab-row .tab-btn {
+    border-radius: 0; text-align: left; padding: 12px 18px;
+    font-size: 10px; letter-spacing: 1px; width: 100%; flex: none;
+    border-left: 3px solid transparent; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .desk-split > .tab-row .tab-btn.active {
+    background: var(--gold-dim); border-left-color: var(--gold); color: var(--gold);
+  }
+
+  /* Right: content panel fills remaining 50%, scrolls independently */
+  .desk-split > .desk-content {
+    flex: 1; overflow-y: auto; padding: 20px 28px 40px; min-width: 0;
+  }
+  .desk-split > .desk-content::-webkit-scrollbar { width: 5px; }
+  .desk-split > .desk-content::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* Tab panes inside desk-content show normally when active */
+  .desk-split > .desk-content .tab-pane.active { display: block; }
+
+  /* Screen header (hero area, stat bar) stays above the split, full width */
+  .desk-screen-header {
+    flex-shrink: 0; padding: 16px 28px 0; border-bottom: 1px solid var(--border)33;
+  }
+
+  /* Roster right panel — character card grid */
+  #rosterList {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 10px;
+  }
+  #rosterList .char-card { margin-bottom: 0; }
+
+  /* Campaign detail — the inner tabs also become a vertical split */
+  #campDetailView .desk-split > .tab-row { width: 130px; }
+
+  /* History right panel header */
+  .desk-history-label {
     font-family: 'Cinzel', serif;
     font-size: 9px;
-    letter-spacing: 2px;
     color: var(--muted);
-    padding: 10px 28px 0;
-    opacity: 0.5;
+    letter-spacing: 2px;
+    padding: 14px 20px 8px;
+    opacity: 0.6;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
     flex-shrink: 0;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 0;
-    padding-bottom: 8px;
   }
 
-  /* Divider between panels */
-  .screen.active { border-right: 1px solid var(--border); }
-
-  .scroll-region {
-    padding: 20px 24px 40px;
-    max-width: none;
-    flex: 1;
-  }
-
-  /* Scrollbars */
-  .screen::-webkit-scrollbar { width: 5px; }
-  .screen::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
-  .screen::-webkit-scrollbar-thumb:hover { background: var(--muted); }
-
-  /* Toast — centred, no side offset needed with top nav */
+  /* Toast */
   .toast { left: 50%; transform: translateX(-50%); right: auto; min-width: 220px; }
 
-  /* Modegate / playergate: full width, no split */
-  #scr-modegate.active, #scr-playergate.active {
-    width: 100% !important;
-    max-width: 100% !important;
-    border-right: none !important;
+  /* Modegate / playergate / build: full width, no split */
+  #scr-modegate.active, #scr-playergate.active, #scr-build.active {
+    overflow-y: auto !important;
   }
 
   /* Modal centering */
   #charImportModal { align-items: center !important; }
-  #charImportModal > div {
-    border-radius: 16px !important;
-    max-width: 600px !important;
-    max-height: 85vh !important;
-  }
+  #charImportModal > div { border-radius: 16px !important; max-width: 600px !important; max-height: 85vh !important; }
 
-  /* Wider sync indicator */
   #syncIndicator { font-size: 11px; }
-
-  /* Build screen — full width (multi-step wizard) */
-  #scr-build.active {
-    width: 100% !important;
-    max-width: 100% !important;
-    border-right: none !important;
-  }
 }
 
 @media (min-width: 1200px) {
-  #app { grid-template-columns: 1fr; }
-  .nav-item { font-size: 11px; padding: 0 22px; }
-
-  /* Wider primary panel on large screens */
-  .screen.active {
-    width: 460px;
-    max-width: 480px;
-  }
+  .nav-item { font-size: 11px; padding: 0 24px; }
+  .desk-split > .tab-row { width: 170px; }
 }
 
 /* ── Campaign styles ── */
@@ -1673,21 +1625,7 @@ function nav(id){
   document.getElementById('backBtn').style.visibility=m?.back?'visible':'hidden';
   currentScreen=id;
 
-  // Desktop split: show a logical companion panel on the right
-  const companions={
-    'roster':   'sheet',
-    'sheet':    'roster',
-    'dice':     'party',
-    'party':    'dice',
-    'loot':     'campaign',
-    'campaign': 'loot',
-    'partysheet':'party',
-  };
-  const companionId = companions[id];
-  if(companionId){
-    const companionEl = document.getElementById('scr-'+companionId);
-    if(companionEl) companionEl.classList.add('desk-secondary');
-  }
+  // No cross-screen companion panels — each screen handles its own desktop layout
 
   if(id==='roster'){renderRoster();renderCampaignSwitchBanner();}
   if(id==='campaign'){renderCampList();}
@@ -1698,13 +1636,9 @@ function nav(id){
   }
   if(id==='loot'){lootTab('inventory');}
   if(id==='dice')renderDiceScreen();
-  // Also render companion if it needs it
-  if(companionId==='party')partyTab('overview');
-  if(companionId==='roster'){renderRoster();renderCampaignSwitchBanner();}
-  if(companionId==='campaign')renderCampList();
-  if(companionId==='loot')lootTab('inventory');
-  if(companionId==='dice')renderDiceScreen();
+
   applyModeUI();
+  applyDesktopSplit();
 }
 function goBack(){const m=SCREEN_META[currentScreen];if(m?.back)nav(m.back);}
 
@@ -2593,6 +2527,145 @@ function joinAsPlayer(){
   applyModeUI();
   toast('✦ Welcome, '+char.name+'!');
   nav('roster');
+}
+
+function applyDesktopSplit(){
+  if(window.innerWidth < 768) return;
+
+  // ── Tabbed screens: tab-row becomes left sidebar, tab-panes fill right ──
+  const tabbedScreens = ['scr-sheet','scr-partysheet','scr-party','scr-loot'];
+  tabbedScreens.forEach(screenId => {
+    const screen = document.getElementById(screenId);
+    if(!screen || screen.dataset.deskSplit) return;
+    const tabRow = screen.querySelector(':scope > .tab-row');
+    if(!tabRow) return;
+    const tabPanes = [...screen.querySelectorAll(':scope > .tab-pane')];
+    if(!tabPanes.length) return;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'desk-split';
+    const content = document.createElement('div');
+    content.className = 'desk-content';
+
+    screen.insertBefore(wrap, tabRow);
+    wrap.appendChild(tabRow);
+    wrap.appendChild(content);
+    tabPanes.forEach(p => content.appendChild(p));
+    screen.dataset.deskSplit = '1';
+  });
+
+  // ── Dice screen: left=controls, right=result+history ──
+  const diceScreen = document.getElementById('scr-dice');
+  if(diceScreen && !diceScreen.dataset.deskSplit){
+    // Wrap the whole content in a horizontal split
+    const allChildren = [...diceScreen.children];
+    // Left column: charPanel, rollBtn, rollResult, Roll Mode, Die Type, Modifier, Conditions
+    // Right column: History
+    const historyDivider = [...allChildren].find(el => el.querySelector && el.querySelector('span') && el.textContent.includes('History'));
+    const historyList = diceScreen.querySelector('#rollHistory');
+
+    const wrap = document.createElement('div');
+    wrap.className = 'desk-split';
+    const leftCol = document.createElement('div');
+    leftCol.className = 'desk-content';
+    leftCol.style.cssText = 'border-right:1px solid var(--border);flex:0 0 50%;max-width:50%;';
+    const rightCol = document.createElement('div');
+    rightCol.className = 'desk-content';
+    rightCol.style.cssText = 'flex:1;background:var(--bg2);';
+
+    // Move all children into left col, then move history divider+list to right
+    diceScreen.appendChild(wrap);
+    allChildren.forEach(el => leftCol.appendChild(el));
+    wrap.appendChild(leftCol);
+    wrap.appendChild(rightCol);
+
+    // Move history section to right
+    if(historyDivider) rightCol.appendChild(historyDivider);
+    if(historyList) rightCol.appendChild(historyList);
+
+    // Add a label to right col
+    const label = document.createElement('div');
+    label.style.cssText = 'font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:2px;padding:14px 20px 8px;opacity:0.6;border-bottom:1px solid rgba(255,255,255,0.05)';
+    label.textContent = 'ROLL HISTORY';
+    rightCol.insertBefore(label, rightCol.firstChild);
+
+    diceScreen.dataset.deskSplit = '1';
+  }
+
+  // ── Roster: left=header/import btn, right=character cards ──
+  const rosterScreen = document.getElementById('scr-roster');
+  if(rosterScreen && !rosterScreen.dataset.deskSplit){
+    const allChildren = [...rosterScreen.children];
+    const rosterList = document.getElementById('rosterList');
+    if(rosterList){
+      const wrap = document.createElement('div');
+      wrap.className = 'desk-split';
+      const leftCol = document.createElement('div');
+      leftCol.className = 'desk-content';
+      leftCol.style.cssText = 'border-right:1px solid var(--border);flex:0 0 280px;max-width:280px;background:var(--bg2);';
+      const rightCol = document.createElement('div');
+      rightCol.className = 'desk-content';
+
+      rosterScreen.appendChild(wrap);
+      // Left: everything except rosterList
+      allChildren.forEach(el => {
+        if(el !== rosterList) leftCol.appendChild(el);
+        else rightCol.appendChild(el);
+      });
+      wrap.appendChild(leftCol);
+      wrap.appendChild(rightCol);
+
+      // Style roster list as a grid on desktop
+      rosterList.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;';
+
+      rosterScreen.dataset.deskSplit = '1';
+    }
+  }
+
+  // ── Campaign: campListView left, detail/forms right ──
+  const campScreen = document.getElementById('scr-campaign');
+  if(campScreen && !campScreen.dataset.deskSplit){
+    const allChildren = [...campScreen.children];
+    const campListView = document.getElementById('campListView');
+    if(campListView){
+      const wrap = document.createElement('div');
+      wrap.className = 'desk-split';
+      const leftCol = document.createElement('div');
+      leftCol.className = 'desk-content';
+      leftCol.style.cssText = 'border-right:1px solid var(--border);flex:0 0 300px;max-width:300px;background:var(--bg2);';
+      const rightCol = document.createElement('div');
+      rightCol.className = 'desk-content';
+
+      campScreen.appendChild(wrap);
+      allChildren.forEach(el => {
+        if(el === campListView) leftCol.appendChild(el);
+        else rightCol.appendChild(el);
+      });
+      wrap.appendChild(leftCol);
+      wrap.appendChild(rightCol);
+      campScreen.dataset.deskSplit = '1';
+    }
+  }
+
+  // ── Campaign detail inner tabs: sessions/quests/npcs/arcs/notes ──
+  const campDetail = document.getElementById('campDetailView');
+  if(campDetail && !campDetail.dataset.deskSplit){
+    const tabRow = campDetail.querySelector('#campTabRow');
+    if(tabRow){
+      const tabPanes = [...campDetail.querySelectorAll(':scope > .tab-pane')];
+      if(tabPanes.length){
+        const wrap = document.createElement('div');
+        wrap.className = 'desk-split';
+        const content = document.createElement('div');
+        content.className = 'desk-content';
+        campDetail.insertBefore(wrap, tabRow);
+        wrap.appendChild(tabRow);
+        wrap.appendChild(content);
+        tabPanes.forEach(p => content.appendChild(p));
+        campDetail.dataset.deskSplit = '1';
+      }
+    }
+  }
 }
 
 function applyModeUI(){
@@ -4168,6 +4241,7 @@ function _bootContinue(mode, nav_bar){
     if(nav_bar) nav_bar.style.display='flex';
     applyModeUI();
     nav('roster');
+    setTimeout(applyDesktopSplit, 0); // run after DOM renders
   }
 }
 
@@ -5549,6 +5623,7 @@ function openCamp(id) {
   document.getElementById('campDetailView').style.display = 'block';
   renderCampDetailHeader();
   campTab('sessions');
+  setTimeout(applyDesktopSplit, 0);
 }
 
 function hideCampForm() {
