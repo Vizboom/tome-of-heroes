@@ -2566,18 +2566,30 @@ function getPlayerCampId(){ return S.get('toh_player_camp_id'); }
 async function setDMMode(){
   S.set('toh_mode','dm');
 
-  // Ensure this DM has a persistent group_id
+  // Show loading state on the DM button
+  const dmBtn = document.querySelector('.modegate-btn-dm');
+  if(dmBtn){ dmBtn.style.opacity='0.6'; dmBtn.style.pointerEvents='none'; }
+  syncIndicator('saving');
+
+  // Ensure this DM has a persistent group_id (creates fresh one if cleared)
   const gid = await ensureGroupId();
+  if(!gid){
+    toast('Could not connect to server — check your internet','var(--red)');
+    if(dmBtn){ dmBtn.style.opacity=''; dmBtn.style.pointerEvents=''; }
+    S.set('toh_mode', null);
+    return;
+  }
 
   // Show the group code in the settings screen
   const codeDisplay = document.getElementById('dmGroupCodeDisplay');
   const codeValue = document.getElementById('dmGroupCodeValue');
-  if(codeDisplay && codeValue && gid){ codeDisplay.style.display='block'; codeValue.textContent=gid; }
+  if(codeDisplay && codeValue){ codeDisplay.style.display='block'; codeValue.textContent=gid; }
 
   // Pull all data for this group then boot
   await pullAll(getActiveCampId());
   subscribeRealtime(getActiveCampId());
 
+  if(dmBtn){ dmBtn.style.opacity=''; dmBtn.style.pointerEvents=''; }
   document.querySelector('.bottomnav').style.display='flex';
   applyModeUI();
   nav('roster');
@@ -2727,14 +2739,25 @@ async function callClaude(body){
   return res.json();
 }
 
-function clearAllData(){
+async function clearAllData(){
   if(!confirm('⚠ This will permanently delete ALL characters, campaigns, loot and settings.\n\nThis cannot be undone. Are you sure?')) return;
   if(!confirm('Last chance — delete everything?')) return;
-  // Clear all toh_ keys from localStorage
+
+  // Clear Supabase group_id setting so a fresh one is created next time
+  try {
+    const user = await getSupaUser();
+    if(user){
+      await supa.from('settings').delete().eq('key','group_id_'+user.id);
+    }
+  } catch(e){}
+
+  // Clear all localStorage
   const keys = Object.keys(localStorage).filter(k=>k.startsWith('toh_'));
   keys.forEach(k=>localStorage.removeItem(k));
+  localStorage.removeItem('toh_group_id');
+
   toast('All data cleared');
-  setTimeout(()=>bootApp(), 800);
+  setTimeout(()=>window.location.reload(), 800);
 }
 
 /* ══════════════════════════════════════════════════════
@@ -4827,11 +4850,11 @@ function bootApp(){
 
   getSupaUser().then(async user => {
     if(user){
-      // Always ensure a group_id exists for logged-in DM users
-      if(mode==='dm' || (!mode && !getGroupId())){
+      // Only restore group_id if user already has a mode set (returning session)
+      if(mode==='dm' && !getGroupId()){
         await ensureGroupId();
       }
-      // Pull all shared data fresh from Supabase
+      // Pull fresh data if we have a group_id
       const campId = getActiveCampId();
       if(getGroupId()){
         await pullAll(campId);
