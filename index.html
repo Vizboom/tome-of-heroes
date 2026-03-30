@@ -4952,13 +4952,34 @@ async function skipLogin(){
 }
 
 async function doLogout(){
-  try { await supaSignOut(); } catch(e){}
-  // Clear all session state from localStorage
-  ['toh_mode','toh_player_char_id','toh_player_camp_id','toh_group_id',
-   'toh_chars','toh_campaigns','toh_active_camp','toh_dice_char',
-   'toh_joined_party','toh_pid'].forEach(k=>localStorage.removeItem(k));
-  // Force full page reload to clear all JS state cleanly
-  window.location.reload();
+  // Sign out from Supabase auth
+  try { await supa.auth.signOut(); _supaUser = null; } catch(e){ console.warn('signout error',e); }
+
+  // Clear ALL localStorage — everything
+  const keysToRemove = Object.keys(localStorage).filter(k => k.startsWith('toh_') || k.startsWith('sb-'));
+  keysToRemove.forEach(k => localStorage.removeItem(k));
+  // Also clear Supabase auth tokens explicitly
+  Object.keys(localStorage).forEach(k => {
+    if(k.includes('supabase') || k.includes('auth-token')) localStorage.removeItem(k);
+  });
+
+  // Stop realtime
+  _realtimeSubs.forEach(s=>supa.removeChannel(s));
+  _realtimeSubs = [];
+
+  // Show login screen directly
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  const nav_bar = document.querySelector('.bottomnav');
+  if(nav_bar) nav_bar.style.display='none';
+  const ex = document.getElementById('modeBadge'); if(ex) ex.remove();
+  const loginScreen = document.getElementById('scr-login');
+  if(loginScreen){
+    loginScreen.classList.add('active');
+    document.getElementById('pageTitle').textContent='Tome of Heroes';
+    document.getElementById('backBtn').style.visibility='hidden';
+  } else {
+    window.location.reload();
+  }
 }
 
 function importChar(){const raw=(document.getElementById('importCodeIn')?.value||'').trim();if(!raw){toast('Paste a code first','var(--red)');return;}let char=decodeChar(raw);if(!char||!char.name||char.classIdx===undefined){toast('Invalid code','var(--red)');return;}char.id=Date.now();char.shareCode=genCode();char.currentHP=char.currentHP||char.maxHP;char.statuses=char.statuses||[];char.spells=char.spells||[];char.attacks=char.attacks||[];char.equipment=char.equipment||[];const chars=getChars();chars.push(char);saveChars(chars);toast('✦ '+char.name+' imported!');renderRoster();}
