@@ -4828,10 +4828,6 @@ function _finishCharImport(char, source){
   const chars = getChars();
   chars.push(char);
   saveChars(chars);
-  // Integrity check: if campaigns vanished after char save, re-seed them
-  if(getCampaigns().length === 0 && PRESET_CAMPAIGNS && PRESET_CAMPAIGNS.length){
-    seedPresetCampaigns();
-  }
   document.getElementById('charImportModal')?.remove();
   toast(`✦ ${char.name} imported from ${source}!`);
   renderRoster();
@@ -7350,66 +7346,43 @@ function renderCampaignSwitchBanner() {
 
 // Seed preset campaigns AFTER all consts are defined
 function seedPresetCampaigns(){
-  if(!PRESET_CAMPAIGNS || !PRESET_CAMPAIGNS.length){
-    console.warn('PRESET_CAMPAIGNS empty or not loaded');
-    return;
-  }
-  let camps = getCampaigns();
-  let changed = false;
+  // With server-first approach, only seed _db if empty (offline fallback)
+  if(!PRESET_CAMPAIGNS || !PRESET_CAMPAIGNS.length) return;
+  if(_db.campaigns.length > 0) return;
   PRESET_CAMPAIGNS.forEach(p => {
-    const existing = camps.find(c => c.id === p.id);
-    const needsInstall = !existing ||
-      ((!existing.sessions || existing.sessions.length === 0) &&
-       (!existing.npcs || existing.npcs.length === 0));
-    if(!needsInstall) return;
-    // Deep clone so we don't mutate the master
     const camp = JSON.parse(JSON.stringify(p));
-    camp.sessions = camp.sessions||[]; camp.quests = camp.quests||[];
-    camp.npcs = camp.npcs||[]; camp.arcs = camp.arcs||[];
-    camp.notes = camp.notes||[]; camp.charIds = camp.charIds||[];
-    if(existing && existing.charIds && existing.charIds.length){
-      camp.charIds = existing.charIds;
-    }
-    const idx = camps.findIndex(c => c.id === p.id);
-    if(idx >= 0) camps[idx] = camp;
-    else camps.push(camp);
-    changed = true;
+    camp.sessions=camp.sessions||[]; camp.quests=camp.quests||[];
+    camp.npcs=camp.npcs||[]; camp.arcs=camp.arcs||[];
+    camp.notes=camp.notes||[]; camp.charIds=camp.charIds||[];
+    if(!_db.campaigns.find(c=>c.id===camp.id)) _db.campaigns.push(camp);
   });
-  if(changed){
-    saveCampaigns(camps);
-    if(!getActiveCampId() && camps.length) setActiveCampId(camps[0].id);
-  }
 }
 
-seedPresetCampaigns();
-
-function forceReinstallPresets(){
+async function forceReinstallPresets(){
   if(!PRESET_CAMPAIGNS || !PRESET_CAMPAIGNS.length){
     alert('Preset data not found. Try reloading the page.');
     return;
   }
-  let camps = getCampaigns();
+  if(!getGroupId()){
+    toast('Connect to a group first before restoring presets','var(--red)');
+    return;
+  }
+  toast('Restoring built-in campaigns…','var(--purple)');
   let count = 0;
-  PRESET_CAMPAIGNS.forEach(p => {
+  for(const p of PRESET_CAMPAIGNS){
     const camp = JSON.parse(JSON.stringify(p));
-    camp.sessions = camp.sessions||[]; camp.quests = camp.quests||[];
-    camp.npcs = camp.npcs||[]; camp.arcs = camp.arcs||[];
-    camp.notes = camp.notes||[]; camp.charIds = camp.charIds||[];
-    const existing = camps.find(c => c.id === p.id);
-    if(existing && existing.charIds && existing.charIds.length){
-      camp.charIds = existing.charIds;
-    }
-    const idx = camps.findIndex(c => c.id === p.id);
-    if(idx >= 0) camps[idx] = camp;
-    else camps.push(camp);
+    camp.sessions=camp.sessions||[]; camp.quests=camp.quests||[];
+    camp.npcs=camp.npcs||[]; camp.arcs=camp.arcs||[];
+    camp.notes=camp.notes||[]; camp.charIds=camp.charIds||[];
+    const existing = _db.campaigns.find(c=>c.id===p.id);
+    if(existing?.charIds?.length) camp.charIds = existing.charIds;
+    await dbSaveCampaign(camp);
     count++;
-  });
-  saveCampaigns(camps);
-  if(!getActiveCampId() && camps.length) setActiveCampId(camps[0].id);
+  }
+  if(!getActiveCampId() && _db.campaigns.length) setActiveCampId(_db.campaigns[0].id);
   toast(`✦ ${count} built-in campaign${count!==1?'s':''} restored!`,'var(--gold)');
   renderCampList();
 }
-
 bootApp();
 </script>
 
