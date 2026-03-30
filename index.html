@@ -1273,8 +1273,33 @@ async function pullAll(campId){
       supa.from('characters').select('*').eq('group_id', gid),
       supa.from('campaigns').select('*').eq('group_id', gid),
     ]);
-    if(!cr.error)   _db.chars     = (cr.data||[]).map(r=>r.data||r);
-    if(!campr.error) _db.campaigns = (campr.data||[]).map(r=>r.data||r);
+    // Only overwrite _db if we got actual data back (never wipe with empty)
+    if(!cr.error && cr.data && cr.data.length > 0)
+      _db.chars = cr.data.map(r=>r.data||r);
+    else if(!cr.error && cr.data && cr.data.length === 0 && _db.chars.length > 0)
+      console.log('pullAll: Supabase returned 0 chars — keeping existing _db.chars');
+
+    if(!campr.error && campr.data && campr.data.length > 0)
+      _db.campaigns = campr.data.map(r=>r.data||r);
+    else if(!campr.error && campr.data && campr.data.length === 0 && _db.campaigns.length > 0)
+      console.log('pullAll: Supabase returned 0 campaigns — keeping existing _db.campaigns');
+
+    if(campId){
+      const { data: loot } = await supa.from('loot').select('*').eq('campaign_id', campId).single();
+      if(loot){ _db.items[campId]=loot.data||[]; _db.wealth[campId]=loot.wealth||{}; }
+    }
+    try {
+      const { data: s } = await supa.from('settings').select('value').eq('key','claude_api_key').single();
+      if(s?.value) localStorage.setItem('toh_claude_key', s.value);
+    } catch(e){}
+    syncIndicator('live');
+    return true;
+  } catch(e){
+    console.warn('pullAll error:', e);
+    syncIndicator('error');
+    return false;
+  }
+}
     if(campId){
       const { data: loot } = await supa.from('loot').select('*').eq('campaign_id', campId).single();
       if(loot){ _db.items[campId]=loot.data||[]; _db.wealth[campId]=loot.wealth||{}; }
@@ -4884,42 +4909,42 @@ async function diagCampaigns(){
 
 async function forceSyncAll(){
   toast('⏳ Force syncing all data…','var(--purple)');
-  // Ensure group id exists
   const gid = await ensureGroupId();
   if(!gid){ toast('No group ID — log in as DM first','var(--red)'); return; }
 
-  const chars = JSON.parse(localStorage.getItem('toh_chars')||'[]');
-  const camps = JSON.parse(localStorage.getItem('toh_campaigns')||'[]');
+  // Read from in-memory store (_db), NOT localStorage
+  const chars = _db.chars || [];
+  const camps = _db.campaigns || [];
   const campId = getActiveCampId();
+
+  if(!chars.length && !camps.length){
+    toast('Nothing in memory to sync — try refreshing first','var(--gold)');
+    return;
+  }
 
   let pushed = 0, errors = 0;
 
-  // Push all characters
   for(const char of chars){
     const row = { id: String(char.id), group_id: gid, campaign_id: campId||null, share_code: char.shareCode||null, data: char };
     const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
-    if(error){ console.error('char push error:', error.message, error.code); errors++; }
+    if(error){ console.error('char push error:', error.message); errors++; }
     else pushed++;
   }
 
-  // Push all campaigns
   for(const camp of camps){
     const row = { id: camp.id, group_id: gid, name: camp.name||'', data: camp };
     const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
-    if(error){ console.error('camp push error:', error.message, error.code); errors++; }
+    if(error){ console.error('camp push error:', error.message); errors++; }
     else pushed++;
   }
 
   if(errors > 0){
-    toast(`⚠ ${pushed} pushed, ${errors} failed — check console & RLS policies`, 'var(--red)');
-    // Show the SQL needed
-    alert(`${errors} rows failed to push.\n\nRun this SQL in Supabase SQL Editor:\n\n-- Drop old policies\nDROP POLICY IF EXISTS "Users can manage own characters" ON characters;\nDROP POLICY IF EXISTS "Users can manage own campaigns" ON campaigns;\nDROP POLICY IF EXISTS "Users can manage own loot" ON loot;\n\n-- Add group_id columns\nALTER TABLE characters ADD COLUMN IF NOT EXISTS group_id text;\nALTER TABLE campaigns ADD COLUMN IF NOT EXISTS group_id text;\nALTER TABLE loot ADD COLUMN IF NOT EXISTS group_id text;\n\n-- Open policies (group_id is the access control)\nCREATE POLICY "open_chars" ON characters FOR ALL USING (true) WITH CHECK (true);\nCREATE POLICY "open_camps" ON campaigns FOR ALL USING (true) WITH CHECK (true);\nCREATE POLICY "open_loot" ON loot FOR ALL USING (true) WITH CHECK (true);\nCREATE POLICY "open_settings" ON settings FOR ALL USING (true) WITH CHECK (true);`);
+    toast(`⚠ ${pushed} pushed, ${errors} failed — check 🔍 Diagnose`, 'var(--red)');
   } else {
     toast(`✓ Synced ${pushed} records to group ${gid}`, 'var(--green)');
-    // Now pull back to confirm
-    await pullAll(campId);
-    renderRoster();
-    renderCampList();
+    // Pull back to confirm Supabase has it (don't wipe _db if pull fails)
+    const ok = await pullAll(campId);
+    if(ok){ renderRoster(); renderCampList(); }
   }
 }
 
