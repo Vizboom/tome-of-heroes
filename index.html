@@ -1125,43 +1125,42 @@ const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 let _supaUser = null;
 let _realtimeSubs = [];
-let _syncPending = {};
-let _syncTimer = null;
 let _online = navigator.onLine;
+let _syncTimer = null;
+let _pending = {};
 
 window.addEventListener('online',  ()=>{ _online=true;  syncIndicator('live'); _flushPending(); });
 window.addEventListener('offline', ()=>{ _online=false; syncIndicator('offline'); });
 
+/* ══ IN-MEMORY STORE — Supabase is source of truth ══ */
+const _db = { chars:[], campaigns:[], items:{}, wealth:{} };
+
 function syncIndicator(state){
   const el = document.getElementById('syncIndicator');
   if(!el) return;
-  if(state==='live')     { el.textContent='🟢 Live'; el.style.color='var(--green)'; }
-  else if(state==='saving') { el.textContent='💾 Saving…'; el.style.color='var(--gold)'; }
+  if(state==='live')    { el.textContent='🟢 Live'; el.style.color='var(--green)'; }
+  else if(state==='saving'){ el.textContent='💾 Saving…'; el.style.color='var(--gold)'; }
   else if(state==='offline'){ el.textContent='🔴 Offline'; el.style.color='var(--red)'; }
-  else if(state==='error')  { el.textContent='⚠ Sync error'; el.style.color='var(--red)'; }
+  else if(state==='error') { el.textContent='⚠ Sync error'; el.style.color='var(--red)'; }
+  else { el.textContent=''; }
 }
 
-/* ── AUTH ── */
+/* ══ AUTH ══ */
 async function supaSignUp(email, password, displayName){
   const { data, error } = await supa.auth.signUp({ email, password, options:{ data:{ display_name: displayName } } });
   if(error) throw error;
   return data;
 }
-
 async function supaSignIn(email, password){
   const { data, error } = await supa.auth.signInWithPassword({ email, password });
   if(error) throw error;
   _supaUser = data.user;
   return data;
 }
-
 async function supaSignOut(){
   await supa.auth.signOut();
   _supaUser = null;
-  _realtimeSubs.forEach(s=>supa.removeChannel(s));
-  _realtimeSubs = [];
 }
-
 async function getSupaUser(){
   if(_supaUser) return _supaUser;
   const { data } = await supa.auth.getUser();
@@ -1169,22 +1168,19 @@ async function getSupaUser(){
   return _supaUser;
 }
 
-/* ── GROUP ID ── */
+/* ══ GROUP ID ══ */
 function getGroupId(){ return localStorage.getItem('toh_group_id')||null; }
 function setGroupId(id){ if(id) localStorage.setItem('toh_group_id', id); }
 
-// Ensure this user has a group_id — create one if DM, or fail silently if player
 async function ensureGroupId(){
   let gid = getGroupId();
   if(gid) return gid;
   const user = await getSupaUser();
   if(!user) return null;
-  // Check Supabase for existing group
   try {
     const { data } = await supa.from('settings').select('value').eq('key','group_id_'+user.id).single();
     if(data?.value){ setGroupId(data.value); return data.value; }
   } catch(e){}
-  // Create new group code for this user
   const code = Math.random().toString(36).slice(2,7).toUpperCase();
   try {
     await supa.from('settings').upsert({key:'group_id_'+user.id, value:code, updated_at:new Date().toISOString()},{onConflict:'key'});
@@ -1193,61 +1189,99 @@ async function ensureGroupId(){
   } catch(e){ return null; }
 }
 
-/* ── PUSH to Supabase ── */
-async function pushCharacter(char, campaignId){
-  if(!_online) return;
-  let gid = getGroupId() || await ensureGroupId();
-  if(!gid) return;
-  const row = { id: String(char.id), group_id: gid, campaign_id: campaignId||null, share_code: char.shareCode||null, data: char };
-  const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
-  if(error) console.warn('Push char error:', error.message, row);
+/* ══ DIRECT SUPABASE READ/WRITE — no localStorage for app data ══ */
+
+async function dbGetChars(){
+  const gid = getGroupId(); if(!gid) return [];
+  const { data, error } = await supa.from('characters').select('*').eq('group_id', gid);
+  if(error){ console.warn('getChars error:', error.message); return _db.chars; }
+  _db.chars = (data||[]).map(r=>r.data||r);
+  return _db.chars;
 }
 
-async function pushCampaign(camp){
-  if(!_online) return;
-  let gid = getGroupId() || await ensureGroupId();
-  if(!gid) return;
+async function dbSaveChar(char){
+  const gid = getGroupId()||await ensureGroupId(); if(!gid) return;
+  const campId = getActiveCampId();
+  const row = { id: String(char.id), group_id: gid, campaign_id: campId||null, share_code: char.shareCode||null, data: char };
+  const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
+  if(error) console.warn('saveChar error:', error.message);
+  // Update in-memory cache
+  const i = _db.chars.findIndex(c=>String(c.id)===String(char.id));
+  if(i>=0) _db.chars[i]=char; else _db.chars.push(char);
+}
+
+async function dbDeleteChar(charId){
+  const gid = getGroupId(); if(!gid) return;
+  await supa.from('characters').delete().eq('id', String(charId)).eq('group_id', gid);
+  _db.chars = _db.chars.filter(c=>String(c.id)!==String(charId));
+}
+
+async function dbGetCampaigns(){
+  const gid = getGroupId(); if(!gid) return [];
+  const { data, error } = await supa.from('campaigns').select('*').eq('group_id', gid);
+  if(error){ console.warn('getCampaigns error:', error.message); return _db.campaigns; }
+  _db.campaigns = (data||[]).map(r=>r.data||r);
+  return _db.campaigns;
+}
+
+async function dbSaveCampaign(camp){
+  const gid = getGroupId()||await ensureGroupId(); if(!gid) return;
   const row = { id: camp.id, group_id: gid, name: camp.name||'', data: camp };
   const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
-  if(error) console.warn('Push campaign error:', error.message);
+  if(error) console.warn('saveCampaign error:', error.message);
+  const i = _db.campaigns.findIndex(c=>c.id===camp.id);
+  if(i>=0) _db.campaigns[i]=camp; else _db.campaigns.push(camp);
 }
 
-async function pushLoot(campaignId, items, wealth){
-  if(!_online) return;
-  let gid = getGroupId() || await ensureGroupId();
-  if(!gid) return;
-  const row = { id: campaignId, group_id: gid, campaign_id: campaignId, data: items, wealth: wealth };
+async function dbDeleteCampaign(campId){
+  const gid = getGroupId(); if(!gid) return;
+  await supa.from('campaigns').delete().eq('id', campId).eq('group_id', gid);
+  _db.campaigns = _db.campaigns.filter(c=>c.id!==campId);
+}
+
+async function dbGetItems(campId){
+  if(!campId) return [];
+  const { data, error } = await supa.from('loot').select('*').eq('campaign_id', campId).single();
+  if(error) return _db.items[campId]||[];
+  _db.items[campId] = data?.data||[];
+  _db.wealth[campId] = data?.wealth||{};
+  return _db.items[campId];
+}
+
+async function dbGetWealth(campId){
+  if(!campId) return {};
+  if(!_db.wealth[campId]) await dbGetItems(campId);
+  return _db.wealth[campId]||{};
+}
+
+async function dbSaveItems(campId, items, wealth){
+  const gid = getGroupId()||await ensureGroupId(); if(!gid||!campId) return;
+  _db.items[campId] = items;
+  if(wealth!==undefined) _db.wealth[campId] = wealth;
+  const row = { id: campId, group_id: gid, campaign_id: campId, data: items, wealth: _db.wealth[campId]||{} };
   const { error } = await supa.from('loot').upsert(row, {onConflict:'id'});
-  if(error) console.warn('Push loot error:', error.message);
+  if(error) console.warn('saveItems error:', error.message);
 }
 
-/* ── PULL from Supabase — overwrites local cache completely ── */
-async function pullAll(campaignId){
+/* ══ PULL ALL — refresh in-memory cache from Supabase ══ */
+async function pullAll(campId){
   if(!_online) return false;
-  const gid = getGroupId();
-  if(!gid){ console.log('pullAll: no group_id'); return false; }
+  const gid = getGroupId(); if(!gid) return false;
   try {
     syncIndicator('saving');
-    const [campsRes, charsRes] = await Promise.all([
-      supa.from('campaigns').select('*').eq('group_id', gid),
+    const [cr, campr] = await Promise.all([
       supa.from('characters').select('*').eq('group_id', gid),
+      supa.from('campaigns').select('*').eq('group_id', gid),
     ]);
-    if(!campsRes.error && campsRes.data){
-      localStorage.setItem('toh_campaigns', JSON.stringify(campsRes.data.map(r=>r.data||r)));
-    }
-    if(!charsRes.error && charsRes.data){
-      localStorage.setItem('toh_chars', JSON.stringify(charsRes.data.map(r=>r.data||r)));
-    }
-    if(campaignId){
-      const { data: loot } = await supa.from('loot').select('*').eq('campaign_id', campaignId).single();
-      if(loot){
-        localStorage.setItem('toh_items_'+campaignId, JSON.stringify(loot.data||[]));
-        localStorage.setItem('toh_wealth_'+campaignId, JSON.stringify(loot.wealth||{}));
-      }
+    if(!cr.error)   _db.chars     = (cr.data||[]).map(r=>r.data||r);
+    if(!campr.error) _db.campaigns = (campr.data||[]).map(r=>r.data||r);
+    if(campId){
+      const { data: loot } = await supa.from('loot').select('*').eq('campaign_id', campId).single();
+      if(loot){ _db.items[campId]=loot.data||[]; _db.wealth[campId]=loot.wealth||{}; }
     }
     try {
-      const { data: setting } = await supa.from('settings').select('value').eq('key','claude_api_key').single();
-      if(setting?.value) localStorage.setItem('toh_claude_key', setting.value);
+      const { data: s } = await supa.from('settings').select('value').eq('key','claude_api_key').single();
+      if(s?.value) localStorage.setItem('toh_claude_key', s.value);
     } catch(e){}
     syncIndicator('live');
     return true;
@@ -1258,47 +1292,38 @@ async function pullAll(campaignId){
   }
 }
 
-/* ── DEBOUNCED PUSH queue ── */
-const _pending = {};
-let _syncTimer = null;
-
+/* ══ DEBOUNCED FLUSH (for loot/wealth batching) ══ */
 function schedulePush(type, id, data){
   _pending[type+':'+id] = {type, id, data};
   clearTimeout(_syncTimer);
   _syncTimer = setTimeout(_flushPending, 800);
   syncIndicator('saving');
 }
-
 async function _flushPending(){
   const keys = Object.keys(_pending);
   if(!keys.length) return;
   for(const key of keys){
     const p = _pending[key];
     delete _pending[key];
-    if(p.type==='character') await pushCharacter(p.data.char, p.data.campaignId);
-    if(p.type==='campaign')  await pushCampaign(p.data);
-    if(p.type==='loot')      await pushLoot(p.id, p.data.items, p.data.wealth);
+    if(p.type==='loot') await dbSaveItems(p.id, p.data.items, p.data.wealth);
   }
   syncIndicator('live');
 }
 
-/* ── REALTIME — live updates from other devices ── */
-function subscribeRealtime(campaignId){
+/* ══ REALTIME ══ */
+function subscribeRealtime(campId){
   _realtimeSubs.forEach(s=>supa.removeChannel(s));
   _realtimeSubs = [];
-  const gid = getGroupId();
-  if(!gid) return;
+  const gid = getGroupId(); if(!gid) return;
 
   const charSub = supa.channel('chars-'+gid)
-    .on('postgres_changes',{event:'*',schema:'public',table:'characters',filter:'group_id=eq.'+gid}, payload=>{
-      const chars = JSON.parse(localStorage.getItem('toh_chars')||'[]');
+    .on('postgres_changes',{event:'*',schema:'public',table:'characters',filter:'group_id=eq.'+gid}, async payload=>{
       if(payload.eventType==='DELETE'){
-        localStorage.setItem('toh_chars', JSON.stringify(chars.filter(c=>String(c.id)!==String(payload.old?.id))));
+        _db.chars = _db.chars.filter(c=>String(c.id)!==String(payload.old?.id));
       } else if(payload.new?.data){
         const updated = payload.new.data;
-        const i = chars.findIndex(c=>String(c.id)===String(updated.id));
-        if(i>=0) chars[i]=updated; else chars.push(updated);
-        localStorage.setItem('toh_chars', JSON.stringify(chars));
+        const i = _db.chars.findIndex(c=>String(c.id)===String(updated.id));
+        if(i>=0) _db.chars[i]=updated; else _db.chars.push(updated);
       }
       if(document.getElementById('rosterList')?.closest('.screen.active')) renderRoster();
       if(document.getElementById('ptab-overview')?.classList.contains('active')) renderPartyOverview();
@@ -1308,26 +1333,22 @@ function subscribeRealtime(campaignId){
   const campSub = supa.channel('camps-'+gid)
     .on('postgres_changes',{event:'*',schema:'public',table:'campaigns',filter:'group_id=eq.'+gid}, payload=>{
       if(payload.new?.data){
-        const camps = JSON.parse(localStorage.getItem('toh_campaigns')||'[]');
         const updated = payload.new.data;
-        const i = camps.findIndex(c=>c.id===updated.id);
-        if(i>=0) camps[i]=updated; else camps.push(updated);
-        localStorage.setItem('toh_campaigns', JSON.stringify(camps));
+        const i = _db.campaigns.findIndex(c=>c.id===updated.id);
+        if(i>=0) _db.campaigns[i]=updated; else _db.campaigns.push(updated);
         if(document.getElementById('campList')) renderCampList();
+        if(document.getElementById('campDetailHeader') && editingCampId===updated.id) renderCampDetailHeader();
       }
     }).subscribe();
   _realtimeSubs.push(campSub);
 
-  if(campaignId){
-    const lootSub = supa.channel('loot-'+campaignId)
-      .on('postgres_changes',{event:'*',schema:'public',table:'loot',filter:'campaign_id=eq.'+campaignId}, payload=>{
-        if(payload.new){
-          localStorage.setItem('toh_items_'+campaignId, JSON.stringify(payload.new.data||[]));
-          localStorage.setItem('toh_wealth_'+campaignId, JSON.stringify(payload.new.wealth||{}));
-          if(document.getElementById('ltab-inventory')?.classList.contains('active')) renderInventory();
-          if(document.getElementById('ltab-pool')?.classList.contains('active')) renderPool();
-          if(document.getElementById('ltab-wealth')?.classList.contains('active')) renderWealth();
-        }
+  if(campId){
+    const lootSub = supa.channel('loot-'+campId)
+      .on('postgres_changes',{event:'*',schema:'public',table:'loot',filter:'campaign_id=eq.'+campId}, payload=>{
+        if(payload.new){ _db.items[campId]=payload.new.data||[]; _db.wealth[campId]=payload.new.wealth||{}; }
+        if(document.getElementById('ltab-inventory')?.classList.contains('active')) renderInventory();
+        if(document.getElementById('ltab-pool')?.classList.contains('active')) renderPool();
+        if(document.getElementById('ltab-wealth')?.classList.contains('active')) renderWealth();
       }).subscribe();
     _realtimeSubs.push(lootSub);
   }
@@ -1524,37 +1545,82 @@ const QUICK_ITEMS=[
 ];
 
 /* ══ STORAGE ══ */
+/* ══ DATA ACCESS — in-memory _db, Supabase is source of truth ══ */
+
+// Simple localStorage wrapper for UI preferences only (mode, active camp, etc)
 const S={
   get:k=>{try{return JSON.parse(localStorage.getItem(k)||'null');}catch{return null;}},
-  set:(k,v)=>{
-    try{
-      // Before saving anything, snapshot campaigns so we can restore if they vanish
-      const campsBefore = k!=='toh_campaigns' ? localStorage.getItem('toh_campaigns') : null;
-      localStorage.setItem(k,JSON.stringify(v));
-      // If campaigns disappeared after a non-campaign save, restore them
-      if(campsBefore && k!=='toh_campaigns' && !localStorage.getItem('toh_campaigns')){
-        try{ localStorage.setItem('toh_campaigns', campsBefore); }catch(e){}
-      }
-    }catch(e){}
-  }
+  set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
 };
-const getChars=()=>S.get('toh_chars')||[];
 
-// Returns the campaign a character is assigned to (or null if unassigned)
-function getCharCampaign(charId){
-  return getCampaigns().find(c=>(c.charIds||[]).some(x=>String(x)===String(charId)))||null;
+// ── Characters ──
+function getChars(){ return _db.chars||[]; }
+function saveChars(chars){
+  // Update in-memory cache immediately for snappy UI
+  _db.chars = chars;
+  // Persist each char to Supabase
+  const campId = getActiveCampId();
+  chars.forEach(char => dbSaveChar(char));
+}
+function saveChar(char){
+  const i = _db.chars.findIndex(c=>String(c.id)===String(char.id));
+  if(i>=0) _db.chars[i]=char; else _db.chars.push(char);
+  dbSaveChar(char);
 }
 
-// Returns chars visible for the active campaign context:
-// - Chars assigned to the active campaign
-// - Chars not assigned to ANY campaign (available to assign)
-// - Never shows chars belonging to OTHER campaigns
+// ── Campaigns ──
+function getCampaigns(){ return _db.campaigns||[]; }
+function saveCampaigns(camps){
+  _db.campaigns = camps;
+  camps.forEach(c => dbSaveCampaign(c));
+}
+function saveCampaign(camp){
+  const i = _db.campaigns.findIndex(c=>c.id===camp.id);
+  if(i>=0) _db.campaigns[i]=camp; else _db.campaigns.push(camp);
+  dbSaveCampaign(camp);
+}
+
+// ── Loot / Items ──
+const _itemsKey=()=>{const c=getActiveCampId();return c?'toh_items_'+c:'toh_items';};
+const _wealthKey=()=>{const c=getActiveCampId();return c?'toh_wealth_'+c:'toh_wealth';};
+function getItems(){
+  const campId = getActiveCampId();
+  return campId ? (_db.items[campId]||[]) : [];
+}
+function getWealth(){
+  const campId = getActiveCampId();
+  return campId ? (_db.wealth[campId]||{}) : {};
+}
+function saveItems(items){
+  const campId = getActiveCampId();
+  if(!campId) return;
+  _db.items[campId] = items;
+  schedulePush('loot', campId, {items, wealth:getWealth()});
+}
+function saveWealth(wealth){
+  const campId = getActiveCampId();
+  if(!campId) return;
+  _db.wealth[campId] = wealth;
+  schedulePush('loot', campId, {items:getItems(), wealth});
+}
+
+// ── Party (derived from campaign charIds + _db.chars) ──
+const getParty=()=>getFullParty();
+const saveParty=()=>{}; // no-op — party is derived from campaign charIds
+
+// ── Party ID ──
+const getPartyId=()=>{
+  let id=S.get('toh_pid');
+  if(!id){id='PARTY-'+Math.random().toString(36).slice(2,8).toUpperCase();S.set('toh_pid',id);}
+  return id;
+};
+
+// ── Visible chars (campaign scoped) ──
 function getVisibleChars(){
   const all = getChars();
   const activeCamp = getActiveCamp();
   const activeCampId = activeCamp?.id;
   const campaigns = getCampaigns();
-  // Build set of ALL assigned char IDs across all campaigns
   const allAssigned = new Set();
   campaigns.forEach(c=>(c.charIds||[]).forEach(id=>allAssigned.add(String(id))));
   return all.filter(c=>{
@@ -1564,34 +1630,11 @@ function getVisibleChars(){
     return isInActiveCamp || isUnassigned;
   });
 }
-const saveChars=(c, changedIds)=>{
-  S.set('toh_chars',c);
-  // Only push chars that actually changed
-  const campId=getActiveCampId();
-  if(typeof schedulePush!=='undefined'){
-    const toPush = changedIds ? c.filter(ch=>changedIds.includes(String(ch.id))) : c;
-    toPush.forEach(char=>{
-      schedulePush('character',String(char.id),{char,campaignId:campId});
-    });
-  }
-};
-const getParty=()=>S.get('toh_party')||[];
-const saveParty=p=>S.set('toh_party',p);
-const _itemsKey=()=>{const c=getActiveCampId();return c?'toh_items_'+c:'toh_items';};
-const _wealthKey=()=>{const c=getActiveCampId();return c?'toh_wealth_'+c:'toh_wealth';};
-const getItems=()=>S.get(_itemsKey())||[];
-const getWealth=()=>S.get(_wealthKey())||{};
-const saveItems=i=>{
-  S.set(_itemsKey(),i);
-  const campId=getActiveCampId();
-  if(campId) schedulePush('loot',campId,{items:i,wealth:getWealth()});
-};
-const saveWealth=w=>{
-  S.set(_wealthKey(),w);
-  const campId=getActiveCampId();
-  if(campId) schedulePush('loot',campId,{items:getItems(),wealth:w});
-};
-const getPartyId=()=>{let id=S.get('toh_pid');if(!id){id='PARTY-'+Math.random().toString(36).slice(2,8).toUpperCase();S.set('toh_pid',id);}return id;};
+function getCharCampaign(charId){
+  return getCampaigns().find(c=>(c.charIds||[]).some(x=>String(x)===String(charId)))||null;
+}
+
+
 
 /* ══ HELPERS ══ */
 const getMod=s=>{const m=Math.floor((s-10)/2);return(m>=0?'+':'')+m;};
@@ -1640,11 +1683,7 @@ function nav(id){
 
   // No cross-screen companion panels — each screen handles its own desktop layout
 
-  if(id==='roster'){
-    // Pull fresh from Supabase if online
-    if(_online && getGroupId()) pullAll(getActiveCampId()).then(()=>{ renderRoster(); renderCampaignSwitchBanner(); });
-    else { renderRoster(); renderCampaignSwitchBanner(); }
-  }
+  if(id==='roster'){renderRoster();renderCampaignSwitchBanner();}
   if(id==='campaign'){renderCampList();}
   if(id==='party'){partyTab('overview');}
   if(id==='modegate'){
@@ -5975,8 +6014,8 @@ if('serviceWorker' in navigator){
 ══════════════════════════════════════════════════════ */
 
 /* ── Storage helpers ── */
-const getCampaigns  = () => S.get('toh_campaigns') || [];
-const saveCampaigns = c => {
+// getCampaigns defined in storage layer above
+const _saveCampaignsOLD = c => {
   S.set('toh_campaigns', c);
   if(typeof schedulePush!=='undefined'){
     c.forEach(camp=>schedulePush('campaign',camp.id,camp));
@@ -6328,13 +6367,11 @@ function switchCampaign(id) {
 }
 
 /* ── Campaign detail ── */
-async function openCamp(id) {
+function openCamp(id) {
   editingCampId = id;
   document.getElementById('campListView').style.display = 'none';
   document.getElementById('campNewForm').style.display = 'none';
   document.getElementById('campDetailView').style.display = 'block';
-  // Pull fresh data from Supabase before rendering so charIds match
-  if(_online && getGroupId()) await pullAll(id);
   renderCampDetailHeader();
   campTab('sessions');
 }
