@@ -863,11 +863,13 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <button class="tab-btn" onclick="partySheetTab('skills')">Skills</button>
       <button class="tab-btn" onclick="partySheetTab('spells')">Spells</button>
       <button class="tab-btn" onclick="partySheetTab('lore')">Lore</button>
+      <button class="tab-btn" id="pstab-levelup-btn" onclick="partySheetTab('levelup')" style="color:var(--gold);display:none">⬆ Level Up</button>
     </div>
     <div class="tab-pane active" id="pstab-combat"></div>
     <div class="tab-pane" id="pstab-skills"></div>
     <div class="tab-pane" id="pstab-spells"></div>
     <div class="tab-pane" id="pstab-lore"></div>
+    <div class="tab-pane" id="pstab-levelup"></div>
     <button class="btn btn-outline" onclick="nav('party')">← Party</button>
   </div>
 
@@ -1795,6 +1797,7 @@ function _renderRosterInner(){
       </div>
       <div class="char-card-actions">
         ${!isPlayerMode()?`<button class="icon-btn" title="${isDefault?'Default dice char':'Set as default'}" onclick="setDefaultChar(${c.id});event.stopPropagation()" style="color:${isDefault?'var(--gold)':'var(--muted)'};font-size:16px;opacity:${isDefault?1:0.5}">★</button>`:''}
+        ${!isPlayerMode()?`<button class="icon-btn" title="Grant Level Up" onclick="grantLevelUp(${c.id});event.stopPropagation()" style="color:var(--gold);font-size:14px">⬆</button>`:''}
         ${!isPlayerMode()?`<button class="icon-btn" onclick="openShareFor(${c.id});event.stopPropagation()" title="Share">🔗</button>`:''}
         ${!isPlayerMode()?`<button class="icon-btn" style="color:var(--red)" onclick="deleteChar(${c.id});event.stopPropagation()">✕</button>`:''}
       </div>
@@ -2372,11 +2375,15 @@ function openPartySheet(id){
     <div class="sheet-charname" style="font-size:18px">${char.name}</div>
     <div class="sheet-meta">Level ${char.level} ${char.race} ${cls.name}</div>
     <div class="sheet-badges"><span class="sheet-badge">${char.background}</span></div>`;
+  // Show Level Up tab only for DM and char below max level
+  const lvlBtn = document.getElementById('pstab-levelup-btn');
+  if(lvlBtn) lvlBtn.style.display = (!isPlayerMode() && char.level < 20) ? '' : 'none';
   partySheetTab('combat');
 }
 
 function partySheetTab(t){
-  document.querySelectorAll('#scr-partysheet .tab-btn').forEach((b,i)=>b.classList.toggle('active',['combat','skills','spells','lore'][i]===t));
+  const tabs = ['combat','skills','spells','lore','levelup'];
+  document.querySelectorAll('#scr-partysheet .tab-btn').forEach((b,i)=>b.classList.toggle('active', tabs[i]===t));
   document.querySelectorAll('#scr-partysheet .tab-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('pstab-'+t).classList.add('active');
   const party=getFullParty();
@@ -2386,6 +2393,7 @@ function partySheetTab(t){
   if(t==='skills')renderSkillsTab(char,cls,'pstab-skills');
   if(t==='spells')renderSpellsTab(char,cls,'pstab-spells',false);
   if(t==='lore')renderLoreTab(char,cls,'pstab-lore',false);
+  if(t==='levelup')renderLevelUpTab(char,cls);
 }
 
 /* ══ PARTY OVERVIEW ══ */
@@ -3402,6 +3410,232 @@ const ELDRITCH_INVOCATIONS = ['Agonizing Blast (add CHA to Eldritch Blast)','Arm
 const SKILL_LIST = ['Acrobatics','Animal Handling','Arcana','Athletics','Deception','History','Insight','Intimidation','Investigation','Medicine','Nature','Perception','Performance','Persuasion','Religion','Sleight of Hand','Stealth','Survival'];
 
 // ══ LEVEL-UP MODAL ═══════════════════════════════════════════════════════════
+
+// DM quick-grant from roster: opens party sheet on level up tab
+function grantLevelUp(charId){
+  openPartySheet(charId);
+  setTimeout(()=>partySheetTab('levelup'), 50);
+}
+
+// Render the full Level Up tab inside the party sheet
+function renderLevelUpTab(char, cls){
+  const el = document.getElementById('pstab-levelup');
+  const newLevel = char.level + 1;
+  if(char.level >= 20){
+    el.innerHTML = `<div class="empty-state"><div class="es-icon">✦</div><p>${char.name} is already at max level.</p></div>`;
+    return;
+  }
+  const ld = (LEVEL_FEATURES[cls.name]||{})[newLevel]||{};
+  const pb = getPB(newLevel);
+  const cc = cls.color;
+
+  // HP options
+  const hitDie = cls.hit;
+  const conMod = parseInt(getMod(char.abilities?.CON||10))||0;
+  const avgHP = Math.floor(hitDie/2)+1+conMod;
+
+  // Subclass prompt?
+  const needsSubclass = ld.subclass && !char.subclass;
+  const subclassOptions = SUBCLASSES[cls.name]||[];
+
+  // ASI / Feat?
+  const hasASI = ld.asi;
+
+  // Spells to pick?
+  const newSpellSlots = ld.spells||0;
+  const newCantrips = ld.cantrips||0;
+
+  let html = `
+    <div style="background:var(--surface2);border:1px solid ${cc};border-radius:13px;padding:16px;margin-bottom:14px">
+      <div style="font-family:'Cinzel',serif;font-size:18px;color:var(--gold);margin-bottom:4px">⬆ Level ${newLevel}</div>
+      <div style="font-size:12px;color:var(--muted)">${cls.name} · Proficiency Bonus +${pb}</div>
+    </div>`;
+
+  // Features at this level
+  if(ld.features?.length){
+    html += `<div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">NEW FEATURES</div>`;
+    html += ld.features.map(f=>`
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px">
+        <div style="font-family:'Cinzel',serif;font-size:13px;color:${cc};margin-bottom:4px">${f.n}</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.5">${f.d||''}</div>
+      </div>`).join('');
+  }
+
+  // HP section
+  html += `
+    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin:14px 0 8px">HIT POINTS</div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button id="hpAvgBtn" onclick="selectLvlHP('avg')" class="btn btn-primary" style="flex:1;margin:0">
+        Average: +${avgHP} HP
+      </button>
+      <button id="hpRollBtn" onclick="selectLvlHP('roll')" class="btn btn-outline" style="flex:1;margin:0">
+        Roll: d${hitDie}${conMod>=0?'+':''}${conMod}
+      </button>
+    </div>
+    <div id="lvlupHPResult" style="font-family:'Cinzel',serif;font-size:13px;color:var(--gold);text-align:center;min-height:20px;margin-bottom:14px"></div>`;
+
+  // Subclass
+  if(needsSubclass && subclassOptions.length){
+    html += `
+      <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">CHOOSE SUBCLASS</div>
+      <select id="lvlupSubclass" style="width:100%;background:var(--surface2);border:1px solid ${cc};border-radius:8px;padding:10px;color:var(--text);font-family:'Cinzel',serif;font-size:12px;margin-bottom:14px">
+        <option value="">— Select subclass —</option>
+        ${subclassOptions.map(s=>`<option value="${s}">${s}</option>`).join('')}
+      </select>`;
+  }
+
+  // Subclass already chosen but level allows picking (some classes pick at different levels)
+  if(ld.subclass && char.subclass){
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:var(--muted)">Subclass: <span style="color:var(--purple)">${char.subclass}</span></div>`;
+  }
+
+  // ASI / Feat
+  if(hasASI){
+    html += `
+      <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">ABILITY SCORE IMPROVEMENT OR FEAT</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button id="asiTypeASI" onclick="selectASIType('asi')" class="btn btn-primary" style="flex:1;margin:0;font-size:11px">Ability Score +2</button>
+        <button id="asiTypeFeat" onclick="selectASIType('feat')" class="btn btn-outline" style="flex:1;margin:0;font-size:11px">Feat</button>
+      </div>
+      <div id="asiPanel" style="margin-bottom:14px">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+          ${['STR','DEX','CON','INT','WIS','CHA'].map(ab=>`
+            <div>
+              <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);text-align:center;margin-bottom:3px">${ab} (${char.abilities?.[ab]||10})</div>
+              <select id="asi_${ab}" onchange="updateASITotal()" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px;color:var(--text);font-size:11px;text-align:center">
+                <option value="0">+0</option>
+                <option value="1">+1</option>
+                <option value="2">+2</option>
+              </select>
+            </div>`).join('')}
+        </div>
+        <div id="asiTotalMsg" style="font-size:11px;color:var(--muted);text-align:center;margin-top:6px">Distribute 2 points total</div>
+      </div>
+      <div id="featPanel" style="display:none;margin-bottom:14px">
+        <select id="lvlupFeat" style="width:100%;background:var(--surface2);border:1px solid var(--purple);border-radius:8px;padding:10px;color:var(--text);font-family:'Cinzel',serif;font-size:11px">
+          <option value="">— Select a feat —</option>
+          ${FEATS_5E.map(f=>`<option value="${f}">${f}</option>`).join('')}
+        </select>
+      </div>`;
+  }
+
+  // Spell slots info
+  if(newSpellSlots > 0){
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:14px">
+      <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:4px">SPELLS</div>
+      <div style="font-size:12px;color:var(--text)">+${newSpellSlots} new spell slot${newSpellSlots!==1?'s':''} available at level ${newLevel}</div>
+      ${newCantrips?`<div style="font-size:12px;color:var(--text);margin-top:4px">+${newCantrips} new cantrip${newCantrips!==1?'s':''}</div>`:''}
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;font-style:italic">Add new spells from the Spells tab after levelling up</div>
+    </div>`;
+  }
+
+  // Confirm button
+  html += `
+    <button class="btn btn-gold" onclick="confirmPartySheetLevelUp()" style="width:100%;font-size:14px;padding:14px">
+      ✦ Confirm Level Up to ${newLevel}
+    </button>`;
+
+  el.innerHTML = html;
+  // Init ASI type selection
+  if(hasASI) selectASIType('asi');
+  // Init HP selection
+  window._lvlupHP = avgHP;
+  window._lvlupHPMode = 'avg';
+  document.getElementById('hpAvgBtn')?.classList.add('btn-primary');
+}
+
+function selectLvlHP(mode){
+  const char = getFullParty().find(c=>c.id===partySheetCharId);
+  if(!char) return;
+  const cls = CLASSES[char.classIdx];
+  const conMod = parseInt(getMod(char.abilities?.CON||10))||0;
+  const hitDie = cls.hit;
+  const resultEl = document.getElementById('lvlupHPResult');
+  document.getElementById('hpAvgBtn')?.classList.toggle('btn-primary', mode==='avg');
+  document.getElementById('hpAvgBtn')?.classList.toggle('btn-outline', mode!=='avg');
+  document.getElementById('hpRollBtn')?.classList.toggle('btn-primary', mode==='roll');
+  document.getElementById('hpRollBtn')?.classList.toggle('btn-outline', mode!=='roll');
+  if(mode==='avg'){
+    const avg = Math.floor(hitDie/2)+1+conMod;
+    window._lvlupHP = avg;
+    if(resultEl) resultEl.textContent = `+${avg} HP (average)`;
+  } else {
+    const rolled = Math.ceil(Math.random()*hitDie);
+    const total = Math.max(1, rolled+conMod);
+    window._lvlupHP = total;
+    if(resultEl) resultEl.textContent = `Rolled ${rolled} + ${conMod} CON = +${total} HP`;
+  }
+  window._lvlupHPMode = mode;
+}
+
+function selectASIType(type){
+  const asiPanel = document.getElementById('asiPanel');
+  const featPanel = document.getElementById('featPanel');
+  const asiBtn = document.getElementById('asiTypeASI');
+  const featBtn = document.getElementById('asiTypeFeat');
+  window._lvlupASIType = type;
+  if(asiPanel) asiPanel.style.display = type==='asi'?'':'none';
+  if(featPanel) featPanel.style.display = type==='feat'?'':'none';
+  asiBtn?.classList.toggle('btn-primary', type==='asi');
+  asiBtn?.classList.toggle('btn-outline', type!=='asi');
+  featBtn?.classList.toggle('btn-primary', type==='feat');
+  featBtn?.classList.toggle('btn-outline', type!=='feat');
+}
+
+function updateASITotal(){
+  const vals = ['STR','DEX','CON','INT','WIS','CHA'].map(ab=>parseInt(document.getElementById('asi_'+ab)?.value)||0);
+  const total = vals.reduce((a,b)=>a+b,0);
+  const msg = document.getElementById('asiTotalMsg');
+  if(msg) msg.textContent = total===2 ? '✓ 2 points allocated' : `${total}/2 points — ${total<2?'add '+(2-total)+' more':'too many, reduce by '+(total-2)}`;
+  if(msg) msg.style.color = total===2 ? 'var(--green)' : 'var(--red)';
+}
+
+function confirmPartySheetLevelUp(){
+  const char = getFullParty().find(c=>c.id===partySheetCharId);
+  if(!char) return;
+  const cls = CLASSES[char.classIdx];
+  const newLevel = char.level + 1;
+  const ld = (LEVEL_FEATURES[cls.name]||{})[newLevel]||{};
+
+  // Validate subclass
+  if(ld.subclass && !char.subclass){
+    const sel = document.getElementById('lvlupSubclass')?.value;
+    if(!sel){ toast('Choose a subclass first','var(--red)'); return; }
+    char.subclass = sel;
+  }
+
+  // Apply HP
+  char.maxHP = (char.maxHP||0) + (window._lvlupHP||1);
+  char.currentHP = (char.currentHP||0) + (window._lvlupHP||1);
+
+  // Apply ASI or Feat
+  if(ld.asi){
+    if(window._lvlupASIType === 'feat'){
+      const feat = document.getElementById('lvlupFeat')?.value;
+      if(!feat){ toast('Choose a feat','var(--red)'); return; }
+      char.feats = char.feats||[];
+      if(!char.feats.includes(feat)) char.feats.push(feat);
+    } else {
+      const abils = ['STR','DEX','CON','INT','WIS','CHA'];
+      const vals = abils.map(ab=>parseInt(document.getElementById('asi_'+ab)?.value)||0);
+      const total = vals.reduce((a,b)=>a+b,0);
+      if(total !== 2){ toast('Allocate exactly 2 points','var(--red)'); return; }
+      abils.forEach((ab,i)=>{ if(vals[i]>0) char.abilities[ab] = Math.min(20,(char.abilities[ab]||10)+vals[i]); });
+    }
+  }
+
+  // Level up
+  char.level = newLevel;
+
+  // Save
+  saveChar(char);
+  toast(`✦ ${char.name} is now Level ${newLevel}!`, 'var(--gold)');
+
+  // Refresh the sheet
+  openPartySheet(char.id);
+  partySheetTab('combat');
+  renderRoster();
+}
 
 function levelUp(charId){
   const chars = getChars();
