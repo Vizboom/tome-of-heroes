@@ -1654,13 +1654,20 @@ const getPartyId=()=>{
 function getVisibleChars(){
   const all = getChars();
   const activeCamp = getActiveCamp();
-  const activeCampId = activeCamp?.id;
   const campaigns = getCampaigns();
+
+  // No campaigns at all — show everything
+  if(!campaigns.length) return all;
+
   const allAssigned = new Set();
   campaigns.forEach(c=>(c.charIds||[]).forEach(id=>allAssigned.add(String(id))));
+
+  // No active campaign set — show all chars so nothing is hidden
+  if(!activeCamp) return all;
+
   return all.filter(c=>{
     const sid = String(c.id);
-    const isInActiveCamp = activeCampId && (activeCamp?.charIds||[]).some(x=>String(x)===sid);
+    const isInActiveCamp = (activeCamp?.charIds||[]).some(x=>String(x)===sid);
     const isUnassigned = !allAssigned.has(sid);
     return isInActiveCamp || isUnassigned;
   });
@@ -2668,6 +2675,12 @@ async function connectWithCode(){
 
   setGroupId(code);
   await pullAll(null);
+
+  // Auto-set active campaign if none set
+  if(!getActiveCampId() && _db.campaigns.length){
+    setActiveCampId(_db.campaigns[0].id);
+  }
+
   if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
   _showModeGateConnected(code);
 }
@@ -2706,7 +2719,14 @@ function _showModeGateConnected(gid){
 
 async function enterAsDM(){
   S.set('toh_mode','dm');
-  await pullAll(getActiveCampId());
+  const campId = getActiveCampId();
+  await pullAll(campId);
+
+  // Auto-set active campaign if none set and campaigns exist
+  if(!getActiveCampId() && _db.campaigns.length){
+    setActiveCampId(_db.campaigns[0].id);
+  }
+
   subscribeRealtime(getActiveCampId());
   document.querySelector('.bottomnav').style.display='flex';
   applyModeUI();
@@ -5031,6 +5051,11 @@ function _bootContinue(mode, nav_bar){
           const camp = getCampaigns().find(c=>(c.charIds||[]).some(x=>String(x)===String(charId)));
           if(camp){ setActiveCampId(camp.id); S.set('toh_player_camp_id', camp.id); }
         }
+      }
+    } else if(mode==='dm'){
+      // Auto-set active campaign if none stored
+      if(!getActiveCampId() && _db.campaigns.length){
+        setActiveCampId(_db.campaigns[0].id);
       }
     }
     if(nav_bar) nav_bar.style.display='flex';
