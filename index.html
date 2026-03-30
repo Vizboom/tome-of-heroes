@@ -6358,11 +6358,8 @@ function renderCampDetailHeader() {
   const isActive = getActiveCampId() === camp.id;
   const el = document.getElementById('campDetailHeader');
   const allChars = getChars();
-  // Clean stale charIds (deleted characters)
-  // Only filter charIds for display — do NOT save back (chars may not be loaded yet on other devices)
-  const allCharIds = new Set(allChars.map(c=>String(c.id)));
-  const validCharIds = (camp.charIds||[]).filter(x=>allCharIds.has(String(x)));
-  camp = {...camp, charIds: validCharIds};
+  // Use the real charIds from the server — never strip them
+  const realCharIds = camp.charIds || [];
   el.innerHTML = `
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:13px;padding:14px;margin-bottom:14px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
@@ -6384,21 +6381,21 @@ function renderCampDetailHeader() {
         <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">PARTY CHARACTERS</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
           ${(()=>{
-            const rawCamp = getCampaigns().find(c=>c.id===camp.id);
-            const allAssignedIds = new Set(rawCamp?.charIds?.map(String)||[]);
+            const assignedIds = new Set(realCharIds.map(String));
+            // Build set of all charIds globally to find unassigned chars
             const campaigns = getCampaigns();
             const globalAssigned = new Set();
             campaigns.forEach(c=>(c.charIds||[]).forEach(id=>globalAssigned.add(String(id))));
-            // Show: chars assigned to this campaign (even if not in local cache) + unassigned chars
-            const assignedChars = allChars.filter(c=>allAssignedIds.has(String(c.id)));
+            // Chars assigned to this campaign (loaded locally)
+            const assignedChars = allChars.filter(c=>assignedIds.has(String(c.id)));
+            // Chars not assigned to any campaign (available to add)
             const unassignedChars = allChars.filter(c=>!globalAssigned.has(String(c.id)));
-            // Show ghost pills for charIds not yet loaded locally
+            // Ghost pills for charIds not in local cache yet
             const loadedIds = new Set(assignedChars.map(c=>String(c.id)));
-            const ghostIds = [...allAssignedIds].filter(id=>!loadedIds.has(id));
+            const ghostIds = [...assignedIds].filter(id=>!loadedIds.has(id));
             const eligible = [...assignedChars, ...unassignedChars];
             let html = '';
-            // Ghost pills for chars assigned but not loaded yet
-            ghostIds.forEach(id=>{
+            ghostIds.forEach(()=>{
               html+=`<div style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid var(--gold);background:var(--gold-dim);opacity:0.6">
                 <span style="font-size:14px">⏳</span>
                 <span style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold)">Loading…</span>
@@ -6406,8 +6403,8 @@ function renderCampDetailHeader() {
             });
             if(!eligible.length && !ghostIds.length) return '<span style="font-size:12px;color:var(--muted);font-style:italic">No characters — create some in Roster</span>';
             html += eligible.map(c=>{
-              const inCamp=allAssignedIds.has(String(c.id));
-              const cc=classColor(c.classIdx);
+              const inCamp = assignedIds.has(String(c.id));
+              const cc = classColor(c.classIdx);
               return `<div onclick="toggleCampChar('${camp.id}','${c.id}')" style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid ${inCamp?cc:'var(--border)'};background:${inCamp?cc+'22':'transparent'};cursor:pointer;transition:var(--trans)">
                 <span style="font-size:14px">${classIcon(c.classIdx)}</span>
                 <span style="font-family:'Cinzel',serif;font-size:10px;color:${inCamp?cc:'var(--muted)'}">${c.name}</span>
