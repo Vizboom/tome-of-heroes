@@ -4731,74 +4731,106 @@ function _finishCharImport(char, source){
 }
 
 async function diagCampaigns(){
-  const lines = [];
-  lines.push('=== SYNC DIAGNOSTICS ===');
-  const user = await getSupaUser().catch(()=>null);
-  lines.push('auth: ' + (user ? '✓ '+user.email : '✗ NOT LOGGED IN'));
-  lines.push('group_id: ' + (getGroupId()||'NOT SET'));
-  lines.push('toh_mode: ' + (localStorage.getItem('toh_mode')||'none'));
-  lines.push('online: ' + _online);
+  const out = [];
+  const ok  = t => '✅ '+t;
+  const err = t => '❌ '+t;
+  const wrn = t => '⚠️  '+t;
 
-  lines.push('');
-  lines.push('--- SETTINGS TABLE ---');
-  try {
-    const { data, error } = await supa.from('settings').select('key,value').limit(10);
-    if(error) lines.push('settings READ: ✗ '+error.message+' ('+error.code+')');
-    else {
-      lines.push('settings readable: ✓ ('+data.length+' rows)');
-      if(user){
-        const gkey = 'group_id_'+user.id;
-        const match = (data||[]).find(r=>r.key===gkey);
-        lines.push('group key "'+gkey+'": '+(match?'✓ FOUND = '+match.value:'✗ NOT FOUND'));
-      }
+  out.push('══ SUPABASE HEALTH CHECK ══');
+  out.push('URL: '+supa.supabaseUrl);
+  out.push('');
+
+  // 1. Auth
+  out.push('── AUTH ──');
+  const user = await supa.auth.getUser().then(r=>r.data?.user).catch(()=>null);
+  out.push(user ? ok('Logged in: '+user.email) : err('NOT logged in'));
+  out.push('group_id: '+(getGroupId()||'NOT SET'));
+  out.push('mode: '+(localStorage.getItem('toh_mode')||'none'));
+  out.push('');
+
+  // 2. Test each table: read, write, group_id column
+  const tables = ['settings','characters','campaigns','loot'];
+  for(const tbl of tables){
+    out.push('── '+tbl.toUpperCase()+' ──');
+    // READ
+    const {data:rd, error:re} = await supa.from(tbl).select('*').limit(1);
+    if(re) out.push(err('READ: '+re.message+' ['+re.code+']'));
+    else   out.push(ok('READ: accessible ('+rd.length+' sample row)'));
+
+    // Check group_id column exists (for non-settings tables)
+    if(tbl !== 'settings'){
+      const {data:cd, error:ce} = await supa.from(tbl).select('group_id').limit(1);
+      if(ce && ce.message.includes('column')) out.push(err('group_id column: MISSING — run ALTER TABLE'));
+      else if(ce) out.push(wrn('group_id check: '+ce.message));
+      else out.push(ok('group_id column: exists'));
     }
-  } catch(e){ lines.push('settings EXCEPTION: '+e.message); }
 
-  lines.push('');
-  lines.push('--- CHARACTERS TABLE ---');
-  try {
-    const { data, error } = await supa.from('characters').select('id,group_id').limit(20);
-    if(error) lines.push('characters READ: ✗ '+error.message+' ('+error.code+')');
-    else {
-      lines.push('characters visible: ✓ ('+data.length+' rows)');
-      const gid = getGroupId();
-      if(gid){
-        const mine = (data||[]).filter(r=>r.group_id===gid);
-        lines.push('with group_id "'+gid+'": '+mine.length+' rows');
-      }
-      (data||[]).forEach(r=>lines.push('  id='+r.id+' group='+r.group_id));
-    }
-  } catch(e){ lines.push('characters EXCEPTION: '+e.message); }
-
-  lines.push('');
-  lines.push('--- WRITE TEST ---');
-  const gid = getGroupId();
-  if(gid){
-    const testId = 'diag-'+Date.now();
-    try {
-      const { error: we } = await supa.from('characters').upsert({id:testId,group_id:gid,data:{name:'_TEST_'}},{onConflict:'id'});
-      if(we) lines.push('write: ✗ '+we.message+' ('+we.code+')');
+    // WRITE
+    const testId = 'healthcheck-'+Date.now();
+    let writeOk = false;
+    if(tbl==='settings'){
+      const {error:we} = await supa.from(tbl).upsert({key:testId,value:'test',updated_at:new Date().toISOString()},{onConflict:'key'});
+      if(we) out.push(err('WRITE: '+we.message+' ['+we.code+']'));
+      else { writeOk=true; out.push(ok('WRITE: succeeded')); await supa.from(tbl).delete().eq('key',testId); }
+    } else {
+      const gid = getGroupId()||'test-group';
+      const {error:we} = await supa.from(tbl).upsert({id:testId,group_id:gid,data:{_test:true}},{onConflict:'id'});
+      if(we) out.push(err('WRITE: '+we.message+' ['+we.code+']'));
       else {
-        lines.push('write: ✓ succeeded');
-        const { data: rd, error: re } = await supa.from('characters').select('id').eq('id',testId).single();
-        lines.push('read back: '+(re?'✗ '+re.message:'✓ confirmed'));
-        await supa.from('characters').delete().eq('id',testId);
-        lines.push('cleanup: ✓');
+        writeOk=true;
+        out.push(ok('WRITE: succeeded'));
+        // Read back
+        const {data:rb,error:rbe}=await supa.from(tbl).select('id,group_id').eq('id',testId).single();
+        if(rbe) out.push(err('READ-BACK: '+rbe.message));
+        else out.push(ok('READ-BACK: id='+rb.id+' group='+rb.group_id));
+        await supa.from(tbl).delete().eq('id',testId);
       }
-    } catch(e){ lines.push('write EXCEPTION: '+e.message); }
-  } else {
-    lines.push('skipped — no group_id');
+    }
+    out.push('');
   }
 
-  lines.push('');
-  lines.push('--- LOCAL CACHE ---');
-  const rawChars = localStorage.getItem('toh_chars');
-  const rawCamps = localStorage.getItem('toh_campaigns');
-  lines.push('characters: ' + (rawChars ? JSON.parse(rawChars).length+' cached' : 'EMPTY'));
-  lines.push('campaigns: ' + (rawCamps ? JSON.parse(rawCamps).length+' cached' : 'EMPTY'));
-  if(rawChars) try{ JSON.parse(rawChars).forEach(c=>lines.push('  '+c.name+' id='+c.id)); }catch(e){}
+  // 3. Group data counts
+  const gid = getGroupId();
+  if(gid){
+    out.push('── GROUP DATA ('+gid+') ──');
+    const {data:gc,error:ge}=await supa.from('characters').select('id,data').eq('group_id',gid);
+    if(ge) out.push(err('chars: '+ge.message));
+    else {
+      out.push(ok('characters: '+gc.length+' in group'));
+      gc.forEach(r=>out.push('  • '+(r.data?.name||r.id)));
+    }
+    const {data:gcamp,error:gcampe}=await supa.from('campaigns').select('id,name').eq('group_id',gid);
+    if(gcampe) out.push(err('campaigns: '+gcampe.message));
+    else {
+      out.push(ok('campaigns: '+gcamp.length+' in group'));
+      gcamp.forEach(r=>out.push('  • '+(r.name||r.id)));
+    }
+    out.push('');
+  }
 
-  const msg = lines.join('\n');
+  // 4. Local cache
+  out.push('── LOCAL CACHE ──');
+  const lc = JSON.parse(localStorage.getItem('toh_chars')||'[]');
+  const lcmp = JSON.parse(localStorage.getItem('toh_campaigns')||'[]');
+  out.push('characters: '+lc.length+' cached');
+  lc.forEach(c=>out.push('  • '+c.name+' (id='+c.id+')'));
+  out.push('campaigns: '+lcmp.length+' cached');
+  lcmp.forEach(c=>out.push('  • '+(c.name||c.id)+' charIds='+(c.charIds||[]).length));
+
+  // 5. Verdict
+  out.push('');
+  out.push('── VERDICT ──');
+  const fullText = out.join('\n');
+  if(fullText.includes('❌')){
+    out.push('Problems found — see ❌ lines above.');
+    if(fullText.includes('column')||fullText.includes('42703')) out.push('→ Run ALTER TABLE to add group_id columns');
+    if(fullText.includes('42501')||fullText.includes('row-level')) out.push('→ RLS is blocking — run the DROP+CREATE POLICY SQL');
+    if(fullText.includes('NOT logged in')) out.push('→ Sign in first');
+  } else {
+    out.push('All checks passed ✅');
+  }
+
+  const msg = out.join('\n');
   console.log(msg);
   alert(msg);
 }
