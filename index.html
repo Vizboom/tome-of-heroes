@@ -1710,6 +1710,14 @@ function goBack(){const m=SCREEN_META[currentScreen];if(m?.back)nav(m.back);}
 
 /* ══ ROSTER ══ */
 function renderRoster(){
+  // If _db is empty and we have a group, pull from Supabase first
+  if(!_db.chars.length && !_db.campaigns.length && getGroupId()){
+    pullAll(getActiveCampId()).then(()=>_renderRosterInner());
+    return;
+  }
+  _renderRosterInner();
+}
+function _renderRosterInner(){
   let chars=getVisibleChars();
   // In player mode, only show the player's own character
   if(isPlayerMode()){
@@ -6047,8 +6055,17 @@ function renderCampList() {
   document.getElementById('campNewForm').style.display = 'none';
   document.getElementById('campImportForm').style.display = 'none';
   document.getElementById('campDetailView').style.display = 'none';
-  // Restore button always visible
   document.querySelectorAll('.btn-restore-presets').forEach(b=>b.style.display='');
+
+  // If _db is empty and we have a group, pull from Supabase first
+  if(!_db.campaigns.length && getGroupId()){
+    pullAll(getActiveCampId()).then(()=>_renderCampListInner());
+    return;
+  }
+  _renderCampListInner();
+}
+
+function _renderCampListInner() {
   let camps = getCampaigns();
   // Player mode: only show campaign this player belongs to
   if(isPlayerMode()){
@@ -6474,7 +6491,7 @@ function toggleCampChar(campId, charId) {
     }
     camps[ci].charIds.push(charId);
   }
-  saveCampaigns(camps);
+  saveCampaign(camps[ci]);
   renderCampDetailHeader();
   renderRoster(); // update roster to reflect campaign filter
 }
