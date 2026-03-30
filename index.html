@@ -4929,9 +4929,13 @@ async function skipLogin(){
 }
 
 async function doLogout(){
-  await supaSignOut();
-  syncIndicator('');
-  bootApp();
+  try { await supaSignOut(); } catch(e){}
+  // Clear all session state from localStorage
+  ['toh_mode','toh_player_char_id','toh_player_camp_id','toh_group_id',
+   'toh_chars','toh_campaigns','toh_active_camp','toh_dice_char',
+   'toh_joined_party','toh_pid'].forEach(k=>localStorage.removeItem(k));
+  // Force full page reload to clear all JS state cleanly
+  window.location.reload();
 }
 
 function importChar(){const raw=(document.getElementById('importCodeIn')?.value||'').trim();if(!raw){toast('Paste a code first','var(--red)');return;}let char=decodeChar(raw);if(!char||!char.name||char.classIdx===undefined){toast('Invalid code','var(--red)');return;}char.id=Date.now();char.shareCode=genCode();char.currentHP=char.currentHP||char.maxHP;char.statuses=char.statuses||[];char.spells=char.spells||[];char.attacks=char.attacks||[];char.equipment=char.equipment||[];const chars=getChars();chars.push(char);saveChars(chars);toast('✦ '+char.name+' imported!');renderRoster();}
@@ -6248,11 +6252,13 @@ function switchCampaign(id) {
 }
 
 /* ── Campaign detail ── */
-function openCamp(id) {
+async function openCamp(id) {
   editingCampId = id;
   document.getElementById('campListView').style.display = 'none';
   document.getElementById('campNewForm').style.display = 'none';
   document.getElementById('campDetailView').style.display = 'block';
+  // Pull fresh data from Supabase before rendering so charIds match
+  if(_online && getGroupId()) await pullAll(id);
   renderCampDetailHeader();
   campTab('sessions');
 }
@@ -6277,13 +6283,10 @@ function renderCampDetailHeader() {
   const el = document.getElementById('campDetailHeader');
   const allChars = getChars();
   // Clean stale charIds (deleted characters)
-  const validCharIds = (camp.charIds||[]).filter(x=>allChars.find(c=>String(c.id)===String(x)));
-  if(validCharIds.length !== (camp.charIds||[]).length){
-    const camps = getCampaigns();
-    const ci = camps.findIndex(c=>c.id===camp.id);
-    if(ci>=0){ camps[ci].charIds = validCharIds; saveCampaigns(camps); }
-    camp.charIds = validCharIds;
-  }
+  // Only filter charIds for display — do NOT save back (chars may not be loaded yet on other devices)
+  const allCharIds = new Set(allChars.map(c=>String(c.id)));
+  const validCharIds = (camp.charIds||[]).filter(x=>allCharIds.has(String(x)));
+  camp = {...camp, charIds: validCharIds};
   el.innerHTML = `
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:13px;padding:14px;margin-bottom:14px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
@@ -6305,25 +6308,36 @@ function renderCampDetailHeader() {
         <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">PARTY CHARACTERS</div>
         <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
           ${(()=>{
-            // Only show chars in this campaign OR unassigned to any campaign
+            const rawCamp = getCampaigns().find(c=>c.id===camp.id);
+            const allAssignedIds = new Set(rawCamp?.charIds?.map(String)||[]);
             const campaigns = getCampaigns();
-            const allAssigned = new Set();
-            campaigns.forEach(c=>(c.charIds||[]).forEach(id=>allAssigned.add(String(id))));
-            const eligible = allChars.filter(c=>{
-              const sid = String(c.id);
-              const inThis = (camp.charIds||[]).some(x=>String(x)===sid);
-              const unassigned = !allAssigned.has(sid);
-              return inThis || unassigned;
+            const globalAssigned = new Set();
+            campaigns.forEach(c=>(c.charIds||[]).forEach(id=>globalAssigned.add(String(id))));
+            // Show: chars assigned to this campaign (even if not in local cache) + unassigned chars
+            const assignedChars = allChars.filter(c=>allAssignedIds.has(String(c.id)));
+            const unassignedChars = allChars.filter(c=>!globalAssigned.has(String(c.id)));
+            // Show ghost pills for charIds not yet loaded locally
+            const loadedIds = new Set(assignedChars.map(c=>String(c.id)));
+            const ghostIds = [...allAssignedIds].filter(id=>!loadedIds.has(id));
+            const eligible = [...assignedChars, ...unassignedChars];
+            let html = '';
+            // Ghost pills for chars assigned but not loaded yet
+            ghostIds.forEach(id=>{
+              html+=`<div style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid var(--gold);background:var(--gold-dim);opacity:0.6">
+                <span style="font-size:14px">⏳</span>
+                <span style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold)">Loading…</span>
+              </div>`;
             });
-            if(!eligible.length) return '<span style="font-size:12px;color:var(--muted);font-style:italic">No characters — create some in Roster</span>';
-            return eligible.map(c=>{
-              const inCamp=(camp.charIds||[]).some(x=>String(x)===String(c.id));
+            if(!eligible.length && !ghostIds.length) return '<span style="font-size:12px;color:var(--muted);font-style:italic">No characters — create some in Roster</span>';
+            html += eligible.map(c=>{
+              const inCamp=allAssignedIds.has(String(c.id));
               const cc=classColor(c.classIdx);
               return `<div onclick="toggleCampChar('${camp.id}','${c.id}')" style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid ${inCamp?cc:'var(--border)'};background:${inCamp?cc+'22':'transparent'};cursor:pointer;transition:var(--trans)">
                 <span style="font-size:14px">${classIcon(c.classIdx)}</span>
                 <span style="font-family:'Cinzel',serif;font-size:10px;color:${inCamp?cc:'var(--muted)'}">${c.name}</span>
               </div>`;
             }).join('');
+            return html;
           })()}
         </div>
       </div>
