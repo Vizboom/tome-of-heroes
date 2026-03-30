@@ -1326,22 +1326,6 @@ async function pullAll(campId){
     return false;
   }
 }
-    if(campId){
-      const { data: loot } = await supa.from('loot').select('*').eq('campaign_id', campId).single();
-      if(loot){ _db.items[campId]=loot.data||[]; _db.wealth[campId]=loot.wealth||{}; }
-    }
-    try {
-      const { data: s } = await supa.from('settings').select('value').eq('key','claude_api_key').single();
-      if(s?.value) localStorage.setItem('toh_claude_key', s.value);
-    } catch(e){}
-    syncIndicator('live');
-    return true;
-  } catch(e){
-    console.warn('pullAll error:', e);
-    syncIndicator('error');
-    return false;
-  }
-}
 
 /* ══ DEBOUNCED FLUSH (for loot/wealth batching) ══ */
 function schedulePush(type, id, data){
