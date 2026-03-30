@@ -6359,14 +6359,31 @@ function renderPresetCampaigns() {
   }).join('');
 }
 
-function installPreset(id) {
+async function installPreset(id) {
   const preset = PRESET_CAMPAIGNS.find(p => p.id === id);
   if (!preset) return;
-  // Remove existing version first so it gets a clean reinstall
-  const camps = getCampaigns().filter(c => c.id !== id);
-  saveCampaigns(camps);
-  doImportCampaign(preset.code);
-  setTimeout(renderPresetCampaigns, 300);
+  if(!getGroupId()){ toast('Connect to a group first','var(--red)'); return; }
+
+  const camp = JSON.parse(JSON.stringify(preset));
+  camp.sessions=camp.sessions||[]; camp.quests=camp.quests||[];
+  camp.npcs=camp.npcs||[]; camp.arcs=camp.arcs||[];
+  camp.notes=camp.notes||[]; camp.charIds=camp.charIds||[];
+
+  const gid = getGroupId();
+  const row = { id: camp.id, group_id: gid, name: camp.name||'', data: camp };
+  const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
+  if(error){
+    toast('Failed to save: '+error.message,'var(--red)');
+    console.error('installPreset error:', error);
+    return;
+  }
+  const i = _db.campaigns.findIndex(c=>c.id===camp.id);
+  if(i>=0) _db.campaigns[i]=camp; else _db.campaigns.push(camp);
+  if(!getActiveCampId()) setActiveCampId(camp.id);
+  toast('✦ '+camp.name+' installed! '+(camp.sessions||[]).length+' sessions, '+(camp.npcs||[]).length+' NPCs.','var(--gold)');
+  hideCampForm();
+  setTimeout(renderPresetCampaigns, 100);
+  renderCampList();
 }
 
 
@@ -7367,20 +7384,41 @@ async function forceReinstallPresets(){
     toast('Connect to a group first before restoring presets','var(--red)');
     return;
   }
+
   toast('Restoring built-in campaigns…','var(--purple)');
+  const gid = getGroupId();
+  const errors = [];
   let count = 0;
+
   for(const p of PRESET_CAMPAIGNS){
     const camp = JSON.parse(JSON.stringify(p));
     camp.sessions=camp.sessions||[]; camp.quests=camp.quests||[];
     camp.npcs=camp.npcs||[]; camp.arcs=camp.arcs||[];
     camp.notes=camp.notes||[]; camp.charIds=camp.charIds||[];
-    const existing = _db.campaigns.find(c=>c.id===p.id);
+    // Preserve existing charIds
+    const existing = _db.campaigns.find(c=>c.id===camp.id);
     if(existing?.charIds?.length) camp.charIds = existing.charIds;
-    await dbSaveCampaign(camp);
-    count++;
+
+    // Save directly to Supabase
+    const row = { id: camp.id, group_id: gid, name: camp.name||'', data: camp };
+    const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
+    if(error){
+      console.error('Preset save error for', camp.name, ':', error.message, error.code);
+      errors.push(`${camp.name}: ${error.message} (${error.code})`);
+    } else {
+      // Update _db cache
+      const i = _db.campaigns.findIndex(c=>c.id===camp.id);
+      if(i>=0) _db.campaigns[i]=camp; else _db.campaigns.push(camp);
+      count++;
+    }
   }
-  if(!getActiveCampId() && _db.campaigns.length) setActiveCampId(_db.campaigns[0].id);
-  toast(`✦ ${count} built-in campaign${count!==1?'s':''} restored!`,'var(--gold)');
+
+  if(errors.length){
+    alert(`${count} restored, ${errors.length} failed:\n\n${errors.join('\n')}\n\nCheck that your Supabase 'data' column is type 'jsonb' and your RLS policies are open.`);
+  } else {
+    if(!getActiveCampId() && _db.campaigns.length) setActiveCampId(_db.campaigns[0].id);
+    toast(`✦ ${count} built-in campaign${count!==1?'s':''} restored!`,'var(--gold)');
+  }
   renderCampList();
 }
 bootApp();
