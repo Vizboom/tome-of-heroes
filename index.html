@@ -3429,52 +3429,77 @@ function renderLevelUpTab(char, cls){
   const pb = getPB(newLevel);
   const cc = cls.color;
 
-  // HP options
+  // HP
   const hitDie = cls.hit;
   const conMod = parseInt(getMod(char.abilities?.CON||10))||0;
   const avgHP = Math.floor(hitDie/2)+1+conMod;
 
-  // Subclass prompt?
   const needsSubclass = ld.subclass && !char.subclass;
   const subclassOptions = SUBCLASSES[cls.name]||[];
-
-  // ASI / Feat?
   const hasASI = ld.asi;
-
-  // Spells to pick?
   const newSpellSlots = ld.spells||0;
   const newCantrips = ld.cantrips||0;
+
+  // Resolve feature strings — replace generic "Path Feature", "Subclass Feature" etc. with subclass name
+  const resolveFeature = (f) => {
+    if(typeof f === 'object') return {name: f.n||f.name||'Feature', desc: f.d||f.desc||''};
+    const subName = char.subclass || '(subclass)';
+    // Replace generic placeholders with actual subclass context
+    const name = String(f)
+      .replace('Path Feature', subName + ' Feature')
+      .replace('Subclass Feature', subName + ' Feature')
+      .replace('Bard College Feature', subName + ' Feature')
+      .replace('Martial Archetype Feature', subName + ' Feature')
+      .replace('Divine Domain Feature', subName + ' Feature')
+      .replace('Sacred Oath Feature', subName + ' Feature')
+      .replace('Ranger Archetype Feature', subName + ' Feature')
+      .replace('Roguish Archetype Feature', subName + ' Feature')
+      .replace('Sorcerous Origin Feature', subName + ' Feature')
+      .replace('Otherworldly Patron Feature', subName + ' Feature')
+      .replace('Arcane Tradition Feature', subName + ' Feature')
+      .replace('Monastic Tradition Feature', subName + ' Feature')
+      .replace('Circle Feature', subName + ' Feature')
+      .replace('Primal Path (subclass)', 'Choose Primal Path (Subclass)');
+    // Build a helpful description
+    let desc = '';
+    if(name.includes('ASI or Feat')) desc = 'Increase one ability score by 2, or two ability scores by 1, or choose a feat.';
+    else if(name.includes('Extra Attack')) desc = 'You can attack twice, instead of once, whenever you take the Attack action.';
+    else if(name.includes('Expertise')) desc = 'Double your proficiency bonus for two skills of your choice.';
+    else if(name.includes('Unarmored Defense') && cls.name==='Barbarian') desc = 'AC = 10 + DEX modifier + CON modifier (while not wearing armor).';
+    else if(name.includes('Rage')) desc = `Bonus action. Advantage on STR checks/saves, bonus STR damage, resistance to piercing/slashing/bludgeoning. Uses per long rest scale with level.`;
+    else if(name.includes('Spellcasting')) desc = `You can cast ${cls.name} spells using ${cls.name==='Wizard'?'INT':cls.name==='Cleric'||cls.name==='Druid'?'WIS':'CHA'} as your spellcasting ability.`;
+    else if(name.includes('Subclass') || name.includes('Feature')) desc = `See your ${subName} features for details.`;
+    return {name, desc};
+  };
+
+  const features = (ld.features||[]).filter(Boolean).map(resolveFeature);
 
   let html = `
     <div style="background:var(--surface2);border:1px solid ${cc};border-radius:13px;padding:16px;margin-bottom:14px">
       <div style="font-family:'Cinzel',serif;font-size:18px;color:var(--gold);margin-bottom:4px">⬆ Level ${newLevel}</div>
-      <div style="font-size:12px;color:var(--muted)">${cls.name} · Proficiency Bonus +${pb}</div>
+      <div style="font-size:12px;color:var(--muted)">${cls.name}${char.subclass?' · '+char.subclass:''} · Proficiency Bonus +${pb}</div>
     </div>`;
 
-  // Features at this level
-  if(ld.features?.length){
+  // Features
+  if(features.length){
     html += `<div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">NEW FEATURES</div>`;
-    html += ld.features.map(f=>`
+    html += features.map(f=>`
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px">
-        <div style="font-family:'Cinzel',serif;font-size:13px;color:${cc};margin-bottom:4px">${f.n}</div>
-        <div style="font-size:12px;color:var(--muted);line-height:1.5">${f.d||''}</div>
+        <div style="font-family:'Cinzel',serif;font-size:13px;color:${cc};margin-bottom:${f.desc?4:0}px">${f.name}</div>
+        ${f.desc?`<div style="font-size:12px;color:var(--muted);line-height:1.5">${f.desc}</div>`:''}
       </div>`).join('');
   }
 
-  // HP section
+  // HP
   html += `
     <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin:14px 0 8px">HIT POINTS</div>
     <div style="display:flex;gap:8px;margin-bottom:14px">
-      <button id="hpAvgBtn" onclick="selectLvlHP('avg')" class="btn btn-primary" style="flex:1;margin:0">
-        Average: +${avgHP} HP
-      </button>
-      <button id="hpRollBtn" onclick="selectLvlHP('roll')" class="btn btn-outline" style="flex:1;margin:0">
-        Roll: d${hitDie}${conMod>=0?'+':''}${conMod}
-      </button>
+      <button id="hpAvgBtn" onclick="selectLvlHP('avg')" class="btn btn-primary" style="flex:1;margin:0">Average: +${avgHP} HP</button>
+      <button id="hpRollBtn" onclick="selectLvlHP('roll')" class="btn btn-outline" style="flex:1;margin:0">Roll: d${hitDie}${conMod>=0?'+':''}${conMod}</button>
     </div>
-    <div id="lvlupHPResult" style="font-family:'Cinzel',serif;font-size:13px;color:var(--gold);text-align:center;min-height:20px;margin-bottom:14px"></div>`;
+    <div id="lvlupHPResult" style="font-family:'Cinzel',serif;font-size:13px;color:var(--gold);text-align:center;min-height:20px;margin-bottom:14px">+${avgHP} HP (average)</div>`;
 
-  // Subclass
+  // Subclass picker
   if(needsSubclass && subclassOptions.length){
     html += `
       <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">CHOOSE SUBCLASS</div>
@@ -3482,10 +3507,7 @@ function renderLevelUpTab(char, cls){
         <option value="">— Select subclass —</option>
         ${subclassOptions.map(s=>`<option value="${s}">${s}</option>`).join('')}
       </select>`;
-  }
-
-  // Subclass already chosen but level allows picking (some classes pick at different levels)
-  if(ld.subclass && char.subclass){
+  } else if(char.subclass && ld.subclass){
     html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:14px;font-size:12px;color:var(--muted)">Subclass: <span style="color:var(--purple)">${char.subclass}</span></div>`;
   }
 
@@ -3519,29 +3541,37 @@ function renderLevelUpTab(char, cls){
       </div>`;
   }
 
-  // Spell slots info
-  if(newSpellSlots > 0){
+  // Spell info
+  if(newSpellSlots > 0 || newCantrips > 0){
     html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:14px">
       <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:4px">SPELLS</div>
-      <div style="font-size:12px;color:var(--text)">+${newSpellSlots} new spell slot${newSpellSlots!==1?'s':''} available at level ${newLevel}</div>
+      ${newSpellSlots?`<div style="font-size:12px;color:var(--text)">+${newSpellSlots} new spell slot${newSpellSlots!==1?'s':''} at level ${newLevel}</div>`:''}
       ${newCantrips?`<div style="font-size:12px;color:var(--text);margin-top:4px">+${newCantrips} new cantrip${newCantrips!==1?'s':''}</div>`:''}
       <div style="font-size:11px;color:var(--muted);margin-top:4px;font-style:italic">Add new spells from the Spells tab after levelling up</div>
     </div>`;
   }
 
-  // Confirm button
+  // Fighting Style (some classes get at specific levels)
+  if(ld.fightingStyle){
+    html += `
+      <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">FIGHTING STYLE</div>
+      <select id="lvlupFightingStyle" style="width:100%;background:var(--surface2);border:1px solid ${cc};border-radius:8px;padding:10px;color:var(--text);font-family:'Cinzel',serif;font-size:12px;margin-bottom:14px">
+        <option value="">— Select a fighting style —</option>
+        ${FIGHTING_STYLES.map(f=>`<option value="${f}">${f}</option>`).join('')}
+      </select>`;
+  }
+
   html += `
     <button class="btn btn-gold" onclick="confirmPartySheetLevelUp()" style="width:100%;font-size:14px;padding:14px">
       ✦ Confirm Level Up to ${newLevel}
     </button>`;
 
   el.innerHTML = html;
-  // Init ASI type selection
-  if(hasASI) selectASIType('asi');
-  // Init HP selection
+
+  // Init defaults
   window._lvlupHP = avgHP;
   window._lvlupHPMode = 'avg';
-  document.getElementById('hpAvgBtn')?.classList.add('btn-primary');
+  if(hasASI) selectASIType('asi');
 }
 
 function selectLvlHP(mode){
@@ -3597,7 +3627,7 @@ function confirmPartySheetLevelUp(){
   const newLevel = char.level + 1;
   const ld = (LEVEL_FEATURES[cls.name]||{})[newLevel]||{};
 
-  // Validate subclass
+  // Validate & apply subclass
   if(ld.subclass && !char.subclass){
     const sel = document.getElementById('lvlupSubclass')?.value;
     if(!sel){ toast('Choose a subclass first','var(--red)'); return; }
@@ -3624,14 +3654,24 @@ function confirmPartySheetLevelUp(){
     }
   }
 
+  // Apply Fighting Style if chosen
+  if(ld.fightingStyle){
+    const style = document.getElementById('lvlupFightingStyle')?.value;
+    if(style){
+      char.equipment = char.equipment||[];
+      if(!char.equipment.includes('Fighting Style: '+style))
+        char.equipment.push('Fighting Style: '+style);
+    }
+  }
+
   // Level up
   char.level = newLevel;
 
-  // Save
+  // Save to Supabase
   saveChar(char);
   toast(`✦ ${char.name} is now Level ${newLevel}!`, 'var(--gold)');
 
-  // Refresh the sheet
+  // Refresh
   openPartySheet(char.id);
   partySheetTab('combat');
   renderRoster();
