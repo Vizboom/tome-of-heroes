@@ -3401,6 +3401,554 @@ const SUBCLASSES = {
   Wizard:['School of Evocation','School of Abjuration','School of Conjuration','School of Divination','School of Enchantment','School of Illusion','School of Necromancy','School of Transmutation','Bladesinging','Order of Scribes','Chronurgy','Graviturgy'],
 };
 
+// Per-subclass features at each level they receive a feature
+// Levels match the generic "Path Feature / Domain Feature / etc." slots in LEVEL_FEATURES
+const SUBCLASS_FEATURES = {
+  // ── BARBARIAN ─────────────────────────────────────────────────────────────
+  'Path of the Berserker': {
+    3:  [{n:'Frenzy',d:'When you rage you can go into a frenzy. You can make a single melee weapon attack as a bonus action on each of your turns until the rage ends. At end of frenzy you suffer one level of exhaustion.'}],
+    6:  [{n:'Mindless Rage',d:'You cannot be charmed or frightened while raging. If you are when you enter rage, the effect is suspended.'}],
+    10: [{n:'Intimidating Presence',d:'Use an action to frighten a creature within 30 ft (WIS save). Recharge on long rest.'}],
+    14: [{n:'Retaliation',d:'When you take damage from a creature within 5 ft, you can use a reaction to make a melee weapon attack against it.'}],
+  },
+  'Path of the Totem Warrior': {
+    3:  [{n:'Spirit Seeker',d:'You can cast Beast Sense and Speak with Animals as rituals.'},{n:'Totem Spirit',d:'Choose a totem animal: Bear (resistance to all non-psychic damage while raging), Eagle (Dash as bonus action while raging, provoke no opportunity attacks), Wolf (allies have advantage on melee attacks vs enemies within 5 ft of you while raging).'}],
+    6:  [{n:'Aspect of the Beast',d:'Gain a non-combat benefit from your totem: Bear (carry weight doubled, advantage on STR checks), Eagle (see up to 1 mile clearly, dim light counts as bright), Wolf (track at fast pace, stealth at normal pace).'}],
+    10: [{n:'Spirit Walker',d:'You can cast Commune with Nature as a ritual.'}],
+    14: [{n:'Totemic Attunement',d:'Gain a combat benefit from your totem: Bear (enemies have disadvantage on attacks vs your allies if you\'re within 5 ft), Eagle (fly speed equal to walk speed while raging), Wolf (knock Large or smaller creatures prone with melee weapon attacks while raging).'}],
+  },
+  'Path of the Ancestral Guardian': {
+    3:  [{n:'Ancestral Protectors',d:'First creature you hit each rage becomes the target of your ancestors. That target has disadvantage on attacks vs creatures other than you, and those creatures have resistance vs the target\'s attacks.'}],
+    6:  [{n:'Spirit Shield',d:'If an ally within 30 ft takes damage, use reaction to reduce that damage by 2d6 (scales with level).'}],
+    10: [{n:'Consult the Spirits',d:'Cast Clairvoyance once per short/long rest without a spell slot, using WIS as spellcasting.'}],
+    14: [{n:'Vengeful Ancestors',d:'When you use Spirit Shield, the attacker takes force damage equal to the damage reduced.'}],
+  },
+  'Path of the Storm Herald': {
+    3:  [{n:'Storm Aura',d:'Choose an environment: Desert (fire damage to nearby enemies), Sea (lightning damage to one creature), Tundra (temp HP to allies). Activates when you rage.'}],
+    6:  [{n:'Storm Soul',d:'Gain a passive benefit from your environment: Desert (fire resistance, no damage from extreme heat), Sea (lightning resistance, can breathe underwater, swim speed), Tundra (cold resistance, no damage from extreme cold, water/liquid you touch freezes).'}],
+    10: [{n:'Shielding Storm',d:'Allies within 10 ft of you gain resistance matching your Storm Soul.'}],
+    14: [{n:'Raging Storm',d:'Enhanced Storm Aura effect. Desert: target must save or be blinded. Sea: target must save or knocked prone. Tundra: target must save or speed reduced to 0 until next turn.'}],
+  },
+  'Path of the Zealot': {
+    3:  [{n:'Divine Fury',d:'First creature you hit each turn deals extra necrotic or radiant damage (1d6 + half barbarian level).'},{n:'Warrior of the Gods',d:'Spells that restore HP to you can be cast without components. If you die you can be revived; no material components needed.'}],
+    6:  [{n:'Fanatical Focus',d:'If you fail a saving throw while raging, reroll it once (must use new result).'}],
+    10: [{n:'Zealous Presence',d:'Use a bonus action to unleash a battle cry. Up to 10 creatures within 60 ft gain advantage on attacks and saving throws until start of your next turn. Long rest recharge.'}],
+    14: [{n:'Rage Beyond Death',d:'While raging, being reduced to 0 HP doesn\'t knock you unconscious. You still die if you take damage that brings you to your negative max HP. Rage ends if you haven\'t attacked a hostile or taken damage.'}],
+  },
+  'Path of the Beast': {
+    3:  [{n:'Form of the Beast',d:'When you rage, you sprout natural weapons. Choose one each rage: Bite (1d8 piercing + heal equal to prof bonus once per turn), Claws (extra attack with claws 1d6 slashing + move up to 5 ft after attacking), Tail (1d8 piercing reach, reaction to add 1d8 to AC vs one hit).'}],
+    6:  [{n:'Bestial Soul',d:'Natural weapons count as magical. Choose one: swim speed, climb speed, or breath underwater. Can switch after long rest.'}],
+    10: [{n:'Infectious Fury',d:'When you hit with natural weapons, creature must succeed on a WIS save or either take 2d12 psychic damage or attack another creature of your choice.'}],
+    14: [{n:'Call the Hunt',d:'When you enter rage, choose up to CON mod creatures within 30 ft. They gain the benefit of your natural weapon attacks once per turn. You gain 5 temp HP per creature. Recharges long rest.'}],
+  },
+  'Path of Wild Magic': {
+    3:  [{n:'Magic Awareness',d:'Can detect spells within 60 ft as an action. Recharge long rest.'},{n:'Wild Surge',d:'When you rage, roll on Wild Magic table for a random magical effect each turn.'}],
+    6:  [{n:'Bolstering Magic',d:'As an action, touch a creature (including yourself): they can roll a d3 and add to an ability check or attack roll in the next 10 minutes, OR they regain an expended spell slot of level d3.'}],
+    10: [{n:'Unstable Backlash',d:'When you take damage or fail a save while raging, immediately roll on Wild Surge table as a reaction.'}],
+    14: [{n:'Controlled Surge',d:'When you roll on Wild Surge table, you can roll twice and choose which result applies.'}],
+  },
+
+  // ── BARD ──────────────────────────────────────────────────────────────────
+  'College of Lore': {
+    3:  [{n:'Bonus Proficiencies',d:'Gain proficiency in 3 skills of your choice.'},{n:'Cutting Words',d:'Reaction: subtract a Bardic Inspiration die from a creature\'s attack roll, ability check, or damage roll within 60 ft.'}],
+    6:  [{n:'Additional Magical Secrets',d:'Learn 2 spells from any class. These count as bard spells.'}],
+    14: [{n:'Peerless Skill',d:'When you make an ability check and fail, you can expend one Bardic Inspiration die and add it to the check.'}],
+  },
+  'College of Valor': {
+    3:  [{n:'Bonus Proficiencies',d:'Gain proficiency with medium armor, shields, and martial weapons.'},{n:'Combat Inspiration',d:'A creature with your Bardic Inspiration can add the die to a weapon damage roll or AC against one attack.'}],
+    6:  [{n:'Extra Attack',d:'You can attack twice when you take the Attack action.'}],
+    14: [{n:'Battle Magic',d:'When you use your action to cast a bard spell, you can make one weapon attack as a bonus action.'}],
+  },
+  'College of Glamour': {
+    3:  [{n:'Mantle of Inspiration',d:'Bonus action: expend Bardic Inspiration to give temp HP to up to 5 creatures within 60 ft and let them immediately move up to their speed without OA.'},{n:'Enthralling Performance',d:'After 1-minute performance, charm humanoids within 60 ft for 1 hour (WIS save). They regard you favorably. Long rest recharge.'}],
+    6:  [{n:'Mantle of Majesty',d:'Bonus action: cast Command without a spell slot for 1 minute. For the duration, cast Command as a bonus action each turn. Long rest recharge.'}],
+    14: [{n:'Unbreakable Majesty',d:'Bonus action: take on an unearthly appearance for 1 minute. Any creature attacking you for the first time each turn must succeed on a CHA save or attack another target. Short rest recharge.'}],
+  },
+  'College of Swords': {
+    3:  [{n:'Bonus Proficiencies',d:'Proficiency with medium armor and scimitars.'},{n:'Fighting Style',d:'Choose Dueling or Two-Weapon Fighting.'},{n:'Blade Flourish',d:'When you take the Attack action, gain walking speed +10 ft. Each attack can spend Bardic Inspiration for a Flourish: Defensive (+die to AC), Slashing (deal die damage to another creature within 5 ft), Mobile (move up to die x5 ft without OA).'}],
+    6:  [{n:'Extra Attack',d:'Attack twice when you take the Attack action.'}],
+    14: [{n:'Master\'s Flourish',d:'When you use a Blade Flourish, roll a d6 instead of expending Bardic Inspiration.'}],
+  },
+  'College of Whispers': {
+    3:  [{n:'Psychic Blades',d:'When you hit with a weapon, expend Bardic Inspiration to deal extra psychic damage (2d6 at L3, scaling).'},{n:'Words of Terror',d:'Speak privately to a humanoid for 1 minute. They must succeed on WIS save or be frightened of you for 1 hour.'}],
+    6:  [{n:'Mantle of Whispers',d:'When a humanoid dies within 30 ft, reaction: capture their shadow. Use as an action to become disguised as that humanoid for 1 hour. Short rest recharge.'}],
+    14: [{n:'Shadow Lore',d:'Action: whisper to a creature within 30 ft. It must succeed on WIS save or be frightened and charmed for 8 hours. Recharge long rest.'}],
+  },
+  'College of Creation': {
+    3:  [{n:'Mote of Potential',d:'When a creature uses your Bardic Inspiration die, they roll it twice and use the highest result (bonus depends on use: attack/check/save/hit die).'},{n:'Performance of Creation',d:'Action: create a nonmagical item up to Bardic Inspiration die x10 gp value. Lasts hours equal to your prof bonus.'}],
+    6:  [{n:'Animating Performance',d:'Animate a Large or smaller item for 8 hours as a Dancing Item. It acts on your turn.'}],
+    14: [{n:'Creative Crescendo',d:'When you use Performance of Creation, you can create up to your CHA mod additional items. All must be of the same type.'}],
+  },
+  'College of Eloquence': {
+    3:  [{n:'Silver Tongue',d:'When you make a Persuasion or Deception check, treat a roll of 9 or lower as a 10.'},{n:'Unsettling Words',d:'Bonus action: expend Bardic Inspiration to subtract the die from the next saving throw a creature makes before your next turn.'}],
+    6:  [{n:'Unfailing Inspiration',d:'When a creature uses your Bardic Inspiration and fails, they keep the die.'},{n:'Universal Speech',d:'Action: choose creatures up to your CHA mod within 60 ft. They understand you magically for 1 hour.'}],
+    14: [{n:'Infectious Inspiration',d:'When a creature uses your Bardic Inspiration successfully, you can give a free Bardic Inspiration die to another creature within 60 ft as a reaction.'}],
+  },
+
+  // ── CLERIC ────────────────────────────────────────────────────────────────
+  'Life Domain': {
+    1:  [{n:'Domain Spells: Bless, Cure Wounds',d:'Always prepared. Bonus proficiency: Heavy Armor.'},{n:'Disciple of Life',d:'Healing spells restore extra HP equal to 2 + spell level.'}],
+    2:  [{n:'Channel Divinity: Preserve Life',d:'Action: restore HP total equal to 5x cleric level divided among creatures within 30 ft (max half their max HP each).'}],
+    6:  [{n:'Blessed Healer',d:'When you cast a healing spell for another creature, you regain HP equal to 2 + spell level.'}],
+    8:  [{n:'Divine Strike',d:'Once per turn, add 1d8 radiant damage to weapon attacks (2d8 at level 14).'}],
+    17: [{n:'Supreme Healing',d:'When you would roll dice to restore HP with a spell, use the highest number possible instead.'}],
+  },
+  'Light Domain': {
+    1:  [{n:'Domain Spells: Burning Hands, Faerie Fire',d:'Always prepared. Bonus cantrip: Light.'},{n:'Warding Flare',d:'Reaction: impose disadvantage on an attack roll against you or another creature within 30 ft (prof bonus times per day).'}],
+    2:  [{n:'Channel Divinity: Radiance of the Dawn',d:'Action: 30 ft radius, snuff magical darkness, deal 2d10+cleric level radiant damage to hostile creatures (CON save for half).'}],
+    6:  [{n:'Improved Flare',d:'Warding Flare can now protect any creature, not just yourself.'}],
+    8:  [{n:'Potent Spellcasting',d:'Add WIS modifier to damage rolls of cleric cantrips.'}],
+    17: [{n:'Corona of Light',d:'Action: aura of sunlight 60 ft for 1 minute. Creatures in the aura have disadvantage on saves vs your Radiance of the Dawn and spells that deal fire or radiant damage.'}],
+  },
+  'War Domain': {
+    1:  [{n:'Domain Spells: Divine Favor, Shield of Faith',d:'Always prepared. Bonus proficiencies: Heavy Armor, Martial Weapons.'},{n:'War Priest',d:'WIS mod times per long rest, make a weapon attack as a bonus action when you use the Attack action.'}],
+    2:  [{n:'Channel Divinity: Guided Strike',d:'Add +10 to an attack roll before the DM declares hit/miss. Once per Channel Divinity use.'}],
+    6:  [{n:'Channel Divinity: War God\'s Blessing',d:'Reaction: when a creature within 30 ft makes an attack roll, grant +10 to the roll.'}],
+    8:  [{n:'Divine Strike',d:'Once per turn, add 1d8 weapon damage type to weapon attacks (2d8 at level 14).'}],
+    17: [{n:'Avatar of Battle',d:'Resistance to bludgeoning, piercing, and slashing damage from nonmagical weapons.'}],
+  },
+  'Trickery Domain': {
+    1:  [{n:'Domain Spells: Charm Person, Disguise Self',d:'Always prepared.'},{n:'Blessing of the Trickster',d:'Touch a creature to give advantage on Stealth checks for 1 hour. Long rest recharge.'}],
+    2:  [{n:'Channel Divinity: Invoke Duplicity',d:'Create illusory duplicate within 30 ft. Move it up to 30 ft. Can cast spells through duplicate, have advantage on attacks vs creatures within 5 ft of it. Concentration 1 minute.'}],
+    6:  [{n:'Channel Divinity: Cloak of Shadows',d:'Become invisible until end of next turn.'}],
+    8:  [{n:'Divine Strike',d:'Once per turn, add 1d8 poison damage to weapon attacks (2d8 at level 14).'}],
+    17: [{n:'Improved Duplicity',d:'Create 4 duplicates instead of 1 with Invoke Duplicity.'}],
+  },
+  'Knowledge Domain': {
+    1:  [{n:'Domain Spells: Command, Identify',d:'Always prepared. Gain two skills from History, Arcana, Nature, Religion; gain expertise in them.'},{n:'Blessings of Knowledge',d:'Learn 2 languages of your choice.'}],
+    2:  [{n:'Channel Divinity: Knowledge of the Ages',d:'As an action, gain proficiency in a chosen skill or tool for 10 minutes.'}],
+    6:  [{n:'Channel Divinity: Read Thoughts',d:'Read surface thoughts of a creature within 60 ft (WIS save). If they fail, you can use Command on them without expending a spell slot.'}],
+    8:  [{n:'Potent Spellcasting',d:'Add WIS modifier to damage rolls of cleric cantrips.'}],
+    17: [{n:'Visions of the Past',d:'Spend 1 minute in meditation to see visions: for objects, see events that occurred near the object in the past; for areas, see events that occurred in the area. Short rest recharge.'}],
+  },
+  'Nature Domain': {
+    1:  [{n:'Domain Spells: Animal Friendship, Speak with Animals',d:'Always prepared. Bonus proficiency: Heavy Armor. Gain one Druid cantrip.'},{n:'Acolyte of Nature',d:'Learn one druid cantrip. Gain proficiency in Animal Handling, Nature, or Survival.'}],
+    2:  [{n:'Channel Divinity: Charm Animals and Plants',d:'Action: charm beasts and plants within 30 ft that can see you for 1 minute (WIS save).'}],
+    6:  [{n:'Dampen Elements',d:'Reaction: when you or an ally within 30 ft takes acid, cold, fire, lightning, or thunder damage, grant resistance to that instance.'}],
+    8:  [{n:'Divine Strike',d:'Once per turn, add 1d8 cold, fire, or lightning damage to weapon attacks (2d8 at level 14).'}],
+    17: [{n:'Master of Nature',d:'When a creature is charmed by Charm Animals and Plants, you can command it as a bonus action.'}],
+  },
+  'Tempest Domain': {
+    1:  [{n:'Domain Spells: Fog Cloud, Thunderwave',d:'Always prepared. Bonus proficiencies: Heavy Armor, Martial Weapons.'},{n:'Wrath of the Storm',d:'WIS mod times per long rest, react to a creature hitting you: deal 2d8 lightning or thunder damage (DEX save for half).'}],
+    2:  [{n:'Channel Divinity: Destructive Wrath',d:'When you roll lightning or thunder damage, deal maximum damage instead.'}],
+    6:  [{n:'Thunderbolt Strike',d:'When you deal lightning damage to a Large or smaller creature, push it up to 10 ft.'}],
+    8:  [{n:'Divine Strike',d:'Once per turn, add 1d8 thunder damage to weapon attacks (2d8 at level 14).'}],
+    17: [{n:'Stormborn',d:'You have a fly speed equal to your walk speed when not underground or indoors.'}],
+  },
+
+  // ── DRUID ─────────────────────────────────────────────────────────────────
+  'Circle of the Moon': {
+    2:  [{n:'Combat Wild Shape',d:'Wild Shape as a bonus action. Spend spell slots to regain HP while Wild Shaped (1d8 per slot level).'},{n:'Circle Forms',d:'Use Wild Shape to become creatures of CR 1 (scales: CR 2 at L5, CR 3 at L9, etc.).'}],
+    6:  [{n:'Primal Strike',d:'Wild Shape attacks count as magical.'}],
+    10: [{n:'Elemental Wild Shape',d:'Expend 2 uses of Wild Shape to transform into an air, earth, fire, or water elemental.'}],
+    14: [{n:'Thousand Forms',d:'Cast Alter Self at will.'}],
+  },
+  'Circle of the Land': {
+    2:  [{n:'Bonus Cantrip',d:'Learn one additional druid cantrip.'},{n:'Natural Recovery',d:'Short rest: recover spell slots totalling up to half druid level (round up). Once per long rest.'}],
+    3:  [{n:'Circle Spells',d:'Gain additional spells depending on your chosen land (Arctic, Coast, Desert, Forest, Grassland, Mountain, Swamp, or Underdark). Always prepared, don\'t count against your limit.'}],
+    6:  [{n:'Land\'s Stride',d:'Moving through nonmagical difficult terrain costs no extra movement. Advantage on saves vs magical plants. Immune to magically created difficult terrain.'}],
+    10: [{n:'Nature\'s Ward',d:'Immune to poison and disease. Immune to charm and fear from elementals and fey.'}],
+    14: [{n:'Nature\'s Sanctuary',d:'When a beast or plant attacks you, it must make a WIS save or be forced to choose a different target.'}],
+  },
+  'Circle of Spores': {
+    2:  [{n:'Halo of Spores',d:'Reaction when a creature within 10 ft starts its turn or moves: deal 1d4 necrotic damage (CON save, scales with level).'},{n:'Symbiotic Entity',d:'Expend Wild Shape to awaken spores for 10 minutes: gain temp HP (4x druid level), Halo of Spores damage doubles, melee attacks deal 1d6 extra necrotic.'}],
+    6:  [{n:'Fungal Infestation',d:'When a Small/Medium beast or humanoid dies within 10 ft, use reaction to animate it as a zombie for 1 hour. It obeys your commands. Prof bonus uses per long rest.'}],
+    10: [{n:'Spreading Spores',d:'While Symbiotic Entity active, bonus action: create a 10 ft cube of spores lasting 1 minute. Creatures entering the cube trigger Halo of Spores. You don\'t need to use reaction.'}],
+    14: [{n:'Fungal Body',d:'Immune to blinded, deafened, frightened, and poisoned. Critical hits against you become normal hits.'}],
+  },
+  'Circle of Stars': {
+    2:  [{n:'Star Map',d:'Create a star map (spellbook). Always have Guidance cantrip. Cast Guiding Bolt and Detect Magic without using a spell slot (prof bonus times per long rest).'},{n:'Starry Form',d:'Expend Wild Shape to take on constellation form for 10 minutes. Choose: Archer (bonus action ranged spell attack 1d8+WIS radiant), Chalice (when you cast a healing spell, regain 1d8+WIS HP), Dragon (minimum result on concentration checks is 10).'}],
+    6:  [{n:'Cosmic Omen',d:'Roll a die after finishing a long rest. Odd: Woe — reaction to subtract 1d6 from a roll. Even: Weal — reaction to add 1d6 to a roll. Prof bonus uses.'}],
+    10: [{n:'Twinkling Constellations',d:'While in Starry Form, your constellation features improve. Archer deals 2d8+WIS and can make two attacks. Chalice heals you and another creature. Dragon gives flying speed 20 ft.'}],
+    14: [{n:'Full of Stars',d:'While in Starry Form, you become partially incorporeal: resistance to bludgeoning, piercing, and slashing damage.'}],
+  },
+  'Circle of Wildfire': {
+    2:  [{n:'Summon Wildfire Spirit',d:'Expend Wild Shape: summon a wildfire spirit in a 20 ft radius. It acts on your turn and can use Flame Seed (ranged attack 1d6+WIS fire) or Fiery Teleportation (teleport you or willing creature within 5 ft up to 15 ft, creatures within 5 ft of destination take 1d6+WIS fire damage).'},{n:'Enhanced Bond',d:'While wildfire spirit is present, your fire and healing spells deal extra 1d8 damage/healing.'}],
+    6:  [{n:'Cauterizing Flames',d:'When a Small or larger creature dies within 30 ft of your spirit, a spectral flame appears. Bonus action: a creature within 30 ft of the flame regains 2d10+WIS HP, and the flame vanishes.'}],
+    10: [{n:'Blazing Revival',d:'When you drop to 0 HP and your wildfire spirit is within 120 ft of you, dismiss the spirit to stabilize at 1 HP. Long rest recharge.'}],
+    14: [{n:'Firestorm',d:'When you cast a fire spell, the wildfire spirit can fly up to 15 ft and make one Fiery Teleportation without spending your action.'}],
+  },
+
+  // ── FIGHTER ───────────────────────────────────────────────────────────────
+  'Champion': {
+    3:  [{n:'Improved Critical',d:'Your weapon attacks score a critical hit on a roll of 19-20.'}],
+    7:  [{n:'Remarkable Athlete',d:'Add half proficiency (round up) to STR, DEX, or CON checks that don\'t already use proficiency. Long jump distance increases by STR mod feet.'}],
+    10: [{n:'Additional Fighting Style',d:'Choose a second fighting style from the Fighter list.'}],
+    15: [{n:'Superior Critical',d:'Weapon attacks score critical hit on 18-20.'}],
+    18: [{n:'Survivor',d:'At the start of each of your turns, regain HP equal to 5 + CON modifier if below half max HP and not at 0 HP.'}],
+  },
+  'Battle Master': {
+    3:  [{n:'Combat Superiority',d:'Gain 4 maneuvers and 4 superiority dice (d8). Maneuver options include Disarming Attack, Distracting Strike, Feinting Attack, Goading Attack, Lunging Attack, Maneuvering Attack, Menacing Attack, Parry, Precision Attack, Pushing Attack, Rally, Riposte, Sweeping Attack, Trip Attack, Commander\'s Strike, Brace, Ambush, Tactical Assessment.'},{n:'Student of War',d:'Proficiency in one type of artisan\'s tools.'}],
+    7:  [{n:'Know Your Enemy',d:'Study a creature for 1 minute; learn if it\'s superior/inferior/equal to you in 2 of: STR, DEX, CON, AC, current HP, total class levels, fighter levels.'}],
+    10: [{n:'Improved Combat Superiority',d:'Superiority dice become d10.'}],
+    15: [{n:'Relentless',d:'When you roll initiative and have no superiority dice left, regain 1.'}],
+    18: [{n:'Improved Combat Superiority',d:'Superiority dice become d12.'}],
+  },
+  'Eldritch Knight': {
+    3:  [{n:'Spellcasting (INT)',d:'Learn 3 wizard spells (2 must be abjuration or evocation). Cast using INT. Gain spell slots: 2 first-level.'},{n:'Weapon Bond',d:'Bond with up to 2 weapons. Cannot be disarmed. Summon bonded weapon to hand as bonus action.'}],
+    7:  [{n:'War Magic',d:'When you use your action to cast a cantrip, you can make one weapon attack as a bonus action.'}],
+    10: [{n:'Eldritch Strike',d:'When you hit a creature with a weapon attack, it has disadvantage on its next saving throw vs a spell you cast before end of your next turn.'}],
+    15: [{n:'Arcane Charge',d:'When you use Action Surge, you can also teleport up to 30 ft to an unoccupied space you can see.'}],
+    18: [{n:'Improved War Magic',d:'War Magic now works with any spell, not just cantrips.'}],
+  },
+  'Psi Warrior': {
+    3:  [{n:'Psionic Power (Psi Dice)',d:'Gain psi energy dice (d6, scales). Use to: Protective Field (reaction, reduce damage by die+INT), Psionic Strike (bonus damage on hit: die+INT force), Telekinetic Movement (move object/creature up to 30 ft).'}],
+    7:  [{n:'Telekinetic Adept',d:'Psi-Powered Leap: fly speed = twice walk speed as bonus action. Telekinetic Thrust: on Psionic Strike hit, target must save or be knocked prone or moved 10 ft.'}],
+    10: [{n:'Guarded Mind',d:'If you start turn affected by charmed or frightened, spend 1 psi die to end the effect. Resistance to psychic damage.'}],
+    15: [{n:'Bulwark of Force',d:'Bonus action: protect yourself and allies within 30 ft with half cover for 1 minute (INT mod uses per long rest).'}],
+    18: [{n:'Telekinetic Master',d:'Cast Telekinesis without a slot (INT mod). While concentrating on it, bonus action to attack.'}],
+  },
+  'Echo Knight': {
+    3:  [{n:'Manifest Echo',d:'Bonus action: create an echo (AC 14+prof bonus, 1 HP, immune to conditions). Swap places with echo as bonus action. Attack through echo as if in its space. Move echo 30 ft with bonus action.'},{n:'Unleash Incarnation',d:'When you attack, you can have your echo make an additional attack. CON mod uses per long rest.'}],
+    7:  [{n:'Echo Avatar',d:'Spend 10 min; see/hear through echo for up to 10 min as long as it\'s within 1000 ft. While doing so you\'re blinded and deafened.'}],
+    10: [{n:'Shadow Martyr',d:'Reaction: interpose echo between an ally and an attack. Echo is hit instead. Recharge: short/long rest.'}],
+    15: [{n:'Reclaim Potential',d:'When your echo is destroyed, gain 2d6+CON temp HP. Prof bonus uses per long rest.'}],
+    18: [{n:'Legion of One',d:'Create two echoes simultaneously. Each can use Unleash Incarnation independently.'}],
+  },
+  'Samurai': {
+    3:  [{n:'Fighting Spirit',d:'Bonus action: advantage on all weapon attacks this turn + 5 temp HP (scales to 10, then 15). Short rest recharge x3 per long rest.'}],
+    7:  [{n:'Elegant Courtier',d:'Add WIS mod to Persuasion checks. If you fail a WIS save, use Fighting Spirit reaction to reroll (prof bonus uses per long rest).'}],
+    10: [{n:'Tireless Spirit',d:'If you roll initiative with no Fighting Spirit uses, regain 1 use.'}],
+    15: [{n:'Rapid Strike',d:'When you have advantage on a weapon attack, forgo advantage to make one additional weapon attack as part of the same action. Once per turn.'}],
+    18: [{n:'Strength Before Death',d:'If damage would reduce you to 0 HP, delay that damage until after an immediate bonus turn (interrupts normal initiative). Long rest recharge.'}],
+  },
+  'Cavalier': {
+    3:  [{n:'Bonus Proficiency',d:'Gain proficiency in one of: Animal Handling, History, Insight, Performance, or Persuasion. Or learn one additional language.'},{n:'Born to the Saddle',d:'Advantage on saving throws to avoid falling off a mount. Land on feet if unmounted. Mounting costs only 5 ft of movement.'},{n:'Unwavering Mark',d:'When you hit a creature, mark it until end of your next turn. Marked creatures have disadvantage on attacks against others. If marked creature attacks another, use bonus action to attack it once. STR-mod uses per long rest.'}],
+    7:  [{n:'Warding Maneuver',d:'Reaction: add 1d8 to you or an adjacent creature\'s AC for one attack. CON-mod uses per long rest.'}],
+    10: [{n:'Hold the Line',d:'Opportunity attacks against creatures that move deal extra 1d8 damage, and target\'s speed is reduced to 0.'}],
+    15: [{n:'Ferocious Charger',d:'When you hit with a charge (moved 10+ ft before attacking), target must succeed on STR save or be knocked prone. Once per turn.'}],
+    18: [{n:'Vigilant Defender',d:'Opportunity attacks don\'t cost your reaction; instead you can make them up to DEX-mod times per round (minimum 1), each to a different creature.'}],
+  },
+  'Arcane Archer': {
+    3:  [{n:'Arcane Archer Lore',d:'Gain proficiency in Arcana or Nature. Learn the Prestidigitation or Druidcraft cantrip.'},{n:'Arcane Shot (2 options)',d:'Choose 2 Arcane Shot options. Use them 2 times per short/long rest. Options: Banishing Arrow, Beguiling Arrow, Bursting Arrow, Enfeebling Arrow, Grasping Arrow, Piercing Arrow, Seeking Arrow, Shadow Arrow.'}],
+    7:  [{n:'Magic Arrow',d:'Arrows you fire with a bow count as magical for overcoming resistance.'}],
+    10: [{n:'Curved Shot',d:'When you miss with Arcane Shot, reroll the attack against a different target within 60 ft and within 10 ft of the first target.'}],
+    15: [{n:'Ever-Ready Shot',d:'If you roll initiative with no Arcane Shot uses, regain 1 use.'}],
+    18: [{n:'Arcane Shot (6 options)',d:'Learn 2 more Arcane Shot options and improve all options.'}],
+  },
+  'Banneret': {
+    3:  [{n:'Rallying Cry',d:'When you use Second Wind, choose up to 3 allies within 60 ft who can see or hear you. Each regains HP equal to your fighter level.'}],
+    7:  [{n:'Royal Envoy',d:'Expertise in Persuasion. If already proficient, add double prof bonus.'}],
+    10: [{n:'Inspiring Surge',d:'When you use Action Surge, choose one ally within 60 ft who can see/hear you: they can make one melee or ranged weapon attack as a reaction.'}],
+    15: [{n:'Bulwark',d:'When you use Indomitable to reroll a failed save, an ally within 60 ft who can see/hear you can reroll a failed save using your new roll.'}],
+    18: [{n:'Inspiring Surge (2 targets)',d:'Inspiring Surge now affects 2 allies.'}],
+  },
+
+  // ── MONK ──────────────────────────────────────────────────────────────────
+  'Way of the Open Hand': {
+    3:  [{n:'Open Hand Technique',d:'When you hit with Flurry of Blows, apply one effect (DEX save): knock prone, push 15 ft, or prevent reactions until end of next turn.'}],
+    6:  [{n:'Wholeness of Body',d:'Action: regain HP equal to 3x monk level. Long rest recharge.'}],
+    11: [{n:'Tranquility',d:'End of long rest: gain effect of Sanctuary spell (WIS save) until next long rest.'}],
+    17: [{n:'Quivering Palm',d:'When you hit with an unarmed strike, spend 3 ki to set up lethal vibrations. As an action later, deal 10d10 damage (CON save for half). Expend to deal 10d6 instead on a failed save.'}],
+  },
+  'Way of Shadow': {
+    3:  [{n:'Shadow Arts',d:'Spend 2 ki to cast Darkness, Darkvision, Pass without Trace, or Silence. Also gain the Minor Illusion cantrip.'}],
+    6:  [{n:'Shadow Step',d:'Teleport up to 60 ft from one dim light/darkness space to another. Gain advantage on first melee attack.'}],
+    11: [{n:'Cloak of Shadows',d:'Action: become invisible in dim light or darkness for until you attack or cast a spell.'}],
+    17: [{n:'Opportunist',d:'Reaction: make an unarmed strike against a creature within 5 ft when another creature hits it.'}],
+  },
+  'Way of the Four Elements': {
+    3:  [{n:'Disciple of the Elements',d:'Learn 2 Elemental Disciplines and can spend ki to use them. Options include: Fangs of the Fire Snake, Fist of Four Thunders, Fist of Unbroken Air, Rush of the Gale Spirits, Shape the Flowing River, Sweeping Cinder Strike, Water Whip, Wave of Rolling Earth (higher level), Clench of the North Wind, Gong of the Summit, Flames of the Phoenix, Mist Stance, Ride the Wind, Eternal Mountain Defense.'}],
+    6:  [{n:'Additional Elemental Discipline',d:'Learn one additional Elemental Discipline.'}],
+    11: [{n:'Additional Elemental Discipline',d:'Learn one additional Elemental Discipline (access to higher-level disciplines).'}],
+    17: [{n:'Additional Elemental Discipline',d:'Learn one additional Elemental Discipline.'}],
+  },
+  'Way of the Kensei': {
+    3:  [{n:'Path of the Kensei',d:'Choose 2 weapons as kensei weapons (one ranged allowed). Gain proficiency if you didn\'t have it. Kensei\'s Shot: bonus action, add 1d4 to ranged weapon damage. Way of the Brush: proficiency in one type of artisan\'s tools (calligraphy/painter\'s).'}],
+    6:  [{n:'One with the Blade',d:'Kensei weapons count as magical. Magical Kensei Strike: spend 1 ki after hitting with kensei weapon to deal +1d4 damage.'}],
+    11: [{n:'Sharpen the Blade',d:'Action: spend 1-3 ki to grant a bonus to attack and damage rolls with a kensei weapon equal to ki spent for 1 minute (no concentration).'}],
+    17: [{n:'Unerring Accuracy',d:'Once per turn, if you miss an attack with a monk weapon, reroll the attack.'}],
+  },
+  'Way of Mercy': {
+    3:  [{n:'Implements of Mercy',d:'Gain proficiency in Insight and Medicine, and with Herbalism kit. Learn Merciful Mask (disturbing mask as bonus action).'},{n:'Hand of Healing',d:'Spend 1 ki: touch a creature to restore 1 martial arts die + WIS mod HP, also end one condition (blinded, deafened, paralyzed, poisoned, stunned).'},{n:'Hand of Harm',d:'Once per turn when you hit with unarmed strike, spend 1 ki to deal extra necrotic damage (1 martial arts die + WIS mod) and possibly inflict poisoned condition.'}],
+    6:  [{n:'Physician\'s Touch',d:'Hand of Healing can end one disease. Hand of Harm can inflict paralyzed condition instead.'}],
+    11: [{n:'Flurry of Healing and Harm',d:'Use Hand of Healing with each Flurry of Blows hit without spending extra ki. Use Hand of Harm once per Flurry without extra ki.'}],
+    17: [{n:'Hand of Ultimate Mercy',d:'Spend 5 ki and touch a creature dead no longer than 24 hours. It regains 4d10+40 HP and is affected by Lesser Restoration. Long rest recharge.'}],
+  },
+  'Way of the Sun Soul': {
+    3:  [{n:'Radiant Sun Bolt',d:'Ranged spell attack (using DEX or STR), 30 ft, 1d4+prof radiant. Use with Flurry of Blows bonus action (spend 1 ki for 2 Radiant Sun Bolts instead of unarmed strikes).'}],
+    6:  [{n:'Searing Arc Strike',d:'Spend 2 ki and 1 ki per spell level above 1st to cast Burning Hands (DEX save, 3d6 fire, scales). As part of Flurry of Blows.'}],
+    11: [{n:'Searing Sunburst',d:'Action: throw orb at a point within 150 ft. All in 20 ft radius must CON save or take 2d6 radiant. Spend ki (up to 3) to add 2d6 per ki.'}],
+    17: [{n:'Sun Shield',d:'Shed bright light 30 ft (dim 30 more). Reaction: when a creature hits you in melee, deal radiant damage = 5 + WIS mod.'}],
+  },
+  'Way of the Astral Self': {
+    3:  [{n:'Arms of the Astral Self',d:'Spend 1 ki: summon astral arms for 10 minutes. They are your unarmed strikes (WIS or STR, uses WIS mod for rolls if higher). Make 2 attacks with bonus action. Counts as monk weapons.'}],
+    6:  [{n:'Visage of the Astral Self',d:'Spend 1 ki: summon astral visage for 10 minutes. Darkvision 120 ft, WIS (Insight/Perception) using WIS mod, speak and be understood.'}],
+    11: [{n:'Body of the Astral Self',d:'When both arms and visage are active, body manifests: deflect hostile spells 1d10+WIS mod, resistance to damage from attacks (reaction after being hit).'}],
+    17: [{n:'Awakened Astral Self',d:'Spend 5 ki: gain all features (arms, visage, body) simultaneously for 10 minutes, plus additional attacks.'}],
+  },
+
+  // ── PALADIN ───────────────────────────────────────────────────────────────
+  'Oath of Devotion': {
+    3:  [{n:'Sacred Weapon',d:'Action: imbue weapon with positive energy for 1 minute. Add CHA mod to attack rolls, weapon sheds bright light 20 ft. Immune to frighten while active.'},{n:'Turn the Unholy',d:'Channel Divinity: turn fiends and undead.'}],
+    7:  [{n:'Aura of Devotion',d:'You and friendly creatures within 10 ft can\'t be charmed while you\'re conscious (30 ft at level 18).'}],
+    15: [{n:'Purity of Spirit',d:'Always under the effect of the Protection from Evil and Good spell.'}],
+    20: [{n:'Holy Nimbus',d:'As an action, emit an aura of sunlight for 1 minute. Enemies starting turn in the aura take 10 radiant damage. Advantage on saves vs spells cast by fiends or undead. Long rest recharge.'}],
+  },
+  'Oath of the Ancients': {
+    3:  [{n:'Nature\'s Wrath',d:'Ensnare a creature within 10 ft in magical vines (STR or DEX save or restrained for 1 minute).'},{n:'Turn the Faithless',d:'Channel Divinity: turn fey and fiends.'}],
+    7:  [{n:'Aura of Warding',d:'You and friendly creatures within 10 ft have resistance to damage from spells (30 ft at level 18).'}],
+    15: [{n:'Undying Sentinel',d:'When you drop to 0 HP and don\'t die, you instead drop to 1 HP. Long rest recharge. You don\'t suffer age effects and can\'t be aged magically.'}],
+    20: [{n:'Elder Champion',d:'Assume the form of an ancient force of nature for 1 minute. Regain 10 HP at start of each turn. Spells cost 1 less action. Enemies within 10 ft that fail saves are affected as if by Bane. Long rest recharge.'}],
+  },
+  'Oath of Vengeance': {
+    3:  [{n:'Abjure Enemy',d:'Channel Divinity: frighten one creature within 60 ft (WIS save). Fey and fiends have disadvantage. Frightened creature has speed 0.'},{n:'Vow of Enmity',d:'Channel Divinity: bonus action advantage on attacks vs one creature within 10 ft for 1 minute.'}],
+    7:  [{n:'Relentless Avenger',d:'When you hit with an opportunity attack, reduce speed to 0 and move up to half your speed following the creature (no OA for this movement).'}],
+    15: [{n:'Soul of Vengeance',d:'When a creature under your Vow of Enmity attacks, use reaction to attack that creature.'}],
+    20: [{n:'Avenging Angel',d:'Assume angelic form for 1 minute. Fly speed 60 ft. Aura of Menace (60 ft): creatures who fail WIS save are frightened and have -5 to attacks vs you/allies for 1 minute. Long rest recharge.'}],
+  },
+  'Oath of Conquest': {
+    3:  [{n:'Conquering Presence',d:'Channel Divinity: frighten all creatures within 30 ft that you choose (WIS save) for 1 minute.'},{n:'Guided Strike',d:'Channel Divinity: add +10 to an attack roll after seeing the roll.'}],
+    7:  [{n:'Aura of Conquest',d:'Frightened creatures within 10 ft have speed 0 and take psychic damage equal to half paladin level at start of turn (30 ft at 18).'}],
+    15: [{n:'Scornful Rebuke',d:'Creatures that attack you take psychic damage equal to CHA mod (min 1) each time they damage you.'}],
+    20: [{n:'Invincible Conqueror',d:'1 minute: resistance to all damage, extra attack with Attack action, weapon attacks score critical on 19-20. Long rest recharge.'}],
+  },
+  'Oath of Redemption': {
+    3:  [{n:'Emissary of Peace',d:'+5 bonus to Persuasion checks (Channel Divinity).'},{n:'Rebuke the Violent',d:'Reaction: when a creature within 30 ft deals damage, deal radiant damage equal to that damage to the attacker (WIS save for half).'}],
+    7:  [{n:'Aura of the Guardian',d:'Reaction: take damage for an ally within 10 ft instead of them. Ally takes 0 damage; you take it all. 30 ft at level 18.'}],
+    15: [{n:'Protective Spirit',d:'If you end your turn below half max HP and aren\'t incapacitated, regain HP equal to 1d6 + half your paladin level.'}],
+    20: [{n:'Emissary of Redemption',d:'Resistance to all damage dealt by other creatures. If a creature damages you, it takes radiant damage equal to half the damage it dealt. Ends if you attack or force a creature to make a save.'}],
+  },
+  'Oath of Glory': {
+    3:  [{n:'Inspiring Smite',d:'After Divine Smite, bonus action: distribute 2d8+paladin level temp HP among creatures within 30 ft.'},{n:'Peerless Athlete',d:'Channel Divinity: advantage on STR (Athletics) and DEX (Acrobatics) checks, double weight you can carry, jump distance for 10 minutes.'}],
+    7:  [{n:'Aura of Alacrity',d:'Walk speed +10 ft. Friendly creatures within 10 ft who move toward you on their turn get +10 walk speed (30 ft at 18).'}],
+    15: [{n:'Glorious Defense',d:'Reaction: when you or another creature is hit within 10 ft, add CHA mod to AC vs that attack. If it misses, make one melee weapon attack against the attacker. CHA mod uses per long rest.'}],
+    20: [{n:'Living Legend',d:'1 hour: CHA mod to hit instead of STR or DEX, once per turn on hit reroll one die (must accept new roll), reaction to reroll a failed CHA save. Long rest recharge.'}],
+  },
+  'Oathbreaker': {
+    3:  [{n:'Dreadful Aspect',d:'Channel Divinity: frighten all creatures within 30 ft that you choose (WIS save) for 1 minute.'},{n:'Control Undead',d:'Channel Divinity: target undead within 30 ft must make WIS save or fall under your control for 24 hours.'}],
+    7:  [{n:'Aura of Hate',d:'You and fiends/undead within 10 ft add CHA mod to melee weapon damage rolls (30 ft at 18).'}],
+    15: [{n:'Supernatural Resistance',d:'Resistance to bludgeoning, piercing, and slashing damage from nonmagical weapons.'}],
+    20: [{n:'Dread Lord',d:'1 minute: aura of gloom 30 ft (dim light), frightened enemies have disadvantage on saves vs your spells, melee attacks deal extra 4d8 necrotic damage. Long rest recharge.'}],
+  },
+
+  // ── RANGER ────────────────────────────────────────────────────────────────
+  'Hunter': {
+    3:  [{n:'Hunter\'s Prey',d:'Choose one: Colossus Slayer (1d8 extra damage vs wounded creatures, once per turn), Giant Killer (react to attacks by Large+ creatures near you), Horde Breaker (additional attack vs creature adjacent to target once per turn).'}],
+    7:  [{n:'Defensive Tactics',d:'Choose one: Escape the Horde (OA against you made with disadvantage), Multiattack Defense (+4 AC against remaining attacks after being hit), Steel Will (advantage on saves vs frightened).'}],
+    11: [{n:'Multiattack',d:'Choose one: Volley (action to shower an area with arrows, range attack vs each creature in 10 ft radius), Whirlwind Attack (melee attack against any number of creatures within 5 ft).'}],
+    15: [{n:'Superior Hunter\'s Defense',d:'Choose one: Evasion (half damage on DEX save, no damage on success), Stand Against the Tide (reaction: force creature to repeat attack vs another creature nearby), Uncanny Dodge (use reaction to halve attack damage).'}],
+  },
+  'Gloom Stalker': {
+    3:  [{n:'Dread Ambusher',d:'Add prof bonus to initiative. On first turn of combat, one extra attack dealing +1d8 damage.'},{n:'Umbral Sight',d:'Darkvision 60 ft (or +60 ft). Invisible to darkvision while in darkness.'},{n:'Gloom Stalker Spells',d:'Always prepared: Disguise Self (L3), Rope Trick (L5), Fear (L9), Greater Invisibility (L13), Seeming (L17).'}],
+    7:  [{n:'Iron Mind',d:'Proficiency in WIS saves (or CHA/INT if already proficient in WIS).'}],
+    11: [{n:'Stalker\'s Flurry',d:'Once per turn, if you miss an attack, you can make an additional attack immediately.'}],
+    15: [{n:'Shadowy Dodge',d:'Reaction: impose disadvantage on an attacker\'s attack roll.'}],
+  },
+  'Beast Master': {
+    3:  [{n:'Ranger\'s Companion',d:'Bond with a beast CR 1/4 or lower. It acts on your turn (uses your bonus action to attack). Uses your prof bonus in many stats.'}],
+    7:  [{n:'Exceptional Training',d:'On your turn, if you don\'t command the beast, it can take Dash, Disengage, Dodge, or Help. Its attacks count as magical.'}],
+    11: [{n:'Bestial Fury',d:'Your beast companion can make 2 attacks when you command it to attack.'}],
+    15: [{n:'Share Spells',d:'When you cast a spell on yourself, it can also target the beast companion if within 30 ft.'}],
+  },
+  'Fey Wanderer': {
+    3:  [{n:'Dreadful Strikes',d:'Deal extra 1d4 psychic damage with weapon attacks (1d6 at level 11). Once per turn.'},{n:'Fey Wanderer Magic',d:'Always prepared: Charm Person (L3), Misty Step (L5), Dispel Magic (L9), Dimension Door (L13), Mislead (L17).'},{n:'Otherworldly Glamour',d:'Add WIS mod to Deception, Performance, and Persuasion checks. Gain proficiency in one of these.'}],
+    7:  [{n:'Beguiling Twist',d:'Advantage on saves vs charmed and frightened. Reaction: when a creature within 120 ft succeeds on charm/fear save, force a different creature to save or be charmed/frightened by you.'}],
+    11: [{n:'Fey Reinforcements',d:'Learn Summon Fey spell, always prepared. Cast once per long rest without slot. While concentrating, bonus action to move it.'}],
+    15: [{n:'Misty Wanderer',d:'Cast Misty Step without using a spell slot (WIS mod times per long rest). When you do, take one willing creature with you.'}],
+  },
+  'Swarmkeeper': {
+    3:  [{n:'Gathered Swarm',d:'Surrounded by a swarm of Tiny creatures. Once per turn when you hit with a weapon, choose: deal extra 1d6 piercing damage, move the target 15 ft (STR save), move yourself 5 ft without provoking OA.'},{n:'Swarmkeeper Magic',d:'Always prepared: Mage Hand (cantrip), Faerie Fire (L3), Web (L5), Gaseous Form (L9), Arcane Eye (L13), Insect Plague (L17).'}],
+    7:  [{n:'Writhing Tide',d:'As bonus action, the swarm carries you: fly speed 10 ft for your move. Works a number of times per long rest equal to prof bonus.'}],
+    11: [{n:'Mighty Swarm',d:'Your Gathered Swarm improves: extra damage becomes 1d8, pushed creature is knocked prone, and you can move yourself up to 10 ft.'}],
+    15: [{n:'Swarming Dispersal',d:'Reaction when you take damage: magical swarm disperses then reforms. You gain resistance to that damage and teleport up to 30 ft. Prof bonus uses per long rest.'}],
+  },
+
+  // ── ROGUE ─────────────────────────────────────────────────────────────────
+  'Thief': {
+    3:  [{n:'Fast Hands',d:'Use Cunning Action to also make a Sleight of Hand check, use thieves\'\2tools, or use/interact with an item.'},{n:'Second-Story Work',d:'Climb speed = walk speed. When making running jump, add DEX mod to distance.'}],
+    9:  [{n:'Supreme Sneak',d:'Advantage on Stealth checks if you move 50% or less of your speed.'}],
+    13: [{n:'Use Magic Device',d:'Ignore class, race, and level requirements on magic items.'}],
+    17: [{n:'Thief\'s Reflexes',d:'Take two turns in first round of combat (first at normal initiative, second at initiative-10).'}],
+  },
+  'Assassin': {
+    3:  [{n:'Bonus Proficiencies',d:'Proficiency with disguise kit and poisoner\'s kit.'},{n:'Assassinate',d:'Advantage on attacks vs creatures that haven\'t taken a turn yet. Hits against surprised creatures are critical hits.'}],
+    9:  [{n:'Infiltration Expertise',d:'Create a false identity in 7 days. Establish history, profession, and affiliations. Pass as that person indefinitely.'}],
+    13: [{n:'Impostor',d:'Unerringly mimic another creature\'s speech, writing, and behavior. Must observe for 3+ hours. Contested Deception vs Insight to detect.'}],
+    17: [{n:'Death Strike',d:'When you hit a surprised creature, it must make CON save (DC 8+prof+DEX) or take double damage.'}],
+  },
+  'Arcane Trickster': {
+    3:  [{n:'Spellcasting (INT)',d:'Learn 3 wizard spells (2 must be Enchantment or Illusion). Cast using INT.'},{n:'Mage Hand Legerdemain',d:'Your Mage Hand is invisible and can pick pockets, manipulate objects, pick locks, and disarm traps (using Sleight of Hand).'}],
+    9:  [{n:'Magical Ambush',d:'If hidden when you cast a spell, target has disadvantage on saves against it this turn.'}],
+    13: [{n:'Versatile Trickster',d:'Use Mage Hand to distract an enemy: gain advantage on attacks vs creature within 5 ft of your Mage Hand (bonus action).'}],
+    17: [{n:'Spell Thief',d:'Reaction after failing a save vs a spell: steal it. Cast it on your next turn without a slot. Caster can\'t cast it until long rest. Long rest recharge.'}],
+  },
+  'Swashbuckler': {
+    3:  [{n:'Fancy Footwork',d:'After you attack a creature in melee, it can\'t make OA against you for the rest of the turn.'},{n:'Rakish Audacity',d:'Add CHA mod to initiative. Sneak Attack even without advantage if no other creatures are within 5 ft (you still need a finesse/ranged weapon).'}],
+    9:  [{n:'Panache',d:'Use Persuasion as an action to charm a hostile creature for 1 minute (they have disadvantage on attacks vs others). Or a non-hostile creature is charmed for up to 1 hour.'}],
+    13: [{n:'Elegant Maneuver',d:'Bonus action: gain advantage on next Acrobatics or Athletics check.'}],
+    17: [{n:'Master Duelist',d:'When you miss an attack, roll again with advantage. Once per short/long rest.'}],
+  },
+  'Scout': {
+    3:  [{n:'Skirmisher',d:'When an enemy ends turn within 5 ft of you, react to move up to half speed without provoking OA.'},{n:'Survivalist',d:'Proficiency and expertise in Nature and Survival.'}],
+    9:  [{n:'Superior Mobility',d:'Walk, climb, and swim speed increased by 10 ft.'}],
+    13: [{n:'Ambush Master',d:'Advantage on initiative. First creature you hit each combat becomes easy to hit: allies have advantage vs it until start of your next turn.'}],
+    17: [{n:'Sudden Strike',d:'When you take Attack action, make one additional attack as bonus action. This attack can benefit from Sneak Attack even if Sneak Attack was used this turn (against a different target).'}],
+  },
+  'Inquisitive': {
+    3:  [{n:'Ear for Deceit',d:'Treat any Insight check for lies as a minimum of 8+prof+WIS.'},{n:'Eye for Detail',d:'Bonus action to use Perception to spot hidden creatures or Investigate to uncover clues.'},{n:'Insightful Fighting',d:'Bonus action: Insight check vs Deception of a creature to use Sneak Attack against it without advantage for 1 minute.'}],
+    9:  [{n:'Steady Eye',d:'Advantage on Perception and Investigate checks if you haven\'t moved this turn.'}],
+    13: [{n:'Unerring Eye',d:'Action: detect illusions, shapechangers, and other deceptions within 30 ft (WIS save to resist). Prof bonus uses per long rest.'}],
+    17: [{n:'Eye for Weakness',d:'While Insightful Fighting is active, Sneak Attack dice increase by 3d6.'}],
+  },
+  'Phantom': {
+    3:  [{n:'Whispers of the Dead',d:'After short/long rest, gain proficiency in one skill or tool of your choice (whispered to you by spirits).'},{n:'Wails from the Grave',d:'After Sneak Attack, spend one Sneak Attack die to deal necrotic damage to a second creature within 30 ft of the first.'}],
+    9:  [{n:'Tokens of the Departed',d:'Reaction when a creature within 30 ft dies: capture its soul as a Tiny trinket (hold one at a time). Trinket lets you ask it one question. Advantage on death saves while holding it. Spend 1 ki (no ki cost) to gain prof bonus in any skill.'}],
+    13: [{n:'Ghost Walk',d:'Bonus action: ghostly form for 10 minutes. Move through creatures/objects (end turn inside = 1d10 force), advantage on DEX saves, resistance to non-psychic damage. Prof bonus uses per long rest.'}],
+    17: [{n:'Death\'s Friend',d:'Wails from the Grave costs no Sneak Attack dice. Tokens of the Departed: also benefit from Sneak Attack when you make attacks near the spirit.'}],
+  },
+  'Soulknife': {
+    3:  [{n:'Psionic Energy Dice (d6)',d:'Regain one when you roll initiative. Use to fuel psionic abilities (Psi-Bolstered Knack, Psychic Whispers).'},{n:'Psychic Blades',d:'Two psychic blades as part of Attack action (one per attack). 1d6+STR/DEX psychic damage, can\'t be disarmed, vanish after use. Second blade deals 1d4 only.'}],
+    9:  [{n:'Soul Blades',d:'Homing Strikes: if you miss a psychic blade attack, expend a psi die to reroll, add die to roll. Psychic Teleportation: bonus action to expend psi die, teleport up to 10x die result feet.'}],
+    13: [{n:'Psychic Veil',d:'Become invisible for 1 hour or until you deal damage/force a save. Prof bonus uses per long rest.'}],
+    17: [{n:'Rend Mind',d:'When you use Psychic Blades Sneak Attack on a creature, force a WIS save or it\'s stunned until end of your next turn. Long rest recharge (or expend 3 psi dice).'}],
+  },
+
+  // ── SORCERER ──────────────────────────────────────────────────────────────
+  'Draconic Bloodline': {
+    1:  [{n:'Dragon Ancestor',d:'Choose a dragon type (determines damage type). Speak Draconic. Advantage on Persuasion/Intimidation vs dragons.'},{n:'Draconic Resilience',d:'Max HP increases by your sorcerer level. AC = 13 + DEX mod when not wearing armor.'}],
+    6:  [{n:'Elemental Affinity',d:'Add CHA mod to damage rolls matching your dragon ancestor\'s type. Spend 1 sorcery point to gain resistance to that damage type for 1 hour.'}],
+    14: [{n:'Dragon Wings',d:'Grow a pair of draconic wings as bonus action. Fly speed equal to walk speed while they exist.'}],
+    18: [{n:'Draconic Presence',d:'Spend 5 sorcery points: aura 60 ft for 1 minute. Creatures must WIS save each turn or be charmed or frightened.'}],
+  },
+  'Wild Magic': {
+    1:  [{n:'Wild Magic Surge',d:'After casting a 1st-level or higher spell, DM can have you roll d20. On a 1, roll on Wild Magic Surge table.'},{n:'Tides of Chaos',d:'Gain advantage on one attack, ability check, or saving throw. Recharge long rest. DM can make you Wild Magic Surge to recharge early.'}],
+    6:  [{n:'Bend Luck',d:'Reaction: spend 2 sorcery points to roll 1d4 and add or subtract from a roll by another creature you can see.'}],
+    14: [{n:'Controlled Chaos',d:'When you roll on Wild Magic Surge table, roll twice and use either result.'}],
+    18: [{n:'Spell Bombardment',d:'When you roll damage dice for a spell and get the maximum, roll one additional die and add it. Once per turn.'}],
+  },
+  'Divine Soul': {
+    1:  [{n:'Divine Magic',d:'Access the cleric spell list (treat as sorcerer spells). Gain one extra spell known from the cleric list.'},{n:'Favored by the Gods',d:'If you fail a saving throw or miss an attack, add 2d4 to the roll. Short rest recharge.'}],
+    6:  [{n:'Empowered Healing',d:'Bonus action: when you or an ally rolls dice for a healing spell within 5 ft, spend 1 sorcery point to reroll any number of healing dice.'}],
+    14: [{n:'Otherworldly Wings',d:'Bonus action: sprout wings. Fly speed 30 ft. You can have feathered or bat wings (cosmetic choice).'}],
+    18: [{n:'Unearthly Recovery',d:'Bonus action: if below half max HP, regain half your max HP. Long rest recharge.'}],
+  },
+  'Storm Sorcery': {
+    1:  [{n:'Wind Speaker',d:'Speak, read, and write Primordial (and its dialects Aquan, Auran, Ignan, Terran).'},{n:'Tempestuous Magic',d:'After casting a 1st+ spell, bonus action to fly 10 ft without provoking OA.'}],
+    6:  [{n:'Heart of the Storm',d:'Resistance to lightning and thunder. When you cast a 1st+ spell that deals lightning or thunder damage, creatures within 10 ft take half your sorcerer level lightning or thunder damage.'}],
+    14: [{n:'Storm\'s Fury',d:'Reaction when hit in melee: deal 1d6 lightning per sorcerer level to attacker (DEX save for half) and push 20 ft.'}],
+    18: [{n:'Wind Soul',d:'Immune to lightning and thunder. Fly speed 60 ft. Reduce to 30 ft and share with up to 3 creatures within 30 ft.'}],
+  },
+  'Shadow Magic': {
+    1:  [{n:'Eyes of the Dark',d:'Darkvision 120 ft. Spend 1 sorcery point to cast Darkness without concentration and see through your own Darkness.'},{n:'Strength of the Grave',d:'When damage would kill you, WIS save (DC 5+damage dealt) to drop to 1 HP instead. Radiant or critical hits auto-fail. Long rest recharge.'}],
+    6:  [{n:'Hound of Ill Omen',d:'Spend 3 sorcery points: summon a shadowy hound to harry a creature. Target has disadvantage on saves vs your spells while hound is adjacent. Hound uses mastiff stats plus 5+prof HP and can move through objects.'}],
+    14: [{n:'Shadow Walk',d:'Bonus action when in dim light or darkness: teleport up to 120 ft to unoccupied dim/dark space.'}],
+    18: [{n:'Umbral Form',d:'Spend 6 sorcery points: become shadow for 1 minute. Resistance to all damage except force and radiant. Move through creatures and objects (1d10 force if you end turn inside).'}],
+  },
+  'Aberrant Mind': {
+    1:  [{n:'Telepathic Speech',d:'Bonus action: form telepathic connection with a creature within 30 ft for your sorcerer level in minutes. You and target can communicate telepathically while within 100 ft of each other.'},{n:'Psionic Spells',d:'Always prepared: Mind Sliver cantrip, Arms of Hadar, Dissonant Whispers, Calm Emotions, Detect Thoughts, Hunger of Hadar, Sending, Evard\'s Black Tentacles, Dominate Person, Telekinesis.'}],
+    6:  [{n:'Psionic Sorcery',d:'Cast psionic spells using only sorcery points (1 per spell level) without verbal/somatic components.'},{n:'Psychic Defenses',d:'Resistance to psychic damage. Advantage on saves vs charmed and frightened.'}],
+    14: [{n:'Revelation in Flesh',d:'Spend 1+ sorcery points as bonus action: gain benefits for 10 minutes. 1: blindsight 60 ft, 2: swim/breathe underwater, 3: see the invisible, 4: fly speed equal to walk.'}],
+    18: [{n:'Warping Implosion',d:'Action: teleport up to 120 ft. Each creature within 30 ft of your original spot must STR save or be pulled there and take 3d10 force damage (half on success). Spend 5 sorcery points to use.'}],
+  },
+  'Clockwork Soul': {
+    1:  [{n:'Clockwork Magic',d:'Always prepared: Alarm, Protection from Evil and Good, Aid, Lesser Restoration, Dispel Magic, Protection from Energy, Freedom of Movement, Summon Construct, Hold Monster, Wall of Force.'},{n:'Restore Balance',d:'Reaction: cancel advantage or disadvantage on a roll before the DM declares the result. Prof bonus uses per long rest.'}],
+    6:  [{n:'Bulwark of Law',d:'Bonus action: expend sorcery points (1-5). A creature within 30 ft gains that many d8s as a pool. When hit, spend dice from the pool to reduce damage. Lasts 8 hours.'}],
+    14: [{n:'Trance of Order',d:'Bonus action: enter a mechanical trance for 1 minute. Attacks can\'t score crits. Treat d20 rolls below 10 as a 10. Long rest recharge.'}],
+    18: [{n:'Clockwork Cavalcade',d:'Action: summon spirits to fix and protect. Restore up to 100 HP to any creatures within 30 ft (distribute freely). Repair broken magic items within 30 ft. Dispel up to L6 spells affecting creatures within 30 ft. Long rest recharge.'}],
+  },
+
+  // ── WARLOCK ───────────────────────────────────────────────────────────────
+  'The Fiend': {
+    1:  [{n:'Dark One\'s Blessing',d:'When you reduce a hostile creature to 0 HP, gain temp HP = CHA mod + warlock level.'},{n:'Expanded Spell List',d:'Burning Hands, Command, Blindness/Deafness, Scorching Ray, Fireball, Stinking Cloud, Fire Shield, Wall of Fire, Flame Strike, Hallow.'}],
+    6:  [{n:'Dark One\'s Own Luck',d:'Add a d10 to one ability check or saving throw per short/long rest.'}],
+    10: [{n:'Fiendish Resilience',d:'After short/long rest, choose one damage type (not force or psychic): gain resistance to it until you choose again.'}],
+    14: [{n:'Hurl Through Hell',d:'When you hit a creature, send it to hell for 1 round: takes 10d10 psychic damage on return. Long rest recharge.'}],
+  },
+  'The Great Old One': {
+    1:  [{n:'Awakened Mind',d:'Telepathy with any creature you can see within 30 ft. No shared language needed.'},{n:'Expanded Spell List',d:'Dissonant Whispers, Tassha\'s Hideous Laughter, Detect Thoughts, Phantasmal Force, Clairvoyance, Sending, Dominate Beast, Evard\'s Black Tentacles, Dominate Person, Telekinesis.'}],
+    6:  [{n:'Entropic Ward',d:'Reaction: impose disadvantage on an attack roll. If it misses, you gain advantage on your next attack vs that creature. Short rest recharge.'}],
+    10: [{n:'Thought Shield',d:'Resistance to psychic damage. Creatures can\'t read your mind with magic. When damage is redirected to a creature via your mind link, they take psychic damage equal to the damage you took.'}],
+    14: [{n:'Create Thrall',d:'Touch an incapacitated humanoid. It becomes charmed by you until Remove Curse is cast. While charmed, telepathically communicate with it at any distance (same plane).'}],
+  },
+  'The Archfey': {
+    1:  [{n:'Fey Presence',d:'Action: charm or frighten all creatures in 10 ft cube adjacent to you until end of your next turn (WIS save). Short rest recharge.'},{n:'Expanded Spell List',d:'Faerie Fire, Sleep, Calm Emotions, Phantasmal Force, Blink, Plant Growth, Dominate Beast, Greater Invisibility, Dominate Person, Seeming.'}],
+    6:  [{n:'Misty Escape',d:'Reaction when taking damage: turn invisible and teleport up to 60 ft. Lasts until start of your next turn or you attack/force a save. Short rest recharge.'}],
+    10: [{n:'Beguiling Defenses',d:'Immune to charmed. Reaction when a creature tries to charm you: it must WIS save or be charmed by you for 1 minute.'}],
+    14: [{n:'Dark Delirium',d:'Action: charm or frighten one creature within 60 ft (WIS save) for 1 minute while concentrating. On failure, they\'re in a dream-world and unaware of surroundings. Short rest recharge.'}],
+  },
+  'The Celestial': {
+    1:  [{n:'Healing Light',d:'Pool of d6s = 1 + warlock level. Bonus action: expend dice (max CHA mod) to heal creature within 60 ft. Regain all dice on long rest.'},{n:'Expanded Spell List',d:'Cure Wounds, Guiding Bolt, Flaming Sphere, Lesser Restoration, Daylight, Revivify, Guardian of Faith, Wall of Fire, Flame Strike, Greater Restoration.'}],
+    6:  [{n:'Radiant Soul',d:'Resistance to radiant damage. Add CHA mod to radiant/fire damage rolls once per spell cast.'}],
+    10: [{n:'Celestial Resilience',d:'When you finish a long/short rest, you and up to 5 allies gain temp HP: warlock level + CHA mod (you), or half that (allies).'}],
+    14: [{n:'Searing Vengeance',d:'When you or an ally within 60 ft uses a death save and succeeds or is stabilized, you can use reaction: deal radiant damage to nearby creatures, push 10 ft, and blind until end of your next turn. Long rest recharge.'}],
+  },
+  'The Hexblade': {
+    1:  [{n:'Hexblade\'s Curse',d:'Bonus action: curse target within 30 ft for 1 minute. Score crits on 19-20 vs target. Regain HP equal to CHA mod + prof bonus when it dies. Short rest recharge.'},{n:'Hex Warrior',d:'Proficiency in medium armor, shields, and martial weapons. One weapon becomes your pact weapon for WIS-based (wait... actually CHA-based) attacks. Counts as your pact weapon.'},{n:'Expanded Spell List',d:'Shield, Wrathful Smite, Blur, Branding Smite, Blink, Elemental Weapon, Phantasmal Killer, Staggering Smite, Banishing Smite, Cone of Cold.'}],
+    6:  [{n:'Accursed Specter',d:'When you slay a humanoid, curse its spirit. Accursed Specter rises to serve you for 24 hours or until long rest.'}],
+    10: [{n:'Armor of Hexes',d:'If Hexblade\'s Curse target attacks you, roll d6. On 4+, the attack automatically misses.'}],
+    14: [{n:'Master of Hexes',d:'When Hexblade\'s Curse target dies, move the curse to a new target within 30 ft without using action or short rest.'}],
+  },
+
+  // ── WIZARD ────────────────────────────────────────────────────────────────
+  'School of Evocation': {
+    2:  [{n:'Evocation Savant',d:'Copy evocation spells into spellbook at half cost (25 gp, 1 hour).'},{n:'Sculpt Spells',d:'When you cast an evocation spell with area, choose up to INT mod creatures to automatically succeed on save and take no damage.'}],
+    6:  [{n:'Potent Cantrip',d:'When a creature succeeds on save vs your damaging cantrip, they still take half damage.'}],
+    10: [{n:'Empowered Evocation',d:'Add INT mod to damage rolls of wizard evocation spells (once per casting).'}],
+    14: [{n:'Overchannel',d:'When you cast levels 1-5 spell that deals damage, deal maximum damage. Levels 2+ triggers escalating force damage to you (2d12, 4d12, etc.). Long rest to reset.'}],
+  },
+  'School of Abjuration': {
+    2:  [{n:'Abjuration Savant',d:'Copy abjuration spells at half cost.'},{n:'Arcane Ward',d:'When you cast an abjuration spell, create/reinforce a magical ward. Ward HP = 2 x wizard level + INT mod. Absorbs damage instead of you. Recharge ward by casting abjuration spells.'}],
+    6:  [{n:'Projected Ward',d:'Reaction: extend Arcane Ward protection to a creature within 30 ft.'}],
+    10: [{n:'Improved Abjuration',d:'Add prof bonus to ability checks with abjuration spells (Counterspell, Dispel Magic).'}],
+    14: [{n:'Spell Resistance',d:'Advantage on saves vs spells. Resistance to spell damage.'}],
+  },
+  'School of Divination': {
+    2:  [{n:'Divination Savant',d:'Copy divination spells at half cost.'},{n:'Portent',d:'After long rest, roll 2d20. Replace any die roll with one of these results. Expend on use. Recharge long rest.'}],
+    6:  [{n:'Expert Divination',d:'When you cast a divination spell of L2+, recover an expended spell slot of L2 or lower.'}],
+    10: [{n:'The Third Eye',d:'Bonus action (once per rest): gain darkvision 60 ft, see invisible creatures within 10 ft, see into the Ethereal Plane 60 ft, or read all languages.'}],
+    14: [{n:'Greater Portent',d:'You now roll 3d20 for Portent.'}],
+  },
+  'School of Conjuration': {
+    2:  [{n:'Conjuration Savant',d:'Copy conjuration spells at half cost.'},{n:'Minor Conjuration',d:'Summon a nonmagical object of up to L6 that fits in a 3-ft cube as an action. Disappears after 1 hour or when you use this again.'}],
+    6:  [{n:'Benign Transposition',d:'Teleport to unoccupied space within 30 ft, or swap with willing creature within 30 ft. Long rest recharge (short rest if you cast a conjuration spell).'}],
+    10: [{n:'Focused Conjuration',d:'Concentration can\'t be broken on conjuration spells by taking damage.'}],
+    14: [{n:'Durable Summons',d:'Creatures you summon have 30 additional temp HP.'}],
+  },
+  'School of Illusion': {
+    2:  [{n:'Illusion Savant',d:'Copy illusion spells at half cost.'},{n:'Improved Minor Illusion',d:'Know Minor Illusion (or know it as an extra cantrip). Can create both sound and image with one casting.'}],
+    6:  [{n:'Malleable Illusions',d:'When you cast an illusion spell with 1+ minute duration, use action to change the nature of the illusion.'}],
+    10: [{n:'Illusory Self',d:'When a creature attacks you, reaction: interpose an illusory duplicate to cause the attack to miss automatically. Short rest recharge.'}],
+    14: [{n:'Illusory Reality',d:'When you cast an illusion spell of L1+, make one nonliving element of the illusion real for 1 minute. It can interact with the world but can\'t deal damage.'}],
+  },
+  'School of Necromancy': {
+    2:  [{n:'Necromancy Savant',d:'Copy necromancy spells at half cost.'},{n:'Grim Harvest',d:'When you kill a creature with a spell, regain HP equal to 2x spell level (3x for necromancy spells). Doesn\'t apply to undead or constructs.'}],
+    6:  [{n:'Undead Thralls',d:'Add one undead to Animate Dead (extra undead equals prof bonus). Your undead add your prof bonus to damage, and their HP maximum equals normal + your wizard level.'}],
+    10: [{n:'Inured to Undeath',d:'Resistance to necrotic damage. Your max HP can\'t be reduced.'}],
+    14: [{n:'Command Undead',d:'CHA save vs DC 8+prof+INT: undead becomes charmed by you. Unintelligent undead auto-fail. Repeat save every 24 hours. Success ends charm.'}],
+  },
+  'School of Enchantment': {
+    2:  [{n:'Enchantment Savant',d:'Copy enchantment spells at half cost.'},{n:'Hypnotic Gaze',d:'Action: charm an adjacent creature for 1 minute (WIS save each turn, disadvantage). While charmed, it\'s incapacitated and speed is 0. Breaks if you or allies harm it. Short rest recharge.'}],
+    6:  [{n:'Instinctive Charm',d:'Reaction when a creature in 30 ft attacks you: redirect to nearest other creature in range (WIS save negates). Long rest recharge.'}],
+    10: [{n:'Split Enchantment',d:'When you cast an enchantment spell targeting only one creature, target a second creature within range.'}],
+    14: [{n:'Alter Memories',d:'While creature is charmed, erase up to 24 hours of memories (INT save). Also, once per casting of enchantment spell, you can make the target unaware it was charmed.'}],
+  },
+  'Chronurgy': {
+    2:  [{n:'Chronal Shift',d:'Reaction: cause a creature within 30 ft that makes an attack roll, ability check, or save to reroll. Must use new result. 2 uses per long rest.'},{n:'Temporal Awareness',d:'Add INT mod to initiative rolls.'}],
+    6:  [{n:'Momentary Stasis',d:'Action: INT mod creatures within 60 ft must CON save or become incapacitated and speed 0 until end of your next turn (or they take damage). Prof bonus uses per long rest.'}],
+    10: [{n:'Arcane Abeyance',d:'When you cast a L4 or lower spell, encapsulate it in a mote (lasts 1 hour). Any creature can use the mote as an action to release the spell. You choose the target.'}],
+    14: [{n:'Convergent Future',d:'Reaction: decide the outcome of a roll before the result is known. No roll is made; it simply succeeds or fails. Each use causes one level of exhaustion.'}],
+  },
+  'Graviturgy': {
+    2:  [{n:'Adjust Density',d:'Reaction: alter weight of Medium or smaller creature within 30 ft. Either: half weight (advantage on STR checks to jump) or double weight (movement halved, disadvantage on DEX saves, falls hit harder). Concentration up to 1 minute.'},{n:'Gravity Spells',d:'Always prepared: Magnify Gravity, Immovable Object, Pulse Wave, Gravity Sinkhole.'}],
+    6:  [{n:'Gravity Well',d:'When you cast a spell on a creature, move the creature 5 ft toward or away from you (if they fail a save or are hit).'}],
+    10: [{n:'Violent Attraction',d:'Reaction: when an attack is made against a creature within 60 ft, add 1d10 to the damage. Or, when a creature falls, add 2d10 to falling damage. INT mod uses per long rest.'}],
+    14: [{n:'Event Horizon',d:'Spend 5 sorcery-points-equivalent... actually, action: emanate gravitational disruption in 30 ft for 1 minute (CON save each turn or take 2d10 force and speed 0). Concentration. Long rest recharge.'}],
+  },
+  'Order of Scribes': {
+    2:  [{n:'Wizardly Quill',d:'Bonus action: create a magic quill. Copy spells in half the time. Spellbook ink is free. Quill can transform writing.'},{n:'Awakened Spellbook',d:'Use spellbook as spellcasting focus. Ritual spells need only 1 minute. When you cast a prepared spell, optionally swap its damage type with a type from another prepared spell.'}],
+    6:  [{n:'Manifest Mind',d:'Bonus action: manifest your spellbook as a spectral mind within 300 ft. You can see/hear through it. Prof bonus uses per long rest. Can cast spells from its position.'}],
+    10: [{n:'Master Scrivener',d:'Once per long rest, create a temporary scroll of a prepared spell (L1-2) after long rest. Counts as a prepared spell. Free.'}],
+    14: [{n:'One with the Word',d:'If your Awakened Spellbook is on your person, advantage on INT (Arcana) checks. If damaged, teleport it to your person as reaction. If destroyed, avoid death: expunge 1d6 spells from the book permanently. Long rest to reform if expunged.'}],
+  },
+  'Bladesinging': {
+    2:  [{n:'Training in War and Song',d:'Proficiency in light armor, one one-handed weapon type, Performance.'},{n:'Bladesong',d:'Bonus action: start bladesong (prof bonus times per long rest, 1 minute). Add INT mod to AC, walking speed +10 ft, advantage on DEX (Acrobatics), concentration saves add INT mod (minimum 1). Ends if wearing medium/heavy armor, shield, or two-handed weapon.'}],
+    6:  [{n:'Extra Attack',d:'Attack twice when you take the Attack action. One attack can be replaced by a cantrip.'}],
+    10: [{n:'Song of Defense',d:'While bladesong active, reaction to reduce damage by expending spell slot: damage reduced by 5 x slot level.'}],
+    14: [{n:'Song of Victory',d:'While bladesong active, add INT mod to melee weapon attack damage rolls.'}],
+  },
+};
+
 const FIGHTING_STYLES = ['Archery (+2 ranged attacks)','Defense (+1 AC when armored)','Dueling (+2 damage with one-handed weapon)','Great Weapon Fighting (reroll 1s & 2s on damage)','Protection (use reaction to impose disadvantage on enemy attacks near allies)','Two-Weapon Fighting (add ability mod to off-hand damage)','Blind Fighting','Druidic Warrior','Thrown Weapon Fighting','Unarmed Fighting','Interception'];
 
 const METAMAGIC_OPTIONS = ['Careful Spell (protect allies from your AoE)','Distant Spell (double spell range)','Empowered Spell (reroll damage dice)','Extended Spell (double spell duration)','Heightened Spell (disadvantage on save)','Quickened Spell (cast as bonus action)','Seeking Spell (re-cast a miss)','Subtle Spell (no V/S components)','Twinned Spell (target two creatures)','Transmuted Spell (change damage type)'];
@@ -3440,39 +3988,94 @@ function renderLevelUpTab(char, cls){
   const newSpellSlots = ld.spells||0;
   const newCantrips = ld.cantrips||0;
 
-  // Resolve feature strings — replace generic "Path Feature", "Subclass Feature" etc. with subclass name
+  // Build feature list: use SUBCLASS_FEATURES lookup for actual descriptions,
+  // fall back to generic resolution for base class features
+  const subFeatures = char.subclass ? (SUBCLASS_FEATURES[char.subclass]||{})[newLevel]||[] : [];
+  const genericPlaceholders = ['Path Feature','Subclass Feature','Bard College Feature','Martial Archetype Feature',
+    'Divine Domain Feature','Sacred Oath Feature','Ranger Archetype Feature','Roguish Archetype Feature',
+    'Sorcerous Origin Feature','Otherworldly Patron Feature','Arcane Tradition Feature',
+    'Monastic Tradition Feature','Circle Feature','Domain Feature'];
+
   const resolveFeature = (f) => {
     if(typeof f === 'object') return {name: f.n||f.name||'Feature', desc: f.d||f.desc||''};
+    const s = String(f);
     const subName = char.subclass || '(subclass)';
-    // Replace generic placeholders with actual subclass context
-    const name = String(f)
-      .replace('Path Feature', subName + ' Feature')
-      .replace('Subclass Feature', subName + ' Feature')
-      .replace('Bard College Feature', subName + ' Feature')
-      .replace('Martial Archetype Feature', subName + ' Feature')
-      .replace('Divine Domain Feature', subName + ' Feature')
-      .replace('Sacred Oath Feature', subName + ' Feature')
-      .replace('Ranger Archetype Feature', subName + ' Feature')
-      .replace('Roguish Archetype Feature', subName + ' Feature')
-      .replace('Sorcerous Origin Feature', subName + ' Feature')
-      .replace('Otherworldly Patron Feature', subName + ' Feature')
-      .replace('Arcane Tradition Feature', subName + ' Feature')
-      .replace('Monastic Tradition Feature', subName + ' Feature')
-      .replace('Circle Feature', subName + ' Feature')
-      .replace('Primal Path (subclass)', 'Choose Primal Path (Subclass)');
-    // Build a helpful description
-    let desc = '';
-    if(name.includes('ASI or Feat')) desc = 'Increase one ability score by 2, or two ability scores by 1, or choose a feat.';
-    else if(name.includes('Extra Attack')) desc = 'You can attack twice, instead of once, whenever you take the Attack action.';
-    else if(name.includes('Expertise')) desc = 'Double your proficiency bonus for two skills of your choice.';
-    else if(name.includes('Unarmored Defense') && cls.name==='Barbarian') desc = 'AC = 10 + DEX modifier + CON modifier (while not wearing armor).';
-    else if(name.includes('Rage')) desc = `Bonus action. Advantage on STR checks/saves, bonus STR damage, resistance to piercing/slashing/bludgeoning. Uses per long rest scale with level.`;
-    else if(name.includes('Spellcasting')) desc = `You can cast ${cls.name} spells using ${cls.name==='Wizard'?'INT':cls.name==='Cleric'||cls.name==='Druid'?'WIS':'CHA'} as your spellcasting ability.`;
-    else if(name.includes('Subclass') || name.includes('Feature')) desc = `See your ${subName} features for details.`;
-    return {name, desc};
+    // If this is a generic subclass placeholder, subFeatures handles it — skip here
+    if(genericPlaceholders.some(p => s.includes(p))) return null;
+    // Known base-class features with descriptions
+    if(s.includes('ASI or Feat')) return {name:'Ability Score Improvement or Feat', desc:'Increase one ability score by 2, or two scores by 1 each (max 20), or choose a feat.'};
+    if(s.includes('Extra Attack') && s.includes('(2)')) return {name:s, desc:'You can attack three times when you take the Attack action.'};
+    if(s.includes('Extra Attack') && s.includes('(3)')) return {name:s, desc:'You can attack four times when you take the Attack action.'};
+    if(s.includes('Extra Attack')) return {name:s, desc:'You can attack twice when you take the Attack action.'};
+    if(s.includes('Spellcasting')) return {name:s, desc:`Cast ${cls.name} spells using ${['Wizard','Eldritch Knight','Arcane Trickster'].includes(cls.name)?'INT':['Cleric','Druid','Ranger'].includes(cls.name)?'WIS':'CHA'} as your spellcasting ability.`};
+    if(s.includes('Unarmored Defense') && cls.name==='Barbarian') return {name:s, desc:'AC = 10 + DEX mod + CON mod when not wearing armor.'};
+    if(s.includes('Unarmored Defense') && cls.name==='Monk') return {name:s, desc:'AC = 10 + DEX mod + WIS mod when not wearing armor or shield.'};
+    if(s==='Rage') return {name:s, desc:'Bonus action. Advantage on STR checks/saves, bonus damage on STR attacks, resistance to B/P/S damage. Uses per long rest scale with level.'};
+    if(s.includes('Reckless Attack')) return {name:s, desc:'When you make your first attack on your turn, you can attack recklessly (advantage on STR attacks this turn, but attacks against you have advantage until next turn).'};
+    if(s.includes('Danger Sense')) return {name:s, desc:'Advantage on DEX saves vs effects you can see (traps, spells, etc.) while not blinded, deafened, or incapacitated.'};
+    if(s.includes('Feral Instinct')) return {name:s, desc:'Advantage on initiative. If surprised, you can still act normally if you rage before your first action.'};
+    if(s.includes('Brutal Critical')) return {name:s, desc:'Roll one additional weapon damage die on critical hits (additional dice at levels 13 and 17).'};
+    if(s.includes('Relentless Rage')) return {name:s, desc:'If you drop to 0 HP while raging, CON save (DC 10, +5 each time) to drop to 1 HP instead.'};
+    if(s.includes('Indomitable Might')) return {name:s, desc:'If STR check total is less than your STR score, use your STR score instead.'};
+    if(s.includes('Primal Champion')) return {name:s, desc:'STR and CON each increase by 4. Your maximums for these scores are now 24.'};
+    if(s.includes('Bardic Inspiration')) return {name:s, desc:`Grant a creature within 60 ft a Bardic Inspiration die to add to an ability check, attack roll, or saving throw within 10 minutes.`};
+    if(s.includes('Jack of All Trades')) return {name:s, desc:'Add half your proficiency bonus (round down) to ability checks that don\'t use your proficiency bonus.'};
+    if(s.includes('Expertise')) return {name:s, desc:'Choose two skill proficiencies or one skill + thieves\' tools to gain expertise (double proficiency).'};
+    if(s.includes('Magical Secrets')) return {name:s, desc:'Learn two spells from any class. They count as bard spells.'};
+    if(s.includes('Countercharm')) return {name:s, desc:'Action: perform music/oration to give advantage on saves vs charmed and frightened for nearby allies until end of next turn.'};
+    if(s.includes('Evasion')) return {name:s, desc:'When you succeed on a DEX saving throw for half damage, you take no damage instead. On a failure, half damage.'};
+    if(s.includes('Sneak Attack')) return {name:s, desc:`Deal extra dice of damage once per turn when you have advantage on the attack or an ally is adjacent to target.`};
+    if(s.includes('Cunning Action')) return {name:s, desc:'Bonus action: Dash, Disengage, or Hide.'};
+    if(s.includes('Uncanny Dodge')) return {name:s, desc:'Reaction: when an attacker you can see hits you, halve the attack\'s damage.'};
+    if(s.includes('Reliable Talent')) return {name:s, desc:'When you make an ability check using a skill you\'re proficient in, treat any roll of 9 or lower as a 10.'};
+    if(s.includes('Blindsense')) return {name:s, desc:'If you can hear, you know the location of any hidden or invisible creature within 10 ft.'};
+    if(s.includes('Slippery Mind')) return {name:s, desc:'Gain proficiency in WIS saving throws.'};
+    if(s.includes('Elusive')) return {name:s, desc:'No attack roll has advantage against you while you aren\'t incapacitated.'};
+    if(s.includes('Stroke of Luck')) return {name:s, desc:'Turn a miss into a hit or a failed ability check into a success. Short/long rest recharge.'};
+    if(s.includes('Second Wind')) return {name:s, desc:'Bonus action: regain 1d10 + fighter level HP. Short rest recharge.'};
+    if(s.includes('Action Surge')) return {name:s, desc:'Take one additional action on your turn (2 times at level 17). Short rest recharge.'};
+    if(s.includes('Indomitable') && cls.name==='Fighter') return {name:s, desc:'Reroll a failed saving throw, must use new roll. Long rest recharge (additional uses at higher levels).'};
+    if(s.includes('Flurry of Blows')) return {name:s, desc:'Spend 1 ki point: make two unarmed strikes as a bonus action.'};
+    if(s.includes('Patient Defense')) return {name:s, desc:'Spend 1 ki: take the Dodge action as a bonus action.'};
+    if(s.includes('Step of the Wind')) return {name:s, desc:'Spend 1 ki: Dash or Disengage as bonus action. Jump distance doubled for the turn.'};
+    if(s.includes('Stunning Strike')) return {name:s, desc:'Spend 1 ki when you hit: target must CON save or be stunned until end of your next turn.'};
+    if(s.includes('Lay on Hands')) return {name:s, desc:'Pool of HP = 5 × paladin level. Touch a creature to heal from the pool. Spend 5 HP to cure one disease or poison.'};
+    if(s.includes('Divine Smite')) return {name:s, desc:'When you hit with a melee weapon, expend a spell slot to deal extra radiant damage (2d8 for L1, +1d8 per slot level above 1st, +1d8 vs undead/fiends). Max 5d8.'};
+    if(s.includes('Aura of Protection')) return {name:s, desc:'You and friendly creatures within 10 ft add your CHA mod (min +1) to saving throws while conscious. Expands to 30 ft at level 18.'};
+    if(s.includes('Improved Divine Smite')) return {name:s, desc:'Melee weapon attacks deal an extra 1d8 radiant damage.'};
+    if(s.includes('Cleansing Touch')) return {name:s, desc:'Action: end one spell on yourself or a willing creature. CHA mod uses per long rest.'};
+    if(s.includes('Wild Shape')) return {name:s, desc:'Use an action (or bonus action at L20) to transform into a beast you\'ve seen. CR and features available depend on level.'};
+    if(s.includes('Druidic')) return {name:s, desc:'Know the Druidic secret language. Leave hidden messages that only druids can understand.'};
+    if(s.includes('Timeless Body') && cls.name==='Druid') return {name:s, desc:'Age 10× slower. No longer suffer ability score penalties from aging. Can\'t be aged magically.'};
+    if(s.includes('Beast Spells')) return {name:s, desc:'Perform somatic and verbal components of druid spells while Wild Shaped.'};
+    if(s.includes('Archdruid')) return {name:s, desc:'Wild Shape unlimited times. Also ignore V/S components for your druid spells.'};
+    if(s.includes('Ki-Empowered Strikes')) return {name:s, desc:'Your unarmed strikes count as magical for the purpose of overcoming resistance and immunity to nonmagical attacks.'};
+    if(s.includes('Purity of Body')) return {name:s, desc:'Immune to disease and poison.'};
+    if(s.includes('Tongue of the Sun')) return {name:s, desc:'Understand all spoken languages and all creatures understand your speech.'};
+    if(s.includes('Diamond Soul')) return {name:s, desc:'Proficiency in all saving throws. Spend 1 ki to reroll a failed save.'};
+    if(s.includes('Perfect Self')) return {name:s, desc:'When you roll initiative with no ki points left, regain 4 ki.'};
+    if(s.includes('Pact Magic')) return {name:s, desc:'CHA-based spellcasting. Spell slots always at highest available level and recover on short rest.'};
+    if(s.includes('Eldritch Invocations')) return {name:s, desc:'Learn eldritch invocations to customize your warlock abilities. Gain more as you level.'};
+    if(s.includes('Pact Boon')) return {name:s, desc:'Choose Pact of the Blade (summon pact weapon), Pact of the Chain (familiar), or Pact of the Tome (Book of Shadows with cantrips).'};
+    if(s.includes('Mystic Arcanum')) return {name:s, desc:'Choose a spell from your patron\'s list at the given slot level. Cast it once per long rest without using a slot.'};
+    if(s.includes('Eldritch Master')) return {name:s, desc:'Spend 1 minute entreating your patron to regain all warlock spell slots. Long rest recharge.'};
+    if(s.includes('Font of Magic')) return {name:s, desc:'Gain sorcery points equal to your sorcerer level. Spend to create spell slots or fuel metamagic.'};
+    if(s.includes('Metamagic')) return {name:s, desc:'Choose metamagic options to modify your spells: Careful, Distant, Empowered, Extended, Heightened, Quickened, Seeking, Subtle, Twinned, Transmuted.'};
+    if(s.includes('Sorcerous Restoration')) return {name:s, desc:'On a short rest, regain up to 4 expended sorcery points.'};
+    if(s.includes('Arcane Recovery')) return {name:s, desc:'Once per day after a short rest, recover expended spell slots totalling up to half wizard level (rounded up).'};
+    if(s.includes('Spell Mastery')) return {name:s, desc:'Choose one L1 and one L2 spell from your spellbook. Cast them at their lowest level without expending a spell slot.'};
+    if(s.includes('Signature Spells')) return {name:s, desc:'Choose two L3 spells from your spellbook as signatures. Always prepared, cast each once per short rest without using a slot.'};
+    if(s.includes('Favored Enemy')) return {name:s, desc:'Choose a type of favored enemy (aberrations, beasts, celestials, constructs, dragons, elementals, fey, fiends, giants, monstrosities, oozes, plants, or undead) or two humanoid races. Advantage on Survival checks to track and INT checks to recall info.'};
+    if(s.includes('Natural Explorer')) return {name:s, desc:'Choose a favored terrain type. Gain benefits: hard to be lost, move stealthily at normal pace, find double resources, more info about terrain, pass without trace for the group.'};
+    return {name:s, desc:''};
   };
 
-  const features = (ld.features||[]).filter(Boolean).map(resolveFeature);
+  // Combine base class features + actual subclass features from SUBCLASS_FEATURES
+  const baseFeatures = (ld.features||[]).filter(Boolean)
+    .map(resolveFeature)
+    .filter(Boolean); // remove nulls (generic placeholders handled by subFeatures)
+
+  const features = [...baseFeatures, ...subFeatures.map(f=>({name:f.n, desc:f.d}))];
 
   let html = `
     <div style="background:var(--surface2);border:1px solid ${cc};border-radius:13px;padding:16px;margin-bottom:14px">
