@@ -936,43 +936,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 
 
   <!-- LOGIN SCREEN -->
-  <div class="screen" id="scr-login">
-    <div style="max-width:340px;width:100%;margin:0 auto;padding:20px">
-      <div style="text-align:center;margin-bottom:32px">
-        <div style="font-size:48px;margin-bottom:8px">📖</div>
-        <div style="font-family:'Cinzel',serif;font-size:22px;color:var(--gold);letter-spacing:2px">Tome of Heroes</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:6px">Sign in to sync your campaign</div>
-      </div>
-
-      <div id="loginPane">
-        <div class="field"><label>Email</label>
-          <input id="loginEmail" type="email" placeholder="your@email.com" autocomplete="email">
-        </div>
-        <div class="field"><label>Password</label>
-          <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
-        </div>
-        <button class="btn btn-gold" onclick="doLogin()" style="margin-bottom:8px">Sign In →</button>
-        <button class="btn btn-outline" onclick="showSignup()">Create Account</button>
-        <button class="btn btn-outline" onclick="skipLogin()" style="margin-top:16px;opacity:0.5;font-size:11px">Use offline (no sync)</button>
-      </div>
-
-      <div id="signupPane" style="display:none">
-        <div class="field"><label>Your Name</label>
-          <input id="signupName" placeholder="e.g. Narog the DM">
-        </div>
-        <div class="field"><label>Email</label>
-          <input id="signupEmail" type="email" placeholder="your@email.com" autocomplete="email">
-        </div>
-        <div class="field"><label>Password</label>
-          <input id="signupPassword" type="password" placeholder="Min 6 characters" autocomplete="new-password">
-        </div>
-        <button class="btn btn-gold" onclick="doSignup()" style="margin-bottom:8px">Create Account →</button>
-        <button class="btn btn-outline" onclick="showLogin()">← Back to Sign In</button>
-      </div>
-
-      <div id="loginMsg" style="font-size:12px;color:var(--red);text-align:center;margin-top:12px;min-height:18px"></div>
-    </div>
-  </div>
+  <!-- login screen removed — app uses group codes only -->
+  <div class="screen" id="scr-login" style="display:none"></div>
 
   <!-- MODE GATE (first launch) -->
   <div class="screen" data-panel-label="SETTINGS" id="scr-modegate">
@@ -1203,18 +1168,10 @@ function setGroupId(id){ if(id) localStorage.setItem('toh_group_id', id); }
 async function ensureGroupId(){
   let gid = getGroupId();
   if(gid) return gid;
-  const user = await getSupaUser();
-  if(!user) return null;
-  try {
-    const { data } = await supa.from('settings').select('value').eq('key','group_id_'+user.id).single();
-    if(data?.value){ setGroupId(data.value); return data.value; }
-  } catch(e){}
+  // Generate a new group code — no user account needed
   const code = Math.random().toString(36).slice(2,7).toUpperCase();
-  try {
-    await supa.from('settings').upsert({key:'group_id_'+user.id, value:code, updated_at:new Date().toISOString()},{onConflict:'key'});
-    setGroupId(code);
-    return code;
-  } catch(e){ return null; }
+  setGroupId(code);
+  return code;
 }
 
 /* ══ DIRECT SUPABASE READ/WRITE — no localStorage for app data ══ */
@@ -6370,29 +6327,22 @@ function bootApp(){
   const mode=S.get('toh_mode');
   const nav_bar=document.querySelector('.bottomnav');
 
-  getSupaUser().then(async user => {
-    if(user){
-      // Only restore group_id if user already has a mode set (returning session)
-      if(mode==='dm' && !getGroupId()){
-        await ensureGroupId();
+  // No email auth — go straight to app using group code
+  (async () => {
+    // Sign in anonymously so Supabase RLS still works, silently
+    try {
+      const { data } = await supa.auth.getSession();
+      if(!data?.session) {
+        await supa.auth.signInAnonymously().catch(()=>{});
       }
-      // Pull fresh data if we have a group_id
-      const campId = getActiveCampId();
-      if(getGroupId()){
-        await pullAll(campId);
-        subscribeRealtime(campId);
-      }
-      _bootContinue(mode, nav_bar);
-    } else {
-      // Not logged in — show login screen
-      document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-      if(nav_bar) nav_bar.style.display='none';
-      const ex=document.getElementById('modeBadge');if(ex)ex.remove();
-      document.getElementById('scr-login').classList.add('active');
-      document.getElementById('pageTitle').textContent='Tome of Heroes';
-      document.getElementById('backBtn').style.visibility='hidden';
+    } catch(e){}
+    const campId = getActiveCampId();
+    if(getGroupId()){
+      await pullAll(campId).catch(()=>{});
+      subscribeRealtime(campId);
     }
-  }).catch(()=>{
+    _bootContinue(mode, nav_bar);
+  })().catch(()=>{
     _bootContinue(mode, nav_bar);
   });
   setMode('normal');
@@ -6437,48 +6387,12 @@ function _bootContinue(mode, nav_bar){
 }
 
 /* ── LOGIN SCREEN FUNCTIONS ── */
-function showLogin(){ document.getElementById('loginPane').style.display=''; document.getElementById('signupPane').style.display='none'; document.getElementById('loginMsg').textContent=''; }
-function showSignup(){ document.getElementById('loginPane').style.display='none'; document.getElementById('signupPane').style.display=''; document.getElementById('loginMsg').textContent=''; }
-
-function loginMsg(msg, color='var(--red)'){ const el=document.getElementById('loginMsg'); if(el){el.textContent=msg;el.style.color=color;} }
-
-async function doLogin(){
-  const email = document.getElementById('loginEmail')?.value.trim();
-  const pass  = document.getElementById('loginPassword')?.value;
-  if(!email||!pass){ loginMsg('Enter email and password'); return; }
-  loginMsg('Signing in…','var(--gold)');
-  try{
-    await supaSignIn(email, pass);
-    loginMsg('');
-    const campId = getActiveCampId();
-    await pullAll(campId);
-    subscribeRealtime(campId);
-    bootApp();
-  } catch(e){
-    loginMsg(e.message||'Sign in failed');
-  }
-}
-
-async function doSignup(){
-  const name  = document.getElementById('signupName')?.value.trim();
-  const email = document.getElementById('signupEmail')?.value.trim();
-  const pass  = document.getElementById('signupPassword')?.value;
-  if(!name||!email||!pass){ loginMsg('Fill in all fields'); return; }
-  if(pass.length<6){ loginMsg('Password must be at least 6 characters'); return; }
-  loginMsg('Creating account…','var(--gold)');
-  try{
-    await supaSignUp(email, pass, name);
-    // Auto sign in after signup
-    await supaSignIn(email, pass);
-    loginMsg('');
-    bootApp();
-  } catch(e){
-    loginMsg(e.message||'Sign up failed');
-  }
-}
-
+function showLogin(){ /* no-op — email auth removed */ }
+function showSignup(){ /* no-op — email auth removed */ }
+function loginMsg(msg, color){ /* no-op */ }
+async function doLogin(){ /* no-op */ }
+async function doSignup(){ /* no-op */ }
 async function skipLogin(){
-  // Use offline mode — no sync
   syncIndicator('offline');
   _bootContinue(S.get('toh_mode'), document.querySelector('.bottomnav'));
 }
@@ -6499,19 +6413,15 @@ async function doLogout(){
   _realtimeSubs.forEach(s=>supa.removeChannel(s));
   _realtimeSubs = [];
 
-  // Show login screen directly
+  // Return to mode gate (group code screen)
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
   const nav_bar = document.querySelector('.bottomnav');
   if(nav_bar) nav_bar.style.display='none';
   const ex = document.getElementById('modeBadge'); if(ex) ex.remove();
-  const loginScreen = document.getElementById('scr-login');
-  if(loginScreen){
-    loginScreen.classList.add('active');
-    document.getElementById('pageTitle').textContent='Tome of Heroes';
-    document.getElementById('backBtn').style.visibility='hidden';
-  } else {
-    window.location.reload();
-  }
+  document.getElementById('scr-modegate').classList.add('active');
+  document.getElementById('pageTitle').textContent='Tome of Heroes';
+  document.getElementById('topIcon').textContent='📖';
+  document.getElementById('backBtn').style.visibility='hidden';
 }
 
 function importChar(){const raw=(document.getElementById('importCodeIn')?.value||'').trim();if(!raw){toast('Paste a code first','var(--red)');return;}let char=decodeChar(raw);if(!char||!char.name||char.classIdx===undefined){toast('Invalid code','var(--red)');return;}char.id=Date.now();char.shareCode=genCode();char.currentHP=char.currentHP||char.maxHP;char.statuses=char.statuses||[];char.spells=char.spells||[];char.attacks=char.attacks||[];char.equipment=char.equipment||[];const chars=getChars();chars.push(char);saveChars(chars);toast('✦ '+char.name+' imported!');renderRoster();}
@@ -6869,9 +6779,9 @@ function renderDiceCharPanel(){
         let html2 = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ffffff22">
           <div onclick="toggleDicePrepSection('${prepBodyId}','${prepSectionId}')" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:6px;user-select:none">
             <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px">★ PREPARED SPELLS</div>
-            <span id="${prepSectionId}" style="font-size:11px;color:var(--muted);transition:transform 0.2s">▾</span>
+            <span id="${prepSectionId}" style="font-size:11px;color:var(--muted);transition:transform 0.2s">▸</span>
           </div>
-          <div id="${prepBodyId}">`;
+          <div id="${prepBodyId}" style="display:none">`;
         order.forEach(lvl=>{
           if(!byLevel[lvl]) return;
           const label = lvl==='cantrip'?'Cantrips':'Level '+lvl;
