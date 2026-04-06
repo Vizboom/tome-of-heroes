@@ -6864,7 +6864,14 @@ function renderDiceCharPanel(){
         const byLevel = {};
         prepared.forEach(s=>{ const k=s.level||'cantrip'; if(!byLevel[k])byLevel[k]=[]; byLevel[k].push(s); });
         const order = ['cantrip','1','2','3','4','5','6','7','8','9'];
-        let html2 = '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ffffff22"><div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">★ PREPARED SPELLS</div>';
+        const prepSectionId = 'dicePreppedSection_'+char.id;
+        const prepBodyId = 'dicePreppedBody_'+char.id;
+        let html2 = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ffffff22">
+          <div onclick="toggleDicePrepSection('${prepBodyId}','${prepSectionId}')" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:6px;user-select:none">
+            <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px">★ PREPARED SPELLS</div>
+            <span id="${prepSectionId}" style="font-size:11px;color:var(--muted);transition:transform 0.2s">▾</span>
+          </div>
+          <div id="${prepBodyId}">`;
         order.forEach(lvl=>{
           if(!byLevel[lvl]) return;
           const label = lvl==='cantrip'?'Cantrips':'Level '+lvl;
@@ -6891,10 +6898,19 @@ function renderDiceCharPanel(){
             </div>`;
           }).join('');
         });
-        html2 += '</div>';
+        html2 += '</div></div>';
         return html2;
       })()}
     </div>`;
+}
+
+function toggleDicePrepSection(bodyId, arrowId){
+  const body = document.getElementById(bodyId);
+  const arrow = document.getElementById(arrowId);
+  if(!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  if(arrow) arrow.textContent = open ? '▸' : '▾';
 }
 
 function toggleDiceSpellCard(cardId){
