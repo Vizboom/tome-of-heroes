@@ -2199,21 +2199,29 @@ function renderSpellsTab(char,cls,elId,editable){
     const filtered = spellFilter==='all' ? list : list.filter(s=>s.level===spellFilter);
     filtered.forEach((sp,rawIdx)=>{
       const i = spells.indexOf(sp);
+      const db = SPELL_DB[sp.name]||{};
+      const desc = sp.desc || db.desc || '';
+      const castTime = sp.castTime || db.castTime || '';
+      const range = sp.range || db.range || '';
+      const duration = sp.duration || db.duration || '';
+      const components = sp.components || db.components || '';
+      const school = sp.school || db.school || '';
       out+=`<div class="spell-card" id="spc_${char.id}_${i}" onclick="toggleSpellCard('spc_${char.id}_${i}')">
         <div class="spell-header">
           <span class="spell-level-badge" style="border-color:${cls.color};color:${cls.color}">${sp.level==='cantrip'?'Cantrip':'Lv '+sp.level}</span>
           <span class="spell-name">${sp.name}</span>
-          ${sp.prepared?`<span style="font-size:9px;color:var(--gold);font-family:'Cinzel',serif;letter-spacing:1px;margin-left:auto;flex-shrink:0">★ PREP</span>`:''}
+          ${school?`<span class="spell-school">${school}</span>`:''}
+          ${sp.prepared?`<span style="font-size:9px;color:var(--gold);font-family:'Cinzel',serif;letter-spacing:1px;flex-shrink:0">★ PREP</span>`:''}
           <span class="spell-chevron">▼</span>
         </div>
         <div class="spell-body">
           <div class="spell-stats">
-            ${sp.castTime?`<div class="spell-stat"><strong>CAST</strong>${sp.castTime}</div>`:''}
-            ${sp.range?`<div class="spell-stat"><strong>RANGE</strong>${sp.range}</div>`:''}
-            ${sp.duration?`<div class="spell-stat"><strong>DUR</strong>${sp.duration}</div>`:''}
-            ${sp.components?`<div class="spell-stat"><strong>COMP</strong>${sp.components}</div>`:''}
+            ${castTime?`<div class="spell-stat"><strong>CAST</strong>${castTime}</div>`:''}
+            ${range?`<div class="spell-stat"><strong>RANGE</strong>${range}</div>`:''}
+            ${duration?`<div class="spell-stat"><strong>DUR</strong>${duration}</div>`:''}
+            ${components?`<div class="spell-stat"><strong>COMP</strong>${components}</div>`:''}
           </div>
-          ${sp.desc?`<div class="spell-desc">${sp.desc}</div>`:''}
+          ${desc?`<div class="spell-desc">${desc}</div>`:''}
           ${editable?`<div style="display:flex;gap:6px;margin-top:8px">
             <button class="btn btn-outline" style="margin:0;padding:5px 10px;font-size:11px;flex:1;border-color:var(--gold);color:var(--gold)" onclick="toggleSpellPrepared(${char.id},${i},'${elId}');event.stopPropagation()">${sp.prepared?'★ Prepared':'☆ Prepare'}</button>
             <button class="icon-btn" style="color:var(--red);font-size:12px" onclick="removeSpell(${char.id},${i},'${elId}');event.stopPropagation()">✕ Remove</button>
@@ -4400,31 +4408,38 @@ function openSpellBrowser(charId, returnElId, cantripOnly){
   const char = getChars().find(c=>c.id===charId); if(!char) return;
   const cls  = CLASSES[char.classIdx];
   const cc   = cls.color;
-  const knownNames = new Set((char.spells||[]).map(s=>s.name));
-  const spellList  = CLASS_SPELL_LISTS[cls.name];
+  const spellList = CLASS_SPELL_LISTS[cls.name];
 
-  // Build full spell list for class
+  if(!cls.spellcaster){ toast(cls.name+'s don\'t use spells','var(--red)'); return; }
+
+  // Work out max spell level this character can currently access
+  const casterType = CASTER_TYPE[cls.name]||'full';
+  const maxSpellLevel = (MAX_SPELL_LEVEL_BY_LEVEL[casterType]||{})[char.level]||0;
+
+  // Build spell list filtered to accessible levels
   let allSpells = [];
   if(cantripOnly){
-    (spellList?.cantrip||Object.keys(SPELL_DB).filter(n=>{
-      const s=SPELL_DB[n]; return s.school && !spellList; // fallback for non-list classes
-    })).forEach(name=>allSpells.push({name,level:'cantrip'}));
+    (spellList?.cantrip||[]).forEach(name=>allSpells.push({name,level:'cantrip'}));
   } else {
     if(spellList){
       Object.entries(spellList).forEach(([lvl,names])=>{
-        if(lvl==='cantrip') return; // cantrips on separate button
+        if(lvl==='cantrip') return;
+        if(parseInt(lvl) > maxSpellLevel) return; // restrict by level
         names.forEach(name=>allSpells.push({name,level:lvl}));
       });
     } else {
-      // Fallback: show all SPELL_DB spells
       Object.keys(SPELL_DB).forEach(name=>allSpells.push({name,level:'?'}));
     }
   }
-  allSpells.sort((a,b)=>{ const la=a.level==='cantrip'?0:parseInt(a.level)||0; const lb=b.level==='cantrip'?0:parseInt(b.level)||0; return la-lb||a.name.localeCompare(b.name); });
+  allSpells.sort((a,b)=>{
+    const la=a.level==='cantrip'?0:parseInt(a.level)||0;
+    const lb=b.level==='cantrip'?0:parseInt(b.level)||0;
+    return la-lb||a.name.localeCompare(b.name);
+  });
 
   window._spellPickerState = {
     charId, returnElId,
-    slotsToAdd: 999, // unlimited
+    slotsToAdd: 999,
     asCantrips: cantripOnly,
     browserMode: true,
     selected: new Set(),
@@ -4438,14 +4453,19 @@ function openSpellBrowser(charId, returnElId, cantripOnly){
   modal.id = 'spellPickerModal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;display:flex;flex-direction:column;';
 
-  const levels = cantripOnly ? ['cantrip'] : ['all',...['1','2','3','4','5','6','7','8','9'].filter(l=>allSpells.some(s=>s.level===l))];
+  const levels = cantripOnly ? ['cantrip'] :
+    ['all',...['1','2','3','4','5','6','7','8','9'].filter(l=>parseInt(l)<=maxSpellLevel && allSpells.some(s=>s.level===l))];
   const levelTabs = levels.map(l=>`<button class="spell-filter ${l==='all'?'active':''}" onclick="spellPickerFilter('${l}')" id="spf_${l}">${l==='all'?'All':l==='cantrip'?'Cantrips':'Level '+l}</button>`).join('');
+
+  const subtitle = cantripOnly
+    ? `${cls.name} cantrips`
+    : `${cls.name} spells up to level ${maxSpellLevel} (character level ${char.level})`;
 
   modal.innerHTML = `
     <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:14px 16px;display:flex;align-items:center;gap:10px">
       <div style="flex:1">
         <div style="font-family:'Cinzel',serif;font-size:15px;color:var(--gold)">${cantripOnly?'Choose Cantrips':'Add Spells'} — ${cls.name}</div>
-        <div style="font-size:11px;color:var(--muted)"><span id="spPickCount" style="color:${cc}">0 selected</span></div>
+        <div style="font-size:11px;color:var(--muted)">${subtitle} · <span id="spPickCount" style="color:${cc}">0 selected</span></div>
       </div>
       <button class="btn btn-outline" style="margin:0;padding:6px 12px;font-size:11px" onclick="document.getElementById('spellPickerModal').remove()">Cancel</button>
     </div>
@@ -4534,8 +4554,12 @@ function openSpellPicker(charId, slotsToAdd, asCantrips){
   if(asCantrips) {
     (spellList['cantrip']||[]).forEach(name => allSpells.push({name, level:'cantrip'}));
   }
-  // Sort alphabetically
-  allSpells.sort((a,b)=>a.name.localeCompare(b.name));
+  // Sort by level then alphabetically
+  allSpells.sort((a,b)=>{
+    const la=a.level==='cantrip'?0:parseInt(a.level)||0;
+    const lb=b.level==='cantrip'?0:parseInt(b.level)||0;
+    return la-lb||a.name.localeCompare(b.name);
+  });
   window._spellPickerState.allSpells = allSpells;
 
   const isPrepareCaster = SPELLS_KNOWN_GAIN[cls.name]==='prepare';
@@ -4603,21 +4627,22 @@ function renderSpellPickerList(){
     const known= knownNames.has(sp.name);
     const lvlLabel = sp.level==='cantrip'?'Cantrip':sp.level==='?'?'':('Lv '+sp.level);
     const safeName = sp.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    return `<div onclick="toggleSpellPickerItem('${safeName}','${sp.level}')"
-      style="background:var(--surface2);border:2px solid ${sel?cc:'var(--border)'};border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;opacity:${known&&!sel?0.45:1};transition:border-color 0.12s,opacity 0.12s">
-      <div style="display:flex;align-items:center;gap:8px">
+    const cardId = 'spkcard_'+sp.name.replace(/[^a-z0-9]/gi,'_');
+    return `<div id="${cardId}" style="background:var(--surface2);border:2px solid ${sel?cc:'var(--border)'};border-radius:10px;margin-bottom:6px;opacity:${known&&!sel?0.45:1};transition:border-color 0.12s,opacity 0.12s;overflow:hidden">
+      <div onclick="toggleSpellPickerItem('${safeName}','${sp.level}')" style="display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer">
         <div style="width:22px;height:22px;border-radius:50%;border:2px solid ${sel?cc:'var(--border)'};background:${sel?cc:'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-size:12px;transition:all 0.12s">${sel?'✓':''}</div>
         <div style="flex:1;min-width:0">
           <div style="font-family:'Cinzel',serif;font-size:13px;color:${sel?cc:'var(--text)'}">${sp.name}${known?' <span style="font-size:9px;color:var(--muted)">(known)</span>':''}</div>
           ${db.castTime||db.range?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${[db.castTime,db.range,db.duration].filter(Boolean).join(' · ')}</div>`:''}
-          ${db.desc?`<div style="font-size:11px;color:var(--muted);line-height:1.4;margin-top:3px">${db.desc.slice(0,110)}${db.desc.length>110?'…':''}</div>`:''}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0">
           ${lvlLabel?`<span style="font-size:10px;color:${sel?cc:'var(--muted)'};font-family:'Cinzel',serif">${lvlLabel}</span>`:''}
           ${db.school?`<span style="font-size:9px;color:var(--muted)">${db.school}</span>`:''}
+          ${db.components?`<span style="font-size:9px;color:var(--muted)">${db.components}</span>`:''}
+          ${db.desc?`<span onclick="togglePickerDesc('${cardId}');event.stopPropagation()" style="font-size:9px;color:var(--gold);cursor:pointer;margin-top:2px">▸ details</span>`:''}
         </div>
       </div>
-    </div>`;
+      ${db.desc?`<div id="${cardId}_desc" style="display:none;padding:0 14px 12px 44px;font-size:11px;color:var(--muted);line-height:1.6;border-top:1px solid var(--border);margin-top:0">${db.desc}</div>`:''}</div>`;
   }).join('');
 
   const n = st.selected.size;
@@ -6842,12 +6867,24 @@ function renderDiceCharPanel(){
           const label = lvl==='cantrip'?'Cantrips':'Level '+lvl;
           html2+=`<div style="font-size:9px;color:var(--muted);font-family:'Cinzel',serif;letter-spacing:1px;margin:6px 0 4px">${label}</div>`;
           html2+=byLevel[lvl].map(sp=>{
-            const escaped = sp.name.replace(/'/g,"\\'");
-            return `<div onclick="quickPreparedSpell('${escaped}','${sp.castTime||''}','${sp.range||''}','${sp.duration||''}')"
-              style="background:var(--surface);border:1px solid ${cc}44;border-radius:8px;padding:6px 10px;margin-bottom:4px;cursor:pointer;transition:var(--trans)"
+            const cardId = 'dicesp_'+sp.name.replace(/[^a-z0-9]/gi,'_');
+            const escaped = sp.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+            const db = SPELL_DB[sp.name]||{};
+            const desc = sp.desc || db.desc || '';
+            const components = sp.components || db.components || '';
+            return `<div id="${cardId}" style="background:var(--surface);border:1px solid ${cc}44;border-radius:8px;margin-bottom:4px;overflow:hidden;transition:border-color 0.12s"
               onmouseenter="this.style.borderColor='${cc}'" onmouseleave="this.style.borderColor='${cc}44'">
-              <div style="font-family:'Cinzel',serif;font-size:11px;color:${cc}">${sp.name}</div>
-              <div style="font-size:10px;color:var(--muted)">${sp.castTime||''}${sp.range?' · '+sp.range:''}${sp.duration?' · '+sp.duration:''}</div>
+              <div onclick="toggleDiceSpellCard('${cardId}')" style="padding:6px 10px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px">
+                <div style="flex:1;min-width:0">
+                  <div style="font-family:'Cinzel',serif;font-size:11px;color:${cc}">${sp.name}</div>
+                  <div style="font-size:10px;color:var(--muted)">${[sp.castTime||db.castTime,sp.range||db.range,sp.duration||db.duration].filter(Boolean).join(' · ')}</div>
+                </div>
+                ${desc?`<span style="font-size:10px;color:var(--muted);flex-shrink:0">▸</span>`:''}
+              </div>
+              ${desc?`<div id="${cardId}_body" style="display:none;padding:6px 10px 8px;border-top:1px solid #ffffff11">
+                ${components?`<div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-style:italic">${components}</div>`:''}
+                <div style="font-size:11px;color:var(--text);line-height:1.6">${desc}</div>
+              </div>`:''}
             </div>`;
           }).join('');
         });
@@ -6855,6 +6892,24 @@ function renderDiceCharPanel(){
         return html2;
       })()}
     </div>`;
+}
+
+function toggleDiceSpellCard(cardId){
+  const body = document.getElementById(cardId+'_body');
+  const arrow = document.querySelector('#'+cardId+' span[style*="▸"]');
+  if(!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if(arrow) arrow.textContent = open ? '▸' : '▾';
+}
+
+function togglePickerDesc(cardId){
+  const desc = document.getElementById(cardId+'_desc');
+  const btn  = document.querySelector('#'+cardId+' span[onclick*="togglePickerDesc"]');
+  if(!desc) return;
+  const open = desc.style.display !== 'none';
+  desc.style.display = open ? 'none' : 'block';
+  if(btn) btn.textContent = open ? '▸ details' : '▴ hide';
 }
 
 function quickPreparedSpell(name, castTime, range, duration){
