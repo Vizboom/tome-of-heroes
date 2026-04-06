@@ -2192,7 +2192,7 @@ function renderSpellsTab(char,cls,elId,editable){
   const prepared = spells.filter(s=>s.prepared);
   const known    = spells.filter(s=>!s.prepared);
 
-  const renderSpellList = (list, label, showPrepToggle) => {
+  const renderSpellList = (list, label, showPrepToggle, isPreparedList) => {
     if(!list.length && !showPrepToggle) return '';
     let out = `<div class="divider"><span>${label} (${list.length})</span></div>`;
     if(!list.length) return out + `<div style="color:var(--muted);font-size:13px;font-style:italic;margin-bottom:10px">None yet.</div>`;
@@ -2223,8 +2223,11 @@ function renderSpellsTab(char,cls,elId,editable){
           </div>
           ${desc?`<div class="spell-desc">${desc}</div>`:''}
           ${editable?`<div style="display:flex;gap:6px;margin-top:8px">
-            <button class="btn btn-outline" style="margin:0;padding:5px 10px;font-size:11px;flex:1;border-color:var(--gold);color:var(--gold)" onclick="toggleSpellPrepared(${char.id},${i},'${elId}');event.stopPropagation()">${sp.prepared?'★ Prepared':'☆ Prepare'}</button>
-            <button class="icon-btn" style="color:var(--red);font-size:12px" onclick="removeSpell(${char.id},${i},'${elId}');event.stopPropagation()">✕ Remove</button>
+            ${isPreparedList
+              ? `<button class="btn btn-outline" style="margin:0;padding:5px 10px;font-size:11px;flex:1;border-color:var(--gold);color:var(--gold)" onclick="toggleSpellPrepared(${char.id},${i},'${elId}');event.stopPropagation()">☆ Un-prepare</button>`
+              : `<button class="btn btn-outline" style="margin:0;padding:5px 10px;font-size:11px;flex:1;border-color:var(--gold);color:var(--gold)" onclick="toggleSpellPrepared(${char.id},${i},'${elId}');event.stopPropagation()">★ Prepare</button>
+                 <button class="icon-btn" style="color:var(--red);font-size:12px" title="Remove from spellbook" onclick="if(confirm('Remove ${sp.name.replace(/'/g,"\\'")} from spellbook?'))removeSpell(${char.id},${i},'${elId}');event.stopPropagation()">✕</button>`
+            }
           </div>`:''}
         </div>
       </div>`;
@@ -2239,8 +2242,8 @@ function renderSpellsTab(char,cls,elId,editable){
     html+=`<div class="spell-filter-row">${filterLevels.map(l=>`<div class="spell-filter ${spellFilter===l?'active':''}" onclick="setSpellFilter('${l}','${elId}',${char.id})">${l==='all'?'All':l==='cantrip'?'Cantrips':'L'+l}</div>`).join('')}</div>`;
   }
 
-  html += renderSpellList(prepared, '★ Prepared / Active Spells', editable);
-  html += renderSpellList(known, 'Known / Spellbook', editable);
+  html += renderSpellList(prepared, '★ Prepared / Active Spells', editable, true);
+  html += renderSpellList(known, 'Known / Spellbook', editable, false);
 
   if(editable){
     html+=`<div class="divider"><span>Add Spells</span></div>
