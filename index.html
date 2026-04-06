@@ -2131,31 +2131,66 @@ function renderSpellsTab(char,cls,elId,editable){
   const slots=SPELL_SLOTS[char.level]||SPELL_SLOTS[20];
   const spells=char.spells||[];
 
-  let html=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px">
+  let html=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">
     <div class="ab-display" style="--cc:${cls.color}"><div class="ab-display-label">ABILITY</div><div class="ab-display-score" style="font-size:18px">${sab}</div></div>
     <div class="ab-display" style="--cc:${cls.color}"><div class="ab-display-label">ATTACK</div><div class="ab-display-score">${smod+pb>=0?'+':''}${smod+pb}</div></div>
     <div class="ab-display" style="--cc:${cls.color}"><div class="ab-display-label">SAVE DC</div><div class="ab-display-score">${8+pb+smod}</div></div>
   </div>
+  <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;text-align:center;margin-bottom:10px">
+    ${['Bard','Sorcerer','Warlock','Ranger'].includes(cls.name)
+      ? '✦ KNOWN CASTER — all spells always available'
+      : '✦ PREPARE CASTER — mark spells as Prepared each long rest'}
+  </div>
   <div class="divider"><span>Spell Slots</span></div>`;
 
-  slots.forEach((total,lvl)=>{
-    const usedN=used[lvl]||0;
-    html+=`<div class="slot-row" style="--cc:${cls.color};--cc-dim:${cls.color}22"><div class="slot-level">Lv ${lvl+1}</div><div class="slot-dots">`;
-    for(let i=0;i<total;i++){const isUsed=i<usedN;html+=`<div class="slot-dot ${isUsed?'used':'avail'}" onclick="toggleSlot(${char.id},${lvl},${i},${total},'${slotKey}','${elId}')"></div>`;}
+  // Pact magic: Warlock slots are short-rest, same level, different count
+  const PACT_MAGIC_SLOTS = {1:1,2:2,3:2,4:2,5:2,6:2,7:2,8:2,9:2,10:2,11:3,12:3,13:3,14:3,15:3,16:3,17:4,18:4,19:4,20:4};
+  const PACT_MAGIC_LEVEL  = {1:1,2:1,3:2,4:2,5:3,6:3,7:4,8:4,9:5,10:5,11:5,12:5,13:5,14:5,15:5,16:5,17:5,18:5,19:5,20:5};
+  const isWarlock = cls.name === 'Warlock';
+
+  if(isWarlock){
+    const pactCount = PACT_MAGIC_SLOTS[char.level]||2;
+    const pactLevel = PACT_MAGIC_LEVEL[char.level]||1;
+    const usedN = used[0]||0;
+    html += `<div class="slot-row" style="--cc:${cls.color};--cc-dim:${cls.color}22">
+      <div class="slot-level" style="min-width:80px">Pact L${pactLevel}</div>
+      <div style="font-size:9px;color:var(--muted);margin-left:4px;margin-right:8px">✦ Short rest</div>
+      <div class="slot-dots">`;
+    for(let i=0;i<pactCount;i++){const isUsed=i<usedN;html+=`<div class="slot-dot ${isUsed?'used':'avail'}" onclick="toggleSlot(${char.id},0,${i},${pactCount},'${slotKey}','${elId}')"></div>`;}
     html+=`</div></div>`;
-  });
+  } else {
+    slots.forEach((total,lvl)=>{
+      if(!total) return;
+      const usedN=used[lvl]||0;
+      html+=`<div class="slot-row" style="--cc:${cls.color};--cc-dim:${cls.color}22"><div class="slot-level">Lv ${lvl+1}</div><div class="slot-dots">`;
+      for(let i=0;i<total;i++){const isUsed=i<usedN;html+=`<div class="slot-dot ${isUsed?'used':'avail'}" onclick="toggleSlot(${char.id},${lvl},${i},${total},'${slotKey}','${elId}')"></div>`;}
+      html+=`</div></div>`;
+    });
+  }
 
-  // Prepared / known split
-  const prepared = spells.filter(s=>s.prepared);
-  const known    = spells.filter(s=>!s.prepared);
+  html += `<div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+    <button onclick="resetAllSlots(${char.id},'${slotKey}','${elId}')" style="background:none;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:5px 12px;cursor:pointer">↺ Long Rest — Restore Slots</button>
+  </div>`;
+  const isKnownCaster = ['Bard','Sorcerer','Warlock','Ranger'].includes(cls.name);
+  // Cantrips are always treated as prepared
+  const spellsWithFixedCantrips = spells.map(s =>
+    s.level === 'cantrip' ? {...s, prepared: true} : s
+  );
+  const prepared = spellsWithFixedCantrips.filter(s=>s.prepared);
+  const known    = spellsWithFixedCantrips.filter(s=>!s.prepared);
 
-  const renderSpellList = (list, label, showPrepToggle, isPreparedList) => {
-    if(!list.length && !showPrepToggle) return '';
-    let out = `<div class="divider"><span>${label} (${list.length})</span></div>`;
-    if(!list.length) return out + `<div style="color:var(--muted);font-size:13px;font-style:italic;margin-bottom:10px">None yet.</div>`;
+  const renderSpellList = (list, label, showEmptySection, isPreparedList) => {
+    // For prepared list: always show section if editable (so player knows where prepared spells appear)
+    if(!list.length && !showEmptySection) return '';
     const filtered = spellFilter==='all' ? list : list.filter(s=>s.level===spellFilter);
-    filtered.forEach((sp,rawIdx)=>{
-      const i = spells.indexOf(sp);
+    const countLabel = filtered.length !== list.length
+      ? `${filtered.length} shown / ${list.length} total`
+      : list.length;
+    let out = `<div class="divider"><span>${label} (${countLabel})</span></div>`;
+    if(!list.length) return out + `<div style="color:var(--muted);font-size:13px;font-style:italic;margin-bottom:10px">${isPreparedList ? 'No spells prepared yet. Use ★ Prepare on spells in your spellbook below.' : 'No spells in spellbook yet.'}</div>`;
+    if(!filtered.length) return out + `<div style="color:var(--muted);font-size:12px;font-style:italic;margin-bottom:8px">None at this level.</div>`;
+    filtered.forEach((sp)=>{
+      const i = spells.indexOf(spells.find(s=>s.name===sp.name && s.level===sp.level));
       const db = SPELL_DB[sp.name]||{};
       const desc = sp.desc || db.desc || '';
       const castTime = sp.castTime || db.castTime || '';
@@ -2163,12 +2198,13 @@ function renderSpellsTab(char,cls,elId,editable){
       const duration = sp.duration || db.duration || '';
       const components = sp.components || db.components || '';
       const school = sp.school || db.school || '';
+      const isCantrip = sp.level === 'cantrip';
       out+=`<div class="spell-card" id="spc_${char.id}_${i}" onclick="toggleSpellCard('spc_${char.id}_${i}')">
         <div class="spell-header">
-          <span class="spell-level-badge" style="border-color:${cls.color};color:${cls.color}">${sp.level==='cantrip'?'Cantrip':'Lv '+sp.level}</span>
+          <span class="spell-level-badge" style="border-color:${cls.color};color:${cls.color}">${isCantrip?'Cantrip':'Lv '+sp.level}</span>
           <span class="spell-name">${sp.name}</span>
           ${school?`<span class="spell-school">${school}</span>`:''}
-          ${sp.prepared?`<span style="font-size:9px;color:var(--gold);font-family:'Cinzel',serif;letter-spacing:1px;flex-shrink:0">★ PREP</span>`:''}
+          ${sp.prepared && !isCantrip ?`<span style="font-size:9px;color:var(--gold);font-family:'Cinzel',serif;letter-spacing:1px;flex-shrink:0">★ PREP</span>`:''}
           <span class="spell-chevron">▼</span>
         </div>
         <div class="spell-body">
@@ -2179,12 +2215,15 @@ function renderSpellsTab(char,cls,elId,editable){
             ${components?`<div class="spell-stat"><strong>COMP</strong>${components}</div>`:''}
           </div>
           ${desc?`<div class="spell-desc">${desc}</div>`:''}
-          ${editable?`<div style="display:flex;gap:6px;margin-top:8px">
+          ${editable && !isCantrip && !isKnownCaster ?`<div style="display:flex;gap:6px;margin-top:8px">
             ${isPreparedList
-              ? `<button class="btn btn-outline" style="margin:0;padding:5px 10px;font-size:11px;flex:1;border-color:var(--gold);color:var(--gold)" onclick="toggleSpellPrepared(${char.id},${i},'${elId}');event.stopPropagation()">☆ Un-prepare</button>`
-              : `<button class="btn btn-outline" style="margin:0;padding:5px 10px;font-size:11px;flex:1;border-color:var(--gold);color:var(--gold)" onclick="toggleSpellPrepared(${char.id},${i},'${elId}');event.stopPropagation()">★ Prepare</button>
-                 <button class="icon-btn" style="color:var(--red);font-size:12px" title="Remove from spellbook" onclick="if(confirm('Remove ${sp.name.replace(/'/g,"\\'")} from spellbook?'))removeSpell(${char.id},${i},'${elId}');event.stopPropagation()">✕</button>`
+              ? `<button class="btn btn-outline" style="margin:0;padding:5px 10px;font-size:11px;flex:1;border-color:var(--muted);color:var(--muted)" onclick="toggleSpellPrepared(${char.id},${i},'${elId}');event.stopPropagation()">☆ Un-prepare</button>`
+              : `<button class="btn btn-outline" style="margin:0;padding:5px 10px;font-size:11px;flex:1;border-color:var(--gold);color:var(--gold)" onclick="toggleSpellPrepared(${char.id},${i},'${elId}');event.stopPropagation()">★ Prepare</button>`
             }
+            ${!isPreparedList ? `<button class="icon-btn" style="color:var(--red);font-size:12px" title="Remove from spellbook" onclick="if(confirm('Remove ${sp.name.replace(/'/g,"\\'")} from spellbook?'))removeSpell(${char.id},${i},'${elId}');event.stopPropagation()">✕</button>` : ''}
+          </div>`:
+          editable && !isCantrip ?`<div style="margin-top:8px">
+            <button class="icon-btn" style="color:var(--red);font-size:12px" title="Remove spell" onclick="if(confirm('Remove ${sp.name.replace(/'/g,"\\'")}?'))removeSpell(${char.id},${i},'${elId}');event.stopPropagation()">✕ Remove</button>
           </div>`:''}
         </div>
       </div>`;
@@ -2199,8 +2238,14 @@ function renderSpellsTab(char,cls,elId,editable){
     html+=`<div class="spell-filter-row">${filterLevels.map(l=>`<div class="spell-filter ${spellFilter===l?'active':''}" onclick="setSpellFilter('${l}','${elId}',${char.id})">${l==='all'?'All':l==='cantrip'?'Cantrips':'L'+l}</div>`).join('')}</div>`;
   }
 
-  html += renderSpellList(prepared, '★ Prepared / Active Spells', editable, true);
-  html += renderSpellList(known, 'Known / Spellbook', editable, false);
+  if(isKnownCaster){
+    // Known-casters: one unified list, all spells always available
+    html += renderSpellList(spells, '✦ Known Spells', editable, false);
+  } else {
+    // Prepare-casters (Wizard, Cleric, Druid, Paladin): split prepared / spellbook
+    html += renderSpellList(prepared, '★ Prepared / Active Spells', editable, true);
+    html += renderSpellList(known, '📖 Spellbook (unprepared)', editable, false);
+  }
 
   if(editable){
     html+=`<div class="divider"><span>Add Spells</span></div>
@@ -2218,27 +2263,44 @@ function renderSpellsTab(char,cls,elId,editable){
 }
 
 function toggleSpellPrepared(charId, idx, elId){
-  const chars=getChars(); const ci=chars.findIndex(c=>c.id===charId); if(ci<0) return;
-  if(!chars[ci].spells?.[idx]) return;
-  chars[ci].spells[idx].prepared = !chars[ci].spells[idx].prepared;
-  saveChars(chars);
-  renderSpellsTab(chars[ci],CLASSES[chars[ci].classIdx],elId,true);
+  // Try own chars first, fall back to full party (DM viewing another character)
+  const ownChars = getChars();
+  const ownIdx = ownChars.findIndex(c=>c.id===charId);
+  if(ownIdx >= 0){
+    if(!ownChars[ownIdx].spells?.[idx]) return;
+    ownChars[ownIdx].spells[idx].prepared = !ownChars[ownIdx].spells[idx].prepared;
+    saveChars(ownChars);
+    renderSpellsTab(ownChars[ownIdx], CLASSES[ownChars[ownIdx].classIdx], elId, true);
+  } else {
+    // DM viewing a party member's sheet
+    const fullParty = getFullParty();
+    const char = fullParty.find(c=>c.id===charId);
+    if(!char || !char.spells?.[idx]) return;
+    char.spells[idx].prepared = !char.spells[idx].prepared;
+    saveChar(char);
+    renderSpellsTab(char, CLASSES[char.classIdx], elId, true);
+  }
 }
 
 
-function setSpellFilter(f,elId,charId){spellFilter=f;const char=getChars().find(c=>c.id===charId);if(char)renderSpellsTab(char,CLASSES[char.classIdx],elId,elId==='stab-spells');}
+function setSpellFilter(f,elId,charId){
+  spellFilter=f;
+  const char=getChars().find(c=>c.id===charId)||getFullParty().find(c=>c.id===charId);
+  if(char)renderSpellsTab(char,CLASSES[char.classIdx],elId,elId==='stab-spells'||elId==='pstab-spells');
+}
 function toggleSpellCard(id){const el=document.getElementById(id);if(el)el.classList.toggle('expanded');}
 function addSpell(charId,elId,asPrepared=false){
   const name=(document.getElementById(`spName_${charId}`)?.value||'').trim();
   if(!name){toast('Enter spell name','var(--red)');return;}
   const chars=getChars();const ci=chars.findIndex(c=>c.id===charId);if(ci<0)return;
   if(!chars[ci].spells)chars[ci].spells=[];
-  // Look up spell in database to auto-fill details
   const dbData = lookupSpell(name) || {};
+  const lvl = document.getElementById(`spLevel_${charId}`)?.value||'cantrip';
+  const cls = CLASSES[chars[ci].classIdx];
+  const isKnownCasterAS = ['Bard','Sorcerer','Warlock','Ranger'].includes(cls.name);
+  const autoPrep = asPrepared || isKnownCasterAS || lvl === 'cantrip';
   const newSpell = {
-    name,
-    prepared: asPrepared||false,
-    level:document.getElementById(`spLevel_${charId}`)?.value||'cantrip',
+    name, prepared: autoPrep, level: lvl,
     school:document.getElementById(`spSchool_${charId}`)?.value||dbData.school||'',
     castTime:document.getElementById(`spCast_${charId}`)?.value||dbData.castTime||'',
     range:document.getElementById(`spRange_${charId}`)?.value||dbData.range||'',
@@ -2248,23 +2310,36 @@ function addSpell(charId,elId,asPrepared=false){
   };
   chars[ci].spells.push(newSpell);
   chars[ci].spells.sort((a,b)=>{const lo={cantrip:0};const la=lo[a.level]??parseInt(a.level);const lb=lo[b.level]??parseInt(b.level);return la-lb;});
-  saveChars(chars);spellFilter='all';renderSpellsTab(chars[ci],CLASSES[chars[ci].classIdx],elId,true);
+  saveChars(chars);spellFilter='all';renderSpellsTab(chars[ci],cls,elId,true);
   if(dbData.desc) toast('✦ '+name+' added with description!');
   else toast('Spell added!');
 }
 function removeSpell(charId,idx,elId){
-  const chars=getChars();const ci=chars.findIndex(c=>c.id===charId);if(ci<0)return;
-  chars[ci].spells.splice(idx,1);saveChars(chars);spellFilter='all';
-  renderSpellsTab(chars[ci],CLASSES[chars[ci].classIdx],elId,true);
+  const chars=getChars();const ci=chars.findIndex(c=>c.id===charId);
+  if(ci>=0){
+    chars[ci].spells.splice(idx,1);saveChars(chars);spellFilter='all';
+    renderSpellsTab(chars[ci],CLASSES[chars[ci].classIdx],elId,true);
+  } else {
+    const char=getFullParty().find(c=>c.id===charId);if(!char)return;
+    char.spells.splice(idx,1);saveChar(char);spellFilter='all';
+    renderSpellsTab(char,CLASSES[char.classIdx],elId,true);
+  }
 }
 function toggleSlot(cid,lvl,idx,total,key,elId){
   let used={};try{used=JSON.parse(localStorage.getItem(key)||'{}');}catch{}
   const cur=used[lvl]||0;used[lvl]=idx<cur?idx:Math.min(idx+1,total);
   localStorage.setItem(key,JSON.stringify(used));
-  const char=getChars().find(c=>c.id===cid);if(char)renderSpellsTab(char,CLASSES[char.classIdx],elId,elId==='stab-spells');
+  // Find char from own list or party
+  const char=getChars().find(c=>c.id===cid)||getFullParty().find(c=>c.id===cid);
+  if(char) renderSpellsTab(char,CLASSES[char.classIdx],elId,elId==='stab-spells'||elId==='pstab-spells');
 }
 
-/* ══ GEAR TAB ══ */
+function resetAllSlots(cid,key,elId){
+  localStorage.setItem(key,'{}');
+  const char=getChars().find(c=>c.id===cid)||getFullParty().find(c=>c.id===cid);
+  if(char) renderSpellsTab(char,CLASSES[char.classIdx],elId,elId==='stab-spells'||elId==='pstab-spells');
+  toast('Spell slots restored — Long Rest complete!','var(--green)');
+}
 function renderGearTab(char,cls,elId,editable){
   const items=getItems().filter(i=>i.owner==char.id);
   const equip=char.equipment||[];
@@ -2896,26 +2971,85 @@ async function clearAllData(){
    PROGRESSION SYSTEM — Level Up, Feats, ASI, DM Effects
 ══════════════════════════════════════════════════════ */
 
-const FEATS_5E = [
-  'Alert','Athlete','Actor','Charger','Crossbow Expert','Defensive Duelist',
-  'Dual Wielder','Dungeon Delver','Durable','Elemental Adept','Grappler',
-  'Great Weapon Master','Healer','Heavily Armored','Heavy Armor Master',
-  'Inspiring Leader','Keen Mind','Lightly Armored','Linguist','Lucky',
-  'Mage Slayer','Magic Initiate','Martial Adept','Medium Armor Master',
-  'Mobile','Moderately Armored','Mounted Combatant','Observant',
-  'Polearm Master','Resilient','Ritual Caster','Savage Attacker',
-  'Sentinel','Sharpshooter','Shield Master','Skilled','Skulker',
-  'Spell Sniper','Tavern Brawler','Tough','War Caster','Weapon Master',
-  // Tasha\'s
-  'Artificer Initiate','Chef','Crusher','Eldritch Adept','Fey Touched',
-  'Fighting Initiate','Gunner','Metamagic Adept','Piercer','Poisoner',
-  'Shadow Touched','Shield Training','Slasher','Telekinetic','Telepathic',
-  // Xanathar\'s
-  'Bountiful Luck','Dragon Fear','Dragon Hide','Dwarven Fortitude',
-  'Elven Accuracy','Fade Away','Fey Teleportation','Flames of Phlegethos',
-  'Infernal Constitution','Orcish Fury','Orcish Aggression','Prodigy',
-  'Second Chance','Squat Nimbleness','Wood Elf Magic'
+const FEATS_DB = [
+  // PHB
+  {name:"Alert",           req:"",              desc:"+5 to initiative. Can't be surprised while conscious. Hidden creatures gain no advantage against you."},
+  {name:"Athlete",         req:"STR or DEX 13", desc:"+1 STR or DEX. Standing from prone costs only 5 ft. Climbing doesn't cost extra movement. Running long/high jump needs only 5 ft run-up."},
+  {name:"Actor",           req:"",              desc:"+1 CHA. Advantage on Deception/Performance when disguised. Mimic a creature's speech or sounds after 1 min of listening (DC 16 Insight to detect)."},
+  {name:"Charger",         req:"",              desc:"When you Dash, you can make one bonus attack or shove (+5 damage if moved 10 ft in a line to the target)."},
+  {name:"Crossbow Expert", req:"",              desc:"Ignore loading. No disadvantage in melee. Bonus hand-crossbow attack after attacking with one-handed weapon."},
+  {name:"Defensive Duelist",req:"DEX 13",       desc:"When hit in melee while holding a finesse weapon, use reaction to add proficiency bonus to AC against that attack."},
+  {name:"Dual Wielder",    req:"",              desc:"+1 AC while wielding two melee weapons. Can dual-wield non-light weapons. Draw or stow two weapons at once."},
+  {name:"Dungeon Delver",  req:"",              desc:"Advantage on Perception/Investigation for secret doors. Advantage on saves vs traps. Resistance to trap damage. Search for traps at normal pace."},
+  {name:"Durable",         req:"CON 13",        desc:"+1 CON. When rolling a Hit Die to regain HP, minimum roll = 2 × your CON modifier (min 2)."},
+  {name:"Elemental Adept", req:"Can cast spells",desc:"Choose a damage type (acid/cold/fire/lightning/thunder). Spells of that type ignore resistance. Treat 1s as 2s on damage dice."},
+  {name:"Grappler",        req:"STR 13",        desc:"Advantage on attacks against creatures you're grappling. Use an action to pin a grappled creature (both restrained until escape)."},
+  {name:"Great Weapon Master",req:"",           desc:"When you score a crit or reduce a creature to 0 HP with a heavy weapon, bonus attack as a bonus action. Before any heavy weapon attack, take −5 to hit for +10 damage."},
+  {name:"Healer",          req:"",              desc:"Stabilise at 1 HP with a healer's kit. Use healer's kit to restore 1d6+4+target's max HD HP (once per creature per short rest)."},
+  {name:"Heavily Armored", req:"Medium Armor prof",desc:"+1 STR. Gain heavy armor proficiency."},
+  {name:"Heavy Armor Master",req:"Heavy Armor prof",desc:"+1 STR. While in heavy armor, reduce nonmagical bludgeoning/piercing/slashing damage by 3."},
+  {name:"Inspiring Leader",req:"CHA 13",        desc:"10-min speech grants up to 6 creatures temp HP = your level + CHA modifier."},
+  {name:"Keen Mind",       req:"",              desc:"+1 INT. Always know north, hours until sunrise/sunset. Perfect recall of anything seen/heard in last month."},
+  {name:"Lightly Armored", req:"",              desc:"+1 STR or DEX. Gain light armor proficiency."},
+  {name:"Linguist",        req:"",              desc:"+1 INT. Learn 3 languages. Create written ciphers only you (or a successful DC = INT + proficiency) can decode."},
+  {name:"Lucky",           req:"",              desc:"3 luck points per long rest. Spend a point to roll an extra d20 for attacks, saves, or ability checks (choose which d20 to use), or to force a reroll of an attack against you."},
+  {name:"Mage Slayer",     req:"",              desc:"Reaction to attack a creature that casts a spell within 5 ft. Creatures concentrating in 5 ft have disadvantage on the concentration save. Advantage on saves vs spells by adjacent creatures."},
+  {name:"Magic Initiate",  req:"",              desc:"Choose a class. Learn 2 cantrips and 1 1st-level spell from that class. Cast the 1st-level spell once per long rest without a slot."},
+  {name:"Martial Adept",   req:"",              desc:"Learn 2 Battle Master maneuvers. Gain 1 superiority die (d6) that refreshes on a short or long rest."},
+  {name:"Medium Armor Master",req:"Medium Armor prof",desc:"No disadvantage on Stealth in medium armor. Max DEX bonus to AC increases to +3 in medium armor."},
+  {name:"Mobile",          req:"",              desc:"+10 ft speed. Difficult terrain doesn't cost extra when you Dash. After attacking a creature (hit or miss), no opportunity attacks from it until your next turn."},
+  {name:"Moderately Armored",req:"Light Armor prof",desc:"+1 STR or DEX. Gain medium armor and shield proficiency."},
+  {name:"Mounted Combatant",req:"",             desc:"Advantage on melee attacks against unmounted creatures smaller than your mount. Force attacks targeting your mount to target you instead. Mount takes no damage on successful DEX save (half on fail)."},
+  {name:"Observant",       req:"",              desc:"+1 INT or WIS. Lip-read if you can see a creature's mouth and know the language. +5 to passive Perception and Investigation."},
+  {name:"Polearm Master",  req:"",              desc:"Bonus attack with the butt of a glaive/halberd/pike/quarterstaff (1d4 bludgeoning). Opportunity attack when a creature enters your reach."},
+  {name:"Resilient",       req:"",              desc:"+1 to a chosen ability score. Gain proficiency in saving throws using that ability."},
+  {name:"Ritual Caster",   req:"INT or WIS 13", desc:"Gain a ritual book with 2 1st-level ritual spells from a chosen class. Add more ritual spells of half proficiency bonus level or lower when found."},
+  {name:"Savage Attacker", req:"",              desc:"Once per turn when you roll melee weapon damage, roll the damage dice twice and take the higher result."},
+  {name:"Sentinel",        req:"",              desc:"Opportunity attacks reduce speed to 0. Can make opportunity attacks even if the creature Disengages. Reaction to attack when an adjacent creature attacks someone other than you."},
+  {name:"Sharpshooter",    req:"",              desc:"Ignore half/three-quarters cover. No disadvantage for long range. Before any ranged attack, take −5 to hit for +10 damage."},
+  {name:"Shield Master",   req:"",              desc:"Bonus action to shove after attacking. Add shield's AC bonus to DEX saves vs single-target spells. Use reaction on a failed DEX save to take no damage instead of half."},
+  {name:"Skilled",         req:"",              desc:"Gain proficiency in any 3 skills or tools of your choice."},
+  {name:"Skulker",         req:"DEX 13",        desc:"Hide when lightly obscured. Missing a ranged attack doesn't reveal position. Dim light doesn't impose disadvantage on Perception."},
+  {name:"Spell Sniper",    req:"Can cast spells",desc:"Double range of attack-roll spells. Ignore half/three-quarters cover. Learn one attack-roll cantrip from any class."},
+  {name:"Tavern Brawler",  req:"",              desc:"+1 STR or CON. Proficient with improvised weapons and unarmed strikes (1d4). Grapple as a bonus action after hitting with unarmed or improvised weapon."},
+  {name:"Tough",           req:"",              desc:"HP maximum increases by 2 × your level. +2 HP for each level gained after taking this feat."},
+  {name:"War Caster",      req:"Can cast spells",desc:"Advantage on Constitution saves to maintain concentration. Perform somatic components while holding weapons/shield. Cast a spell as an opportunity attack."},
+  {name:"Weapon Master",   req:"",              desc:"+1 STR or DEX. Gain proficiency in 4 weapons of your choice."},
+  // Tasha's Cauldron of Everything
+  {name:"Artificer Initiate",req:"",            desc:"Learn 1 artificer cantrip. Learn and cast 1 1st-level artificer spell once/day (long rest). Gain tool proficiency used by the spell."},
+  {name:"Chef",            req:"",              desc:"+1 CON or WIS. Gain cook's utensils proficiency. Short rest cooking heals extra HP (proficiency bonus creatures). Long rest treats grant temp HP."},
+  {name:"Crusher",         req:"",              desc:"+1 STR or CON. Bludgeoning hits can push creature 5 ft once per turn. Crit gives allies advantage against the target until your next turn."},
+  {name:"Eldritch Adept",  req:"Spellcasting or Pact Magic",desc:"Learn one Eldritch Invocation from the warlock list (replace on long rest if it has no class prerequisite)."},
+  {name:"Fey Touched",     req:"",              desc:"+1 INT, WIS, or CHA. Learn Misty Step and one 1st-level divination or enchantment spell. Cast each once/day free (long rest) or with slots."},
+  {name:"Fighting Initiate",req:"Weapon proficiency",desc:"Learn one Fighting Style from the fighter list. Can replace it when you gain a level."},
+  {name:"Gunner",          req:"",              desc:"+1 DEX. Proficient with firearms. Ignore loading for firearms. No disadvantage for ranged attacks in melee."},
+  {name:"Metamagic Adept", req:"Spellcasting or Pact Magic",desc:"Learn 2 Metamagic options from the sorcerer list. Gain 2 sorcery points (replenish on long rest, usable only for Metamagic)."},
+  {name:"Piercer",         req:"",              desc:"+1 STR or DEX. Once per turn, reroll one piercing damage die (take new result). Piercing crits roll one extra damage die."},
+  {name:"Poisoner",        req:"",              desc:"Proficient with poisoner's kit. Ignore poison resistance. Bonus action to apply poison to weapon (1d8 extra poison damage, DC 14 CON or poisoned 1 min)."},
+  {name:"Shadow Touched",  req:"",              desc:"+1 INT, WIS, or CHA. Learn Invisibility and one 1st-level illusion or necromancy spell. Cast each once/day free (long rest) or with slots."},
+  {name:"Shield Training", req:"",              desc:"+1 STR, DEX, or CON. Gain shield proficiency. Equip/unequip shield as object interaction. Shields count as armor for features requiring armor."},
+  {name:"Slasher",         req:"",              desc:"+1 STR or DEX. Slashing hits reduce speed by 10 ft until start of your next turn. Slashing crits give disadvantage on attacks until your next turn."},
+  {name:"Telekinetic",     req:"",              desc:"+1 INT, WIS, or CHA. Learn Mage Hand (invisible, stronger). Bonus action to shove a creature 5 ft (STR save vs 8+prof+mod)."},
+  {name:"Telepathic",      req:"",              desc:"+1 INT, WIS, or CHA. Communicate telepathically within 60 ft (no shared language needed). Cast Detect Thoughts once/day free (long rest)."},
+  // Xanathar's Guide
+  {name:"Bountiful Luck",  req:"Halfling",      desc:"When an ally within 30 ft rolls a 1, use your reaction to let them reroll (must take new result)."},
+  {name:"Dragon Fear",     req:"Dragonborn",    desc:"+1 STR, CON, or CHA. Replace breath weapon with a frightening roar (WIS save or frightened 1 min)."},
+  {name:"Dragon Hide",     req:"Dragonborn",    desc:"+1 STR, CON, or CHA. Scales grant AC 13 + DEX (no armor). Unarmed strikes deal 1d4 + STR slashing."},
+  {name:"Dwarven Fortitude",req:"Dwarf",        desc:"+1 CON. When you Dodge, spend a Hit Die to regain HP."},
+  {name:"Elven Accuracy",  req:"Elf or Half-Elf",desc:"+1 INT, WIS, CHA, or DEX. When you have advantage on an attack with those stats, roll 3 dice and take the highest."},
+  {name:"Fade Away",       req:"Gnome",         desc:"+1 DEX or INT. Reaction when damaged: become invisible until end of next turn or until you attack/cast."},
+  {name:"Fey Teleportation",req:"High Elf",     desc:"+1 INT or CHA. Learn Misty Step. Cast it once free per short or long rest."},
+  {name:"Flames of Phlegethos",req:"Tiefling",  desc:"+1 INT or CHA. Reroll 1s on fire damage (must keep new roll). When you cast fire spells, flames wreathe you (1 fire damage to melee attackers until next turn)."},
+  {name:"Infernal Constitution",req:"Tiefling", desc:"+1 CON. Resistance to cold and poison damage. Advantage on saves vs being poisoned."},
+  {name:"Orcish Fury",     req:"Half-Orc",      desc:"+1 STR or CON. Once per short/long rest, add extra weapon damage die on a hit. When you use Relentless Endurance, make one attack as a reaction."},
+  {name:"Orcish Aggression",req:"Half-Orc",     desc:"Bonus action to move up to your speed toward an enemy you can see or hear."},
+  {name:"Prodigy",         req:"Half-Elf, Half-Orc, or Human",desc:"Gain one skill proficiency, one tool proficiency, and one language. Gain expertise in one skill you're proficient in."},
+  {name:"Second Chance",   req:"Halfling",      desc:"+1 DEX, CON, or CHA. When a creature hits you, use reaction to force a reroll (once per short/long rest)."},
+  {name:"Squat Nimbleness",req:"Dwarf or Small race",desc:"+1 STR or DEX. +5 ft speed. Proficiency in Acrobatics or Athletics. Advantage to escape grapples."},
+  {name:"Wood Elf Magic",  req:"Wood Elf",       desc:"Learn Longstrider and Pass Without Trace. Cast each once free per long rest."},
 ];
+// Keep a plain array for backwards compatibility
+const FEATS_5E = FEATS_DB.map(f=>f.name);
 
 // ASI levels per class — when the class gets +2 points to distribute
 const ASI_LEVELS = {
@@ -3083,10 +3217,55 @@ function renderProgressTab(char, cls){
   }
 
   // ── ASI HISTORY ──
+  // ── ASI HISTORY ──
   const asiHistory = char.asiHistory || [];
   if(asiHistory.length){
     html += `<div class="divider"><span>Ability Score History</span></div>`;
     html += asiHistory.map(a=>`<div style="font-size:12px;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--border)">Lv${a.level}: ${a.desc}</div>`).join('');
+    html += '<div style="margin-bottom:12px"></div>';
+  }
+
+  // ── FEATURE CHOICES LOG ──
+  const fChoiceLog = char.featureChoiceLog || [];
+  if(fChoiceLog.length){
+    html += `<div class="divider"><span>Class Choices</span></div>`;
+    html += fChoiceLog.map(entry=>`
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;margin-bottom:6px">
+        <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:3px">LV ${entry.level} — ${entry.choice.toUpperCase()}</div>
+        <div style="font-size:12px;color:var(--purple)">${entry.picks.join(' · ')}</div>
+      </div>`).join('');
+    html += '<div style="margin-bottom:6px"></div>';
+  }
+
+  // ── ALL CLASS FEATURES (full feature list for this character's level) ──
+  html += `<div class="divider"><span>All Class Features</span></div>`;
+  const clsFeatureLog = [];
+  for(let lvl = 1; lvl <= char.level; lvl++){
+    const ld = (LEVEL_FEATURES[cls.name]||{})[lvl]||{};
+    const subFts = char.subclass ? (SUBCLASS_FEATURES[char.subclass]||{})[lvl]||[] : [];
+    const allFts = [...(ld.features||[]).filter(f=>!String(f).includes('ASI or Feat')), ...subFts.map(f=>f.n)];
+    if(allFts.length) clsFeatureLog.push({level:lvl, features:allFts});
+  }
+  if(clsFeatureLog.length){
+    html += clsFeatureLog.map(entry=>`
+      <div style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--border)">
+        <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);min-width:28px;padding-top:1px">L${entry.level}</div>
+        <div style="flex:1">${entry.features.map(f=>`<span style="font-size:11px;color:var(--text);margin-right:6px">${f}</span>`).join('<span style="color:var(--border)"> · </span>')}</div>
+      </div>`).join('');
+    html += '<div style="margin-bottom:12px"></div>';
+  }
+
+  // ── METAMAGIC & INVOCATIONS (if applicable) ──
+  const metamagic = char.metamagic||[];
+  const invocations = char.invocations||[];
+  if(metamagic.length){
+    html += `<div class="divider"><span>Metamagic</span></div>`;
+    html += metamagic.map(m=>`<div style="font-size:12px;color:var(--purple);padding:3px 0;border-bottom:1px solid var(--border)">🔮 ${m}</div>`).join('');
+    html += '<div style="margin-bottom:12px"></div>';
+  }
+  if(invocations.length){
+    html += `<div class="divider"><span>Eldritch Invocations</span></div>`;
+    html += invocations.map(inv=>`<div style="font-size:12px;color:var(--purple);padding:3px 0;border-bottom:1px solid var(--border)">👁 ${inv}</div>`).join('');
     html += '<div style="margin-bottom:12px"></div>';
   }
 
@@ -4067,6 +4246,214 @@ const ELDRITCH_INVOCATIONS = ['Agonizing Blast (add CHA to Eldritch Blast)','Arm
 
 const SKILL_LIST = ['Acrobatics','Animal Handling','Arcana','Athletics','Deception','History','Insight','Intimidation','Investigation','Medicine','Nature','Perception','Performance','Persuasion','Religion','Sleight of Hand','Stealth','Survival'];
 
+// ── CLASS-SPECIFIC LEVEL-UP FEATURE CHOICES ──────────────────────────────────
+// Each entry: { type, label, icon, count, options[] or optionsFn(char) }
+// types: 'pick' (choose N from list), 'expertise' (pick N from proficient skills)
+const CLASS_LEVEL_CHOICES = {
+  Barbarian: {
+    3: [{type:'pick', label:'Totem Animal (Spirit Seeker)', icon:'🐾', count:1,
+         condition: c => (c.subclass||'').includes('Totem'),
+         options:['Bear — Resistance to all damage except psychic while raging','Eagle — Dash as bonus action, no opportunity attacks while raging','Wolf — Allies have advantage on melee attacks vs creatures within 5 ft of you while raging','Elk — Your speed increases by 15 ft while raging','Tiger — Gain proficiency in two skills from the following list: Athletics, Acrobatics, Stealth, Survival']
+        }],
+    6: [{type:'pick', label:'Aspect of the Beast Totem', icon:'🦁', count:1,
+         condition: c => (c.subclass||'').includes('Totem'),
+         options:['Bear — Carry weight doubled, advantage on STR checks','Eagle — See clearly up to 1 mile, dim light counts as bright light','Wolf — Track at fast pace, stealth at normal pace while in favored terrain','Elk — +15 ft speed when not raging','Tiger — +10 ft speed']
+        }],
+    10: [{type:'pick', label:'Spirit Walker Totem', icon:'👻', count:1,
+          condition: c => (c.subclass||'').includes('Totem'),
+          options:['Bear — Warding — enemies have disadvantage on attacks vs allies within 5 ft','Eagle — Soar — fly speed equal to walking speed while raging','Wolf — Hunter — enemies hit by you are knocked prone if they are Large or smaller','Elk — Stampede — knock creatures prone when you move through their space','Tiger — Stalker — hide as bonus action while raging']
+         }],
+  },
+  Bard: {
+    3: [{type:'expertise', label:'Expertise (choose 2 skills or 1 skill + Thieves\' Tools)', icon:'⭐', count:2,
+         options: c => [...(c.proficiencies||[]), 'Thieves\'s Tools']
+        }],
+    10: [{type:'expertise', label:'Expertise (choose 2 more skills)', icon:'⭐', count:2,
+          options: c => (c.proficiencies||[]).filter(p => !(c.expertiseSkills||[]).includes(p))
+         }],
+    14: [{type:'pick', label:'Magical Secrets (any 2 spells from any class)', icon:'📖', count:1,
+          note:'Use the spell picker after confirming to add your Magical Secrets spells',
+          options:['Use the spell browser to choose any 2 spells from any class spell list']
+         }],
+  },
+  Cleric: {
+    1: [{type:'pick', label:'Divine Domain (Cantrip if applicable)', icon:'✝', count:1,
+         note:'Your domain may grant bonus cantrips — see your Domain description',
+         options:['Domain cantrips are automatically granted by your domain choice — no selection needed here']
+        }],
+  },
+  Druid: {
+    2: [{type:'pick', label:'Wild Shape Beast (note a known beast)', icon:'🐺', count:1,
+         note:'Write in a beast you have observed. You can transform into beasts with CR ¼ or lower (no flying/swimming at L2).',
+         options:['Wolf (CR ¼)','Brown Bear (CR ½)','Giant Spider (CR 1)','Ape (CR ½)','Black Bear (CR ½)','Crocodile (CR ½)','Giant Toad (CR 1)','Dire Wolf (CR 1)','Custom — note a beast you\'ve seen in your campaign']
+        }],
+    4: [{type:'pick', label:'Wild Shape Upgrade', icon:'🦅', count:1,
+         note:'Can now use Wild Shape with a swimming speed. Max CR ½.',
+         options:['Crocodile (CR ½, swim 30 ft)','Giant Crab (CR ⅛, swim 20 ft)','Reef Shark (CR ½, swim 40 ft)','Custom swimming beast']
+        }],
+    8: [{type:'pick', label:'Wild Shape Upgrade (flying)', icon:'🦁', count:1,
+         note:'Can now Wild Shape into beasts with a flying speed. Max CR 1.',
+         options:['Giant Eagle (CR 1, fly 80 ft)','Giant Vulture (CR 1, fly 60 ft)','Peryton (CR 2)','Custom flying beast']
+        }],
+  },
+  Fighter: {
+    1: [{type:'pick', label:'Fighting Style', icon:'⚔', count:1,
+         condition: c => !c.fightingStyle,
+         options: FIGHTING_STYLES
+        }],
+    3: [{type:'pick', label:'Battle Master Maneuvers (choose 3)', icon:'🎲', count:3,
+         condition: c => (c.subclass||'').includes('Battle Master'),
+         options:['Commander\'s Strike — Forgo one attack; ally makes an attack as a reaction','Disarming Attack — On hit, target drops one item (STR save)','Distracting Strike — On hit, next attack vs target has advantage until your next turn','Evasive Footwork — Add superiority die to AC when you move','Feinting Attack — Bonus action feint gives advantage + extra damage on next attack','Goading Attack — On hit, target has disadvantage on attacks vs others (WIS save)','Lunging Attack — Add 5 ft reach for one attack + extra damage','Maneuvering Attack — On hit, ally can move half speed without OA','Menacing Attack — On hit, target is frightened (WIS save)','Parry — Reaction: reduce melee damage by superiority die + DEX mod','Precision Attack — Add superiority die to one attack roll','Pushing Attack — On hit, push target 15 ft (STR save)','Rally — Bonus action: grant temp HP to an ally','Riposte — Reaction: counter-attack when a creature misses you','Sweeping Attack — Deal damage to adjacent creature when you hit','Trip Attack — On hit, knock target prone (STR save)']
+        }],
+    7: [{type:'pick', label:'Additional Battle Master Maneuver', icon:'🎲', count:1,
+         condition: c => (c.subclass||'').includes('Battle Master'),
+         options:['Commander\'s Strike','Disarming Attack','Distracting Strike','Evasive Footwork','Feinting Attack','Goading Attack','Lunging Attack','Maneuvering Attack','Menacing Attack','Parry','Precision Attack','Pushing Attack','Rally','Riposte','Sweeping Attack','Trip Attack']
+        }],
+    10: [{type:'pick', label:'Additional Battle Master Maneuver', icon:'🎲', count:1,
+          condition: c => (c.subclass||'').includes('Battle Master'),
+          options:['Commander\'s Strike','Disarming Attack','Distracting Strike','Evasive Footwork','Feinting Attack','Goading Attack','Lunging Attack','Maneuvering Attack','Menacing Attack','Parry','Precision Attack','Pushing Attack','Rally','Riposte','Sweeping Attack','Trip Attack']
+         },
+         {type:'pick', label:'Fighting Style (second)', icon:'⚔', count:1,
+          condition: c => (c.subclass||'').includes('Champion'),
+          options: FIGHTING_STYLES
+         }],
+    15: [{type:'pick', label:'Additional Battle Master Maneuver', icon:'🎲', count:1,
+          condition: c => (c.subclass||'').includes('Battle Master'),
+          options:['Commander\'s Strike','Disarming Attack','Distracting Strike','Evasive Footwork','Feinting Attack','Goading Attack','Lunging Attack','Maneuvering Attack','Menacing Attack','Parry','Precision Attack','Pushing Attack','Rally','Riposte','Sweeping Attack','Trip Attack']
+         }],
+  },
+  Monk: {
+    1: [{type:'pick', label:'Monastic Weapons (choose 1 type)', icon:'🥋', count:1,
+         note:'You have proficiency with these weapons and can use them as monk weapons',
+         options:['Shortsword','Handaxe','Spear','Quarterstaff','Unarmed (default)']
+        }],
+  },
+  Paladin: {
+    2: [{type:'pick', label:'Fighting Style', icon:'⚔', count:1,
+         condition: c => !c.fightingStyle,
+         options: ['Defense (+1 AC when armored)','Dueling (+2 damage with one-handed weapon)','Great Weapon Fighting (reroll 1s & 2s on two-handed weapon damage)','Protection (use reaction to impose disadvantage on enemy attacks near allies)','Blind Fighting','Interception']
+        }],
+  },
+  Ranger: {
+    1: [{type:'pick', label:'Favored Enemy (choose a creature type)', icon:'🎯', count:1,
+         options:['Aberrations','Beasts','Celestials','Constructs','Dragons','Elementals','Fey','Fiends','Giants','Monstrosities','Oozes','Plants','Undead','Two Humanoid Races (e.g. Orcs & Goblins)']
+        },
+        {type:'pick', label:'Natural Explorer Terrain', icon:'🌲', count:1,
+         options:['Arctic','Coast','Desert','Forest','Grassland','Mountain','Swamp','Underdark']
+        }],
+    2: [{type:'pick', label:'Fighting Style', icon:'⚔', count:1,
+         condition: c => !c.fightingStyle,
+         options:['Archery (+2 ranged attacks)','Defense (+1 AC when armored)','Dueling (+2 damage one-handed weapon)','Two-Weapon Fighting (add ability mod to off-hand damage)','Blind Fighting','Druidic Warrior (learn 2 Druid cantrips)','Thrown Weapon Fighting']
+        }],
+    6: [{type:'pick', label:'Additional Favored Enemy', icon:'🎯', count:1,
+         options:['Aberrations','Beasts','Celestials','Constructs','Dragons','Elementals','Fey','Fiends','Giants','Monstrosities','Oozes','Plants','Undead','Two Humanoid Races']
+        },
+        {type:'pick', label:'Additional Natural Explorer Terrain', icon:'🌲', count:1,
+         options:['Arctic','Coast','Desert','Forest','Grassland','Mountain','Swamp','Underdark']
+        }],
+    10: [{type:'pick', label:'3rd Natural Explorer Terrain', icon:'🌲', count:1,
+          options:['Arctic','Coast','Desert','Forest','Grassland','Mountain','Swamp','Underdark']
+         }],
+    14: [{type:'pick', label:'3rd Favored Enemy Type', icon:'🎯', count:1,
+          options:['Aberrations','Beasts','Celestials','Constructs','Dragons','Elementals','Fey','Fiends','Giants','Monstrosities','Oozes','Plants','Undead','Two Humanoid Races']
+         }],
+  },
+  Rogue: {
+    1: [{type:'expertise', label:'Expertise (choose 2 skills or 1 skill + Thieves\' Tools)', icon:'⭐', count:2,
+         options: c => [...(c.proficiencies||[]), 'Thieves\'s Tools']
+        }],
+    3: [{type:'pick', label:'Roguish Archetype — Arcane Trickster spells', icon:'🎩', count:1,
+         condition: c => (c.subclass||'').includes('Arcane Trickster'),
+         note:'You learn 3 spells from the Wizard list (2 must be enchantment/illusion). Use the spell browser after confirming.',
+         options:['Use spell browser to add Wizard enchantment/illusion spells']
+        }],
+    6: [{type:'expertise', label:'Expertise (choose 2 more skills)', icon:'⭐', count:2,
+         options: c => (c.proficiencies||[]).filter(p => !(c.expertiseSkills||[]).includes(p))
+        }],
+  },
+  Sorcerer: {
+    3: [{type:'pick', label:'Metamagic Options (choose 2)', icon:'🔮', count:2,
+         options: METAMAGIC_OPTIONS
+        }],
+    10: [{type:'pick', label:'Additional Metamagic Option', icon:'🔮', count:1,
+          options: METAMAGIC_OPTIONS
+         }],
+    17: [{type:'pick', label:'Additional Metamagic Option', icon:'🔮', count:1,
+          options: METAMAGIC_OPTIONS
+         }],
+  },
+  Warlock: {
+    2: [{type:'pick', label:'Eldritch Invocations (choose 2)', icon:'👁', count:2,
+         options: ELDRITCH_INVOCATIONS
+        }],
+    3: [{type:'pick', label:'Pact Boon', icon:'📜', count:1,
+         options:['Pact of the Blade — Summon a magical weapon as a bonus action. Counts as your spellcasting focus. You are proficient with it.','Pact of the Chain — Learn Find Familiar. Your familiar can be an imp, pseudodragon, quasit, or sprite. It can attack using its reaction on your turn.','Pact of the Tome — Your patron gives you a Book of Shadows with 3 cantrips from any class. They count as warlock cantrips for you.']
+        },
+        {type:'pick', label:'Additional Eldritch Invocation', icon:'👁', count:1,
+         options: ELDRITCH_INVOCATIONS
+        }],
+    5: [{type:'pick', label:'Additional Eldritch Invocation', icon:'👁', count:1,
+         options: ELDRITCH_INVOCATIONS
+        }],
+    7: [{type:'pick', label:'Additional Eldritch Invocation', icon:'👁', count:1,
+         options: ELDRITCH_INVOCATIONS
+        }],
+    9: [{type:'pick', label:'Additional Eldritch Invocation', icon:'👁', count:1,
+         options: ELDRITCH_INVOCATIONS
+        }],
+    11: [{type:'pick', label:'Mystic Arcanum (6th level spell)', icon:'⚡', count:1,
+          note:'Choose one 6th-level spell from your patron\'s expanded list or the warlock list.',
+          options:['Arcane Gate','Circle of Death','Create Undead','Eyebite','Flesh to Stone','Mass Suggestion','True Seeing']
+         }],
+    12: [{type:'pick', label:'Additional Eldritch Invocation', icon:'👁', count:1,
+          options: ELDRITCH_INVOCATIONS
+         }],
+    13: [{type:'pick', label:'Mystic Arcanum (7th level spell)', icon:'⚡', count:1,
+          options:['Etherealness','Finger of Death','Forcecage','Plane Shift']
+         }],
+    15: [{type:'pick', label:'Mystic Arcanum (8th level spell)', icon:'⚡', count:1,
+          options:['Demiplane','Dominate Monster','Feeblemind','Glibness','Power Word Stun']
+         },
+         {type:'pick', label:'Additional Eldritch Invocation', icon:'👁', count:1,
+          options: ELDRITCH_INVOCATIONS
+         }],
+    17: [{type:'pick', label:'Mystic Arcanum (9th level spell)', icon:'⚡', count:1,
+          options:['Astral Projection','Foresight','Gate','Imprisonment','Power Word Kill','True Polymorph']
+         },
+         {type:'pick', label:'Additional Eldritch Invocation', icon:'👁', count:1,
+          options: ELDRITCH_INVOCATIONS
+         }],
+    18: [{type:'pick', label:'Additional Eldritch Invocation', icon:'👁', count:1,
+          options: ELDRITCH_INVOCATIONS
+         }],
+    19: [{type:'pick', label:'Additional Eldritch Invocation', icon:'👁', count:1,
+          options: ELDRITCH_INVOCATIONS
+         }],
+  },
+  Wizard: {
+    2: [{type:'pick', label:'Arcane Tradition Feature', icon:'📜', count:1,
+         condition: c => (c.subclass||'').includes('Order of Scribes'),
+         note:'Order of Scribes: Choose your Awakened Spellbook\'s initial spoken language',
+         options:['Draconic','Elvish','Infernal','Celestial','Abyssal','Common','Deep Speech']
+        }],
+    18: [{type:'pick', label:'Spell Mastery — choose 1st-level spell', icon:'⭐', count:1,
+          note:'Choose one 1st-level spell from your spellbook — you can cast it at its lowest level without a spell slot',
+          options: c => (c.spells||[]).filter(s=>s.level==='1').map(s=>s.name)
+         },
+         {type:'pick', label:'Spell Mastery — choose 2nd-level spell', icon:'⭐', count:1,
+          note:'Choose one 2nd-level spell from your spellbook — you can cast it at its lowest level without a spell slot',
+          options: c => (c.spells||[]).filter(s=>s.level==='2').map(s=>s.name)
+         }],
+    20: [{type:'pick', label:'Signature Spells — choose first 3rd-level spell', icon:'✨', count:1,
+          note:'Always prepared, cast once per short rest without a slot',
+          options: c => (c.spells||[]).filter(s=>s.level==='3').map(s=>s.name)
+         },
+         {type:'pick', label:'Signature Spells — choose second 3rd-level spell', icon:'✨', count:1,
+          options: c => (c.spells||[]).filter(s=>s.level==='3').map(s=>s.name)
+         }],
+  },
+};
+
 // ══ LEVEL-UP MODAL ═══════════════════════════════════════════════════════════
 
 // DM quick-grant from roster: opens party sheet on level up tab
@@ -4193,14 +4580,46 @@ function renderLevelUpTab(char, cls){
       <div style="font-size:12px;color:var(--muted)">${cls.name}${char.subclass?' · '+char.subclass:''} · Proficiency Bonus +${pb}</div>
     </div>`;
 
-  // Features
+  // Features — interactive expandable cards
   if(features.length){
     html += `<div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">NEW FEATURES</div>`;
-    html += features.map(f=>`
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px">
-        <div style="font-family:'Cinzel',serif;font-size:13px;color:${cc};margin-bottom:${f.desc?4:0}px">${f.name}</div>
-        ${f.desc?`<div style="font-size:12px;color:var(--muted);line-height:1.5">${f.desc}</div>`:''}
+    html += features.map((f,fi)=>`
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
+        <div onclick="${f.desc?`var b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';this.querySelector('.fchev').textContent=b.style.display==='none'?'▸':'▾'`:'void(0)'}"
+             style="display:flex;align-items:center;gap:8px;padding:12px;${f.desc?'cursor:pointer;':''}background:var(--surface)">
+          <span style="color:${cc};font-size:14px;flex-shrink:0">◆</span>
+          <span style="font-family:'Cinzel',serif;font-size:12px;flex:1;color:${cc}">${f.name}</span>
+          ${f.desc?`<span class="fchev" style="color:var(--muted);font-size:11px">▸</span>`:''}
+        </div>
+        ${f.desc?`<div style="display:none;padding:10px 12px 12px 34px;font-size:11px;color:var(--muted);line-height:1.6;border-top:1px solid var(--border)">${f.desc}</div>`:''}
       </div>`).join('');
+  }
+
+  // Class-specific feature choices for party sheet level-up
+  const psClassChoices = (CLASS_LEVEL_CHOICES[cls.name]||{})[newLevel]||[];
+  const psActiveChoices = psClassChoices.filter(ch => !ch.condition || ch.condition(char));
+  if(psActiveChoices.length){
+    window._lvlupFeatureChoices = {};
+    psActiveChoices.forEach((ch, chi)=>{
+      const opts = typeof ch.options==='function' ? ch.options(char) : (ch.options||[]);
+      if(!opts.length) return;
+      html += `<div style="background:var(--surface2);border:2px solid var(--purple);border-radius:10px;padding:12px;margin-bottom:12px">
+        <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-bottom:6px">${ch.icon} ${ch.label.toUpperCase()}</div>
+        ${ch.note?`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-style:italic;line-height:1.5">${ch.note}</div>`:''}
+        ${ch.count>1
+          ? Array.from({length:ch.count}).map((_,i)=>`
+              <select onchange="if(!window._lvlupFeatureChoices)window._lvlupFeatureChoices={};if(!window._lvlupFeatureChoices[${chi}])window._lvlupFeatureChoices[${chi}]=[];window._lvlupFeatureChoices[${chi}][${i}]=this.value"
+                style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;margin-bottom:6px;box-sizing:border-box">
+                <option value="">— Pick ${ch.label} ${i+1} —</option>
+                ${opts.map(o=>`<option value="${o}">${o}</option>`).join('')}
+              </select>`).join('')
+          : `<select onchange="if(!window._lvlupFeatureChoices)window._lvlupFeatureChoices={};if(!window._lvlupFeatureChoices[${chi}])window._lvlupFeatureChoices[${chi}]=[];window._lvlupFeatureChoices[${chi}][0]=this.value"
+               style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;box-sizing:border-box">
+               <option value="">— Select —</option>
+               ${opts.map(o=>`<option value="${o}">${o}</option>`).join('')}
+             </select>`}
+      </div>`;
+    });
   }
 
   // HP
@@ -4247,10 +4666,21 @@ function renderLevelUpTab(char, cls){
         <div id="asiTotalMsg" style="font-size:11px;color:var(--muted);text-align:center;margin-top:6px">Distribute 2 points total</div>
       </div>
       <div id="featPanel" style="display:none;margin-bottom:14px">
-        <select id="lvlupFeat" style="width:100%;background:var(--surface2);border:1px solid var(--purple);border-radius:8px;padding:10px;color:var(--text);font-family:'Cinzel',serif;font-size:11px">
-          <option value="">— Select a feat —</option>
-          ${FEATS_5E.map(f=>`<option value="${f}">${f}</option>`).join('')}
-        </select>
+        <input id="featSearch" oninput="filterFeatCards('featCardList','featSearch')" placeholder="Search feats…"
+          style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;margin-bottom:8px;box-sizing:border-box">
+        <div id="featCardList" style="display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto">
+          ${FEATS_DB.map(f=>`<div class="feat-card" data-feat="${f.name}" data-req="${f.req||''}"
+            onclick="selectFeatCard(this,'lvlupFeat')"
+            style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;transition:border-color 0.12s">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
+              <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--text)">\${f.name}</span>
+              \${f.req?`<span style="font-size:9px;color:var(--muted);flex-shrink:0">\${f.req}</span>`:''}
+            </div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">\${f.desc}</div>
+          </div>`).join('')}
+        </div>
+        <input type="hidden" id="lvlupFeat" value="">
+        <div id="featChosenLabel" style="font-size:11px;color:var(--gold);margin-top:6px;min-height:16px;font-family:'Cinzel',serif"></div>
       </div>`;
   }
 
@@ -4312,6 +4742,7 @@ function renderLevelUpTab(char, cls){
   // Init defaults
   window._lvlupHP = avgHP;
   window._lvlupHPMode = 'avg';
+  window._lvlupFeatureChoices = {};
   if(hasASI) selectASIType('asi');
 }
 
@@ -4365,7 +4796,8 @@ function updateASITotal(){
 
 // Browser mode: unlimited selection, launched from Spells tab
 function openSpellBrowser(charId, returnElId, cantripOnly){
-  const char = getChars().find(c=>c.id===charId); if(!char) return;
+  const char = getChars().find(c=>c.id===charId) || getFullParty().find(c=>c.id===charId);
+  if(!char) return;
   const cls  = CLASSES[char.classIdx];
   const cc   = cls.color;
   const spellList = CLASS_SPELL_LISTS[cls.name];
@@ -4421,6 +4853,7 @@ function openSpellBrowser(charId, returnElId, cantripOnly){
     ? `${cls.name} cantrips`
     : `${cls.name} spells up to level ${maxSpellLevel} (character level ${char.level})`;
 
+  const isKnownCasterBr = ['Bard','Sorcerer','Warlock','Ranger'].includes(cls.name);
   modal.innerHTML = `
     <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:14px 16px;display:flex;align-items:center;gap:10px">
       <div style="flex:1">
@@ -4436,8 +4869,11 @@ function openSpellBrowser(charId, returnElId, cantripOnly){
     </div>
     <div id="spPickList" style="flex:1;overflow-y:auto;padding:10px 16px"></div>
     <div style="background:var(--surface);border-top:1px solid var(--border);padding:12px 16px;display:flex;gap:8px">
-      <button id="spPickConfirm" class="btn btn-primary" style="flex:1;margin:0" onclick="confirmSpellBrowse(false)" disabled>+ Add to Spellbook</button>
-      <button id="spPickConfirmPrep" class="btn btn-gold" style="flex:1;margin:0" onclick="confirmSpellBrowse(true)" disabled>★ Add as Prepared</button>
+      ${isKnownCasterBr || cantripOnly
+        ? `<button id="spPickConfirm" class="btn btn-gold" style="flex:1;margin:0" onclick="confirmSpellBrowse(true)" disabled>✦ Add ${cantripOnly?'Cantrips':'Spells'}</button>`
+        : `<button id="spPickConfirm" class="btn btn-primary" style="flex:1;margin:0" onclick="confirmSpellBrowse(false)" disabled>📖 Add to Spellbook</button>
+           <button id="spPickConfirmPrep" class="btn btn-gold" style="flex:1;margin:0" onclick="confirmSpellBrowse(true)" disabled>★ Add as Prepared</button>`
+      }
     </div>`;
 
   document.body.appendChild(modal);
@@ -4446,38 +4882,53 @@ function openSpellBrowser(charId, returnElId, cantripOnly){
 
 function confirmSpellBrowse(asPrepared){
   const st = window._spellPickerState; if(!st||!st.selected.size) return;
-  const chars = getChars();
-  const ci = chars.findIndex(c=>c.id===st.charId); if(ci<0) return;
-  if(!chars[ci].spells) chars[ci].spells=[];
 
-  const cls = CLASSES[chars[ci].classIdx];
+  // Resolve character from own chars or full party (DM viewing another's sheet)
+  let chars = getChars();
+  let ci = chars.findIndex(c=>c.id===st.charId);
+  let isPartyChar = false;
+  let partyChar = null;
+  if(ci < 0){
+    const fullParty = getFullParty();
+    partyChar = fullParty.find(c=>c.id===st.charId);
+    if(!partyChar){ toast('Character not found','var(--red)'); return; }
+    isPartyChar = true;
+  }
+
+  const workChar = isPartyChar ? partyChar : chars[ci];
+  if(!workChar.spells) workChar.spells=[];
+
+  const cls = CLASSES[workChar.classIdx];
   const allByName = {};
   const spellList = CLASS_SPELL_LISTS[cls.name]||{};
   Object.entries(spellList).forEach(([lvl,names])=>names.forEach(n=>{ allByName[n]=lvl; }));
 
   st.selected.forEach(name=>{
-    if(chars[ci].spells.some(s=>s.name===name)) return;
+    if(workChar.spells.some(s=>s.name===name)) return;
     const db = SPELL_DB[name]||{};
     const lvl = allByName[name]||'cantrip';
-    chars[ci].spells.push({ name, level:lvl, school:db.school||'', castTime:db.castTime||'',
+    workChar.spells.push({ name, level:lvl, school:db.school||'', castTime:db.castTime||'',
       range:db.range||'', duration:db.duration||'', components:db.components||'',
       desc:db.desc||'', prepared:asPrepared });
   });
 
-  chars[ci].spells.sort((a,b)=>{
+  workChar.spells.sort((a,b)=>{
     const la=a.level==='cantrip'?0:parseInt(a.level)||0;
     const lb=b.level==='cantrip'?0:parseInt(b.level)||0;
     return la-lb||a.name.localeCompare(b.name);
   });
 
-  saveChars(chars);
+  if(isPartyChar){
+    saveChar(partyChar);
+  } else {
+    if(ci >= 0) chars[ci] = workChar;
+    saveChars(chars);
+  }
   const count = st.selected.size;
   document.getElementById('spellPickerModal')?.remove();
   toast(`✦ ${count} spell${count!==1?'s':''} added${asPrepared?' as prepared':''}!`,'var(--gold)');
 
-  // Refresh the spells tab
-  renderSpellsTab(chars[ci], cls, st.returnElId||'pstab-spells', true);
-  // Refresh dice panel if open
+  renderSpellsTab(workChar, cls, st.returnElId||'pstab-spells', true);
   if(document.getElementById('diceCharPanel')) renderDiceCharPanel();
 }
 
@@ -4611,8 +5062,10 @@ function renderSpellPickerList(){
     ? `${n} selected`
     : `${n} / ${st.slotsToAdd} selected`;
 
+  // Enable/disable confirm buttons — handle both single-button (known casters) and dual-button layouts
   ['spPickConfirm','spPickConfirmPrep'].forEach(id=>{
-    const btn=document.getElementById(id); if(btn) btn.disabled = n===0;
+    const btn=document.getElementById(id);
+    if(btn) btn.disabled = (n===0);
   });
 }
 
@@ -4637,6 +5090,7 @@ function confirmSpellPick(){
   if(!chars[ci].spells) chars[ci].spells=[];
 
   const cls = CLASSES[chars[ci].classIdx];
+  const isKnownCaster = ['Bard','Sorcerer','Warlock','Ranger'].includes(cls.name);
   const spellList = CLASS_SPELL_LISTS[cls.name]||{};
   const allByName = {};
   Object.entries(spellList).forEach(([lvl,names])=>names.forEach(n=>{ allByName[n]=lvl; }));
@@ -4645,6 +5099,7 @@ function confirmSpellPick(){
     if(chars[ci].spells.some(s=>s.name===name)) return; // skip duplicates
     const db = SPELL_DB[name]||{};
     const lvl = allByName[name]||'cantrip';
+    const autoPrep = isKnownCaster || lvl === 'cantrip'; // known-casters & cantrips always prepared
     chars[ci].spells.push({
       name, level:lvl,
       school:db.school||'',
@@ -4653,7 +5108,7 @@ function confirmSpellPick(){
       duration:db.duration||'',
       components:db.components||'',
       desc:db.desc||'',
-      prepared:false,
+      prepared: autoPrep,
     });
   });
 
@@ -4718,6 +5173,30 @@ function confirmPartySheetLevelUp(){
     }
   }
 
+  // Apply class-specific feature choices
+  const classChoicesAtLevel = (CLASS_LEVEL_CHOICES[cls.name]||{})[newLevel]||[];
+  const activeChoices = classChoicesAtLevel.filter(ch => !ch.condition || ch.condition(char));
+  if(activeChoices.length){
+    if(!char.featureChoiceLog) char.featureChoiceLog = [];
+    activeChoices.forEach((ch, chi)=>{
+      // picks are stored in window._lvlupFeatureChoices
+      const picks = ((window._lvlupFeatureChoices||{})[chi]||[]).filter(Boolean);
+      if(!picks.length) return;
+      if(ch.type === 'expertise'){
+        if(!char.expertiseSkills) char.expertiseSkills = [];
+        picks.forEach(p=>{ if(!char.expertiseSkills.includes(p)) char.expertiseSkills.push(p); });
+        char.equipment = char.equipment||[];
+        char.equipment.push(`Expertise: ${picks.join(', ')}`);
+      } else {
+        const label = picks.length===1 ? picks[0] : picks.join(' / ');
+        char.equipment = char.equipment||[];
+        char.equipment.push(`${ch.label}: ${label}`);
+      }
+      char.featureChoiceLog.push({ level: newLevel, choice: ch.label, picks });
+    });
+    window._lvlupFeatureChoices = {};
+  }
+
   // Level up
   char.level = newLevel;
 
@@ -4767,6 +5246,7 @@ function showLevelUpModal(charId){
     asiDeltas: {STR:0,DEX:0,CON:0,INT:0,WIS:0,CHA:0},
     featChoice: '',
     asiMode: 'scores', // 'scores' or 'feat'
+    featureChoices: {},
     choices: {},
   };
 
@@ -4779,7 +5259,59 @@ function showLevelUpModal(charId){
 
 function buildLevelUpHTML(char, cls, newLevel, ld, avgHP, conMod){
   const cc = `var(--gold)`;
-  const features = (ld.features||[]).filter(f=>!f.startsWith('ASI'));
+  // Resolve raw feature strings into {name, desc} objects using same logic as renderLevelUpTab
+  const rawFeatures = (ld.features||[]).filter(f=>!String(f).startsWith('ASI'));
+  const subFeaturesBL = char.subclass ? (SUBCLASS_FEATURES[char.subclass]||{})[newLevel]||[] : [];
+  const genericPlaceholdersBL = ['Path Feature','Subclass Feature','Bard College Feature','Martial Archetype Feature',
+    'Divine Domain Feature','Sacred Oath Feature','Ranger Archetype Feature','Roguish Archetype Feature',
+    'Sorcerous Origin Feature','Otherworldly Patron Feature','Arcane Tradition Feature',
+    'Monastic Tradition Feature','Circle Feature','Domain Feature'];
+
+  const resolveFeatureBL = (f) => {
+    if(typeof f === 'object') return {name: f.n||f.name||'Feature', desc: f.d||f.desc||''};
+    const s = String(f);
+    if(genericPlaceholdersBL.some(p=>s.includes(p))) return null;
+    if(s.includes('Extra Attack') && s.includes('(2)')) return {name:s, desc:'You can attack three times when you take the Attack action.'};
+    if(s.includes('Extra Attack') && s.includes('(3)')) return {name:s, desc:'You can attack four times when you take the Attack action.'};
+    if(s.includes('Extra Attack')) return {name:s, desc:'You can attack twice when you take the Attack action.'};
+    if(s.includes('Rage')) return {name:s, desc:'Bonus action. Advantage on STR checks/saves, bonus damage on STR attacks, resistance to B/P/S damage. Uses per long rest scale with level.'};
+    if(s.includes('Reckless Attack')) return {name:s, desc:'Attack recklessly: advantage on STR attacks this turn, but attacks against you have advantage until your next turn.'};
+    if(s.includes('Unarmored Defense') && cls.name==='Barbarian') return {name:s, desc:'AC = 10 + DEX mod + CON mod when not wearing armor.'};
+    if(s.includes('Unarmored Defense') && cls.name==='Monk') return {name:s, desc:'AC = 10 + DEX mod + WIS mod when not wearing armor or shield.'};
+    if(s.includes('Bardic Inspiration')) return {name:s, desc:'Grant a creature within 60 ft a die to add to an ability check, attack roll, or saving throw within 10 minutes. Uses = CHA mod per long rest.'};
+    if(s.includes('Jack of All Trades')) return {name:s, desc:'Add half your proficiency bonus (round down) to ability checks that don\'t use your proficiency bonus.'};
+    if(s.includes('Expertise')) return {name:s, desc:'Double your proficiency bonus for two skills of your choice (or one skill + thieves\' tools).'};
+    if(s.includes('Magical Secrets')) return {name:s, desc:'Learn two spells from any class. They count as bard spells for you.'};
+    if(s.includes('Evasion')) return {name:s, desc:'On a DEX save for half damage: success = no damage; failure = half damage.'};
+    if(s.includes('Sneak Attack')) return {name:s, desc:'Deal extra dice of damage once per turn when you have advantage on the attack or when an ally is within 5 ft of your target.'};
+    if(s.includes('Cunning Action')) return {name:s, desc:'Bonus action: Dash, Disengage, or Hide.'};
+    if(s.includes('Uncanny Dodge')) return {name:s, desc:'Reaction: when an attacker you can see hits you, halve the attack\'s damage.'};
+    if(s.includes('Reliable Talent')) return {name:s, desc:'Treat any roll of 9 or lower as a 10 on ability checks you\'re proficient in.'};
+    if(s.includes('Second Wind')) return {name:s, desc:'Bonus action: regain 1d10 + fighter level HP. Recharges on short rest.'};
+    if(s.includes('Action Surge')) return {name:s, desc:'Take one additional action on your turn (2/rest at level 17). Recharges on short rest.'};
+    if(s.includes('Lay on Hands')) return {name:s, desc:'HP pool = 5 × paladin level. Touch a creature to restore HP from the pool. Spend 5 HP to cure one disease or neutralize one poison.'};
+    if(s.includes('Divine Smite')) return {name:s, desc:'Expend a spell slot on a melee hit to deal extra radiant damage: 2d8 for L1, +1d8 per slot level above 1st, +1d8 vs undead or fiends (max 5d8).'};
+    if(s.includes('Spellcasting')) return {name:s, desc:`Cast ${cls.name} spells. Your spellcasting ability is ${['Wizard','Eldritch Knight','Arcane Trickster'].includes(cls.name)?'INT':['Cleric','Druid','Ranger'].includes(cls.name)?'WIS':'CHA'}.`};
+    if(s.includes('Wild Shape')) return {name:s, desc:'Transform into beasts you have seen. CR limits and allowed traits scale with level.'};
+    if(s.includes('Ki')) return {name:s, desc:'Spend ki points to fuel special actions. Regain all ki on a short or long rest.'};
+    if(s.includes('Stunning Strike')) return {name:s, desc:'Spend 1 ki when you hit: the target must CON save or be stunned until end of your next turn.'};
+    if(s.includes('Font of Magic')) return {name:s, desc:'Gain sorcery points equal to your sorcerer level. Use them to create spell slots or fuel metamagic options.'};
+    if(s.includes('Metamagic')) return {name:s, desc:'Choose metamagic options to modify how your spells work (e.g. Quickened, Twinned, Subtle).'};
+    if(s.includes('Pact Magic')) return {name:s, desc:'Short-rest spell slots that always recover at your highest available pact magic level.'};
+    if(s.includes('Eldritch Invocations')) return {name:s, desc:'Learn invocations to customize your warlock abilities. Gain more invocations as you gain levels.'};
+    if(s.includes('Arcane Recovery')) return {name:s, desc:'Once per day after a short rest, recover expended spell slots totalling up to half your wizard level (rounded up).'};
+    if(s.includes('Favored Enemy')) return {name:s, desc:'Choose a creature type. Advantage on Survival checks to track them and INT checks to recall info about them.'};
+    if(s.includes('Natural Explorer')) return {name:s, desc:'Choose a terrain type. Gain benefits: hard to get lost, move stealthily at normal pace, find double resources, and more.'};
+    if(s.includes('Primeval Awareness')) return {name:s, desc:'Expend a spell slot to sense the presence of certain creature types within 1 mile (or 6 miles in your favored terrain) for 1 minute per slot level.'};
+    if(s.includes('Destroy Undead')) return {name:s, desc:'When you use Turn Undead, undead of CR ½ or lower are automatically destroyed (threshold improves at higher levels).'};
+    if(s.includes('Aura of Protection')) return {name:s, desc:'You and friendly creatures within 10 ft add your CHA mod (min +1) to all saving throws while you\'re conscious (30 ft at level 18).'};
+    if(s.includes('Aura of Courage')) return {name:s, desc:'You and friendly creatures within 10 ft can\'t be frightened while you\'re conscious (30 ft at level 18).'};
+    return {name:s, desc:''};
+  };
+
+  const features = [...rawFeatures.map(resolveFeatureBL).filter(Boolean),
+                    ...subFeaturesBL.map(f=>({name:f.n, desc:f.d}))];
+
   const needsSubclass = ld.subclass && !char.subclass;
   const subclasses = SUBCLASSES[cls.name] || [];
   const spellsNeeded = ld.spells || 0;
@@ -4798,15 +5330,49 @@ function buildLevelUpHTML(char, cls, newLevel, ld, avgHP, conMod){
     </div>
     <div style="padding:20px 24px;max-height:75vh;overflow-y:auto">`;
 
-  // ── WHAT YOU GAIN ──
+  // ── WHAT YOU GAIN (interactive expandable feature cards) ──
   if(features.length){
     html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
       <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">✦ NEW FEATURES</div>
-      ${features.map(f=>`<div style="display:flex;gap:8px;margin-bottom:6px;align-items:flex-start">
-        <span style="color:var(--gold);font-size:14px;flex-shrink:0">◆</span>
-        <span style="font-size:13px">${f}</span>
-      </div>`).join('')}
+      ${features.map((f,fi)=>{
+        return `<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden">
+          <div onclick="${f.desc?`var b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';this.querySelector('.fchev').textContent=b.style.display==='none'?'▸':'▾'`:'void(0)'}"
+               style="display:flex;align-items:center;gap:8px;padding:10px 12px;${f.desc?'cursor:pointer;':''}background:var(--surface)">
+            <span style="color:var(--gold);font-size:14px;flex-shrink:0">◆</span>
+            <span style="font-family:'Cinzel',serif;font-size:12px;flex:1">${f.name}</span>
+            ${f.desc?`<span class="fchev" style="color:var(--muted);font-size:12px">▸</span>`:''}
+          </div>
+          ${f.desc?`<div style="display:none;padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.6;background:var(--surface2);border-top:1px solid var(--border)">${f.desc}</div>`:''}
+        </div>`;
+      }).join('')}
     </div>`;
+  }
+
+  // ── CLASS-SPECIFIC FEATURE CHOICES ──
+  const classChoicesAtLevel = (CLASS_LEVEL_CHOICES[cls.name]||{})[newLevel]||[];
+  const activeChoices = classChoicesAtLevel.filter(ch => !ch.condition || ch.condition(char));
+  if(activeChoices.length){
+    activeChoices.forEach((ch, chi) => {
+      const opts = typeof ch.options === 'function' ? ch.options(char) : (ch.options||[]);
+      if(!opts.length) return;
+      const isMulti = ch.count > 1;
+      html += `<div style="background:var(--surface2);border:1px solid var(--purple);border-radius:12px;padding:14px;margin-bottom:16px">
+        <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-bottom:6px">${ch.icon} ${ch.label.toUpperCase()}</div>
+        ${ch.note?`<div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-style:italic;line-height:1.5">${ch.note}</div>`:''}
+        ${isMulti ? `<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Choose ${ch.count}:</div>
+          ${Array.from({length:ch.count}).map((_,i)=>`
+            <select onchange="lvlPickChoice(${chi},${i},this.value)"
+              style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px;margin-bottom:6px;box-sizing:border-box">
+              <option value="">— Pick ${ch.label} ${i+1} —</option>
+              ${opts.map(o=>`<option value="${o}">${o}</option>`).join('')}
+            </select>`).join('')}`
+        : `<select onchange="lvlPickChoice(${chi},0,this.value)"
+            style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;box-sizing:border-box">
+            <option value="">— Select —</option>
+            ${opts.map(o=>`<option value="${o}">${o}</option>`).join('')}
+          </select>`}
+      </div>`;
+    });
   }
 
   // ── HP ──
@@ -4850,30 +5416,51 @@ function buildLevelUpHTML(char, cls, newLevel, ld, avgHP, conMod){
 
   // ── NEW SPELLS ──
   if(spellsNeeded > 0){
-    const availableSpells = Object.keys(SPELL_DB).sort();
-    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
-      <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:4px">📚 LEARN NEW SPELLS (${spellsNeeded})</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Choose ${spellsNeeded} spell${spellsNeeded>1?'s':''} to add to your repertoire</div>
-      <div id="lvlSpellPicks" style="display:flex;flex-direction:column;gap:6px">
-        ${Array.from({length:spellsNeeded}).map((_,i)=>`
-          <select onchange="lvlPickSpell(${i},this.value)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px">
-            <option value="">Spell ${i+1}…</option>
-            ${availableSpells.map(s=>`<option value="${s}">${s}</option>`).join('')}
-          </select>`).join('')}
-      </div>
-    </div>`;
+    const spellListBLU = CLASS_SPELL_LISTS[cls.name]||{};
+    const isKnownCasterBLU = ['Bard','Sorcerer','Warlock','Ranger'].includes(cls.name);
+    const isPrepareBLU = ['Cleric','Druid','Paladin'].includes(cls.name);
+    const casterTypeBLU = CASTER_TYPE[cls.name]||'full';
+    const maxLvlBLU = (MAX_SPELL_LEVEL_BY_LEVEL[casterTypeBLU]||{})[newLevel]||1;
+    // Build filtered spell list for this class at this level
+    let availableSpells = [];
+    Object.entries(spellListBLU).forEach(([lvl,names])=>{
+      if(lvl==='cantrip') return;
+      if(parseInt(lvl)<=maxLvlBLU) names.forEach(n=>availableSpells.push({n,lvl}));
+    });
+    availableSpells.sort((a,b)=>parseInt(a.lvl)-parseInt(b.lvl)||a.n.localeCompare(b.n));
+
+    if(isPrepareBLU){
+      html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+        <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">📚 PREPARE SPELLS</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6">As a <strong>${cls.name}</strong> you prepare spells from your full class list each long rest. After levelling up, use the <strong>Spells</strong> tab → Browse Spell List to mark your prepared spells.</div>
+      </div>`;
+    } else {
+      html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
+        <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:4px">📚 LEARN NEW SPELLS (${spellsNeeded})</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Choose ${spellsNeeded} ${cls.name} spell${spellsNeeded>1?'s':''} up to level ${maxLvlBLU}</div>
+        <div id="lvlSpellPicks" style="display:flex;flex-direction:column;gap:6px">
+          ${Array.from({length:spellsNeeded}).map((_,i)=>`
+            <select onchange="lvlPickSpell(${i},this.value)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px">
+              <option value="">Spell ${i+1}…</option>
+              ${availableSpells.length
+                ? availableSpells.map(s=>`<option value="${s.n}">Lv${s.lvl} — ${s.n}</option>`).join('')
+                : Object.keys(SPELL_DB).sort().map(s=>`<option value="${s}">${s}</option>`).join('')}
+            </select>`).join('')}
+        </div>
+      </div>`;
+    }
   }
 
   // ── NEW CANTRIPS ──
   if(cantripsNeeded > 0){
-    const availableSpells = Object.keys(SPELL_DB).sort();
+    const cantripListBLU = (CLASS_SPELL_LISTS[cls.name]||{}).cantrip || Object.keys(SPELL_DB).sort();
     html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">
       <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:4px">✨ LEARN CANTRIPS (${cantripsNeeded})</div>
       <div id="lvlCantripPicks" style="display:flex;flex-direction:column;gap:6px">
         ${Array.from({length:cantripsNeeded}).map((_,i)=>`
           <select onchange="lvlPickCantrip(${i},this.value)" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:12px">
             <option value="">Cantrip ${i+1}…</option>
-            ${availableSpells.map(s=>`<option value="${s}">${s}</option>`).join('')}
+            ${cantripListBLU.map(s=>`<option value="${s}">${s}</option>`).join('')}
           </select>`).join('')}
       </div>
     </div>`;
@@ -4928,10 +5515,21 @@ function buildLevelUpHTML(char, cls, newLevel, ld, avgHP, conMod){
         <div style="font-size:11px;color:var(--muted)">Points left: <strong id="lvlAsiLeft" style="color:var(--gold)">2</strong></div>
       </div>
       <div id="lvlFeatPick" style="display:none">
-        <select id="lvlFeatSelect" onchange="window._lvlUp.featChoice=this.value" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px">
-          <option value="">Select a feat…</option>
-          ${FEATS_5E.map(f=>`<option value="${f}">${f}</option>`).join('')}
-        </select>
+        <input id="lvlFeatSearch" oninput="filterFeatCards('lvlFeatCardList','lvlFeatSearch')" placeholder="Search feats…"
+          style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;margin-bottom:8px;box-sizing:border-box">
+        <div id="lvlFeatCardList" style="display:flex;flex-direction:column;gap:4px;max-height:240px;overflow-y:auto">
+          ${FEATS_DB.map(f=>`<div class="feat-card" data-feat="${f.name}" data-req="${f.req||''}"
+            onclick="selectFeatCard(this,'lvlFeatSelect')"
+            style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;transition:border-color 0.12s">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
+              <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--text)">\${f.name}</span>
+              \${f.req?`<span style="font-size:9px;color:var(--muted);flex-shrink:0">\${f.req}</span>`:''}
+            </div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">\${f.desc}</div>
+          </div>`).join('')}
+        </div>
+        <input type="hidden" id="lvlFeatSelect" value="">
+        <div id="lvlFeatChosenLabel" style="font-size:11px;color:var(--gold);margin-top:6px;min-height:16px;font-family:'Cinzel',serif"></div>
       </div>
     </div>`;
   }
@@ -5002,6 +5600,13 @@ function lvlAsiAdjust(ab, delta){
   if(leftEl) leftEl.textContent = 2 - Object.values(d).reduce((a,b)=>a+b,0);
 }
 
+function lvlPickChoice(choiceIdx, slotIdx, value){
+  if(!window._lvlUp) return;
+  if(!window._lvlUp.featureChoices) window._lvlUp.featureChoices = {};
+  if(!window._lvlUp.featureChoices[choiceIdx]) window._lvlUp.featureChoices[choiceIdx] = [];
+  window._lvlUp.featureChoices[choiceIdx][slotIdx] = value;
+}
+
 function confirmLevelUp(){
   const s = window._lvlUp;
   if(!s) return;
@@ -5052,11 +5657,18 @@ function confirmLevelUp(){
 
   // New spells
   if(!chars[ci].spells) chars[ci].spells = [];
+  const isKnownCasterCLU = ['Bard','Sorcerer','Warlock','Ranger'].includes(cls.name);
+  const spellListCLU = CLASS_SPELL_LISTS[cls.name]||{};
+  const allByNameCLU = {};
+  Object.entries(spellListCLU).forEach(([lvl,names])=>names.forEach(n=>{ allByNameCLU[n]=lvl; }));
+
   const newSpells = [...(s.spellChoices||[]),...(s.cantripChoices||[])].filter(Boolean);
   newSpells.forEach(name=>{
     if(!chars[ci].spells.find(sp=>sp.name===name)){
       const db = SPELL_DB[name]||{};
-      chars[ci].spells.push({name, prepared:true, school:db.school||'', castTime:db.castTime||'', range:db.range||'', duration:db.duration||'', components:db.components||'', desc:db.desc||''});
+      const lvl = allByNameCLU[name]||'cantrip';
+      const autoPrep = isKnownCasterCLU || lvl === 'cantrip';
+      chars[ci].spells.push({name, level:lvl, prepared:autoPrep, school:db.school||'', castTime:db.castTime||'', range:db.range||'', duration:db.duration||'', components:db.components||'', desc:db.desc||''});
     }
   });
 
@@ -5070,6 +5682,31 @@ function confirmLevelUp(){
   if(s.invocationChoices.length){
     if(!chars[ci].invocations) chars[ci].invocations = [];
     s.invocationChoices.filter(Boolean).forEach(inv=>{ if(!chars[ci].invocations.includes(inv)) chars[ci].invocations.push(inv); });
+  }
+
+  // Class-specific feature choices (Favored Enemy, Battle Master maneuvers, Expertise, Totem, etc.)
+  const classChoicesAtLevel = (CLASS_LEVEL_CHOICES[cls.name]||{})[s.newLevel]||[];
+  const activeChoices = classChoicesAtLevel.filter(ch => !ch.condition || ch.condition(char));
+  if(activeChoices.length && s.featureChoices){
+    if(!chars[ci].featureChoiceLog) chars[ci].featureChoiceLog = [];
+    activeChoices.forEach((ch, chi)=>{
+      const picks = (s.featureChoices[chi]||[]).filter(Boolean);
+      if(!picks.length) return;
+      // Save expertise picks specially to track for future filtering
+      if(ch.type === 'expertise'){
+        if(!chars[ci].expertiseSkills) chars[ci].expertiseSkills = [];
+        picks.forEach(p=>{ if(!chars[ci].expertiseSkills.includes(p)) chars[ci].expertiseSkills.push(p); });
+        // Also save to equipment notes for visibility
+        chars[ci].equipment = chars[ci].equipment||[];
+        chars[ci].equipment.push(`Expertise: ${picks.join(', ')}`);
+      } else {
+        // Save all other picks to equipment/notes log for visibility on character sheet
+        const label = picks.length===1 ? picks[0] : picks.join(' / ');
+        chars[ci].equipment = chars[ci].equipment||[];
+        chars[ci].equipment.push(`${ch.label}: ${label}`);
+      }
+      chars[ci].featureChoiceLog.push({ level: s.newLevel, choice: ch.label, picks });
+    });
   }
 
   // ASI / Feat
@@ -6812,6 +7449,33 @@ function renderDiceCharPanel(){
         return html2;
       })()}
     </div>`;
+}
+
+function selectFeatCard(el, hiddenId){
+  // Deselect siblings in same list
+  el.closest('div[id$="CardList"], div[id$="cardList"], #lvlFeatCardList, #featCardList')
+    ?.querySelectorAll('.feat-card').forEach(c=>{
+      c.style.borderColor='var(--border)';
+      c.style.background = c.style.background.includes('gold') ? 'var(--surface2)' : c.style.background;
+    });
+  el.style.borderColor='var(--gold)';
+  const feat = el.dataset.feat;
+  const hidden = document.getElementById(hiddenId);
+  if(hidden) hidden.value = feat;
+  // Update _lvlUp state if party sheet modal is open
+  if(window._lvlUp) window._lvlUp.featChoice = feat;
+  // Update chosen label
+  const labelId = hiddenId === 'lvlFeatSelect' ? 'lvlFeatChosenLabel' : 'featChosenLabel';
+  const label = document.getElementById(labelId);
+  if(label) label.textContent = '✦ ' + feat + ' selected';
+}
+
+function filterFeatCards(listId, searchId){
+  const q = document.getElementById(searchId)?.value.toLowerCase()||'';
+  document.getElementById(listId)?.querySelectorAll('.feat-card').forEach(c=>{
+    const match = c.dataset.feat.toLowerCase().includes(q) || c.textContent.toLowerCase().includes(q);
+    c.style.display = match ? '' : 'none';
+  });
 }
 
 function toggleDicePrepSection(bodyId, arrowId){
