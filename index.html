@@ -1765,7 +1765,7 @@ function _renderRosterInner(){
     const hasCampFilter = !isPlayerMode() && activeCamp && activeCamp.charIds && activeCamp.charIds.length;
     el.innerHTML=`<div class="empty-state fadein"><div class="es-icon">📜</div><p>${
       isPlayerMode()?'No character found.<br>Ask your DM for your access code.':
-      hasCampFilter?`No characters assigned to <strong>${activeCamp.name}</strong>.<br>Assign characters in the Campaign tab.`:
+      hasCampFilter?('No characters assigned to <strong>'+activeCamp.name+'</strong>.<br>Assign characters in the Campaign tab.'):
       'Your tome is empty.<br>Forge your first hero below.'
     }</p></div>`;
     if(!isPlayerMode() && !hasCampFilter)renderInstallBanner();
@@ -1777,15 +1777,15 @@ function _renderRosterInner(){
     return`<div class="char-card theme-${classTheme(c.classIdx)} fadein" onclick="openSheet(${c.id})">
       <div class="char-avatar">${cls.icon}</div>
       <div style="flex:1;min-width:0">
-        <div class="char-name">${c.name||'Unknown'}${isDefault?` <span style="font-size:10px;color:var(--gold);font-family:'Cinzel',serif;letter-spacing:1px">★</span>`:''}</div>
-        <div class="char-sub">${c.race||''} · ${c.background||''}${c.subclass?` · <span style="color:var(--purple);font-size:11px">${c.subclass.replace(/ \(.*?\)/,'')}</span>`:''}</div>
+        <div class="char-name">${c.name||'Unknown'}${isDefault?(' <span style="font-size:10px;color:var(--gold);font-family:\'Cinzel\',serif;letter-spacing:1px">★</span>'):''}</div>
+        <div class="char-sub">${c.race||''} · ${c.background||''}${c.subclass?(' · <span style="color:var(--purple);font-size:11px">'+c.subclass.replace(/ \(.*?\)/,'')+'</span>'):''}</div>
         <div class="char-tags"><span class="ctag">${cls.name}</span><span class="ctag">Lvl ${c.level||1}</span><span class="ctag">${c.currentHP||0}/${c.maxHP||0} HP</span></div>
       </div>
       <div class="char-card-actions">
-        ${!isPlayerMode()?`<button class="icon-btn" title="${isDefault?'Default dice char':'Set as default'}" onclick="setDefaultChar(${c.id});event.stopPropagation()" style="color:${isDefault?'var(--gold)':'var(--muted)'};font-size:16px;opacity:${isDefault?1:0.5}">★</button>`:''}
-        ${!isPlayerMode()?`<button class="icon-btn" title="Grant Level Up" onclick="grantLevelUp(${c.id});event.stopPropagation()" style="color:var(--gold);font-size:14px">⬆</button>`:''}
-        ${!isPlayerMode()?`<button class="icon-btn" onclick="openShareFor(${c.id});event.stopPropagation()" title="Share">🔗</button>`:''}
-        ${!isPlayerMode()?`<button class="icon-btn" style="color:var(--red)" onclick="deleteChar(${c.id});event.stopPropagation()">✕</button>`:''}
+        ${!isPlayerMode()?('<button class="icon-btn" title="'+(isDefault?'Default dice char':'Set as default')+'" onclick="setDefaultChar('+c.id+');event.stopPropagation()" style="color:'+(isDefault?'var(--gold)':'var(--muted)')+';font-size:16px;opacity:'+(isDefault?1:0.5)+'">★</button>'):''}
+        ${!isPlayerMode()?('<button class="icon-btn" title="Grant Level Up" onclick="grantLevelUp('+c.id+');event.stopPropagation()" style="color:var(--gold);font-size:14px">⬆</button>'):''}
+        ${!isPlayerMode()?('<button class="icon-btn" onclick="openShareFor('+c.id+');event.stopPropagation()" title="Share">🔗</button>'):''}
+        ${!isPlayerMode()?('<button class="icon-btn" style="color:var(--red)" onclick="deleteChar('+c.id+');event.stopPropagation()">✕</button>'):''}
       </div>
     </div>`;
   }).join('');
@@ -1857,7 +1857,7 @@ function buildStep2(){
 function updateStepDots(step){document.getElementById('stepDots').innerHTML=[1,2].map(i=>`<div class="step-dot ${i<=step?'done':''}"></div>`).join('');}
 function renderClassGrid(){
   document.getElementById('classGrid').innerHTML=CLASSES.map((c,i)=>`
-    <div class="class-tile ${B.cls===i?'sel':''} theme-${c.theme}" onclick="selectClass(${i})" style="${B.cls===i?`--cc:${c.color};--cc-dim:${c.color}22`:''}">
+    <div class="class-tile ${B.cls===i?'sel':''} theme-${c.theme}" onclick="selectClass(${i})" style="${B.cls===i?('--cc:'+c.color+';--cc-dim:'+c.color+'22'):''}">
       <div class="class-tile-icon">${c.icon}</div>
       <div class="class-tile-name">${c.name}</div>
     </div>`).join('');
@@ -1957,7 +1957,7 @@ function renderSheetHero(char,cls,elId){
     <div class="sheet-avatar-lg" style="--cc:${cls.color};--cc-dim:${cls.color}22">${cls.icon}</div>
     <div class="sheet-charname">${char.name}</div>
     <div class="sheet-meta">Level ${char.level} ${char.race} ${cls.name}</div>
-    ${char.subclass?`<div style="font-family:'Cinzel',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-top:2px">${char.subclass.replace(/ \(.*?\)/,'')}</div>`:''}
+    ${char.subclass?('<div style="font-family:\'Cinzel\',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-top:2px">'+char.subclass.replace(/ \(.*?\)/,'')+'</div>'):''}
     <div class="sheet-badges">
       <span class="sheet-badge">${char.background}</span>
       ${char.age?`<span class="sheet-badge">Age ${char.age}`+'</span>':''}
@@ -1991,7 +1991,7 @@ function renderCombatTab(char,cls,elId,editable){
   const displayAC = (char.ac || (10+dex)) + lootAcBonus;
   let html=`
     <div class="combat-stats" style="--cc:${cls.color};--cc-dim:${cls.color}22">
-      <div class="cs-box"><div class="cs-val">${displayAC}</div><div class="cs-label">AC${lootAcBonus?` <span style='font-size:9px;color:var(--gold)'>+${lootAcBonus}✦</span>`:''}</div></div>
+      <div class="cs-box"><div class="cs-val">${displayAC}</div><div class="cs-label">AC${lootAcBonus?(' <span style=\'font-size:9px;color:var(--gold)\'>+'+lootAcBonus+'✦</span>'):''}</div></div>
       <div class="cs-box"><div class="cs-val">${getMod(char.abilities.DEX)}</div><div class="cs-label">Initiative</div></div>
       <div class="cs-box"><div class="cs-val">+${pb}</div><div class="cs-label">Prof Bonus</div></div>
       <div class="cs-box"><div class="cs-val">30</div><div class="cs-label">Speed</div></div>
@@ -2000,7 +2000,7 @@ function renderCombatTab(char,cls,elId,editable){
       <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">HIT POINTS</div>
       <div class="hp-track"><div class="hp-fill" style="width:${pct}%;background:${hpC}"></div></div>
       <div class="hp-nums">
-        <span>${editable?`<input class="hp-edit" type="number" id="hpEd_${char.id}" value="${char.currentHP}" min="0" max="${char.maxHP}" onchange="updateHP(${char.id},+this.value,${char.maxHP})">`:'<span style="color:var(--cc,var(--purple));font-family:Cinzel,serif;font-size:14px;font-weight:700">'+char.currentHP+'</span>'} <span style="color:var(--muted)">/ ${char.maxHP}</span></span>
+        <span>${editable?('<input class="hp-edit" type="number" id="hpEd_'+char.id+'" value="'+char.currentHP+'" min="0" max="'+char.maxHP+'" onchange="updateHP('+char.id+',+this.value,'+char.maxHP+')">'):'<span style="color:var(--cc,var(--purple));font-family:Cinzel,serif;font-size:14px;font-weight:700">'+char.currentHP+'</span>'} <span style="color:var(--muted)">/ ${char.maxHP}</span></span>
         <span style="color:${hpC};font-family:'Cinzel',serif;font-size:12px">${pct}%</span>
       </div>
     </div>
@@ -2030,7 +2030,7 @@ function renderCombatTab(char,cls,elId,editable){
   const allAttacks = [...attacks, ...lootWeapons];
   if(!allAttacks.length){html+=`<div style="color:var(--muted);font-size:13px;font-style:italic;margin-bottom:8px">No attacks added yet.</div>`;}
   else{
-    attacks.forEach((a,i)=>{html+=`<div class="attack-card"><div class="attack-icon">${a.icon||'⚔'}</div><div style="flex:1"><div class="attack-name">${a.name}</div><div class="attack-meta">${a.type||''}</div></div><div><div class="attack-bonus">${a.atk||'—'}</div><div class="attack-dmg">${a.dmg||'—'}</div></div>${editable?`<button class="icon-btn" style="color:var(--red)" onclick="removeAttack(${char.id},${i})">✕</button>`:''}</div>`;});
+    attacks.forEach((a,i)=>{html+=`<div class="attack-card"><div class="attack-icon">${a.icon||'⚔'}</div><div style="flex:1"><div class="attack-name">${a.name}</div><div class="attack-meta">${a.type||''}</div></div><div><div class="attack-bonus">${a.atk||'—'}</div><div class="attack-dmg">${a.dmg||'—'}</div></div>${editable?('<button class="icon-btn" style="color:var(--red)" onclick="removeAttack('+char.id+','+i+')">✕</button>'):''}</div>`;});
     if(lootWeapons.length){
       html+=`<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin:8px 0 5px">FROM INVENTORY</div>`;
       lootWeapons.forEach(a=>{
@@ -2237,28 +2237,28 @@ function renderSpellsTab(char,cls,elId,editable){
         <div class="spell-header">
           <span class="spell-level-badge" style="border-color:${cls.color};color:${cls.color}">${isCantrip?'Cantrip':'Lv '+sp.level}</span>
           <span class="spell-name">${sp.name}</span>
-          ${school?`<span class="spell-school">${school}</span>`:''}
-          ${sp.prepared && !isCantrip ?`<span style="font-size:9px;color:var(--gold);font-family:'Cinzel',serif;letter-spacing:1px;flex-shrink:0">★ PREP</span>`:''}
+          ${school?('<span class="spell-school">'+school+'</span>'):''}
+          ${sp.prepared && !isCantrip ?('<span style="font-size:9px;color:var(--gold);font-family:\'Cinzel\',serif;letter-spacing:1px;flex-shrink:0">★ PREP</span>'):''}
           <span class="spell-chevron">▼</span>
         </div>
         <div class="spell-body">
           <div class="spell-stats">
-            ${castTime?`<div class="spell-stat"><strong>CAST</strong>${castTime}</div>`:''}
-            ${range?`<div class="spell-stat"><strong>RANGE</strong>${range}</div>`:''}
-            ${duration?`<div class="spell-stat"><strong>DUR</strong>${duration}</div>`:''}
-            ${components?`<div class="spell-stat"><strong>COMP</strong>${components}</div>`:''}
+            ${castTime?('<div class="spell-stat"><strong>CAST</strong>'+castTime+'</div>'):''}
+            ${range?('<div class="spell-stat"><strong>RANGE</strong>'+range+'</div>'):''}
+            ${duration?('<div class="spell-stat"><strong>DUR</strong>'+duration+'</div>'):''}
+            ${components?('<div class="spell-stat"><strong>COMP</strong>'+components+'</div>'):''}
           </div>
-          ${desc?`<div class="spell-desc">${desc}</div>`:''}
+          ${desc?('<div class="spell-desc">'+desc+'</div>'):''}
           ${editable && !isCantrip && !isKnownCaster ?`<div style="display:flex;gap:6px;margin-top:8px">
             ${isPreparedList
               ? `<button class="btn btn-outline" style="margin:0;padding:5px 10px;font-size:11px;flex:1;border-color:var(--muted);color:var(--muted)" onclick="toggleSpellPrepared(${char.id},${i},'${elId}');event.stopPropagation()">☆ Un-prepare</button>`
               : `<button class="btn btn-outline" style="margin:0;padding:5px 10px;font-size:11px;flex:1;border-color:var(--gold);color:var(--gold)" onclick="toggleSpellPrepared(${char.id},${i},'${elId}');event.stopPropagation()">★ Prepare</button>`
             }
-            ${!isPreparedList ? `<button class="icon-btn" style="color:var(--red);font-size:12px" title="Remove from spellbook" onclick="if(confirm('Remove ${sp.name.replace(/'/g,"\\'")} from spellbook?'))removeSpell(${char.id},${i},'${elId}');event.stopPropagation()">✕</button>` : ''}
+            ${!isPreparedList ? ('<button class="icon-btn" style="color:var(--red);font-size:12px" title="Remove from spellbook" onclick="if(confirm(\'Remove '+sp.name.replace(/'/g,"\\'")+' from spellbook?\'))removeSpell('+char.id+','+i+',\''+elId+'\');event.stopPropagation()">✕</button>') : ''}
           </div>`:
-          editable && !isCantrip ?`<div style="margin-top:8px">
-            <button class="icon-btn" style="color:var(--red);font-size:12px" title="Remove spell" onclick="if(confirm('Remove ${sp.name.replace(/'/g,"\\'")}?'))removeSpell(${char.id},${i},'${elId}');event.stopPropagation()">✕ Remove</button>
-          </div>`:''}
+          editable && !isCantrip ?('<div style="margin-top:8px">
+            <button class="icon-btn" style="color:var(--red);font-size:12px" title="Remove spell" onclick="if(confirm(\'Remove '+sp.name.replace(/'/g,"\\'")+'?\'))removeSpell('+char.id+','+i+',\''+elId+'\');event.stopPropagation()">✕ Remove</button>
+          </div>'):''}
         </div>
       </div>`;
     });
@@ -2384,7 +2384,7 @@ function renderGearTab(char,cls,elId,editable){
   let html=`<div class="divider"><span>Equipment Notes</span></div>
   <div class="equip-list" id="equipList_${char.id}">`;
   if(!equip.length)html+=`<div style="color:var(--muted);font-size:13px;font-style:italic;margin-bottom:8px">No equipment notes yet.</div>`;
-  equip.forEach((e,i)=>{html+=`<div class="equip-item">${e}${editable?`<span class="equip-item-del" onclick="removeEquip(${char.id},${i})">✕</span>`:''}</div>`;});
+  equip.forEach((e,i)=>{html+=`<div class="equip-item">${e}${editable?('<span class="equip-item-del" onclick="removeEquip('+char.id+','+i+')">✕</span>'):''}</div>`;});
   html+=`</div>`;
   if(editable){
     html+=`<div class="equip-add-row">
@@ -2398,10 +2398,10 @@ function renderGearTab(char,cls,elId,editable){
       const pct=Math.max(0,Math.round((char.currentHP/char.maxHP)*100));
       html+=`<div class="item-card"><div class="item-top">
         <div class="item-icon">${TYPE_ICONS[item.type]||'📦'}</div>
-        <div style="flex:1;min-width:0"><div class="item-name">${item.name}${item.qty>1?` ×${item.qty}`:''}</div>
+        <div style="flex:1;min-width:0"><div class="item-name">${item.name}${item.qty>1?(' ×'+item.qty):''}</div>
         <div class="item-meta">${item.type}${item.value>0?' · '+item.value+' gp':''}</div>
         <div class="item-badges"><span class="ibadge r-${item.rarity}">${item.rarity}</span></div></div>
-      </div>${item.desc?`<div class="item-desc">${item.desc}</div>`:''}</div>`;
+      </div>${item.desc?('<div class="item-desc">'+item.desc+'</div>'):''}</div>`;
     });
   } else {
     html+=`<div style="margin-top:12px"><div class="divider"><span>Loot Tracker</span></div><div style="color:var(--muted);font-size:13px;font-style:italic;text-align:center;padding:10px 0">No items tracked yet. Add them in the Loot tab.</div></div>`;
@@ -2434,11 +2434,11 @@ function renderLoreTab(char,cls,elId,editable){
   if(char.age||char.height||char.eyes||char.hair){
     html+=`<div class="divider"><span>Appearance</span></div>
     <div class="appearance-grid">
-      ${char.age?`<div class="appearance-item"><label>AGE</label><span>${char.age}</span></div>`:''}
-      ${char.height?`<div class="appearance-item"><label>HEIGHT</label><span>${char.height}</span></div>`:''}
-      ${char.weight?`<div class="appearance-item"><label>WEIGHT</label><span>${char.weight}</span></div>`:''}
-      ${char.eyes?`<div class="appearance-item"><label>EYES</label><span>${char.eyes}</span></div>`:''}
-      ${char.hair?`<div class="appearance-item"><label>HAIR</label><span>${char.hair}</span></div>`:''}
+      ${char.age?('<div class="appearance-item"><label>AGE</label><span>'+char.age+'</span></div>'):''}
+      ${char.height?('<div class="appearance-item"><label>HEIGHT</label><span>'+char.height+'</span></div>'):''}
+      ${char.weight?('<div class="appearance-item"><label>WEIGHT</label><span>'+char.weight+'</span></div>'):''}
+      ${char.eyes?('<div class="appearance-item"><label>EYES</label><span>'+char.eyes+'</span></div>'):''}
+      ${char.hair?('<div class="appearance-item"><label>HAIR</label><span>'+char.hair+'</span></div>'):''}
     </div>`;
   }
   html+=`<div class="divider"><span>Personality</span></div>`;
@@ -2549,7 +2549,7 @@ function renderPartyOverview(){
     const msg = !camp
       ? 'No active campaign.<br>Select a campaign first.'
       : camp.charIds && camp.charIds.length === 0
-        ? `No characters assigned to <strong>${camp.name}</strong>.<br>Assign characters in the Campaign tab.`
+        ? ('No characters assigned to <strong>'+camp.name+'</strong>.<br>Assign characters in the Campaign tab.')
         : 'No party members yet.<br>Assign characters in the Campaign tab.';
     el.innerHTML=`<div class="empty-state"><div class="es-icon">🛡</div><p>${msg}</p></div>`;
     return;
@@ -2564,7 +2564,7 @@ function renderPartyOverview(){
     ${partyName
       ? `<div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold);flex:1">${partyName}</div>`
       : `<div style="font-family:'Cinzel',serif;font-size:13px;color:var(--muted);font-style:italic;flex:1">Unnamed Party</div>`}
-    ${!isPlayerMode()?`<button onclick="editPartyName()" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;padding:3px 8px;cursor:pointer">✏ Name</button>`:''}
+    ${!isPlayerMode()?('<button onclick="editPartyName()" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;padding:3px 8px;cursor:pointer">✏ Name</button>'):''}
   </div>
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px">
     <div class="inv-sum-card"><div class="isc-label">MEMBERS</div><div class="isc-val">${party.length}</div></div>
@@ -2645,7 +2645,7 @@ function renderInitiative(){
     const isAct=i===active;const pct=Math.max(0,Math.round((c.hp/c.maxHP)*100));const hpC=pct>60?'var(--green)':pct>25?'var(--gold)':'var(--red)';
     return`<div class="init-row ${isAct?'active-turn':''}" style="--cc:${c.color};--cc-dim:${c.color}22">
       <div class="init-num">${c.initiative}</div><div class="init-av">${c.icon}</div>
-      <div class="init-info"><div class="init-name">${c.name}${isAct?` <span class="turn-badge">ACTIVE</span>`:''}</div>
+      <div class="init-info"><div class="init-name">${c.name}${isAct?(' <span class="turn-badge">ACTIVE</span>'):''}</div>
       <div class="init-hpbar"><div class="init-hpfill" style="width:${pct}%;background:${hpC}"></div></div>
       <div style="font-size:10px;color:${hpC};margin-top:2px">${c.hp}/${c.maxHP} HP</div></div>
       <div class="init-controls">
@@ -2679,12 +2679,12 @@ function renderShareTab(){
   if(isDMMode()){
     // DM mode: show all party members with individual share cards
     const gid = getGroupId();
-    const groupSection = gid ? `
+    const groupSection = gid ? ('
       <div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:12px;padding:14px;margin-bottom:16px;text-align:center">
-        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:6px">GROUP CODE — SHARE WITH ALL PLAYERS</div>
-        <div style="font-family:'Cinzel',serif;font-size:32px;color:var(--gold);letter-spacing:6px;margin-bottom:8px">${gid}</div>
-        <button class="btn btn-gold" style="margin:0;padding:6px 18px;font-size:11px" onclick="copyText('${gid}');toast('Group code copied!')">Copy Group Code</button>
-      </div>` : '';
+        <div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:6px">GROUP CODE — SHARE WITH ALL PLAYERS</div>
+        <div style="font-family:\'Cinzel\',serif;font-size:32px;color:var(--gold);letter-spacing:6px;margin-bottom:8px">'+gid+'</div>
+        <button class="btn btn-gold" style="margin:0;padding:6px 18px;font-size:11px" onclick="copyText(\''+gid+'\');toast(\'Group code copied!\')">Copy Group Code</button>
+      </div>') : '';
 
     const charCards = chars.map(c => {
       const cc = classColor(c.classIdx);
@@ -2737,7 +2737,7 @@ function shareSubTab(t,btn){
   if(t==='code')el.innerHTML=`<div class="code-box"><div class="code-hint">Short share code</div><div class="code-big">${char?.shareCode||'??????'}</div><div class="code-hint">Read aloud or message to friends</div></div><button class="btn btn-primary" onclick="copyText('${char?.shareCode||''}')">Copy Short Code</button>`;
   else if(t==='full')el.innerHTML=`<div class="code-box"><div class="code-hint">Full character export</div><div class="code-big" style="font-size:11px;letter-spacing:1px;word-break:break-all;color:var(--muted)">${char?encodeChar(char).slice(0,28)+'…':''}</div></div><button class="btn btn-primary" onclick="copyText('${char?encodeChar(char).replace(/'/g,"\\'"):''}')">Copy Full Export Code</button>`;
   else if(t==='import')el.innerHTML=`<div class="field" style="margin-top:8px"><label>Paste Character Code</label><input id="importCodeIn" placeholder="Short code or full export…"></div><button class="btn btn-primary" onclick="importChar()">Import Character</button><div class="divider"><span>Join a Party</span></div><div class="field"><label>Party Code</label><input id="partyJoinIn" placeholder="PARTY-XXXXXX"></div><button class="btn btn-outline" onclick="joinParty()">Join Party</button>`;
-  else if(t==='party'){const joined=S.get('toh_joined_party');el.innerHTML=`<div class="section-label">Your Party ID</div><div class="copy-row"><span class="copy-text">${partyId}</span><span class="copy-btn" onclick="copyText('${partyId}')">📋</span></div><div class="code-box"><div class="code-hint">Party invite code</div><div class="code-big" style="font-size:16px;letter-spacing:3px">${partyId}</div></div><button class="btn btn-primary" onclick="copyText('${partyId}')">Copy Party Code</button>${joined?`<div style="font-size:12px;color:var(--muted);font-style:italic;margin-top:10px;text-align:center">Also joined: ${joined}</div>`:''}`;}
+  else if(t==='party'){const joined=S.get('toh_joined_party');el.innerHTML=`<div class="section-label">Your Party ID</div><div class="copy-row"><span class="copy-text">${partyId}</span><span class="copy-btn" onclick="copyText('${partyId}')">📋</span></div><div class="code-box"><div class="code-hint">Party invite code</div><div class="code-big" style="font-size:16px;letter-spacing:3px">${partyId}</div></div><button class="btn btn-primary" onclick="copyText('${partyId}')">Copy Party Code</button>${joined?('<div style="font-size:12px;color:var(--muted);font-style:italic;margin-top:10px;text-align:center">Also joined: '+joined+'</div>'):''}`;}
   else if(t==='access'){
     const campChars = getFullParty();
     let html=`<div style="font-size:12px;color:var(--muted);font-style:italic;text-align:center;margin-bottom:14px;line-height:1.5">Give each player their character's access code.<br>They enter it when first opening the app.</div>`;
@@ -3161,12 +3161,12 @@ function renderProgressTab(char, cls){
           </div>`;
         }).join('')}
       </div>
-      ${(effects.exhaustion||0) > 0 ? `<div style="margin-top:8px;display:flex;gap:6px;align-items:center">
+      ${(effects.exhaustion||0) > 0 ? ('<div style="margin-top:8px;display:flex;gap:6px;align-items:center">
         <span style="font-size:12px;color:var(--muted)">Exhaustion:</span>
-        <button class="icon-btn" onclick="adjustExhaustion(${char.id},-1)" style="width:28px;height:28px;font-size:16px">−</button>
-        <span style="font-family:'Cinzel',serif;color:var(--red);font-size:14px">${effects.exhaustion}</span>
-        <button class="icon-btn" onclick="adjustExhaustion(${char.id},1)" style="width:28px;height:28px;font-size:16px">+</button>
-      </div>`:''}
+        <button class="icon-btn" onclick="adjustExhaustion('+char.id+',-1)" style="width:28px;height:28px;font-size:16px">−</button>
+        <span style="font-family:\'Cinzel\',serif;color:var(--red);font-size:14px">'+effects.exhaustion+'</span>
+        <button class="icon-btn" onclick="adjustExhaustion('+char.id+',1)" style="width:28px;height:28px;font-size:16px">+</button>
+      </div>'):''}
       <div style="margin-top:10px">
         <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">CUSTOM EFFECT</div>
         <div style="display:flex;gap:6px">
@@ -3202,7 +3202,7 @@ function renderProgressTab(char, cls){
     <div class="stat-pill-sm"><strong>LEVEL</strong>${char.level}</div>
     <div class="stat-pill-sm"><strong>PROF BONUS</strong>+${pb}</div>
     <div class="stat-pill-sm"><strong>XP</strong>${(char.xp||0).toLocaleString()}</div>
-    ${char.level<20?`<div class="stat-pill-sm"><strong>NEXT</strong>${xpForLevel(char.level+1).toLocaleString()}</div>`:''}
+    ${char.level<20?('<div class="stat-pill-sm"><strong>NEXT</strong>'+xpForLevel(char.level+1).toLocaleString()+'</div>'):''}
   </div>`;
 
   // XP progress bar
@@ -3228,7 +3228,7 @@ function renderProgressTab(char, cls){
     html += feats.map((f,i)=>`<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:10px 12px;margin-bottom:7px">
       <span style="font-size:18px">⚡</span>
       <span style="font-family:'Cinzel',serif;font-size:12px;color:var(--purple);flex:1">${f}</span>
-      ${isDM?`<span class="icon-btn" style="color:var(--red)" onclick="removeFeat(${char.id},${i})">✕</span>`:''}
+      ${isDM?('<span class="icon-btn" style="color:var(--red)" onclick="removeFeat('+char.id+','+i+')">✕</span>'):''}
     </div>`).join('');
   } else {
     html += `<div style="font-size:12px;color:var(--muted);font-style:italic;margin-bottom:10px">No feats yet.</div>`;
@@ -3290,7 +3290,7 @@ function renderProgressTab(char, cls){
     html += clsFeatureLog.map(entry=>`
       <div style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--border)">
         <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);min-width:28px;padding-top:1px">L${entry.level}</div>
-        <div style="flex:1">${entry.features.map(f=>`<span style="font-size:11px;color:var(--text);margin-right:6px">${f}</span>`).join('<span style="color:var(--border)"> · </span>')}</div>
+        <div style="flex:1">${entry.features.map(f=>'<span style="font-size:11px;color:var(--text);margin-right:6px">'+f+'</span>').join('<span style="color:var(--border)"> · </span>')}</div>
       </div>`).join('');
     html += '<div style="margin-bottom:12px"></div>';
   }
@@ -4629,13 +4629,13 @@ function renderLevelUpTab(char, cls){
     html += `<div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">NEW FEATURES</div>`;
     html += features.map((f,fi)=>`
       <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
-        <div onclick="${f.desc?`var b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';this.querySelector('.fchev').textContent=b.style.display==='none'?'▸':'▾'`:'void(0)'}"
+        <div onclick="${f.desc?'var b=this.nextElementSibling;b.style.display=b.style.display===\'none\'?\'block\':\'none\';this.querySelector(\'.fchev\').textContent=b.style.display===\'none\'?\'▸\':\'▾\'':'void(0)'}"
              style="display:flex;align-items:center;gap:8px;padding:12px;${f.desc?'cursor:pointer;':''}background:var(--surface)">
           <span style="color:${cc};font-size:14px;flex-shrink:0">◆</span>
           <span style="font-family:'Cinzel',serif;font-size:12px;flex:1;color:${cc}">${f.name}</span>
-          ${f.desc?`<span class="fchev" style="color:var(--muted);font-size:11px">▸</span>`:''}
+          ${f.desc?'<span class="fchev" style="color:var(--muted);font-size:11px">▸</span>':''}
         </div>
-        ${f.desc?`<div style="display:none;padding:10px 12px 12px 34px;font-size:11px;color:var(--muted);line-height:1.6;border-top:1px solid var(--border)">${f.desc}</div>`:''}
+        ${f.desc?'<div style="display:none;padding:10px 12px 12px 34px;font-size:11px;color:var(--muted);line-height:1.6;border-top:1px solid var(--border)">'+f.desc+'</div>':''}
       </div>`).join('');
   }
 
@@ -4649,7 +4649,7 @@ function renderLevelUpTab(char, cls){
       if(!opts.length) return;
       html += `<div style="background:var(--surface2);border:2px solid var(--purple);border-radius:10px;padding:12px;margin-bottom:12px">
         <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-bottom:6px">${ch.icon} ${ch.label.toUpperCase()}</div>
-        ${ch.note?`<div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-style:italic;line-height:1.5">${ch.note}</div>`:''}
+        ${ch.note?('<div style="font-size:11px;color:var(--muted);margin-bottom:8px;font-style:italic;line-height:1.5">'+ch.note+'</div>'):''}
         ${ch.count>1
           ? Array.from({length:ch.count}).map((_,i)=>`
               <select onchange="if(!window._lvlupFeatureChoices)window._lvlupFeatureChoices={};if(!window._lvlupFeatureChoices[${chi}])window._lvlupFeatureChoices[${chi}]=[];window._lvlupFeatureChoices[${chi}][${i}]=this.value"
@@ -4718,7 +4718,7 @@ function renderLevelUpTab(char, cls){
             style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;transition:border-color 0.12s">
             <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
               <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--text)">\${f.name}</span>
-              \${f.req?`<span style="font-size:9px;color:var(--muted);flex-shrink:0">\${f.req}</span>`:''}
+              \${f.req?'<span style="font-size:9px;color:var(--muted);flex-shrink:0">'+f.req+'</span>':''}
             </div>
             <div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">\${f.desc}</div>
           </div>`).join('')}
@@ -4752,16 +4752,12 @@ function renderLevelUpTab(char, cls){
 
     html += `<div style="background:var(--surface2);border:1px solid ${cc};border-radius:10px;padding:12px;margin-bottom:14px">
       <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">SPELLS GAINED</div>
-      ${newSpellSlots?`<div style="font-size:12px;color:var(--text);margin-bottom:4px">✦ +${newSpellSlots} spell slot${newSpellSlots!==1?'s':''} unlocked up to level ${maxSL}</div>`:''}
-      ${newCantrips?`<div style="font-size:12px;color:var(--text);margin-bottom:4px">✦ +${newCantrips} new cantrip${newCantrips!==1?'s':''}</div>`:''}
+      ${newSpellSlots?('<div style="font-size:12px;color:var(--text);margin-bottom:4px">✦ +'+newSpellSlots+' spell slot'+newSpellSlots!==1?'s':''+' unlocked up to level '+maxSL+'</div>'):''}
+      ${newCantrips?('<div style="font-size:12px;color:var(--text);margin-bottom:4px">✦ +'+newCantrips+' new cantrip'+newCantrips!==1?'s':''+'</div>'):''}
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px">${pickLabel}</div>
       <div style="display:flex;flex-direction:column;gap:6px">
-        ${newCantrips>0?`<button class="btn btn-outline" style="margin:0;border-color:${cc};color:${cc}" onclick="openSpellPicker(${char.id},${newCantrips},true)">
-          ✦ Pick ${newCantrips} Cantrip${newCantrips!==1?'s':''}
-        </button>`:''}
-        ${(pickCount>0)?`<button class="btn btn-primary" style="margin:0" onclick="openSpellPicker(${char.id},${isPrepareCaster?pickCount:pickCount},false)">
-          📖 ${isPrepareCaster?'Select Prepared Spells':'Choose '+pickCount+' New Spell'+(pickCount!==1?'s':'')}
-        </button>`:''}
+        ${newCantrips>0?('<button class="btn btn-outline" style="margin:0;border-color:'+cc+';color:'+cc+'" onclick="openSpellPicker('+char.id+','+newCantrips+',true)">✦ Pick '+newCantrips+' Cantrip'+(newCantrips!==1?'s':'')+'</button>'):''}
+        ${(pickCount>0)?('<button class="btn btn-primary" style="margin:0" onclick="openSpellPicker('+char.id+','+(isPrepareCaster?pickCount:pickCount)+',false)">📖 '+(isPrepareCaster?'Select Prepared Spells':'Choose '+pickCount+' New Spell'+(pickCount!==1?'s':''))+'</button>'):''}
       </div>
     </div>`;
   }
@@ -5088,16 +5084,16 @@ function renderSpellPickerList(){
         <div style="width:22px;height:22px;border-radius:50%;border:2px solid ${sel?cc:'var(--border)'};background:${sel?cc:'transparent'};display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;font-size:12px;transition:all 0.12s">${sel?'✓':''}</div>
         <div style="flex:1;min-width:0">
           <div style="font-family:'Cinzel',serif;font-size:13px;color:${sel?cc:'var(--text)'}">${sp.name}${known?' <span style="font-size:9px;color:var(--muted)">(known)</span>':''}</div>
-          ${db.castTime||db.range?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${[db.castTime,db.range,db.duration].filter(Boolean).join(' · ')}</div>`:''}
+          ${db.castTime||db.range?('<div style="font-size:10px;color:var(--muted);margin-top:2px">'+[db.castTime,db.range,db.duration].filter(Boolean).join(' · ')+'</div>'):''}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0">
-          ${lvlLabel?`<span style="font-size:10px;color:${sel?cc:'var(--muted)'};font-family:'Cinzel',serif">${lvlLabel}</span>`:''}
-          ${db.school?`<span style="font-size:9px;color:var(--muted)">${db.school}</span>`:''}
-          ${db.components?`<span style="font-size:9px;color:var(--muted)">${db.components}</span>`:''}
-          ${db.desc?`<span onclick="togglePickerDesc('${cardId}');event.stopPropagation()" style="font-size:9px;color:var(--gold);cursor:pointer;margin-top:2px">▸ details</span>`:''}
+          ${lvlLabel?('<span style="font-size:10px;color:'+(sel?cc:'var(--muted)')+';font-family:\'Cinzel\',serif">'+lvlLabel+'</span>'):''}
+          ${db.school?('<span style="font-size:9px;color:var(--muted)">'+db.school+'</span>'):''}
+          ${db.components?('<span style="font-size:9px;color:var(--muted)">'+db.components+'</span>'):''}
+          ${db.desc?('<span onclick="togglePickerDesc(\''+cardId+'\');event.stopPropagation()" style="font-size:9px;color:var(--gold);cursor:pointer;margin-top:2px">▸ details</span>'):''}
         </div>
       </div>
-      ${db.desc?`<div id="${cardId}_desc" style="display:none;padding:0 14px 12px 44px;font-size:11px;color:var(--muted);line-height:1.6;border-top:1px solid var(--border);margin-top:0">${db.desc}</div>`:''}</div>`;
+      ${db.desc?('<div id="'+cardId+'_desc" style="display:none;padding:0 14px 12px 44px;font-size:11px;color:var(--muted);line-height:1.6;border-top:1px solid var(--border);margin-top:0">'+db.desc+'</div>'):''}</div>`;
   }).join('');
 
   const n = st.selected.size;
@@ -5386,13 +5382,13 @@ function buildLevelUpHTML(char, cls, newLevel, ld, avgHP, conMod){
       <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">✦ NEW FEATURES</div>
       ${features.map((f,fi)=>{
         return `<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden">
-          <div onclick="${f.desc?`var b=this.nextElementSibling;b.style.display=b.style.display==='none'?'block':'none';this.querySelector('.fchev').textContent=b.style.display==='none'?'▸':'▾'`:'void(0)'}"
+          <div onclick="${f.desc?'var b=this.nextElementSibling;b.style.display=b.style.display===\'none\'?\'block\':\'none\';this.querySelector(\'.fchev\').textContent=b.style.display===\'none\'?\'▸\':\'▾\'':'void(0)'}"
                style="display:flex;align-items:center;gap:8px;padding:10px 12px;${f.desc?'cursor:pointer;':''}background:var(--surface)">
             <span style="color:var(--gold);font-size:14px;flex-shrink:0">◆</span>
             <span style="font-family:'Cinzel',serif;font-size:12px;flex:1">${f.name}</span>
-            ${f.desc?`<span class="fchev" style="color:var(--muted);font-size:12px">▸</span>`:''}
+            ${f.desc?'<span class="fchev" style="color:var(--muted);font-size:12px">▸</span>':''}
           </div>
-          ${f.desc?`<div style="display:none;padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.6;background:var(--surface2);border-top:1px solid var(--border)">${f.desc}</div>`:''}
+          ${f.desc?'<div style="display:none;padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.6;background:var(--surface2);border-top:1px solid var(--border)">'+f.desc+'</div>':''}
         </div>`;
       }).join('')}
     </div>`;
@@ -5408,7 +5404,7 @@ function buildLevelUpHTML(char, cls, newLevel, ld, avgHP, conMod){
       const isMulti = ch.count > 1;
       html += `<div style="background:var(--surface2);border:1px solid var(--purple);border-radius:12px;padding:14px;margin-bottom:16px">
         <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-bottom:6px">${ch.icon} ${ch.label.toUpperCase()}</div>
-        ${ch.note?`<div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-style:italic;line-height:1.5">${ch.note}</div>`:''}
+        ${ch.note?('<div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-style:italic;line-height:1.5">'+ch.note+'</div>'):''}
         ${isMulti ? `<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Choose ${ch.count}:</div>
           ${Array.from({length:ch.count}).map((_,i)=>`
             <select onchange="lvlPickChoice(${chi},${i},this.value)"
@@ -5573,7 +5569,7 @@ function buildLevelUpHTML(char, cls, newLevel, ld, avgHP, conMod){
             style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;transition:border-color 0.12s">
             <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
               <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--text)">\${f.name}</span>
-              \${f.req?`<span style="font-size:9px;color:var(--muted);flex-shrink:0">\${f.req}</span>`:''}
+              \${f.req?'<span style="font-size:9px;color:var(--muted);flex-shrink:0">'+f.req+'</span>':''}
             </div>
             <div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">\${f.desc}</div>
           </div>`).join('')}
@@ -6292,8 +6288,8 @@ Rules:
             </div>`).join('')}
         </div>
         <div style="font-size:11px;color:var(--muted)">${char.maxHP} HP · AC ${char.ac} · Speed ${char.speed}</div>
-        ${char.proficiencies.length?`<div style="font-size:11px;color:var(--muted);margin-top:3px">Prof: ${char.proficiencies.slice(0,5).join(', ')}${char.proficiencies.length>5?' +more':''}</div>`:''}
-        ${char.attacks.length?`<div style="font-size:11px;color:var(--muted);margin-top:3px">⚔ ${char.attacks.map(a=>a.name).join(', ')}</div>`:''}
+        ${char.proficiencies.length?('<div style="font-size:11px;color:var(--muted);margin-top:3px">Prof: '+char.proficiencies.slice(0,5).join(', ')+char.proficiencies.length>5?' +more':''+'</div>'):''}
+        ${char.attacks.length?('<div style="font-size:11px;color:var(--muted);margin-top:3px">⚔ '+char.attacks.map(a=>a.name).join(', ')+'</div>'):''}
       </div>
       <button class="btn btn-gold" onclick="confirmClaudeImport()">✦ Import ${char.name}</button>`;
 
@@ -6366,8 +6362,8 @@ async function handlePdfUpload(input){
             </div>`).join('')}
         </div>
         <div style="font-size:11px;color:var(--muted)">${char.maxHP} HP · AC ${char.ac||'—'} · Speed ${char.speed||30}</div>
-        ${char.spells&&char.spells.length?`<div style="font-size:11px;color:var(--muted);margin-top:4px">⚡ ${char.spells.length} spells imported</div>`:''}
-        ${char.attacks&&char.attacks.length?`<div style="font-size:11px;color:var(--muted);margin-top:2px">⚔ ${char.attacks.map(a=>a.name).join(', ')}</div>`:''}
+        ${char.spells&&char.spells.length?('<div style="font-size:11px;color:var(--muted);margin-top:4px">⚡ '+char.spells.length+' spells imported</div>'):''}
+        ${char.attacks&&char.attacks.length?('<div style="font-size:11px;color:var(--muted);margin-top:2px">⚔ '+char.attacks.map(a=>a.name).join(', ')+'</div>'):''}
       </div>
       <button class="btn btn-gold" onclick="confirmPdfImport()">✦ Import ${char.name}</button>`;
     window._pendingPdfChar = char;
@@ -7140,7 +7136,7 @@ function editPartyName(){
   const oldName = camps[ci].partyName||'';
   camps[ci].partyName = name.trim();
   if(name.trim() && name.trim() !== oldName){
-    addPartyHistoryEvent(camps[ci], 'name', `Party named "${name.trim()}"${oldName?` (was "${oldName}")`:''}`, '⚔');
+    addPartyHistoryEvent(camps[ci], 'name', `Party named "${name.trim()}"${oldName?(' (was "'+oldName+'")'):''}`, '⚔');
   }
   saveCampaigns(camps);
   renderPartyOverview();
@@ -7232,7 +7228,7 @@ function renderPartyHistory(){
             <div style="font-size:12px;line-height:1.5">${e.text}</div>
             <div style="font-size:10px;color:var(--muted);margin-top:2px">${timeStr}</div>
           </div>
-          ${!isPlayerMode()?`<button onclick="deletePartyEvent('${e.id}')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:0 4px;opacity:0.5;flex-shrink:0">✕</button>`:''}
+          ${!isPlayerMode()?('<button onclick="deletePartyEvent(\''+e.id+'\')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:0 4px;opacity:0.5;flex-shrink:0">✕</button>'):''}
         </div>`;
       });
     });
@@ -7323,7 +7319,7 @@ function renderDiceCharPanel(){
           const labels={inspiration:'🌟 Inspired',exhaustion:`💤 Exhausted Lv${effects.exhaustion}`,
             concentration:'🎯 Concentrating',raging:'🔥 Raging',blessed:'✨ Blessed',
             cursed:'🩸 Cursed',polymorphed:'🦎 Polymorphed',hidden:'🗡 Hidden'};
-          return labels[k]?`<span class="cond-tag" style="--chip-c:var(--gold);font-size:10px">${labels[k]}</span>`:'';
+          return labels[k]?('<span class="cond-tag" style="--chip-c:var(--gold);font-size:10px">'+labels[k]+'</span>'):'';
         }).join('')}
         ${customFx.map(e=>`<span class="cond-tag" style="--chip-c:var(--purple);font-size:10px">✦ ${e}</span>`).join('')}
       </div>`:''}
@@ -7489,10 +7485,10 @@ function renderDiceCharPanel(){
                   <div style="font-family:'Cinzel',serif;font-size:11px;color:${cc}">${sp.name}</div>
                   <div style="font-size:10px;color:var(--muted)">${[sp.castTime||db.castTime,sp.range||db.range,sp.duration||db.duration].filter(Boolean).join(' · ')}</div>
                 </div>
-                ${desc?`<span style="font-size:10px;color:var(--muted);flex-shrink:0">▸</span>`:''}
+                ${desc?('<span style="font-size:10px;color:var(--muted);flex-shrink:0">▸</span>'):''}
               </div>
               ${desc?`<div id="${cardId}_body" style="display:none;padding:6px 10px 8px;border-top:1px solid #ffffff11">
-                ${components?`<div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-style:italic">${components}</div>`:''}
+                ${components?('<div style="font-size:10px;color:var(--muted);margin-bottom:4px;font-style:italic">'+components+'</div>'):''}
                 <div style="font-size:11px;color:var(--text);line-height:1.6">${desc}</div>
               </div>`:''}
             </div>`;
@@ -7649,8 +7645,8 @@ function doRollLabelled(label, mod){
       <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--muted);margin-bottom:4px">${label}</div>
       <div class="roll-total" style="color:${tc}">${total}</div>
       <div style="font-size:12px;color:var(--muted)">${em!=='normal'?`[${r1},${r2}]→`:``}${kept}${mod!==0?(mod>0?' +'+mod:' '+mod):''} ${bonusBreak.length?'+ bonuses':''}</div>
-      ${isCrit?`<div style="color:var(--green);font-family:'Cinzel',serif;font-size:12px;letter-spacing:1px">CRITICAL!</div>`:''}
-      ${isFail?`<div style="color:var(--red);font-family:'Cinzel',serif;font-size:12px;letter-spacing:1px">FUMBLE</div>`:''}
+      ${isCrit?('<div style="color:var(--green);font-family:\'Cinzel\',serif;font-size:12px;letter-spacing:1px">CRITICAL!</div>'):''}
+      ${isFail?('<div style="color:var(--red);font-family:\'Cinzel\',serif;font-size:12px;letter-spacing:1px">FUMBLE</div>'):''}
     </div>`;
     // Scroll the dice screen to show the result just below the roll button
     const scrollEl = document.getElementById('diceRollPanel') || document.getElementById('scr-dice');
@@ -7671,21 +7667,21 @@ function switchDiceChar(charId){
 function selectDie(d){diceState.die=d;renderDiceScreen();}
 function setMode(m){diceState.mode=m;document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('adv-on','dis-on','neu-on'));if(m==='advantage')document.getElementById('mAdv').classList.add('adv-on');else if(m==='disadvantage')document.getElementById('mDis').classList.add('dis-on');else document.getElementById('mNeu').classList.add('neu-on');updateRollBtn();}
 function getEffMode(){let adv=false,dis=false;for(const id of diceState.activeConds){const c=CONDITIONS.find(x=>x.id===id);if(c?.force==='advantage')adv=true;if(c?.force==='disadvantage')dis=true;}if(adv&&dis)return diceState.mode;if(adv)return'advantage';if(dis)return'disadvantage';return diceState.mode;}
-function updateRollBtn(){const em=getEffMode();const btn=document.getElementById('rollBtn');if(!btn)return;btn.className='roll-btn '+(em==='advantage'?'roll-a':em==='disadvantage'?'roll-d':'roll-n');btn.textContent=em==='advantage'?'Roll Advantage ↑':em==='disadvantage'?'Roll Disadvantage ↓':'Roll ⬡';const mod=parseInt(document.getElementById('dMod')?.value)||0;const mT=em!=='normal'?` (${em.slice(0,3)})`:'';if(document.getElementById('rollDesc'))document.getElementById('rollDesc').textContent=`rolling 1d${diceState.die}${mT}${mod?` ${mod>0?'+':''}${mod}`:''}`;}
+function updateRollBtn(){const em=getEffMode();const btn=document.getElementById('rollBtn');if(!btn)return;btn.className='roll-btn '+(em==='advantage'?'roll-a':em==='disadvantage'?'roll-d':'roll-n');btn.textContent=em==='advantage'?'Roll Advantage ↑':em==='disadvantage'?'Roll Disadvantage ↓':'Roll ⬡';const mod=parseInt(document.getElementById('dMod')?.value)||0;const mT=em!=='normal'?(' ('+em.slice(0,3)+')'):'';if(document.getElementById('rollDesc'))document.getElementById('rollDesc').textContent=`rolling 1d${diceState.die}${mT}${mod?(' '+mod>0?'+':''+mod):''}`;}
 function toggleCond(id){if(diceState.activeConds.has(id))diceState.activeConds.delete(id);else diceState.activeConds.add(id);renderCondGrid();renderActiveConds();renderCondEffects();updateRollBtn();}
 function renderCondGrid(){const el=document.getElementById('condGrid');if(!el)return;el.innerHTML=CONDITIONS.map(c=>`<div class="cond-chip ${diceState.activeConds.has(c.id)?'con-active':''}" style="--chip-c:${c.c}" onclick="toggleCond('${c.id}')"><span class="ci" style="font-size:18px">${c.i}</span><span class="cn">${c.n}</span></div>`).join('');}
 function renderActiveConds(){const el=document.getElementById('activeConds');if(!el)return;if(!diceState.activeConds.size){el.innerHTML='';return;}el.innerHTML=[...diceState.activeConds].map(id=>{const c=CONDITIONS.find(x=>x.id===id);if(!c)return'';return`<span class="cond-tag" style="--chip-c:${c.c}">${c.i} ${c.n}<span class="cond-rm" onclick="toggleCond('${c.id}')">✕</span></span>`;}).join('');}
-function renderCondEffects(){const el=document.getElementById('condEffects');const div=document.getElementById('condEffectsDivider');if(!el||!div)return;if(!diceState.activeConds.size){el.innerHTML='';div.style.display='none';return;}div.style.display='flex';el.innerHTML=[...diceState.activeConds].map(id=>{const c=CONDITIONS.find(x=>x.id===id);if(!c)return'';const fl=c.force?`<span style="color:${c.force==='advantage'?'var(--green)':'var(--red)'};">${c.force==='advantage'?'↑ Advantage':'↓ Disadvantage'}</span> · `:'';const bl=c.bonus?`<span style="color:var(--gold)">Bonus: ${c.bonus}</span> · `:'';return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 13px;margin-bottom:7px;"><div style="font-family:'Cinzel',serif;font-size:10px;color:${c.c};letter-spacing:0.5px;margin-bottom:4px">${c.i} ${c.n}</div><div style="font-size:12px;color:var(--muted);font-style:italic;margin-bottom:4px">${c.d}</div><div style="font-size:10px">${fl}${bl}</div></div>`;}).join('');}
+function renderCondEffects(){const el=document.getElementById('condEffects');const div=document.getElementById('condEffectsDivider');if(!el||!div)return;if(!diceState.activeConds.size){el.innerHTML='';div.style.display='none';return;}div.style.display='flex';el.innerHTML=[...diceState.activeConds].map(id=>{const c=CONDITIONS.find(x=>x.id===id);if(!c)return'';const fl=c.force?('<span style="color:'+c.force==='advantage'?'var(--green)':'var(--red)'+';">'+c.force==='advantage'?'↑ Advantage':'↓ Disadvantage'+'</span> · '):'';const bl=c.bonus?('<span style="color:var(--gold)">Bonus: '+c.bonus+'</span> · '):'';return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 13px;margin-bottom:7px;"><div style="font-family:'Cinzel',serif;font-size:10px;color:${c.c};letter-spacing:0.5px;margin-bottom:4px">${c.i} ${c.n}</div><div style="font-size:12px;color:var(--muted);font-style:italic;margin-bottom:4px">${c.d}</div><div style="font-size:10px">${fl}${bl}</div></div>`;}).join('');}
 function doRoll(){const _pendingLabel=(document.getElementById('rollDesc')?.textContent||'').replace(/\s*\(.*\)$/,'').trim()||null;if(document.getElementById('rollDesc'))document.getElementById('rollDesc').textContent='rolling 1d20';const mod=parseInt(document.getElementById('dMod')?.value)||0;const em=getEffMode();const d=diceState.die;const r1=Math.ceil(Math.random()*d);let r2=null,kept,dropped;if(em!=='normal'){r2=Math.ceil(Math.random()*d);kept=em==='advantage'?Math.max(r1,r2):Math.min(r1,r2);dropped=em==='advantage'?Math.min(r1,r2):Math.max(r1,r2);}else{kept=r1;}let bonusTotal=0,bonusBreak=[];for(const id of diceState.activeConds){const c=CONDITIONS.find(x=>x.id===id);if(!c?.bonus)continue;if(c.bonus.startsWith('+d')){const sides=parseInt(c.bonus.slice(2));const rolled=Math.ceil(Math.random()*sides);bonusTotal+=rolled;bonusBreak.push(`${c.n}:+${rolled}`);}else if(c.bonus.startsWith('+')){const v=parseInt(c.bonus.slice(1))||0;bonusTotal+=v;bonusBreak.push(`${c.n}:+${v}`);}}
 const total=kept+mod+bonusTotal;const isCrit=d===20&&kept===20;const isFail=d===20&&kept===1;document.querySelectorAll('.die-btn.sel').forEach(b=>{b.classList.add('rolling');setTimeout(()=>b.classList.remove('rolling'),400);});
 let diceHTML='';if(r2!==null){const f1=em==='advantage'?(r1>=r2?'kept':'dropped'):(r1<=r2?'kept':'dropped');const f2=f1==='kept'?'dropped':'kept';const c1=f1==='kept'&&isCrit?'crit':f1==='kept'&&isFail?'fail':f1;const c2=f2==='kept'&&isCrit?'crit':f2==='kept'&&isFail?'fail':f2;diceHTML=`<div class="die-face ${c1}"><span style="font-size:9px">d${d}</span><span class="dv">${r1}</span></div><span style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted)">${em==='advantage'?'keep↑':'keep↓'}</span><div class="die-face ${c2}"><span style="font-size:9px">d${d}</span><span class="dv">${r2}</span></div>`;}else{const cls=isCrit?'crit':isFail?'fail':'kept';diceHTML=`<div class="die-face ${cls}"><span style="font-size:9px">d${d}</span><span class="dv">${kept}</span></div>`;}
-const numColor=isCrit?'var(--green)':isFail?'var(--red)':'var(--gold)';let breakdown=`d${d}: ${kept}`;if(mod!==0)breakdown+=(mod>0?' + '+mod:' − '+Math.abs(mod));if(bonusBreak.length)breakdown+=' + '+bonusBreak.join(', ');if(em!=='normal')breakdown+=` (${em})`;const verdict=isCrit?`<span style="background:rgba(39,174,96,0.15);color:var(--green);border:1px solid var(--green);border-radius:12px;padding:4px 14px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px">✦ CRITICAL HIT ✦</span>`:isFail?`<span style="background:rgba(192,57,43,0.15);color:var(--red);border:1px solid var(--red);border-radius:12px;padding:4px 14px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px">💀 CRITICAL FAIL</span>`:'';
-const el=document.getElementById('rollResult');el.style.display='block';el.innerHTML=`<div class="result-box fadein">${_pendingLabel?`<div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;text-align:center">${_pendingLabel}</div>`:''}<div class="result-dice">${diceHTML}</div><div class="result-total" style="color:${numColor}">${total}</div><div class="result-break">${breakdown}</div>${verdict?`<div class="verdict">${verdict}</div>`:''}</div>`;
+const numColor=isCrit?'var(--green)':isFail?'var(--red)':'var(--gold)';let breakdown=`d${d}: ${kept}`;if(mod!==0)breakdown+=(mod>0?' + '+mod:' − '+Math.abs(mod));if(bonusBreak.length)breakdown+=' + '+bonusBreak.join(', ');if(em!=='normal')breakdown+=` (${em})`;const verdict=isCrit?`<span style="background:rgba(39,174,96,0.15);color:var(--green);border:1px solid var(--green);border-radius:12px;padding:4px 14px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px">✦ CRITICAL HIT ✦</span>`:isFail?('<span style="background:rgba(192,57,43,0.15);color:var(--red);border:1px solid var(--red);border-radius:12px;padding:4px 14px;font-family:\'Cinzel\',serif;font-size:11px;letter-spacing:1px">💀 CRITICAL FAIL</span>'):'';
+const el=document.getElementById('rollResult');el.style.display='block';el.innerHTML=`<div class="result-box fadein">${_pendingLabel?('<div style="font-family:\'Cinzel\',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;text-align:center">'+_pendingLabel+'</div>'):''}<div class="result-dice">${diceHTML}</div><div class="result-total" style="color:${numColor}">${total}</div><div class="result-break">${breakdown}</div>${verdict?('<div class="verdict">'+verdict+'</div>'):''}</div>`;
 // Scroll dice screen so roll button + result are in view
 const scrollEl2 = document.getElementById('diceRollPanel') || document.getElementById('scr-dice');
 if(scrollEl2) scrollEl2.scrollTop = 0;
 diceState.history.unshift({d,kept,total,mode:em,mod,bonuses:bonusBreak,isCrit,isFail,conds:[...diceState.activeConds],label:_pendingLabel});if(diceState.history.length>8)diceState.history.pop();renderDiceHistory();}
-function renderDiceHistory(){const el=document.getElementById('rollHistory');if(!el)return;if(!diceState.history.length){el.innerHTML=`<p style="font-size:13px;color:var(--muted);font-style:italic;text-align:center;padding:12px 0">No rolls yet.</p>`;return;}el.innerHTML=diceState.history.map(r=>{const mc=r.mode==='advantage'?'var(--green)':r.mode==='disadvantage'?'var(--red)':'var(--muted)';const ml=r.mode==='advantage'?'↑ADV':r.mode==='disadvantage'?'↓DIS':'NRM';const tc=r.isCrit?'var(--green)':r.isFail?'var(--red)':'var(--text)';const ci=r.conds.map(id=>{const c=CONDITIONS.find(x=>x.id===id);return c?c.i:'';}).join('');return`<div class="hist-row"><div class="hist-die">${r.label?`<span style="font-size:9px;color:var(--muted);display:block;line-height:1">${r.label.split(' ')[0]}</span>`:''}d${r.d}</div><div class="hist-val" style="color:${tc}">${r.total}</div><div class="hist-info">${r.label||('rolled '+r.kept)}${r.mod!==0?(r.mod>0?' +'+r.mod:' '+r.mod):''}${r.bonuses.length?' + bonuses':''} ${ci}</div><span class="hist-mode" style="color:${mc};border-color:${mc}">${ml}</span></div>`;}).join('');}
+function renderDiceHistory(){const el=document.getElementById('rollHistory');if(!el)return;if(!diceState.history.length){el.innerHTML=`<p style="font-size:13px;color:var(--muted);font-style:italic;text-align:center;padding:12px 0">No rolls yet.</p>`;return;}el.innerHTML=diceState.history.map(r=>{const mc=r.mode==='advantage'?'var(--green)':r.mode==='disadvantage'?'var(--red)':'var(--muted)';const ml=r.mode==='advantage'?'↑ADV':r.mode==='disadvantage'?'↓DIS':'NRM';const tc=r.isCrit?'var(--green)':r.isFail?'var(--red)':'var(--text)';const ci=r.conds.map(id=>{const c=CONDITIONS.find(x=>x.id===id);return c?c.i:'';}).join('');return`<div class="hist-row"><div class="hist-die">${r.label?('<span style="font-size:9px;color:var(--muted);display:block;line-height:1">'+r.label.split(' ')[0]+'</span>'):''}d${r.d}</div><div class="hist-val" style="color:${tc}">${r.total}</div><div class="hist-info">${r.label||('rolled '+r.kept)}${r.mod!==0?(r.mod>0?' +'+r.mod:' '+r.mod):''}${r.bonuses.length?' + bonuses':''} ${ci}</div><span class="hist-mode" style="color:${mc};border-color:${mc}">${ml}</span></div>`;}).join('');}
 
 /* ══ LOOT ══ */
 let lootOwner='pool',lootFilter='all';
@@ -8080,7 +8076,7 @@ function renderInventory(){
   html+=`<div class="inv-summary"><div class="inv-sum-card"><div class="isc-label">ITEMS</div><div class="isc-val">${owned.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val" style="font-size:15px">${fmtGP(totalVal)}<span style="font-size:9px;color:var(--muted)"> gp</span></div></div><div class="inv-sum-card"><div class="isc-label">WEIGHT</div><div class="isc-val" style="font-size:15px;color:${wC}">${totalWt%1===0?totalWt:totalWt.toFixed(1)}<span style="font-size:9px;color:var(--muted)"> lb</span></div></div></div>`;
   if(char)html+=`<div class="wbar-wrap"><div class="wbar-labels"><span>Carry weight</span><span>${totalWt%1===0?totalWt:totalWt.toFixed(1)} / ${maxCarry} lb</span></div><div class="wbar-track"><div class="wbar-fill" style="width:${wPct}%;background:${wC}"></div></div></div>`;
   if(!filtered.length)html+=`<div class="empty-state"><div class="es-icon">🎒</div><p>No items here.</p></div>`;
-  else html+=filtered.map(item=>{const icon=TYPE_ICONS[item.type]||'📦';const al=item.attune==='attuned'?'✦ Attuned':item.attune==='required'?'◇ Needs Attune':'';return`<div class="item-card fadein"><div class="item-top"><div class="item-icon">${icon}</div><div style="flex:1;min-width:0"><div class="item-name">${item.name}${item.qty>1?` <span style="color:var(--muted);font-size:11px">×${item.qty}</span>`:''}</div><div class="item-meta">${item.type}${item.value>0?' · '+item.value+' gp':''}${item.weight>0?' · '+item.weight+' lb':''}</div><div class="item-badges"><span class="ibadge r-${item.rarity}">${item.rarity.replace('-',' ')}</span>${al?`<span class="ibadge" style="border-color:var(--purple);color:var(--purple)">${al}</span>`:''}</div></div></div>${item.desc?`<div class="item-desc">${item.desc}</div>`:''}<div class="item-acts">${item.owner!=='pool'?`<button class="icon-btn" title="To pool" onclick="itemToPool('${item.id}')">🎒</button>`:''} ${item.owner==='pool'?`<button class="icon-btn" style="color:var(--gold)" title="Assign" onclick="assignFromPool('${item.id}')">→</button>`:''}<button class="icon-btn" style="color:var(--red)" title="Remove" onclick="removeItem('${item.id}')">✕</button></div></div>`;}).join('');
+  else html+=filtered.map(item=>{const icon=TYPE_ICONS[item.type]||'📦';const al=item.attune==='attuned'?'✦ Attuned':item.attune==='required'?'◇ Needs Attune':'';return`<div class="item-card fadein"><div class="item-top"><div class="item-icon">${icon}</div><div style="flex:1;min-width:0"><div class="item-name">${item.name}${item.qty>1?(' <span style="color:var(--muted);font-size:11px">×'+item.qty+'</span>'):''}</div><div class="item-meta">${item.type}${item.value>0?' · '+item.value+' gp':''}${item.weight>0?' · '+item.weight+' lb':''}</div><div class="item-badges"><span class="ibadge r-${item.rarity}">${item.rarity.replace('-',' ')}</span>${al?('<span class="ibadge" style="border-color:var(--purple);color:var(--purple)">'+al+'</span>'):''}</div></div></div>${item.desc?('<div class="item-desc">'+item.desc+'</div>'):''}<div class="item-acts">${item.owner!=='pool'?('<button class="icon-btn" title="To pool" onclick="itemToPool(\''+item.id+'\')">🎒</button>'):''} ${item.owner==='pool'?('<button class="icon-btn" style="color:var(--gold)" title="Assign" onclick="assignFromPool(\''+item.id+'\')">→</button>'):''}<button class="icon-btn" style="color:var(--red)" title="Remove" onclick="removeItem('${item.id}')">✕</button></div></div>`;}).join('');
   el.innerHTML=html;
 }
 function removeItem(id){saveItems(getItems().filter(i=>i.id!==id));renderInventory();renderPool();toast('Item removed','var(--red)');}
@@ -8104,7 +8100,7 @@ function renderAddTab(){
 }
 function addItem(){const name=(document.getElementById('iName')?.value||'').trim();if(!name){toast('Enter item name','var(--red)');return;}const item={id:'i'+Date.now(),name,type:document.getElementById('iType').value,rarity:document.getElementById('iRarity').value,qty:Math.max(1,parseInt(document.getElementById('iQty').value)||1),weight:parseFloat(document.getElementById('iWt').value)||0,value:parseFloat(document.getElementById('iVal').value)||0,attune:document.getElementById('iAttune').value,desc:(document.getElementById('iDesc').value||'').trim(),owner:document.getElementById('iOwner').value};const items=getItems();items.push(item);saveItems(items);document.getElementById('iName').value='';document.getElementById('iDesc').value='';document.getElementById('iQty').value='1';toast('✦ '+name+' added!');renderInventory();renderPool();}
 function quickAdd(qi){const q=QUICK_ITEMS[qi];const ownerEl=document.querySelector('#ltab-add #iOwner');const owner=ownerEl?.value||'pool';const item={...q,id:'i'+Date.now()+qi,owner};const items=getItems();items.push(item);saveItems(items);toast('✦ '+q.name+' added!');renderInventory();renderPool();}
-function renderPool(){const items=getItems().filter(i=>i.owner==='pool');const el=document.getElementById('ltab-pool');const totVal=items.reduce((s,i)=>s+(parseFloat(i.value)||0)*i.qty,0);let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px"><div class="inv-sum-card"><div class="isc-label">UNASSIGNED</div><div class="isc-val">${items.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val">${fmtGP(totVal)} <span style="font-size:9px;color:var(--muted)">gp</span></div></div></div>`;if(!items.length)html+=`<div class="empty-state"><div class="es-icon">🪙</div><p>Pool is empty!</p></div>`;else html+=`<div class="card">`+items.map(item=>`<div class="pool-row"><span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${item.name}${item.qty>1?` ×${item.qty}`:''}</div><div style="font-size:10px"><span class="rtext-${item.rarity}">${item.rarity}</span>${item.value>0?' · '+item.value+' gp':''}</div></div><button class="pool-assign-btn" onclick="assignFromPool('${item.id}')">Assign →</button><button class="icon-btn" style="color:var(--red)" onclick="removeItem('${item.id}')">✕</button></div>`).join('')+`</div>`;el.innerHTML=html;}
+function renderPool(){const items=getItems().filter(i=>i.owner==='pool');const el=document.getElementById('ltab-pool');const totVal=items.reduce((s,i)=>s+(parseFloat(i.value)||0)*i.qty,0);let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px"><div class="inv-sum-card"><div class="isc-label">UNASSIGNED</div><div class="isc-val">${items.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val">${fmtGP(totVal)} <span style="font-size:9px;color:var(--muted)">gp</span></div></div></div>`;if(!items.length)html+=`<div class="empty-state"><div class="es-icon">🪙</div><p>Pool is empty!</p></div>`;else html+=`<div class="card">`+items.map(item=>`<div class="pool-row"><span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${item.name}${item.qty>1?(' ×'+item.qty):''}</div><div style="font-size:10px"><span class="rtext-${item.rarity}">${item.rarity}</span>${item.value>0?' · '+item.value+' gp':''}</div></div><button class="pool-assign-btn" onclick="assignFromPool('${item.id}')">Assign →</button><button class="icon-btn" style="color:var(--red)" onclick="removeItem('${item.id}')">✕</button></div>`).join('')+`</div>`;el.innerHTML=html;}
 function renderWealth(){
   // Scope to campaign characters only
   const camp = getActiveCamp();
@@ -8251,15 +8247,15 @@ function _renderCampListInner() {
       <div class="camp-title">${c.name}</div>
       <div class="camp-meta">${c.setting||'Custom Setting'}${c.dm?' · DM: '+c.dm:''}</div>
       <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;align-items:center">
-        ${isActive?`<span class="camp-badge active">● Active</span>`:''}
+        ${isActive?('<span class="camp-badge active">● Active</span>'):''}
         <span class="camp-badge">${sesCount} Session${sesCount!==1?'s':''}</span>
-        ${qCount?`<span class="camp-badge">${qCount} Active Quest${qCount!==1?'s':''}</span>`:''}
+        ${qCount?('<span class="camp-badge">'+qCount+' Active Quest'+qCount!==1?'s':''+'</span>'):''}
         <span style="font-size:10px;color:var(--muted);margin-left:auto">${c.charIds&&c.charIds.length?c.charIds.length+' character'+(c.charIds.length!==1?'s':''):'No characters'}</span>
       </div>
-      ${!isPlayerMode()?`<div class="camp-actions">
-        <button class="icon-btn" onclick="switchCampaign('${c.id}');event.stopPropagation()" title="Set Active" style="color:var(--green);font-size:16px">✓</button>
-        <button class="icon-btn" style="color:var(--red)" onclick="deleteCampaign('${c.id}');event.stopPropagation()">✕</button>
-      </div>`:''}
+      ${!isPlayerMode()?('<div class="camp-actions">
+        <button class="icon-btn" onclick="switchCampaign(\''+c.id+'\');event.stopPropagation()" title="Set Active" style="color:var(--green);font-size:16px">✓</button>
+        <button class="icon-btn" style="color:var(--red)" onclick="deleteCampaign(\''+c.id+'\');event.stopPropagation()">✕</button>
+      </div>'):''}
     </div>`;
   }).join('');
 }
@@ -8439,7 +8435,7 @@ function renderPresetCampaigns() {
       <div style="flex:1">
         <div style="font-family:'Cinzel',serif;font-size:13px;color:var(--gold)">${p.label}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:3px">${p.desc}</div>
-        ${installed?`<div style="font-size:10px;color:var(--green);margin-top:3px">✓ Installed</div>`:''}
+        ${installed?('<div style="font-size:10px;color:var(--green);margin-top:3px">✓ Installed</div>'):''}
       </div>
       <span style="font-family:'Cinzel',serif;font-size:10px;color:${installed?'var(--green)':'var(--purple)'};border:1px solid ${installed?'var(--green)':'var(--purple)'};padding:4px 10px;border-radius:8px">${installed?'Reinstall':'Install'}</span>
     </div>`;
@@ -8601,7 +8597,7 @@ function renderCampDetailHeader() {
         ${isActive?`<span class="camp-badge active" style="flex-shrink:0">● Active</span>`:
           `<button onclick="switchCampaign('${camp.id}')" style="padding:5px 12px;background:var(--green);border:none;border-radius:8px;color:white;font-family:'Cinzel',serif;font-size:9px;cursor:pointer;letter-spacing:1px;flex-shrink:0">Set Active</button>`}
       </div>
-      ${camp.description?`<p style="font-size:13px;color:var(--muted);font-style:italic;margin-bottom:10px;line-height:1.5">${camp.description}</p>`:''}
+      ${camp.description?('<p style="font-size:13px;color:var(--muted);font-style:italic;margin-bottom:10px;line-height:1.5">'+camp.description+'</p>'):''}
       <div class="stat-strip-sm">
         <div class="stat-pill-sm"><strong>SESSIONS</strong>${(camp.sessions||[]).length}</div>
         <div class="stat-pill-sm"><strong>QUESTS</strong>${(camp.quests||[]).length}</div>
@@ -8786,7 +8782,7 @@ function renderSessions() {
           <span style="color:var(--muted);font-size:12px">▼</span>
         </div>
         <div class="session-body">
-          ${s.summary?`<p style="font-size:13px;line-height:1.6;margin-bottom:10px">${s.summary.replace(/\n/g,'<br>')}</p>`:''}
+          ${s.summary?('<p style="font-size:13px;line-height:1.6;margin-bottom:10px">'+s.summary.replace(/\n/g,'<br>')+'</p>'):''}
           ${s.highlights&&s.highlights.length?`<div style="margin-bottom:8px">${s.highlights.map(h=>`<div style="display:flex;gap:6px;align-items:baseline;font-size:12px;margin-bottom:3px"><span style="color:var(--gold)">✦</span><span style="color:var(--muted)">${h}</span></div>`).join('')}</div>`:''}
           ${campChars.length ? `
           <div style="margin-top:8px;margin-bottom:8px">
@@ -9079,14 +9075,14 @@ function renderQuestCard(q) {
     <div style="display:flex;align-items:center;gap:8px">
       <div style="flex:1">
         <div class="quest-title">${q.title}</div>
-        ${q.giver?`<div style="font-size:11px;color:var(--muted);margin-top:2px">Given by: ${q.giver}</div>`:''}
+        ${q.giver?('<div style="font-size:11px;color:var(--muted);margin-top:2px">Given by: '+q.giver+'</div>'):''}
       </div>
       <span class="quest-status-badge ${statusClass}">${q.status||'active'}</span>
       <span style="color:var(--muted);font-size:12px">▼</span>
     </div>
     <div class="session-body" style="display:none">
-      ${q.description?`<p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:8px;font-style:italic">${q.description}</p>`:''}
-      ${q.reward?`<div style="font-size:12px;color:var(--gold);margin-bottom:8px">Reward: ${q.reward}</div>`:''}
+      ${q.description?('<p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:8px;font-style:italic">'+q.description+'</p>'):''}
+      ${q.reward?('<div style="font-size:12px;color:var(--gold);margin-bottom:8px">Reward: '+q.reward+'</div>'):''}
       ${objs.length?`<div style="margin-bottom:8px">${objs.map((o,oi)=>`<div class="obj-row">
         <div class="obj-check ${o.done?'done':''}" onclick="toggleObj('${q.id}',${oi});event.stopPropagation()">${o.done?'✓':''}</div>
         <span class="obj-text ${o.done?'done':''}">${typeof o==='string'?o:o.text}</span>
@@ -9199,9 +9195,9 @@ function renderNPCs() {
         html += `<div class="npc-card">
           <div class="npc-avatar rel-${n.relationship||'neutral'}">${initials}</div>
           <div style="flex:1;min-width:0">
-            <div class="npc-name">${n.name}${!n.alive?` <span style="color:var(--red);font-size:10px">[Deceased]</span>`:''}</div>
+            <div class="npc-name">${n.name}${!n.alive?(' <span style="color:var(--red);font-size:10px">[Deceased]</span>'):''}</div>
             <div class="npc-role">${n.race?n.race+' · ':''}${n.role||'Unknown'} ${n.location?'· '+n.location:''}</div>
-            ${n.desc?`<div style="font-size:12px;color:var(--muted);font-style:italic;line-height:1.4;margin-top:4px">${n.desc}</div>`:''}
+            ${n.desc?('<div style="font-size:12px;color:var(--muted);font-style:italic;line-height:1.4;margin-top:4px">'+n.desc+'</div>'):''}
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">
             <button class="icon-btn" style="font-size:12px" onclick="toggleNPCAlive('${n.id}')" title="${n.alive?'Mark Deceased':'Mark Alive'}">${n.alive?'💀':'❤️'}</button>
@@ -9293,7 +9289,7 @@ function renderArcs() {
             <span style="color:var(--muted);font-size:12px">▼</span>
           </div>
           <div class="session-body" style="display:none">
-            ${a.description?`<p style="font-size:13px;color:var(--muted);font-style:italic;line-height:1.5;margin-bottom:10px">${a.description.replace(/\n/g,'<br>')}</p>`:''}
+            ${a.description?('<p style="font-size:13px;color:var(--muted);font-style:italic;line-height:1.5;margin-bottom:10px">'+a.description.replace(/\n/g,'<br>')+'</p>'):''}
             <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">
               ${['upcoming','active','resolved'].map(s=>`<button onclick="setArcStatus('${a.id}','${s}');event.stopPropagation()" style="padding:4px 10px;border-radius:8px;font-family:'Cinzel',serif;font-size:9px;cursor:pointer;border:1px solid var(--border);background:${a.status===s?'var(--purple)':'var(--surface)'};color:${a.status===s?'white':'var(--muted)'}">${s}</button>`).join('')}
             </div>
