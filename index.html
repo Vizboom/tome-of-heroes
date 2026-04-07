@@ -4705,10 +4705,10 @@ function renderLevelUpTab(char, cls){
             onclick="selectFeatCard(this,'lvlupFeat')"
             style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;transition:border-color 0.12s">
             <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
-              <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--text)">\${f.name}</span>
-              \${f.req?'<span style="font-size:9px;color:var(--muted);flex-shrink:0">'+f.req+'</span>':''}
+              <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--text)">${f.name}</span>
+              ${f.req?'<span style="font-size:9px;color:var(--muted);flex-shrink:0">'+f.req+'</span>':''}
             </div>
-            <div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">\${f.desc}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">${f.desc}</div>
           </div>`).join('')}
         </div>
         <input type="hidden" id="lvlupFeat" value="">
@@ -5556,10 +5556,10 @@ function buildLevelUpHTML(char, cls, newLevel, ld, avgHP, conMod){
             onclick="selectFeatCard(this,'lvlFeatSelect')"
             style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;transition:border-color 0.12s">
             <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
-              <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--text)">\${f.name}</span>
-              \${f.req?'<span style="font-size:9px;color:var(--muted);flex-shrink:0">'+f.req+'</span>':''}
+              <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--text)">${f.name}</span>
+              ${f.req?'<span style="font-size:9px;color:var(--muted);flex-shrink:0">'+f.req+'</span>':''}
             </div>
-            <div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">\${f.desc}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">${f.desc}</div>
           </div>`).join('')}
         </div>
         <input type="hidden" id="lvlFeatSelect" value="">
