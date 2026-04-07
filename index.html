@@ -7105,6 +7105,8 @@ async function forceSyncAll(){
   }
 
   for(const camp of camps){
+    // Never re-push preset campaigns — they are managed by installPreset separately
+    if(String(camp.id).startsWith('preset_')) continue;
     const rowId = gid + '_' + camp.id;
     const row = { id: rowId, group_id: gid, name: camp.name||'', data: camp };
     const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
@@ -8563,7 +8565,8 @@ async function installPreset(id) {
   camp.notes=camp.notes||[]; camp.charIds=camp.charIds||[];
 
   const gid = getGroupId();
-  const row = { id: camp.id, group_id: gid, name: camp.name||'', data: camp };
+  const rowId = gid + '_' + camp.id;
+  const row = { id: rowId, group_id: gid, name: camp.name||'', data: camp };
   const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
   if(error){
     toast('Failed to save: '+error.message,'var(--red)');
@@ -9592,8 +9595,9 @@ async function forceReinstallPresets(){
     const existing = _db.campaigns.find(c=>c.id===camp.id);
     if(existing?.charIds?.length) camp.charIds = existing.charIds;
 
-    // Save directly to Supabase
-    const row = { id: camp.id, group_id: gid, name: camp.name||'', data: camp };
+    // Save directly to Supabase with composite key
+    const rowId = gid + '_' + camp.id;
+    const row = { id: rowId, group_id: gid, name: camp.name||'', data: camp };
     const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
     if(error){
       console.error('Preset save error for', camp.name, ':', error.message, error.code);
