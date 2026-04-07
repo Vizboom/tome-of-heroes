@@ -1113,6 +1113,27 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 <script>
 /* ══ SUPABASE CONFIG ══ */
 const SUPA_URL = 'https://ndnkfhehtirnbmfpcbwx.supabase.co';
+
+// ── Global error handler — prevents UI freeze on any uncaught JS error ──
+window.addEventListener('error', function(e){
+  console.error('Tome of Heroes error:', e.message, 'at', e.filename, e.lineno);
+  // Only show recovery UI if the app screen is visible but frozen
+  const app = document.getElementById('app');
+  if(app && !document.getElementById('_errBanner')){
+    const banner = document.createElement('div');
+    banner.id = '_errBanner';
+    banner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#c0392b;color:#fff;padding:10px 14px;font-size:12px;z-index:99999;display:flex;align-items:center;gap:10px;font-family:sans-serif';
+    banner.innerHTML = `<span style="flex:1">⚠ App error: ${(e.message||'').slice(0,80)}. Try refreshing, or clear data.</span>
+      <button onclick="location.reload()" style="background:#fff;color:#c0392b;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-weight:bold">Refresh</button>
+      <button onclick="if(confirm('Clear all local data and reset?')){localStorage.clear();location.reload();}" style="background:transparent;color:#fff;border:1px solid #fff;border-radius:6px;padding:5px 10px;cursor:pointer">Clear & Reset</button>
+      <button onclick="document.getElementById('_errBanner').remove()" style="background:transparent;color:#fff;border:none;cursor:pointer;font-size:16px">✕</button>`;
+    document.body.appendChild(banner);
+  }
+});
+
+window.addEventListener('unhandledrejection', function(e){
+  console.warn('Unhandled promise rejection:', e.reason);
+});
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5kbmtmaGVodGlybmJtZnBjYnd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NTIwNzgsImV4cCI6MjA5MDEyODA3OH0.jbR9Oj-yWyXF3BZtC69Qp7S-o1shvAoAWeCgjjNt9ck';
 const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
@@ -1673,7 +1694,9 @@ function nav(id){
     if(!allowed.includes(id)) id='roster';
   }
   document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active');s.classList.remove('desk-secondary');});
-  document.getElementById('scr-'+id).classList.add('active');
+  const scr = document.getElementById('scr-'+id);
+  if(!scr){ console.warn('nav: no screen for', id); return; }
+  scr.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   const m=SCREEN_META[id];
   if(m?.nav)document.getElementById(m.nav)?.classList.add('active');
@@ -1682,24 +1705,26 @@ function nav(id){
   document.getElementById('backBtn').style.visibility=m?.back?'visible':'hidden';
   currentScreen=id;
 
-  // No cross-screen companion panels — each screen handles its own desktop layout
-
-  if(id==='roster'){renderRoster();renderCampaignSwitchBanner();}
-  if(id==='campaign'){renderCampList();}
-  if(id==='party'){partyTab('overview');}
-  if(id==='modegate'){
-    const keyInput = document.getElementById('claudeApiKeyInput');
-    if(keyInput) keyInput.value = getClaudeApiKey();
-    const gid = getGroupId();
-    if(gid){
-      _showModeGateConnected(gid);
-    } else {
-      document.getElementById('modeGateConnect').style.display = 'block';
-      document.getElementById('modeGateConnected').style.display = 'none';
+  try {
+    if(id==='roster'){renderRoster();renderCampaignSwitchBanner();}
+    if(id==='campaign'){renderCampList();}
+    if(id==='party'){partyTab('overview');}
+    if(id==='modegate'){
+      const keyInput = document.getElementById('claudeApiKeyInput');
+      if(keyInput) keyInput.value = getClaudeApiKey();
+      const gid = getGroupId();
+      if(gid){
+        _showModeGateConnected(gid);
+      } else {
+        document.getElementById('modeGateConnect').style.display = 'block';
+        document.getElementById('modeGateConnected').style.display = 'none';
+      }
     }
+    if(id==='loot'){lootTab('inventory');}
+    if(id==='dice')renderDiceScreen();
+  } catch(err) {
+    console.error('nav render error for', id, ':', err);
   }
-  if(id==='loot'){lootTab('inventory');}
-  if(id==='dice')renderDiceScreen();
 
   applyModeUI();
   applyDesktopSplit();
@@ -1716,6 +1741,7 @@ function renderRoster(){
   _renderRosterInner();
 }
 function _renderRosterInner(){
+  try {
   let chars=getVisibleChars();
   // In player mode, only show the player's own character
   if(isPlayerMode()){
@@ -1730,7 +1756,10 @@ function _renderRosterInner(){
       chars=chars.filter(c=>campCharIds.includes(String(c.id)));
     }
   }
+  // Guard against characters with invalid classIdx
+  chars = chars.filter(c => c && Number.isInteger(c.classIdx) && CLASSES[c.classIdx]);
   const el=document.getElementById('rosterList');
+  if(!el) return;
   if(!chars.length){
     const activeCamp = getActiveCamp();
     const hasCampFilter = !isPlayerMode() && activeCamp && activeCamp.charIds && activeCamp.charIds.length;
@@ -1748,9 +1777,9 @@ function _renderRosterInner(){
     return`<div class="char-card theme-${classTheme(c.classIdx)} fadein" onclick="openSheet(${c.id})">
       <div class="char-avatar">${cls.icon}</div>
       <div style="flex:1;min-width:0">
-        <div class="char-name">${c.name}${isDefault?` <span style="font-size:10px;color:var(--gold);font-family:'Cinzel',serif;letter-spacing:1px">★</span>`:''}</div>
-        <div class="char-sub">${c.race} · ${c.background}${c.subclass?` · <span style="color:var(--purple);font-size:11px">${c.subclass.replace(/ \(.*?\)/,'')}</span>`:''}</div>
-        <div class="char-tags"><span class="ctag">${cls.name}</span><span class="ctag">Lvl ${c.level}</span><span class="ctag">${c.currentHP}/${c.maxHP} HP</span></div>
+        <div class="char-name">${c.name||'Unknown'}${isDefault?` <span style="font-size:10px;color:var(--gold);font-family:'Cinzel',serif;letter-spacing:1px">★</span>`:''}</div>
+        <div class="char-sub">${c.race||''} · ${c.background||''}${c.subclass?` · <span style="color:var(--purple);font-size:11px">${c.subclass.replace(/ \(.*?\)/,'')}</span>`:''}</div>
+        <div class="char-tags"><span class="ctag">${cls.name}</span><span class="ctag">Lvl ${c.level||1}</span><span class="ctag">${c.currentHP||0}/${c.maxHP||0} HP</span></div>
       </div>
       <div class="char-card-actions">
         ${!isPlayerMode()?`<button class="icon-btn" title="${isDefault?'Default dice char':'Set as default'}" onclick="setDefaultChar(${c.id});event.stopPropagation()" style="color:${isDefault?'var(--gold)':'var(--muted)'};font-size:16px;opacity:${isDefault?1:0.5}">★</button>`:''}
@@ -1761,6 +1790,11 @@ function _renderRosterInner(){
     </div>`;
   }).join('');
   renderInstallBanner();
+  } catch(err) {
+    console.error('renderRoster error:', err);
+    const el = document.getElementById('rosterList');
+    if(el) el.innerHTML = `<div class="empty-state"><div class="es-icon">⚠</div><p>Error loading characters.<br><button class="btn btn-outline" style="margin-top:10px" onclick="clearAllData()">Clear Data & Reset</button></p></div>`;
+  }
 }
 function setDefaultChar(id){
   S.set('toh_dice_char', id);
@@ -2118,6 +2152,7 @@ function renderSkillsTab(char,cls,elId){
 let spellFilter='all';
 function renderSpellsTab(char,cls,elId,editable){
   const el=document.getElementById(elId); if(!el) return;
+  try {
   if(!cls.spellcaster){
     el.innerHTML=`<div class="empty-state"><div class="es-icon">⚔</div><p>${cls.name}s draw power from steel, not sorcery.</p></div>`;
     return;
@@ -2172,15 +2207,14 @@ function renderSpellsTab(char,cls,elId,editable){
     <button onclick="resetAllSlots(${char.id},'${slotKey}','${elId}')" style="background:none;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:5px 12px;cursor:pointer">↺ Long Rest — Restore Slots</button>
   </div>`;
   const isKnownCaster = ['Bard','Sorcerer','Warlock','Ranger'].includes(cls.name);
-  // Cantrips are always treated as prepared
-  const spellsWithFixedCantrips = spells.map(s =>
-    s.level === 'cantrip' ? {...s, prepared: true} : s
+  // Build indexed copies — each item gets its original index preserved for safe onclick refs
+  const indexedSpells = spells.map((s, idx) =>
+    s.level === 'cantrip' ? {...s, prepared: true, _idx: idx} : {...s, _idx: idx}
   );
-  const prepared = spellsWithFixedCantrips.filter(s=>s.prepared);
-  const known    = spellsWithFixedCantrips.filter(s=>!s.prepared);
+  const prepared = indexedSpells.filter(s=>s.prepared);
+  const known    = indexedSpells.filter(s=>!s.prepared);
 
   const renderSpellList = (list, label, showEmptySection, isPreparedList) => {
-    // For prepared list: always show section if editable (so player knows where prepared spells appear)
     if(!list.length && !showEmptySection) return '';
     const filtered = spellFilter==='all' ? list : list.filter(s=>s.level===spellFilter);
     const countLabel = filtered.length !== list.length
@@ -2190,7 +2224,7 @@ function renderSpellsTab(char,cls,elId,editable){
     if(!list.length) return out + `<div style="color:var(--muted);font-size:13px;font-style:italic;margin-bottom:10px">${isPreparedList ? 'No spells prepared yet. Use ★ Prepare on spells in your spellbook below.' : 'No spells in spellbook yet.'}</div>`;
     if(!filtered.length) return out + `<div style="color:var(--muted);font-size:12px;font-style:italic;margin-bottom:8px">None at this level.</div>`;
     filtered.forEach((sp)=>{
-      const i = spells.indexOf(spells.find(s=>s.name===sp.name && s.level===sp.level));
+      const i = sp._idx; // preserved original index — safe even with duplicate names
       const db = SPELL_DB[sp.name]||{};
       const desc = sp.desc || db.desc || '';
       const castTime = sp.castTime || db.castTime || '';
@@ -2240,7 +2274,7 @@ function renderSpellsTab(char,cls,elId,editable){
 
   if(isKnownCaster){
     // Known-casters: one unified list, all spells always available
-    html += renderSpellList(spells, '✦ Known Spells', editable, false);
+    html += renderSpellList(indexedSpells, '✦ Known Spells', editable, false);
   } else {
     // Prepare-casters (Wizard, Cleric, Druid, Paladin): split prepared / spellbook
     html += renderSpellList(prepared, '★ Prepared / Active Spells', editable, true);
@@ -2260,6 +2294,10 @@ function renderSpellsTab(char,cls,elId,editable){
   }
 
   el.innerHTML=html;
+  } catch(err) {
+    console.error('renderSpellsTab error:', err);
+    el.innerHTML = `<div class="empty-state"><div class="es-icon">⚠</div><p>Error loading spells.<br><small style="color:var(--muted)">${err.message}</small></p></div>`;
+  }
 }
 
 function toggleSpellPrepared(charId, idx, elId){
@@ -3064,6 +3102,8 @@ function getASILevels(className){
 
 function renderProgressTab(char, cls){
   const el = document.getElementById('stab-progress');
+  if(!el) return;
+  try {
   const isDM = !isPlayerMode();
   const pb = getPB(char.level);
   const asiLevels = getASILevels(cls.name);
@@ -3270,6 +3310,10 @@ function renderProgressTab(char, cls){
   }
 
   document.getElementById('stab-progress').innerHTML = html;
+  } catch(err) {
+    console.error('renderProgressTab error:', err);
+    el.innerHTML = `<div class="empty-state"><div class="es-icon">⚠</div><p>Error loading progress tab.<br><small style="color:var(--muted)">${err.message}</small></p></div>`;
+  }
 }
 
 function xpForLevel(level){
@@ -5187,6 +5231,12 @@ function confirmPartySheetLevelUp(){
         picks.forEach(p=>{ if(!char.expertiseSkills.includes(p)) char.expertiseSkills.push(p); });
         char.equipment = char.equipment||[];
         char.equipment.push(`Expertise: ${picks.join(', ')}`);
+      } else if(ch.label.toLowerCase().includes('metamagic')){
+        if(!char.metamagic) char.metamagic = [];
+        picks.forEach(p=>{ if(!char.metamagic.includes(p)) char.metamagic.push(p); });
+      } else if(ch.label.toLowerCase().includes('invocation')){
+        if(!char.invocations) char.invocations = [];
+        picks.forEach(p=>{ if(!char.invocations.includes(p)) char.invocations.push(p); });
       } else {
         const label = picks.length===1 ? picks[0] : picks.join(' / ');
         char.equipment = char.equipment||[];
@@ -5692,15 +5742,18 @@ function confirmLevelUp(){
     activeChoices.forEach((ch, chi)=>{
       const picks = (s.featureChoices[chi]||[]).filter(Boolean);
       if(!picks.length) return;
-      // Save expertise picks specially to track for future filtering
       if(ch.type === 'expertise'){
         if(!chars[ci].expertiseSkills) chars[ci].expertiseSkills = [];
         picks.forEach(p=>{ if(!chars[ci].expertiseSkills.includes(p)) chars[ci].expertiseSkills.push(p); });
-        // Also save to equipment notes for visibility
         chars[ci].equipment = chars[ci].equipment||[];
         chars[ci].equipment.push(`Expertise: ${picks.join(', ')}`);
+      } else if(ch.label.toLowerCase().includes('metamagic')){
+        if(!chars[ci].metamagic) chars[ci].metamagic = [];
+        picks.forEach(p=>{ if(!chars[ci].metamagic.includes(p)) chars[ci].metamagic.push(p); });
+      } else if(ch.label.toLowerCase().includes('invocation')){
+        if(!chars[ci].invocations) chars[ci].invocations = [];
+        picks.forEach(p=>{ if(!chars[ci].invocations.includes(p)) chars[ci].invocations.push(p); });
       } else {
-        // Save all other picks to equipment/notes log for visibility on character sheet
         const label = picks.length===1 ? picks[0] : picks.join(' / ');
         chars[ci].equipment = chars[ci].equipment||[];
         chars[ci].equipment.push(`${ch.label}: ${label}`);
