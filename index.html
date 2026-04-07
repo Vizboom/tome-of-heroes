@@ -2256,9 +2256,7 @@ function renderSpellsTab(char,cls,elId,editable){
             }
             ${!isPreparedList ? ('<button class="icon-btn" style="color:var(--red);font-size:12px" title="Remove from spellbook" onclick="if(confirm(\'Remove '+sp.name.replace(/'/g,"\\'")+' from spellbook?\'))removeSpell('+char.id+','+i+',\''+elId+'\');event.stopPropagation()">✕</button>') : ''}
           </div>`:
-          editable && !isCantrip ?('<div style="margin-top:8px">
-            <button class="icon-btn" style="color:var(--red);font-size:12px" title="Remove spell" onclick="if(confirm(\'Remove '+sp.name.replace(/'/g,"\\'")+'?\'))removeSpell('+char.id+','+i+',\''+elId+'\');event.stopPropagation()">✕ Remove</button>
-          </div>'):''}
+          editable && !isCantrip ?('<div style="margin-top:8px"><button class="icon-btn" style="color:var(--red);font-size:12px" title="Remove spell" onclick="if(confirm(\'Remove '+sp.name.replace(/'/g,"\\'")+'?\'))removeSpell('+char.id+','+i+',\''+elId+'\');event.stopPropagation()">✕ Remove</button></div>'):''}
         </div>
       </div>`;
     });
@@ -2679,12 +2677,7 @@ function renderShareTab(){
   if(isDMMode()){
     // DM mode: show all party members with individual share cards
     const gid = getGroupId();
-    const groupSection = gid ? ('
-      <div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:12px;padding:14px;margin-bottom:16px;text-align:center">
-        <div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:6px">GROUP CODE — SHARE WITH ALL PLAYERS</div>
-        <div style="font-family:\'Cinzel\',serif;font-size:32px;color:var(--gold);letter-spacing:6px;margin-bottom:8px">'+gid+'</div>
-        <button class="btn btn-gold" style="margin:0;padding:6px 18px;font-size:11px" onclick="copyText(\''+gid+'\');toast(\'Group code copied!\')">Copy Group Code</button>
-      </div>') : '';
+const groupSection = gid ? (' <div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:12px;padding:14px;margin-bottom:16px;text-align:center"> <div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:6px">GROUP CODE — SHARE WITH ALL PLAYERS</div> <div style="font-family:\'Cinzel\',serif;font-size:32px;color:var(--gold);letter-spacing:6px;margin-bottom:8px">'+gid+'</div> <button class="btn btn-gold" style="margin:0;padding:6px 18px;font-size:11px" onclick="copyText(\''+gid+'\');toast(\'Group code copied!\')">Copy Group Code</button> </div>') : '';
 
     const charCards = chars.map(c => {
       const cc = classColor(c.classIdx);
@@ -3161,12 +3154,7 @@ function renderProgressTab(char, cls){
           </div>`;
         }).join('')}
       </div>
-      ${(effects.exhaustion||0) > 0 ? ('<div style="margin-top:8px;display:flex;gap:6px;align-items:center">
-        <span style="font-size:12px;color:var(--muted)">Exhaustion:</span>
-        <button class="icon-btn" onclick="adjustExhaustion('+char.id+',-1)" style="width:28px;height:28px;font-size:16px">−</button>
-        <span style="font-family:\'Cinzel\',serif;color:var(--red);font-size:14px">'+effects.exhaustion+'</span>
-        <button class="icon-btn" onclick="adjustExhaustion('+char.id+',1)" style="width:28px;height:28px;font-size:16px">+</button>
-      </div>'):''}
+      ${(effects.exhaustion||0) > 0 ? ('<div style="margin-top:8px;display:flex;gap:6px;align-items:center"><span style="font-size:12px;color:var(--muted)">Exhaustion:</span><button class="icon-btn" onclick="adjustExhaustion('+char.id+',-1)" style="width:28px;height:28px;font-size:16px">−</button><span style="font-family:\'Cinzel\',serif;color:var(--red);font-size:14px">'+effects.exhaustion+'</span><button class="icon-btn" onclick="adjustExhaustion('+char.id+',1)" style="width:28px;height:28px;font-size:16px">+</button></div>'):''}
       <div style="margin-top:10px">
         <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">CUSTOM EFFECT</div>
         <div style="display:flex;gap:6px">
@@ -8252,10 +8240,7 @@ function _renderCampListInner() {
         ${qCount?('<span class="camp-badge">'+qCount+' Active Quest'+qCount!==1?'s':''+'</span>'):''}
         <span style="font-size:10px;color:var(--muted);margin-left:auto">${c.charIds&&c.charIds.length?c.charIds.length+' character'+(c.charIds.length!==1?'s':''):'No characters'}</span>
       </div>
-      ${!isPlayerMode()?('<div class="camp-actions">
-        <button class="icon-btn" onclick="switchCampaign(\''+c.id+'\');event.stopPropagation()" title="Set Active" style="color:var(--green);font-size:16px">✓</button>
-        <button class="icon-btn" style="color:var(--red)" onclick="deleteCampaign(\''+c.id+'\');event.stopPropagation()">✕</button>
-      </div>'):''}
+      ${!isPlayerMode()?('<div class="camp-actions"><button class="icon-btn" onclick="switchCampaign(\''+c.id+'\');event.stopPropagation()" title="Set Active" style="color:var(--green);font-size:16px">✓</button><button class="icon-btn" style="color:var(--red)" onclick="deleteCampaign(\''+c.id+'\');event.stopPropagation()">✕</button></div>'):''}
     </div>`;
   }).join('');
 }
