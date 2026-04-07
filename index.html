@@ -6987,7 +6987,7 @@ async function diagCampaigns(){
   // 1. Auth
   out.push('── AUTH ──');
   const user = await supa.auth.getUser().then(r=>r.data?.user).catch(()=>null);
-  out.push(user ? ok('Logged in: '+user.email) : err('NOT logged in'));
+  out.push(user ? ok('Logged in: '+(user.email||'anonymous ('+user.id?.slice(0,8)+'…)')) : err('NOT logged in — writes may fail if RLS is enabled'));
   out.push('group_id: '+(getGroupId()||'NOT SET'));
   out.push('mode: '+(localStorage.getItem('toh_mode')||'none'));
   out.push('');
@@ -7018,7 +7018,7 @@ async function diagCampaigns(){
       else { writeOk=true; out.push(ok('WRITE: succeeded')); await supa.from(tbl).delete().eq('key',testId); }
     } else {
       const gid = getGroupId()||'test-group';
-      const {error:we} = await supa.from(tbl).upsert({id:testId,group_id:gid,data:{_test:true}},{onConflict:'id'});
+      const {error:we} = await supa.from(tbl).upsert({id:testId,group_id:gid,name:'_healthcheck',data:{_test:true}},{onConflict:'id'});
       if(we) out.push(err('WRITE: '+we.message+' ['+we.code+']'));
       else {
         writeOk=true;
@@ -7081,6 +7081,13 @@ async function diagCampaigns(){
 
 async function forceSyncAll(){
   toast('⏳ Force syncing all data…','var(--purple)');
+
+  // Ensure we have an active session before writing
+  try {
+    const { data } = await supa.auth.getSession();
+    if(!data?.session) await supa.auth.signInAnonymously().catch(()=>{});
+  } catch(e){}
+
   const gid = await ensureGroupId();
   if(!gid){ toast('No group ID — log in as DM first','var(--red)'); return; }
 
@@ -7130,13 +7137,14 @@ function bootApp(){
 
   // No email auth — go straight to app using group code
   (async () => {
-    // Sign in anonymously so Supabase RLS still works, silently
+    // Sign in anonymously so Supabase RLS still works
     try {
       const { data } = await supa.auth.getSession();
       if(!data?.session) {
-        await supa.auth.signInAnonymously().catch(()=>{});
+        const { error } = await supa.auth.signInAnonymously();
+        if(error) console.warn('Anonymous sign-in failed:', error.message);
       }
-    } catch(e){}
+    } catch(e){ console.warn('Auth error:', e); }
     const campId = getActiveCampId();
     if(getGroupId()){
       await pullAll(campId).catch(()=>{});
