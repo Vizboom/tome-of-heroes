@@ -1212,7 +1212,10 @@ async function dbGetChars(){
 async function dbSaveChar(char){
   const gid = getGroupId()||await ensureGroupId(); if(!gid) return;
   const campId = getActiveCampId();
-  const row = { id: String(char.id), group_id: gid, campaign_id: campId||null, share_code: char.shareCode||null, data: char };
+  // Use composite row key (group_id + char.id) to prevent cross-group overwrites
+  // The 'data' field preserves the original char.id unchanged
+  const rowId = gid + '_' + String(char.id);
+  const row = { id: rowId, group_id: gid, campaign_id: campId||null, share_code: char.shareCode||null, data: char };
   const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
   if(error) console.warn('saveChar error:', error.message);
   // Update in-memory cache
@@ -1222,7 +1225,8 @@ async function dbSaveChar(char){
 
 async function dbDeleteChar(charId){
   const gid = getGroupId(); if(!gid) return;
-  await supa.from('characters').delete().eq('id', String(charId)).eq('group_id', gid);
+  const rowId = gid + '_' + String(charId);
+  await supa.from('characters').delete().eq('id', rowId).eq('group_id', gid);
   _db.chars = _db.chars.filter(c=>String(c.id)!==String(charId));
 }
 
@@ -1236,7 +1240,9 @@ async function dbGetCampaigns(){
 
 async function dbSaveCampaign(camp){
   const gid = getGroupId()||await ensureGroupId(); if(!gid) return;
-  const row = { id: camp.id, group_id: gid, name: camp.name||'', data: camp };
+  // Use composite row key (group_id + camp.id) to prevent cross-group overwrites
+  const rowId = gid + '_' + camp.id;
+  const row = { id: rowId, group_id: gid, name: camp.name||'', data: camp };
   const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
   if(error) console.warn('saveCampaign error:', error.message);
   const i = _db.campaigns.findIndex(c=>c.id===camp.id);
@@ -1245,7 +1251,8 @@ async function dbSaveCampaign(camp){
 
 async function dbDeleteCampaign(campId){
   const gid = getGroupId(); if(!gid) return;
-  await supa.from('campaigns').delete().eq('id', campId).eq('group_id', gid);
+  const rowId = gid + '_' + campId;
+  await supa.from('campaigns').delete().eq('id', rowId).eq('group_id', gid);
   _db.campaigns = _db.campaigns.filter(c=>c.id!==campId);
 }
 
@@ -7090,14 +7097,16 @@ async function forceSyncAll(){
   let pushed = 0, errors = 0;
 
   for(const char of chars){
-    const row = { id: String(char.id), group_id: gid, campaign_id: campId||null, share_code: char.shareCode||null, data: char };
+    const rowId = gid + '_' + String(char.id);
+    const row = { id: rowId, group_id: gid, campaign_id: campId||null, share_code: char.shareCode||null, data: char };
     const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
     if(error){ console.error('char push error:', error.message); errors++; }
     else pushed++;
   }
 
   for(const camp of camps){
-    const row = { id: camp.id, group_id: gid, name: camp.name||'', data: camp };
+    const rowId = gid + '_' + camp.id;
+    const row = { id: rowId, group_id: gid, name: camp.name||'', data: camp };
     const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
     if(error){ console.error('camp push error:', error.message); errors++; }
     else pushed++;
