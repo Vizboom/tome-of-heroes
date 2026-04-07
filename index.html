@@ -1111,6 +1111,12 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
+  // If jsdelivr failed, try unpkg as fallback CDN
+  if(typeof supabase === 'undefined'){
+    document.write('<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"><\/script>');
+  }
+</script>
+<script>
 /* ══ SUPABASE CONFIG ══ */
 const SUPA_URL = 'https://ndnkfhehtirnbmfpcbwx.supabase.co';
 
@@ -1135,6 +1141,19 @@ window.addEventListener('unhandledrejection', function(e){
   console.warn('Unhandled promise rejection:', e.reason);
 });
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5kbmtmaGVodGlybmJtZnBjYnd4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NTIwNzgsImV4cCI6MjA5MDEyODA3OH0.jbR9Oj-yWyXF3BZtC69Qp7S-o1shvAoAWeCgjjNt9ck';
+
+// Guard: if supabase library failed to load from CDN, create a no-op stub so the app still boots
+if(typeof supabase === 'undefined'){
+  console.warn('Supabase CDN failed to load — running in offline mode');
+  window.supabase = {
+    createClient: ()=>({
+      from: ()=>({ select:()=>Promise.resolve({data:[],error:{message:'Offline'}}), upsert:()=>Promise.resolve({error:{message:'Offline'}}), delete:()=>({eq:()=>({eq:()=>Promise.resolve({})})}), insert:()=>Promise.resolve({error:{message:'Offline'}}), eq:()=>({eq:()=>({single:()=>Promise.resolve({data:null,error:{message:'Offline'}})})}), single:()=>Promise.resolve({data:null,error:{message:'Offline'}}) }),
+      channel: ()=>({ on:function(){return this;}, subscribe:function(){return this;} }),
+      removeChannel: ()=>{},
+      auth: { getSession:()=>Promise.resolve({data:{session:null}}), getUser:()=>Promise.resolve({data:{user:null}}), signInAnonymously:()=>Promise.resolve({error:{message:'Offline'}}) }
+    })
+  };
+}
 const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 let _supaUser = null;
