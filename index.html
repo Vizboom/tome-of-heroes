@@ -7006,7 +7006,9 @@ async function diagCampaigns(){
   // 1. Auth
   out.push('── AUTH ──');
   const user = await supa.auth.getUser().then(r=>r.data?.user).catch(()=>null);
-  out.push(user ? ok('Logged in: '+(user.email||'anonymous ('+user.id?.slice(0,8)+'…)')) : err('NOT logged in — writes may fail if RLS is enabled'));
+  out.push(user
+    ? ok('Logged in: '+(user.email||'anonymous ('+user.id?.slice(0,8)+'…)'))
+    : ok('No auth session — OK if RLS is disabled (using anon key)'));
   out.push('group_id: '+(getGroupId()||'NOT SET'));
   out.push('mode: '+(localStorage.getItem('toh_mode')||'none'));
   out.push('');
@@ -7100,13 +7102,6 @@ async function diagCampaigns(){
 
 async function forceSyncAll(){
   toast('⏳ Force syncing all data…','var(--purple)');
-
-  // Ensure we have an active session before writing
-  try {
-    const { data } = await supa.auth.getSession();
-    if(!data?.session) await supa.auth.signInAnonymously().catch(()=>{});
-  } catch(e){}
-
   const gid = await ensureGroupId();
   if(!gid){ toast('No group ID — log in as DM first','var(--red)'); return; }
 
@@ -7155,15 +7150,8 @@ function bootApp(){
   const nav_bar=document.querySelector('.bottomnav');
 
   // No email auth — go straight to app using group code
+  // RLS is disabled; the anon key provides direct table access
   (async () => {
-    // Sign in anonymously so Supabase RLS still works
-    try {
-      const { data } = await supa.auth.getSession();
-      if(!data?.session) {
-        const { error } = await supa.auth.signInAnonymously();
-        if(error) console.warn('Anonymous sign-in failed:', error.message);
-      }
-    } catch(e){ console.warn('Auth error:', e); }
     const campId = getActiveCampId();
     if(getGroupId()){
       await pullAll(campId).catch(()=>{});
