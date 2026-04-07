@@ -1189,9 +1189,13 @@ function setGroupId(id){ if(id) localStorage.setItem('toh_group_id', id); }
 async function ensureGroupId(){
   let gid = getGroupId();
   if(gid) return gid;
-  // Generate a new group code — no user account needed
+  // Generate a new group code
   const code = Math.random().toString(36).slice(2,7).toUpperCase();
   setGroupId(code);
+  // Register it in Supabase settings so other devices can find/validate it
+  try {
+    await supa.from('settings').upsert({ key: 'group_'+code, value: code }, { onConflict: 'key' });
+  } catch(e){ console.warn('Could not register group code in settings:', e.message); }
   return code;
 }
 
@@ -2059,6 +2063,14 @@ function renderCombatTab(char,cls,elId,editable){
   html+=`<div class="divider"><span>Class Features</span></div>`;
   cls.features.forEach(f=>{html+=`<div class="feature-card" style="--cc:${cls.color}"><div class="feature-name">${f.n}</div><div class="feature-desc">${f.d}</div></div>`;});
   if(char.subclass){html+=`<div class="feature-card" style="--cc:var(--purple);border-color:var(--purple)"><div class="feature-name" style="color:var(--purple)">⚡ ${char.subclass.replace(/ \(.*?\)/,'')}</div><div class="feature-desc">${char.subclass} — see sourcebook for full subclass features.</div></div>`;}
+  // Show feats as feature cards
+  (char.feats||[]).forEach(featName=>{
+    const featData = FEATS_DB.find(f=>f.name===featName);
+    html+=`<div class="feature-card" style="--cc:var(--gold);border-color:var(--gold)22">
+      <div class="feature-name" style="color:var(--gold)">⚡ ${featName}</div>
+      ${featData?.desc?`<div class="feature-desc">${featData.desc}</div>`:''}
+    </div>`;
+  });
   html+=`<div class="feature-card" style="--cc:${cls.color}"><div class="feature-name">Hit Dice</div><div class="feature-desc">1d${cls.hit} per ${cls.name} level. Total: ${char.level}d${cls.hit}.</div></div>`;
   // Show active DM effects
   const _eff = char.effects||{};
@@ -2774,16 +2786,33 @@ async function connectWithCode(){
   if(btn){ btn.style.opacity='0.6'; btn.style.pointerEvents='none'; }
   toast('Connecting…','var(--purple)');
 
-  // Check the code exists in Supabase
   try {
-    const { data, error } = await supa.from('settings').select('key,value').eq('value', code);
-    if(error || !data?.length){
+    // First try settings table lookup (registered groups)
+    let found = false;
+    try {
+      const { data, error } = await supa.from('settings').select('key,value').eq('value', code);
+      if(!error && data?.length) found = true;
+    } catch(e){}
+
+    // Fallback: try to pull data directly with this group_id
+    // If there are characters or campaigns with this group_id, the code is valid
+    if(!found){
+      const { data: chars } = await supa.from('characters').select('id').eq('group_id', code).limit(1);
+      const { data: camps } = await supa.from('campaigns').select('id').eq('group_id', code).limit(1);
+      if(chars?.length || camps?.length){
+        found = true;
+        // Register this code in settings for future lookups
+        try { await supa.from('settings').upsert({ key:'group_'+code, value:code },{ onConflict:'key' }); } catch(e){}
+      }
+    }
+
+    if(!found){
       toast('Group code not found — check the code or create a new group','var(--red)');
       if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
       return;
     }
   } catch(e){
-    toast('Could not connect to server','var(--red)');
+    toast('Could not connect to server — check your internet connection','var(--red)');
     if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
     return;
   }
@@ -2796,6 +2825,7 @@ async function connectWithCode(){
     setActiveCampId(_db.campaigns[0].id);
   }
 
+  subscribeRealtime(getActiveCampId());
   if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
   _showModeGateConnected(code);
 }
@@ -3109,16 +3139,20 @@ function renderProgressTab(char, cls){
   if(isDM){
     html += `<div class="divider"><span>👑 DM Controls</span></div>`;
 
-    // Level up button
+    // Level up / remove level buttons
     if(char.level < 20){
       html += `<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:12px;padding:14px;margin-bottom:12px">
-        <div style="font-family:'Cinzel',serif;font-size:12px;color:var(--gold);letter-spacing:1px;margin-bottom:6px">LEVEL UP</div>
+        <div style="font-family:'Cinzel',serif;font-size:12px;color:var(--gold);letter-spacing:1px;margin-bottom:6px">LEVEL</div>
         <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Current: Level ${char.level} → Level ${char.level+1}</div>
-        <button class="btn btn-gold" onclick="levelUp(${char.id})" style="margin:0">⬆ Level Up to ${char.level+1}</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-gold" onclick="levelUp(${char.id})" style="margin:0;flex:1">⬆ Level Up to ${char.level+1}</button>
+          ${char.level > 1 ? `<button class="btn btn-outline" onclick="removeLevelUp(${char.id})" style="margin:0;width:auto;padding:8px 12px;border-color:var(--red);color:var(--red)" title="Remove last level">↓ Undo</button>` : ''}
+        </div>
       </div>`;
     } else {
-      html += `<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:12px;padding:14px;margin-bottom:12px;text-align:center">
-        <div style="font-family:'Cinzel',serif;font-size:12px;color:var(--gold)">⭐ Max Level 20 Reached</div>
+      html += `<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:12px;padding:14px;margin-bottom:12px">
+        <div style="font-family:'Cinzel',serif;font-size:12px;color:var(--gold);text-align:center;margin-bottom:8px">⭐ Max Level 20 Reached</div>
+        <button class="btn btn-outline" onclick="removeLevelUp(${char.id})" style="margin:0;width:100%;border-color:var(--red);color:var(--red)" title="Remove last level">↓ Remove Last Level</button>
       </div>`;
     }
 
@@ -5238,10 +5272,12 @@ function confirmPartySheetLevelUp(){
   saveChar(char);
   toast(`✦ ${char.name} is now Level ${newLevel}!`, 'var(--gold)');
 
-  // Refresh
+  // Refresh all affected UI
   openPartySheet(char.id);
   partySheetTab('combat');
   renderRoster();
+  // Refresh dice panel so roll modifiers reflect new ability scores
+  if(document.getElementById('diceCharPanel')) renderDiceCharPanel();
 }
 
 function levelUp(charId){
@@ -5253,6 +5289,78 @@ function levelUp(charId){
   if(char.level >= 20){toast('Already max level!','var(--gold)');return;}
   showLevelUpModal(charId);
 }
+
+function removeLevelUp(charId){
+  const chars = getChars();
+  const ci = chars.findIndex(c=>c.id===charId);
+  if(ci<0) return;
+  const char = chars[ci];
+  if(char.level <= 1){ toast('Already at Level 1 — cannot go lower.','var(--red)'); return; }
+
+  const levelToRemove = char.level;
+  const cls = CLASSES[char.classIdx];
+
+  if(!confirm(`Remove Level ${levelToRemove} from ${char.name}?\n\nThis will:\n• Drop them to Level ${levelToRemove-1}\n• Undo any ASI or feat gained at this level\n• Reduce max HP by the amount gained\n• Set XP to the Level ${levelToRemove-1} floor\n\nThis cannot be undone automatically.`)) return;
+
+  // ── 1. Undo ASI / Feat from this level ──
+  const asiEntry = (char.asiHistory||[]).filter(e=>e.level===levelToRemove).pop();
+  if(asiEntry){
+    if(asiEntry.desc.startsWith('ASI:')){
+      // Parse e.g. "ASI: STR+1, CON+1" and reverse
+      const parts = asiEntry.desc.replace('ASI: ','').split(', ');
+      parts.forEach(p=>{
+        const m = p.match(/^([A-Z]+)\+(\d+)$/);
+        if(m) char.abilities[m[1]] = Math.max(1, (char.abilities[m[1]]||10) - parseInt(m[2]));
+      });
+    } else if(asiEntry.desc.startsWith('Feat: ')){
+      const featName = asiEntry.desc.replace('Feat: ','');
+      char.feats = (char.feats||[]).filter(f=>f!==featName);
+    }
+    // Remove this asiHistory entry
+    const idx = char.asiHistory.map(e=>e.level).lastIndexOf(levelToRemove);
+    if(idx>=0) char.asiHistory.splice(idx,1);
+  }
+
+  // ── 2. Undo featureChoiceLog entries for this level ──
+  char.featureChoiceLog = (char.featureChoiceLog||[]).filter(e=>e.level!==levelToRemove);
+
+  // ── 3. Undo metamagic / invocations added at this level ──
+  // (These were logged in featureChoiceLog which we just cleared — nothing more needed
+  //  since we can't know the exact picks without the log. Notify user.)
+
+  // ── 4. Reduce max HP ──
+  // Estimate HP gained at this level: avg = floor(hit/2)+1+CON mod at time of level-up
+  // Use current CON mod as best approximation
+  const conMod = parseInt(getMod(char.abilities.CON))||0;
+  const avgHPGain = Math.floor(cls.hit/2)+1+conMod;
+  char.maxHP = Math.max(1, (char.maxHP||1) - avgHPGain);
+  char.currentHP = Math.min(char.currentHP||1, char.maxHP);
+
+  // ── 5. Set level ──
+  char.level = levelToRemove - 1;
+
+  // ── 6. Set XP to floor for new level ──
+  const xpFloor = xpForLevel(char.level);
+  if((char.xp||0) > xpForLevel(levelToRemove)-1) char.xp = xpFloor;
+
+  chars[ci] = char;
+  saveChars(chars);
+  toast(`↓ ${char.name} is now Level ${char.level}.`,'var(--muted)');
+
+  // Refresh all affected UI
+  const updatedChar = getChars().find(c=>c.id===charId);
+  if(updatedChar){
+    const updatedCls = CLASSES[updatedChar.classIdx];
+    renderSheetHero(updatedChar, updatedCls, 'sheetHero');
+    renderCombatTab(updatedChar, updatedCls, 'stab-combat', true);
+    renderSkillsTab(updatedChar, updatedCls, 'stab-skills');
+    renderProgressTab(updatedChar, updatedCls);
+    sheetTab('progress');
+    if(document.getElementById('diceCharPanel')) renderDiceCharPanel();
+    renderRoster();
+  }
+}
+
 
 function showLevelUpModal(charId){
   const char = getChars().find(c=>c.id===charId);
@@ -5768,9 +5876,17 @@ function confirmLevelUp(){
 
   const updatedChar = getChars().find(c=>c.id===s.charId);
   if(updatedChar){
-    renderSheetHero(updatedChar, cls, 'sheetHero');
-    renderProgressTab(updatedChar, cls);
+    const updatedCls = CLASSES[updatedChar.classIdx];
+    renderSheetHero(updatedChar, updatedCls, 'sheetHero');
+    // Re-render all sheet tabs so ability scores, saves, skills, HP all update
+    renderCombatTab(updatedChar, updatedCls, 'stab-combat', true);
+    renderSkillsTab(updatedChar, updatedCls, 'stab-skills');
+    renderProgressTab(updatedChar, updatedCls);
     sheetTab('progress');
+    // Refresh dice panel so roll modifiers reflect new ability scores
+    if(document.getElementById('diceCharPanel')) renderDiceCharPanel();
+    // Refresh roster card
+    renderRoster();
   }
 }
 
