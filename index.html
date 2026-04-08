@@ -1231,6 +1231,13 @@ async function getSupaUser(){
 function getGroupId(){ return localStorage.getItem('toh_group_id')||null; }
 function setGroupId(id){ if(id) localStorage.setItem('toh_group_id', id); }
 
+// Stable per-device ID for player campaign list storage
+function getDeviceId(){
+  let id = localStorage.getItem('toh_device_id');
+  if(!id){ id = 'dev_'+Math.random().toString(36).slice(2,10).toUpperCase(); localStorage.setItem('toh_device_id', id); }
+  return id;
+}
+
 async function ensureGroupId(){
   let gid = getGroupId();
   if(gid) return gid;
@@ -1256,14 +1263,12 @@ async function dbGetChars(){
 
 async function dbSaveChar(char){
   const gid = getGroupId()||await ensureGroupId(); if(!gid) return;
-  const campId = getActiveCampId();
-  // Use composite row key (group_id + char.id) to prevent cross-group overwrites
-  // The 'data' field preserves the original char.id unchanged
   const rowId = gid + '_' + String(char.id);
-  const row = { id: rowId, group_id: gid, campaign_id: campId||null, share_code: char.shareCode||null, data: char };
+  // Omit campaign_id — group_id is sufficient for scoping, and the FK constraint
+  // on campaign_id causes errors when campaigns haven't been synced yet
+  const row = { id: rowId, group_id: gid, share_code: char.shareCode||null, data: char };
   const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
   if(error) console.warn('saveChar error:', error.message);
-  // Update in-memory cache
   const i = _db.chars.findIndex(c=>String(c.id)===String(char.id));
   if(i>=0) _db.chars[i]=char; else _db.chars.push(char);
 }
@@ -2245,8 +2250,8 @@ function renderSpellsTab(char,cls,elId,editable){
   const sab=aMap[cls.name.toLowerCase()]||'WIS';
   const smod=parseInt(getMod(char.abilities?.[sab]))||0;
   const pb=getPB(char.level);
-  const slotKey='slots_'+char.id;
-  let used={};try{used=JSON.parse(localStorage.getItem(slotKey)||'{}');}catch{}
+  const slotKey='slots_'+char.id; // kept for onclick signature compatibility
+  const used = char.spellSlotsUsed || {};
   const slots=SPELL_SLOTS[char.level]||SPELL_SLOTS[20];
   const spells=char.spells||[];
 
@@ -2446,18 +2451,28 @@ function removeSpell(charId,idx,elId){
   }
 }
 function toggleSlot(cid,lvl,idx,total,key,elId){
-  let used={};try{used=JSON.parse(localStorage.getItem(key)||'{}');}catch{}
-  const cur=used[lvl]||0;used[lvl]=idx<cur?idx:Math.min(idx+1,total);
-  localStorage.setItem(key,JSON.stringify(used));
-  // Find char from own list or party
-  const char=getChars().find(c=>c.id===cid)||getFullParty().find(c=>c.id===cid);
-  if(char) renderSpellsTab(char,CLASSES[char.classIdx],elId,elId==='stab-spells'||elId==='pstab-spells');
+  // Slots stored on char.spellSlotsUsed in Supabase, not localStorage
+  const char = getChars().find(c=>c.id===cid) || getFullParty().find(c=>c.id===cid);
+  if(!char) return;
+  const used = char.spellSlotsUsed || {};
+  const cur = used[lvl]||0;
+  used[lvl] = idx < cur ? idx : Math.min(idx+1, total);
+  char.spellSlotsUsed = used;
+  // Save to Supabase via saveChars if own char
+  const ownChars = getChars();
+  const ci = ownChars.findIndex(c=>c.id===cid);
+  if(ci>=0){ ownChars[ci]=char; saveChars(ownChars); }
+  if(char) renderSpellsTab(char, CLASSES[char.classIdx], elId, elId==='stab-spells'||elId==='pstab-spells');
 }
 
 function resetAllSlots(cid,key,elId){
-  localStorage.setItem(key,'{}');
-  const char=getChars().find(c=>c.id===cid)||getFullParty().find(c=>c.id===cid);
-  if(char) renderSpellsTab(char,CLASSES[char.classIdx],elId,elId==='stab-spells'||elId==='pstab-spells');
+  const char = getChars().find(c=>c.id===cid) || getFullParty().find(c=>c.id===cid);
+  if(!char) return;
+  char.spellSlotsUsed = {};
+  const ownChars = getChars();
+  const ci = ownChars.findIndex(c=>c.id===cid);
+  if(ci>=0){ ownChars[ci]=char; saveChars(ownChars); }
+  if(char) renderSpellsTab(char, CLASSES[char.classIdx], elId, elId==='stab-spells'||elId==='pstab-spells');
   toast('Spell slots restored — Long Rest complete!','var(--green)');
 }
 function renderGearTab(char,cls,elId,editable){
@@ -2867,6 +2882,21 @@ function showDMGate(){
   setTimeout(()=>document.getElementById('dmUsernameInput')?.focus(), 50);
 }
 function showPlayerJoinGate(){
+  // If we're already in the app (player/dm mode), navigate to the modegate player join screen
+  const mode = S.get('toh_mode');
+  if(mode){
+    // Show the modegate temporarily with the player join panel
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById('scr-modegate').classList.add('active');
+    document.getElementById('modeGateChoice').style.display = 'none';
+    document.getElementById('modeGateDM').style.display = 'none';
+    document.getElementById('modeGateConnected').style.display = 'none';
+    document.getElementById('modeGatePlayerJoin').style.display = 'block';
+    // Override back button to return to app
+    const backBtn = document.getElementById('backBtn');
+    if(backBtn){ backBtn.style.visibility='visible'; backBtn.onclick = ()=>{ nav(mode==='player'?'campaign':'roster'); applyModeUI(); }; }
+    return;
+  }
   document.getElementById('modeGateChoice').style.display = 'none';
   document.getElementById('modeGateDM').style.display = 'none';
   document.getElementById('modeGateConnected').style.display = 'none';
@@ -2890,6 +2920,7 @@ async function dmLogin(){
 
   // Username is the group_id — deterministic, no lookup needed
   setGroupId(username);
+  S.set('toh_dm_username', username); // persists across mode switches
 
   // Pull existing data for this username
   await pullAll(null);
@@ -2910,22 +2941,89 @@ async function enterAsDM(){
   S.set('toh_mode','dm');
   const campId = getActiveCampId();
   await pullAll(campId);
-
-  // Auto-set active campaign if none set and campaigns exist
   if(!getActiveCampId() && _db.campaigns.length){
     setActiveCampId(_db.campaigns[0].id);
   }
-
-  // Ensure all campaigns have player join codes (await so they're registered before DM navigates)
   await ensureCampJoinCodes();
-
   subscribeRealtime(getActiveCampId());
   document.querySelector('.bottomnav').style.display='flex';
   applyModeUI();
   nav('roster');
 }
 
-// Players enter a campaign-specific join code (not the DM group code)
+// ── Player campaign list — stored in Supabase settings per device ──
+function _playerCampKey(){ return 'player_'+getDeviceId()+'_campaigns'; }
+
+async function getPlayerCampaigns(){
+  try {
+    const { data } = await supa.from('settings').select('value').eq('key', _playerCampKey()).single();
+    if(data?.value) return JSON.parse(data.value);
+  } catch(e){}
+  // Fallback to localStorage for offline / first load
+  try { return JSON.parse(localStorage.getItem('toh_player_campaigns')||'[]'); } catch(e){ return []; }
+}
+async function savePlayerCampaigns(arr){
+  const val = JSON.stringify(arr||[]);
+  localStorage.setItem('toh_player_campaigns', val); // keep local copy as fast cache
+  try {
+    await supa.from('settings').upsert(
+      { key: _playerCampKey(), value: val, updated_at: new Date().toISOString() },
+      { onConflict: 'key' }
+    );
+  } catch(e){
+    // Retry without updated_at
+    try { await supa.from('settings').upsert({ key: _playerCampKey(), value: val }, { onConflict: 'key' }); } catch(e2){}
+  }
+}
+async function addPlayerCampaign(entry){
+  const arr = await getPlayerCampaigns();
+  if(!arr.find(e=>e.campId===entry.campId)) arr.push(entry);
+  await savePlayerCampaigns(arr);
+}
+async function removePlayerCampaign(campId){
+  const arr = await getPlayerCampaigns();
+  await savePlayerCampaigns(arr.filter(e=>e.campId!==campId));
+}
+
+// Enter player mode — loads all joined campaigns, sets first as active
+async function enterAsPlayerMode(){
+  S.set('toh_mode','player');
+  const joined = await getPlayerCampaigns();
+  if(joined.length){
+    const groups = [...new Set(joined.map(e=>e.gid))];
+    for(const gid of groups){
+      localStorage.setItem('toh_group_id', gid);
+      await pullAll(null);
+    }
+    const dmUsername = S.get('toh_dm_username');
+    if(dmUsername) localStorage.setItem('toh_group_id', dmUsername);
+    const lastCampId = S.get('toh_player_camp_id');
+    const first = joined.find(e=>e.campId===lastCampId) || joined[0];
+    if(first){
+      setActiveCampId(first.campId);
+      S.set('toh_player_camp_id', first.campId);
+    }
+  }
+  document.querySelector('.bottomnav').style.display='flex';
+  applyModeUI();
+  nav('campaign');
+}
+
+// Switch between DM and Player without returning to modegate
+function switchToDM(){
+  const dmUsername = S.get('toh_dm_username') || getGroupId();
+  if(!dmUsername){ toast('No DM account — enter your username first','var(--red)'); return; }
+  localStorage.setItem('toh_group_id', dmUsername);
+  enterAsDM();
+}
+function switchToPlayer(){
+  // Save DM username so we can restore it
+  const gid = getGroupId();
+  if(gid) S.set('toh_dm_username', gid);
+  enterAsPlayerMode();
+}
+
+// connectAsPlayer — adds a campaign to the player's list then enters player mode
 async function connectAsPlayer(){
   const code = (document.getElementById('campaignJoinCodeInput')?.value||'').trim().toUpperCase();
   if(!code || code.length < 4){ toast('Enter your campaign code','var(--red)'); return; }
@@ -2934,14 +3032,10 @@ async function connectAsPlayer(){
   toast('Looking up campaign…','var(--purple)');
   console.log('[join] code:', code);
 
-  let matchGid = null, matchCampId = null;
+  let matchGid = null, matchCampId = null, matchName = null;
 
-  // PRIMARY: scan all campaigns for matching joinCode in data field
-  // This works regardless of settings table structure
   try {
-    const { data: allRows, error: scanErr } = await supa
-      .from('campaigns')
-      .select('id,group_id,name,data');
+    const { data: allRows, error: scanErr } = await supa.from('campaigns').select('id,group_id,name,data');
     console.log('[join] scan rows:', allRows?.length, scanErr?.message);
     if(allRows){
       const row = allRows.find(r => {
@@ -2950,68 +3044,76 @@ async function connectAsPlayer(){
       });
       if(row){
         matchGid = row.group_id;
-        // camp.id lives inside data, row.id is the composite key (gid_campId)
         matchCampId = row.data?.id || row.id;
-        console.log('[join] found via scan:', matchGid, matchCampId, row.name);
+        matchName = row.data?.name || row.name || matchCampId;
+        console.log('[join] found:', matchGid, matchCampId, matchName);
       } else {
-        console.log('[join] no match in', allRows.length, 'rows. Sample joinCodes:',
-          allRows.slice(0,5).map(r=>r.data?.joinCode||'(none)').join(', '));
+        console.log('[join] no match. Sample codes:', allRows.slice(0,5).map(r=>r.data?.joinCode||'(none)').join(', '));
       }
     }
   } catch(e){ console.warn('[join] scan failed:', e.message); }
 
-  // FALLBACK: check settings table
+  // Fallback: settings table
   if(!matchGid){
     try {
-      const { data: rows, error: se } = await supa.from('settings').select('key,value').eq('key','camp_'+code);
-      console.log('[join] settings lookup:', rows, se?.message);
-      if(rows?.length > 0){
-        let meta = null;
-        try { meta = JSON.parse(rows[0].value); } catch(e){}
-        if(meta?.gid && meta?.campId){
-          matchGid = meta.gid;
-          matchCampId = meta.campId;
-          console.log('[join] found via settings:', matchGid, matchCampId);
-        }
+      const { data: rows } = await supa.from('settings').select('key,value').eq('key','camp_'+code);
+      if(rows?.length){
+        let meta; try { meta = JSON.parse(rows[0].value); } catch(e){}
+        if(meta?.gid){ matchGid=meta.gid; matchCampId=meta.campId; }
       }
-    } catch(e){ console.warn('[join] settings lookup failed:', e.message); }
+    } catch(e){}
   }
 
   if(!matchGid || !matchCampId){
-    console.log('[join] not found');
-    toast('Campaign code not found — make sure your DM has entered the app after the last update','var(--red)');
+    toast('Campaign code not found — check with your DM','var(--red)');
     if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
     return;
   }
 
-  // Pull all data for this group
-  setGroupId(matchGid);
+  // Pull this campaign's group data
+  localStorage.setItem('toh_group_id', matchGid);
   await pullAll(null);
-  console.log('[join] _db.campaigns after pull:', _db.campaigns.map(c=>c.id+'/'+c.joinCode));
-
-  const camp = _db.campaigns.find(c => c.id === matchCampId);
+  const camp = _db.campaigns.find(c=>c.id===matchCampId);
   if(!camp){
-    console.log('[join] camp not found in _db, campId was:', matchCampId);
-    toast('Campaign not found in group — ask your DM to Force Sync','var(--red)');
+    toast('Campaign not found — ask your DM to Force Sync','var(--red)');
     if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
     return;
   }
-  _enterPlayerForCampaign(code, camp);
+
+  // Add to player's campaign list
+  await addPlayerCampaign({ code, gid: matchGid, campId: matchCampId, name: camp.name || matchName });
+
+  // Restore DM username as group_id
+  const dmUsername = S.get('toh_dm_username') || S.get('toh_group_id_dm');
+  if(dmUsername) localStorage.setItem('toh_group_id', dmUsername);
+
   if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
+  toast('✦ Added: '+camp.name, 'var(--purple)');
+
+  // If already in player mode, refresh the campaign tab; else enter player mode
+  if(isPlayerMode()){
+    setActiveCampId(matchCampId);
+    S.set('toh_player_camp_id', matchCampId);
+    renderPlayerCampaignTab();
+    nav('campaign');
+  } else {
+    S.set('toh_player_camp_id', matchCampId);
+    enterAsPlayerMode();
+  }
 }
 
 function _enterPlayerForCampaign(joinCode, camp){
   if(!camp){ toast('Campaign not found — try again','var(--red)'); return; }
+  addPlayerCampaign({ code: joinCode, gid: getGroupId(), campId: camp.id, name: camp.name });
   setActiveCampId(camp.id);
   S.set('toh_mode','player');
   S.set('toh_player_camp_id', camp.id);
   S.set('toh_player_char_id', null);
-  S.set('toh_player_join_code', joinCode);
   subscribeRealtime(camp.id);
   document.querySelector('.bottomnav').style.display='flex';
   applyModeUI();
   toast('✦ Joined '+camp.name+'!','var(--purple)');
-  nav('roster');
+  nav('campaign');
 }
 
 function showPlayerGate(){
@@ -3020,7 +3122,6 @@ function showPlayerGate(){
 }
 
 function enterAsPlayer(){
-  // Legacy: character code entry from playergate screen
   const charCode = (document.getElementById('playerAccessCode')?.value||'').trim().toUpperCase();
   const chars = getChars();
   let char = null;
@@ -3028,13 +3129,11 @@ function enterAsPlayer(){
     char = chars.find(c=>c.shareCode&&c.shareCode.toUpperCase()===charCode);
     if(!char) toast('Character code not found — showing all characters','var(--gold)');
   }
-  // Restrict to the campaign this player joined
   const playerCampId = S.get('toh_player_camp_id') || getActiveCampId();
   const campaigns = getCampaigns();
   const camp = char
     ? campaigns.find(c=>(c.charIds||[]).some(x=>String(x)===String(char.id)))
     : (campaigns.find(c=>c.id===playerCampId) || campaigns[0] || null);
-
   S.set('toh_player_char_id', char?.id||null);
   S.set('toh_player_camp_id', camp?.id||null);
   if(camp) setActiveCampId(camp.id);
@@ -3045,71 +3144,144 @@ function enterAsPlayer(){
   nav('roster');
 }
 
-// Legacy joinAsPlayer — now delegates to enterAsPlayer
 async function joinAsPlayer(){ enterAsPlayer(); }
-
-// Legacy setDMMode — now delegates to enterAsDM
 async function setDMMode(){ enterAsDM(); }
 
-function applyDesktopSplit(){
-  // No-op: desktop dice layout is handled purely via CSS
-}
+function applyDesktopSplit(){ /* no-op */ }
 
 function applyModeUI(){
-  const mode=S.get('toh_mode');
-  const topbar=document.querySelector('.topbar');
-  const existing=document.getElementById('modeBadge');
-  if(existing)existing.remove();
+  const mode = S.get('toh_mode');
+  const topbar = document.querySelector('.topbar');
+  const existing = document.getElementById('modeBadge');
+  if(existing) existing.remove();
 
-  // Reset nav visibility first
   document.querySelectorAll('.nav-item').forEach(n=>n.style.display='');
 
   if(mode==='player'){
-    const badge=document.createElement('div');
-    badge.id='modeBadge';badge.className='player-mode-badge';
-    const campName = getCampaigns().find(c=>c.id===getActiveCampId())?.name||'';
-    badge.innerHTML='⚔ '+( campName||'Player');badge.style.cssText='flex-shrink:0;cursor:pointer;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-    badge.title = campName ? 'Playing: '+campName+'\nTap to leave' : 'Player mode — tap to leave';
-    badge.onclick=()=>{ if(confirm('Leave player mode?')) resetMode(); };
+    // Player badge — shows active campaign name, tap to switch to DM
+    const badge = document.createElement('div');
+    badge.id = 'modeBadge'; badge.className = 'player-mode-badge';
+    const campName = getCampaigns().find(c=>c.id===getActiveCampId())?.name || 'Player';
+    badge.innerHTML = '⚔ '+campName.slice(0,16);
+    badge.style.cssText = 'flex-shrink:0;cursor:pointer;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;';
+    badge.title = 'Player mode — tap to switch to DM';
+    badge.onclick = ()=>{ if(confirm('Switch to DM mode?')) switchToDM(); };
     topbar.appendChild(badge);
 
-    // Players cannot access Dice tab
+    // Hide Dice tab for players
     const diceNav = document.getElementById('nav-dice');
-    if(diceNav) diceNav.style.display='none';
-
+    if(diceNav) diceNav.style.display = 'none';
     // Hide DM-only roster buttons
     document.querySelectorAll('#scr-roster .btn-gold,#scr-roster .btn-outline').forEach(b=>{
       if(b.textContent.includes('Forge')||b.textContent.includes('Party')) b.style.display='none';
     });
     // Hide party share/manage tabs
-    const ptabs=document.querySelectorAll('#scr-party .tab-btn');
-    if(ptabs[2])ptabs[2].style.display='none';
-    if(ptabs[3])ptabs[3].style.display='none';
-    // Hide campaign management buttons entirely for players
+    const ptabs = document.querySelectorAll('#scr-party .tab-btn');
+    if(ptabs[2]) ptabs[2].style.display='none';
+    if(ptabs[3]) ptabs[3].style.display='none';
+    // Hide DM campaign management buttons
     document.querySelectorAll('#campListView .btn-gold,#campListView .btn-outline:not(.btn-restore-presets),#campListView .btn-restore-presets').forEach(b=>b.style.display='none');
+    // Show player campaign UI instead
+    _ensurePlayerCampAddBtn();
 
   } else if(mode==='dm'){
-    const badge=document.createElement('div');
-    badge.id='modeBadge';badge.className='dm-mode-badge';
-    badge.innerHTML='👑 '+( getGroupId()||'DM');badge.style.cssText='flex-shrink:0;cursor:pointer;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;';
-    badge.title = 'DM: '+(getGroupId()||'')+'\nTap to switch account';
-    badge.onclick=()=>{ if(confirm('Switch account or sign out?')){ resetMode(); } };
+    const badge = document.createElement('div');
+    badge.id = 'modeBadge'; badge.className = 'dm-mode-badge';
+    const username = getGroupId() || 'DM';
+    badge.innerHTML = '👑 '+username;
+    badge.style.cssText = 'flex-shrink:0;cursor:pointer;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;';
+    badge.title = username+' (DM) — tap to switch to Player';
+    badge.onclick = ()=>{ if(confirm('Switch to Player mode?')) switchToPlayer(); };
     topbar.appendChild(badge);
-    // Restore all hidden elements
+    // Restore all DM elements
     document.querySelectorAll('#scr-roster .btn-gold,#scr-roster .btn-outline').forEach(b=>b.style.display='');
     document.querySelectorAll('#scr-party .tab-btn').forEach(b=>b.style.display='');
     document.querySelectorAll('#campListView .btn-gold,#campListView .btn-outline').forEach(b=>b.style.display='');
+    // Remove player-only add-campaign button if present
+    document.getElementById('playerCampAddBtn')?.remove();
   }
-  // Always show restore button regardless of mode
   document.querySelectorAll('.btn-restore-presets').forEach(b=>{
-    if(!isPlayerMode()) b.style.display='';
+    b.style.display = isPlayerMode() ? 'none' : '';
   });
 }
 
+// Inject "＋ Add Campaign" button into the player campaign list view
+function _ensurePlayerCampAddBtn(){
+  if(document.getElementById('playerCampAddBtn')) return;
+  const listView = document.getElementById('campListView');
+  if(!listView) return;
+  const btn = document.createElement('button');
+  btn.id = 'playerCampAddBtn';
+  btn.className = 'btn btn-outline';
+  btn.style.cssText = 'border-color:var(--purple);color:var(--purple);margin-top:8px';
+  btn.textContent = '＋ Add Campaign Code';
+  btn.onclick = ()=> showPlayerJoinGate();
+  listView.appendChild(btn);
+}
+
+// Player-mode campaign tab: show their joined campaigns
+async function renderPlayerCampaignTab(){
+  if(!isPlayerMode()) return;
+  const joined = await getPlayerCampaigns();
+  const activeId = getActiveCampId();
+  const el = document.getElementById('campList');
+  if(!el) return;
+  if(!joined.length){
+    el.innerHTML = `<div class="empty-state"><div class="es-icon">⚔</div><p>No campaigns joined yet.<br>Tap <strong style="color:var(--purple)">＋ Add Campaign Code</strong> below.</p></div>`;
+    return;
+  }
+  el.innerHTML = joined.map(e=>{
+    const isActive = e.campId === activeId;
+    const camp = _db.campaigns.find(c=>c.id===e.campId);
+    const sesCount = (camp?.sessions||[]).length;
+    return `<div class="camp-card ${isActive?'active-camp':''} fadein" onclick="playerSwitchCampaign('${e.campId}')">
+      <div class="camp-title">${camp?.name||e.name}</div>
+      <div class="camp-meta">${camp?.setting||''}${camp?.dm?' · DM: '+camp.dm:''}</div>
+      <div style="margin-top:8px;display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+        ${isActive?'<span class="camp-badge active">● Active</span>':''}
+        <span class="camp-badge">${sesCount} Session${sesCount!==1?'s':''}</span>
+        <span style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);margin-left:auto;letter-spacing:1px">${e.code}</span>
+      </div>
+      <div class="camp-actions">
+        <button class="icon-btn" onclick="playerSwitchCampaign('${e.campId}');event.stopPropagation()" style="color:var(--green);font-size:16px" title="Switch to">✓</button>
+        <button class="icon-btn" style="color:var(--red)" onclick="playerLeaveCampaign('${e.campId}');event.stopPropagation()" title="Leave campaign">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function playerSwitchCampaign(campId){
+  const joined = await getPlayerCampaigns();
+  const entry = joined.find(e=>e.campId===campId);
+  if(!entry) return;
+  localStorage.setItem('toh_group_id', entry.gid);
+  await pullAll(null);
+  setActiveCampId(campId);
+  S.set('toh_player_camp_id', campId);
+  subscribeRealtime(campId);
+  applyModeUI();
+  renderPlayerCampaignTab();
+  toast('✦ Switched to '+(  _db.campaigns.find(c=>c.id===campId)?.name||campId));
+}
+
+async function playerLeaveCampaign(campId){
+  if(!confirm('Leave this campaign? You can rejoin with the code later.')) return;
+  await removePlayerCampaign(campId);
+  if(getActiveCampId()===campId){
+    const joined = await getPlayerCampaigns();
+    if(joined.length) playerSwitchCampaign(joined[0].campId);
+    else { setActiveCampId(null); S.set('toh_player_camp_id',null); }
+  }
+  renderPlayerCampaignTab();
+  toast('Left campaign','var(--muted)');
+}
+
 function resetMode(){
-  ['toh_mode','toh_player_char_id','toh_player_camp_id','toh_player_join_code'].forEach(k=>localStorage.removeItem(k));
+  // Only clear mode — keep username and player campaign list
+  ['toh_mode','toh_player_char_id','toh_player_camp_id','toh_player_join_code','toh_dm_username'].forEach(k=>localStorage.removeItem(k));
   bootApp();
 }
+
 
 async function saveClaudeApiKey(val){
   const trimmed = val.trim();
@@ -7281,7 +7453,7 @@ async function forceSyncAll(){
 
   for(const char of chars){
     const rowId = gid + '_' + String(char.id);
-    const row = { id: rowId, group_id: gid, campaign_id: campId||null, share_code: char.shareCode||null, data: char };
+    const row = { id: rowId, group_id: gid, share_code: char.shareCode||null, data: char };
     const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
     if(error){
       console.error('char push error:', error.message, error.code, char.name);
@@ -7339,32 +7511,23 @@ function _bootContinue(mode, nav_bar){
     document.getElementById('backBtn').style.visibility='hidden';
     if(nav_bar) nav_bar.style.display='none';
     const ex=document.getElementById('modeBadge');if(ex)ex.remove();
-    // If DM username already saved, skip to connected state
     const gid = getGroupId();
-    if(gid){
-      _showModeGateConnected(gid);
-    } else {
-      showModeGateChoice();
-    }
+    if(gid){ _showModeGateConnected(gid); } else { showModeGateChoice(); }
   } else {
     if(mode==='player'){
       const playerCampId = S.get('toh_player_camp_id');
       if(playerCampId) setActiveCampId(playerCampId);
-      else {
-        const charId = S.get('toh_player_char_id');
-        if(charId){
-          const camp = getCampaigns().find(c=>(c.charIds||[]).some(x=>String(x)===String(charId)));
-          if(camp){ setActiveCampId(camp.id); S.set('toh_player_camp_id', camp.id); }
-        }
-      }
     } else if(mode==='dm'){
+      // Restore DM username as group_id if needed
+      const dmUsername = S.get('toh_dm_username');
+      if(dmUsername && !getGroupId()) localStorage.setItem('toh_group_id', dmUsername);
       if(!getActiveCampId() && _db.campaigns.length){
         setActiveCampId(_db.campaigns[0].id);
       }
     }
     if(nav_bar) nav_bar.style.display='flex';
     applyModeUI();
-    nav('roster');
+    nav(mode==='player' ? 'campaign' : 'roster');
     setTimeout(applyDesktopSplit, 0);
   }
 }
@@ -8562,13 +8725,15 @@ function renderCampList() {
 function _renderCampListInner() {
   // Purge any invalid campaigns that may have slipped in (no id or no name)
   _db.campaigns = (_db.campaigns||[]).filter(c=>c && c.id && c.name);
-  let camps = getCampaigns();
-  // Player mode: only show campaign this player belongs to
+
+  // Player mode: render their personal campaign list
   if(isPlayerMode()){
-    const campId = getPlayerCampId();
-    if(campId) camps = camps.filter(c => c.id === campId);
-    else { camps = []; }
+    renderPlayerCampaignTab();
+    _ensurePlayerCampAddBtn();
+    return;
   }
+
+  let camps = getCampaigns();
   const activeId = getActiveCampId();
   const el = document.getElementById('campList');
   if (!camps.length) {
