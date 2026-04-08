@@ -1758,8 +1758,9 @@ function goBack(){const m=SCREEN_META[currentScreen];if(m?.back)nav(m.back);}
 
 /* ══ ROSTER ══ */
 function renderRoster(){
-  // If _db is empty and we have a group, pull from Supabase first
-  if(!_db.chars.length && !_db.campaigns.length && getGroupId()){
+  // Only pull if we have no chars AND no shared campaigns loaded yet
+  const hasShared = _db.campaigns.some(c=>c._shared);
+  if(!_db.chars.length && !hasShared && getGroupId()){
     pullAll(getActiveCampId()).then(()=>_renderRosterInner());
     return;
   }
@@ -2927,10 +2928,22 @@ async function joinSharedCampaign(){
   campData._shared = true;
   campData._ownerGid = matchGid;
 
-  // Merge into _db — only this campaign
+  // Merge campaign into _db
   const existing = _db.campaigns.findIndex(c=>c.id===matchCampId);
   if(existing >= 0) _db.campaigns[existing] = campData;
   else _db.campaigns.push(campData);
+
+  // Fetch characters assigned to this campaign
+  const chars = await _fetchCampChars(matchGid, matchCampId);
+  chars.forEach(c=>{
+    c._shared = true;
+    c._sharedCampId = matchCampId;
+    const ci = _db.chars.findIndex(x=>String(x.id)===String(c.id));
+    if(ci >= 0) _db.chars[ci] = c; else _db.chars.push(c);
+  });
+
+  // Set as active campaign so roster/party/loot populate immediately
+  setActiveCampId(matchCampId);
 
   // Store reference for reload
   await _saveSharedCamp({ code, ownerGid: matchGid, campId: matchCampId, name: campData.name });
@@ -2958,7 +2971,6 @@ async function _saveSharedCamp(entry){
 async function _loadSharedCamps(){
   const shared = await _getSharedCamps();
   for(const e of shared){
-    // Fetch only the specific campaign row — never pull all owner data
     const campData = await _fetchCampRow(e.ownerGid, e.campId);
     if(!campData) continue;
     campData._shared = true;
@@ -2966,10 +2978,13 @@ async function _loadSharedCamps(){
     const idx = _db.campaigns.findIndex(c=>c.id===e.campId);
     if(idx >= 0) _db.campaigns[idx] = campData;
     else _db.campaigns.push(campData);
-    // Also fetch characters for this campaign
+    // Fetch and merge characters for this campaign
     const chars = await _fetchCampChars(e.ownerGid, e.campId);
     chars.forEach(c=>{
-      if(!_db.chars.find(x=>String(x.id)===String(c.id))) _db.chars.push(c);
+      c._shared = true;
+      c._sharedCampId = e.campId;
+      const ci = _db.chars.findIndex(x=>String(x.id)===String(c.id));
+      if(ci >= 0) _db.chars[ci] = c; else _db.chars.push(c);
     });
   }
 }
