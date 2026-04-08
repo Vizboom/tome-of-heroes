@@ -1276,7 +1276,10 @@ async function dbSaveChar(char){
 async function dbDeleteChar(charId){
   const gid = getGroupId(); if(!gid) return;
   const rowId = gid + '_' + String(charId);
-  await supa.from('characters').delete().eq('id', rowId).eq('group_id', gid);
+  await Promise.all([
+    supa.from('characters').delete().eq('id', rowId).eq('group_id', gid),
+    supa.from('characters').delete().eq('id', String(charId)).eq('group_id', gid),
+  ]);
   _db.chars = _db.chars.filter(c=>String(c.id)!==String(charId));
 }
 
@@ -1302,8 +1305,12 @@ async function dbSaveCampaign(camp){
 
 async function dbDeleteCampaign(campId){
   const gid = getGroupId(); if(!gid) return;
+  // Delete both composite-key format (gid_campId) and legacy bare-id format
   const rowId = gid + '_' + campId;
-  await supa.from('campaigns').delete().eq('id', rowId).eq('group_id', gid);
+  await Promise.all([
+    supa.from('campaigns').delete().eq('id', rowId).eq('group_id', gid),
+    supa.from('campaigns').delete().eq('id', campId).eq('group_id', gid),
+  ]);
   _db.campaigns = _db.campaigns.filter(c=>c.id!==campId);
 }
 
@@ -8938,8 +8945,11 @@ function deleteCampaign(id) {
   // Clean up join code from settings
   const camp = getCampaigns().find(c=>c.id===id);
   if(camp?.joinCode) supa.from('settings').delete().eq('key','camp_'+camp.joinCode).then(()=>{});
+  // Delete from Supabase
+  dbDeleteCampaign(id);
+  // Remove from local state
   const camps = getCampaigns().filter(c => c.id !== id);
-  saveCampaigns(camps);
+  _db.campaigns = camps;
   if (getActiveCampId() === id) setActiveCampId(camps[0]?.id || null);
   renderCampList();
   renderCampaignSwitchBanner();
