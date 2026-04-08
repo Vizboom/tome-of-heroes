@@ -8687,20 +8687,18 @@ async function _registerCampJoinCode(camp){
 // Ensure all campaigns have join codes — call after pullAll for DM sessions
 async function ensureCampJoinCodes(){
   const gid = getGroupId(); if(!gid) return;
-  let changed = false;
   console.log('[joinCodes] Ensuring join codes for', _db.campaigns.length, 'campaigns...');
   for(const camp of _db.campaigns){
     if(!camp.joinCode){
       camp.joinCode = genCode();
-      changed = true;
       dbSaveCampaign(camp);
       console.log('[joinCodes] Generated new code', camp.joinCode, 'for', camp.name);
     }
     // Always re-register in settings to ensure lookup works from any device
     await _registerCampJoinCode(camp);
-    console.log('[joinCodes] Registered', camp.joinCode, '→', camp.id, '(gid:', gid+')');
   }
-  if(changed) renderCampList();
+  // Always re-render so codes appear on cards
+  if(document.getElementById('campList')) renderCampList();
   console.log('[joinCodes] Done.');
 }
 
@@ -8749,6 +8747,15 @@ function _renderCampListInner() {
     const sesCount = (c.sessions||[]).length;
     const qCount = (c.quests||[]).filter(q=>q.status==='active').length;
     const joinCode = c.joinCode||'';
+    const codeBar = !isPlayerMode() ? `
+      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:8px;padding:8px 10px;cursor:pointer" onclick="event.stopPropagation();${joinCode?`copyText('${joinCode}');toast('Player code copied!')`:''}" title="${joinCode?'Tap to copy player code':'Generating code…'}">
+        <span style="font-size:9px;color:var(--muted);letter-spacing:1px;font-family:'Cinzel',serif;flex-shrink:0">PLAYER CODE</span>
+        ${joinCode
+          ? `<span style="font-family:'Cinzel',serif;font-size:16px;color:var(--purple);letter-spacing:4px;font-weight:bold">${joinCode}</span>
+             <span style="font-size:12px;color:var(--muted);margin-left:auto">📋</span>`
+          : `<span style="font-size:11px;color:var(--muted);font-style:italic">Generating… (re-enter as DM if this persists)</span>`
+        }
+      </div>` : '';
     return `<div class="camp-card ${isActive?'active-camp':''} fadein" onclick="openCamp('${c.id}')">
       <div class="camp-title">${c.name}</div>
       <div class="camp-meta">${c.setting||'Custom Setting'}${c.dm?' · DM: '+c.dm:''}</div>
@@ -8758,11 +8765,7 @@ function _renderCampListInner() {
         ${qCount?('<span class="camp-badge">'+qCount+' Active Quest'+(qCount!==1?'s':'')+'</span>'):''}
         <span style="font-size:10px;color:var(--muted);margin-left:auto">${c.charIds&&c.charIds.length?c.charIds.length+' character'+(c.charIds.length!==1?'s':''):'No characters'}</span>
       </div>
-      ${!isPlayerMode() && joinCode ? `<div style="margin-top:8px;display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:8px;padding:6px 10px" onclick="event.stopPropagation()">
-        <span style="font-size:10px;color:var(--muted);letter-spacing:1px;font-family:'Cinzel',serif">PLAYER CODE</span>
-        <span style="font-family:'Cinzel',serif;font-size:14px;color:var(--purple);letter-spacing:3px;cursor:pointer" onclick="copyText('${joinCode}');toast('Code copied!')" title="Tap to copy">${joinCode}</span>
-        <span style="font-size:11px;color:var(--muted);cursor:pointer;margin-left:auto" onclick="copyText('${joinCode}');toast('Code copied!')">📋</span>
-      </div>` : ''}
+      ${codeBar}
       ${!isPlayerMode()?('<div class="camp-actions"><button class="icon-btn" onclick="switchCampaign(\''+c.id+'\');event.stopPropagation()" title="Set Active" style="color:var(--green);font-size:16px">✓</button><button class="icon-btn" style="color:var(--red)" onclick="deleteCampaign(\''+c.id+'\');event.stopPropagation()">✕</button></div>'):''}
     </div>`;
   }).join('');
