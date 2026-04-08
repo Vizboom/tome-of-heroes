@@ -2980,42 +2980,51 @@ async function connectAsPlayer(){
   const btn = document.querySelector('#modeGatePlayerJoin .modegate-btn-player');
   if(btn){ btn.style.opacity='0.6'; btn.style.pointerEvents='none'; }
   toast('Looking up campaign…','var(--purple)');
+
+  let meta = null;
+
+  // Step 1: look up settings table — key = 'camp_CODE', value = JSON {gid, campId}
   try {
-    // Look up the campaign join code in settings: key = 'camp_CODE'
-    const { data, error } = await supa.from('settings').select('key,value').eq('key','camp_'+code).single();
-    if(error || !data){
-      // Fallback: search campaigns directly by joinCode in data field
-      const { data: camps } = await supa.from('campaigns').select('*').limit(200);
-      const match = (camps||[]).find(r=>(r.data?.joinCode||'').toUpperCase()===code);
-      if(!match){
-        toast('Campaign code not found — check with your DM','var(--red)');
-        if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
-        return;
-      }
-      // Found via direct search — set group and campaign
-      const gid = match.group_id;
-      setGroupId(gid);
-      await pullAll(null);
-      _enterPlayerForCampaign(code, match.data);
-    } else {
-      // data.value = JSON: { gid, campId }
-      let meta;
-      try { meta = JSON.parse(data.value); } catch(e){ meta = null; }
-      if(!meta?.gid || !meta?.campId){
-        toast('Campaign code invalid — ask your DM to reshare','var(--red)');
-        if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
-        return;
-      }
-      setGroupId(meta.gid);
-      await pullAll(null);
-      const camp = _db.campaigns.find(c=>c.id===meta.campId);
-      _enterPlayerForCampaign(code, camp);
+    const { data: rows } = await supa.from('settings').select('key,value').eq('key','camp_'+code);
+    if(rows && rows.length > 0){
+      try { meta = JSON.parse(rows[0].value); } catch(e){ meta = null; }
     }
-  } catch(e){
-    toast('Connection error — check your internet','var(--red)');
+  } catch(e){ console.warn('Settings lookup failed:', e.message); }
+
+  // Step 2: if not in settings, scan campaigns table directly for joinCode in data
+  if(!meta?.gid){
+    try {
+      const { data: camps } = await supa.from('campaigns').select('id,group_id,data');
+      const match = (camps||[]).find(r=>{
+        const jc = (r.data?.joinCode||'');
+        return jc.toUpperCase() === code;
+      });
+      if(match){
+        meta = { gid: match.group_id, campId: match.data?.id || match.id };
+        // Back-register this code so future lookups are fast
+        try {
+          await supa.from('settings').upsert({ key:'camp_'+code, value: JSON.stringify(meta) }, { onConflict:'key' });
+        } catch(e){}
+      }
+    } catch(e){ console.warn('Campaign scan failed:', e.message); }
+  }
+
+  if(!meta?.gid || !meta?.campId){
+    toast('Campaign code not found — check with your DM','var(--red)');
     if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
     return;
   }
+
+  // Step 3: connect with the group and find the campaign
+  setGroupId(meta.gid);
+  await pullAll(null);
+  const camp = _db.campaigns.find(c=>c.id===meta.campId);
+  if(!camp){
+    toast('Campaign not found — ask your DM to Force Sync','var(--red)');
+    if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
+    return;
+  }
+  _enterPlayerForCampaign(code, camp);
   if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
 }
 
@@ -8508,8 +8517,9 @@ async function ensureCampJoinCodes(){
       camp.joinCode = genCode();
       changed = true;
       dbSaveCampaign(camp);
-      _registerCampJoinCode(camp);
     }
+    // Always re-register in settings to ensure lookup works from any device
+    _registerCampJoinCode(camp);
   }
   if(changed) renderCampList();
 }
