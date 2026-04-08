@@ -3076,23 +3076,35 @@ async function callClaude(body){
 }
 
 async function clearAllData(){
-  if(!confirm('⚠ This will permanently delete ALL characters, campaigns, loot and settings.\n\nThis cannot be undone. Are you sure?')) return;
-  if(!confirm('Last chance — delete everything?')) return;
+  if(!confirm('⚠ This will permanently delete ALL characters, campaigns, loot and settings from Supabase.\n\nThis cannot be undone. Are you sure?')) return;
+  if(!confirm('Last chance — delete everything for this account?')) return;
 
-  // Clear Supabase group_id setting so a fresh one is created next time
-  try {
-    const user = await getSupaUser();
-    if(user){
-      await supa.from('settings').delete().eq('key','group_id_'+user.id);
-    }
-  } catch(e){}
+  const gid = getGroupId();
+  toast('Deleting data…', 'var(--red)');
+
+  if(gid){
+    try {
+      // Delete all rows for this group from every table
+      await Promise.all([
+        supa.from('characters').delete().eq('group_id', gid),
+        supa.from('campaigns').delete().eq('group_id', gid),
+        supa.from('loot').delete().eq('group_id', gid),
+        supa.from('settings').delete().like('key', gid + '_%'),
+        supa.from('settings').delete().like('key', 'camp_%').filter('value', 'like', '%"gid":"'+gid+'"%'),
+        supa.from('settings').delete().eq('key', 'shared_camps_'+gid),
+      ]);
+    } catch(e){ console.warn('Supabase delete error:', e.message); }
+  }
 
   // Clear all localStorage
-  const keys = Object.keys(localStorage).filter(k=>k.startsWith('toh_'));
-  keys.forEach(k=>localStorage.removeItem(k));
-  localStorage.removeItem('toh_group_id');
+  const deviceId = localStorage.getItem('toh_device_id');
+  Object.keys(localStorage).filter(k=>k.startsWith('toh_')||k.startsWith('sb-')||k.includes('supabase')).forEach(k=>localStorage.removeItem(k));
+  if(deviceId) localStorage.setItem('toh_device_id', deviceId);
 
-  toast('All data cleared');
+  // Clear in-memory store
+  _db.chars=[]; _db.campaigns=[]; _db.items={}; _db.wealth={};
+
+  toast('All data deleted');
   setTimeout(()=>window.location.reload(), 800);
 }
 
