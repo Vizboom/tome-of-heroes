@@ -2945,13 +2945,6 @@ async function _fetchCampChars(ownerGid, campId, campData){
   const charIds = (campData?.charIds || []).map(String);
   console.log('[fetchCampChars] ownerGid:', ownerGid, 'campId:', campId, 'charIds:', charIds);
 
-  // If the campaign has no characters attached yet, return nothing — don't
-  // expose all of the owner's characters to the joining player (Bug 6 fix).
-  if(!charIds.length){
-    console.log('[fetchCampChars] no charIds — returning empty');
-    return [];
-  }
-
   let allChars = [];
 
   // Strategy 1: fetch by group_id (standard)
@@ -2963,12 +2956,11 @@ async function _fetchCampChars(ownerGid, campId, campData){
     }
   } catch(e){ console.warn('[fetchCampChars] strategy1 threw:', e.message); }
 
-  // Strategy 2: if strategy 1 found nothing, fetch each character row by composite key.
-  // Normalise charIds to strings before building composite keys (Bug 5 fix).
-  if(!allChars.length){
+  // Strategy 2: if we have charIds, fetch each character row by composite key
+  if(!allChars.length && charIds.length){
     console.log('[fetchCampChars] strategy2: fetching by composite keys');
     try {
-      const compositeIds = charIds.map(id => ownerGid + '_' + String(id));
+      const compositeIds = charIds.map(id => ownerGid + '_' + id);
       const { data: rows, error } = await supa.from('characters').select('*').in('id', compositeIds);
       console.log('[fetchCampChars] strategy2:', rows?.length||0, 'rows, error:', error?.message||'none');
       if(!error && rows?.length){
@@ -2977,8 +2969,8 @@ async function _fetchCampChars(ownerGid, campId, campData){
     } catch(e){ console.warn('[fetchCampChars] strategy2 threw:', e.message); }
   }
 
-  // Strategy 3: broad scan filtered to charIds
-  if(!allChars.length){
+  // Strategy 3: scan all characters and match by charIds
+  if(!allChars.length && charIds.length){
     console.log('[fetchCampChars] strategy3: broad scan filtered to charIds');
     try {
       const { data: rows, error } = await supa.from('characters').select('*');
@@ -2991,14 +2983,15 @@ async function _fetchCampChars(ownerGid, campId, campData){
     } catch(e){ console.warn('[fetchCampChars] strategy3 threw:', e.message); }
   }
 
-  // Filter to only the characters that belong to this campaign.
-  // Always use String() comparison to avoid numeric vs string ID mismatches (Bug 5 fix).
-  const filtered = allChars.filter(c => charIds.includes(String(c.id)));
-  console.log('[fetchCampChars] final result:', filtered.length, 'chars:', filtered.map(c=>c.name+'(id:'+c.id+')').join(', '));
+  console.log('[fetchCampChars] final result:', allChars.length, 'chars:', allChars.map(c=>c.name+'(id:'+c.id+')').join(', '));
 
-  // If the filter yields nothing despite having results (ID type mismatch survived all
-  // strategies), fall back to the full set so the user gets something rather than nothing.
-  return filtered.length ? filtered : allChars;
+  // If charIds defined, filter to only those
+  if(charIds.length && allChars.length){
+    const filtered = allChars.filter(c => charIds.includes(String(c.id)));
+    console.log('[fetchCampChars] charIds filter:', filtered.length, 'of', allChars.length);
+    return filtered.length ? filtered : allChars; // fallback to all if filter yields nothing
+  }
+  return allChars;
 }
 
 async function joinSharedCampaign(){
@@ -3010,29 +3003,27 @@ async function joinSharedCampaign(){
 
   let matchGid = null, matchCampId = null;
 
-  // Strategy 1: settings table lookup — works across RLS boundaries because
-  // the DM explicitly wrote the key there via _registerCampJoinCode.
   try {
-    const { data: rows } = await supa.from('settings').select('value').eq('key','camp_'+code);
-    if(rows?.length){ let m; try{m=JSON.parse(rows[0].value);}catch{} if(m?.gid){matchGid=m.gid;matchCampId=m.campId;} }
-    console.log('[join] settings lookup:', matchGid ? 'found' : 'not found');
-  } catch(e){ console.warn('[join] settings lookup failed:', e.message); }
+    const { data: rows, error } = await supa.from('campaigns').select('id,group_id,data');
+    if(error) console.error('[join] scan error:', error.message);
+    console.log('[join] scanned', rows?.length, 'campaign rows looking for code', code);
+    const row = (rows||[]).find(r=>(r.data?.joinCode||'').toUpperCase()===code);
+    if(row){
+      matchGid = row.group_id;
+      // IMPORTANT: use data.id (real campaign id), fall back to stripping composite key
+      matchCampId = row.data?.id || row.id.replace(row.group_id+'_','');
+      console.log('[join] found campaign:', row.id, '→ gid:', matchGid, 'campId:', matchCampId);
+    } else {
+      console.log('[join] no match. Sample joinCodes:', (rows||[]).slice(0,5).map(r=>r.data?.joinCode||'(none)').join(', '));
+    }
+  } catch(e){ console.warn('[join] scan failed:', e.message); }
 
-  // Strategy 2: full scan fallback (only works if RLS allows cross-user reads)
+  // Fallback: settings table
   if(!matchGid){
     try {
-      const { data: rows, error } = await supa.from('campaigns').select('id,group_id,data');
-      if(error) console.warn('[join] scan error:', error.message);
-      console.log('[join] scanned', rows?.length, 'campaign rows looking for code', code);
-      const row = (rows||[]).find(r=>(r.data?.joinCode||'').toUpperCase()===code);
-      if(row){
-        matchGid = row.group_id;
-        matchCampId = row.data?.id || row.id.replace(row.group_id+'_','');
-        console.log('[join] found via scan:', row.id, '→ gid:', matchGid, 'campId:', matchCampId);
-      } else {
-        console.log('[join] no match in scan. Sample joinCodes:', (rows||[]).slice(0,5).map(r=>r.data?.joinCode||'(none)').join(', '));
-      }
-    } catch(e){ console.warn('[join] scan failed:', e.message); }
+      const { data: rows } = await supa.from('settings').select('value').eq('key','camp_'+code);
+      if(rows?.length){ let m; try{m=JSON.parse(rows[0].value);}catch{} if(m?.gid){matchGid=m.gid;matchCampId=m.campId;} }
+    } catch(e){}
   }
 
   if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
@@ -7436,38 +7427,7 @@ async function doLogout(){
   _showGate();
 }
 
-function importChar(){
-  const raw=(document.getElementById('importCodeIn')?.value||'').trim();
-  if(!raw){toast('Paste a code first','var(--red)');return;}
-  // Try base64 decode first, then raw JSON fallback
-  let char = null;
-  try { char = decodeChar(raw); } catch(e){}
-  if(!char || !char.name){
-    try { const p = JSON.parse(raw); if(p && p.name) char = p; } catch(e){}
-  }
-  if(!char||!char.name){toast('Invalid code','var(--red)');return;}
-  // Normalise classIdx (may be absent in newer exports that store class as a name string)
-  if(char.classIdx===undefined && char.class){
-    char.classIdx = CLASSES.findIndex(c=>c.name.toLowerCase()===char.class.toLowerCase());
-    if(char.classIdx<0) char.classIdx=0;
-  }
-  if(char.classIdx===undefined) char.classIdx=0;
-  char.id=Date.now();
-  char.shareCode=genCode();
-  char.currentHP=char.currentHP||char.maxHP||10;
-  char.statuses=char.statuses||[];
-  char.spells=char.spells||[];
-  char.attacks=char.attacks||[];
-  char.equipment=char.equipment||[];
-  char.feats=char.feats||[];
-  char.effects=char.effects||{};
-  char.customEffects=char.customEffects||[];
-  const chars=getChars();
-  chars.push(char);
-  saveChars(chars);
-  toast('✦ '+char.name+' imported!');
-  renderRoster();
-}
+function importChar(){const raw=(document.getElementById('importCodeIn')?.value||'').trim();if(!raw){toast('Paste a code first','var(--red)');return;}let char=decodeChar(raw);if(!char||!char.name||char.classIdx===undefined){toast('Invalid code','var(--red)');return;}char.id=Date.now();char.shareCode=genCode();char.currentHP=char.currentHP||char.maxHP;char.statuses=char.statuses||[];char.spells=char.spells||[];char.attacks=char.attacks||[];char.equipment=char.equipment||[];const chars=getChars();chars.push(char);saveChars(chars);toast('✦ '+char.name+' imported!');renderRoster();}
 function joinParty(){const code=(document.getElementById('partyJoinIn')?.value||'').trim().toUpperCase();if(!code){toast('Paste a party code','var(--red)');return;}S.set('toh_joined_party',code);toast('Joined party: '+code);}
 function renderPartyManage(){
   const party=getFullParty();const el=document.getElementById('ptab-manage');
@@ -7478,39 +7438,7 @@ function renderPartyManage(){
   el.innerHTML=html;
 }
 function removePartyMember(id){const mine=getChars().find(c=>c.id===id);if(mine){toast("Use Roster × to remove your own characters",'var(--gold)');return;}saveParty(getParty().filter(c=>c.id!==id));renderPartyManage();toast('Removed','var(--red)');}
-function addToParty(){
-  const raw=(document.getElementById('addToPartyIn')?.value||'').trim();
-  if(!raw){toast('Paste a code','var(--red)');return;}
-  // Try base64 decode first, then raw JSON fallback
-  let char = null;
-  try { char = decodeChar(raw); } catch(e){}
-  if(!char || !char.name){
-    try { const p = JSON.parse(raw); if(p && p.name) char = p; } catch(e){}
-  }
-  if(!char||!char.name){toast('Invalid code','var(--red)');return;}
-  // Normalise classIdx
-  if(char.classIdx===undefined && char.class){
-    char.classIdx = CLASSES.findIndex(c=>c.name.toLowerCase()===char.class.toLowerCase());
-    if(char.classIdx<0) char.classIdx=0;
-  }
-  if(char.classIdx===undefined) char.classIdx=0;
-  char.id=char.id||Date.now();
-  char.currentHP=char.currentHP||char.maxHP||10;
-  char.statuses=char.statuses||[];
-  char.spells=char.spells||[];
-  char.attacks=char.attacks||[];
-  char.equipment=char.equipment||[];
-  char.feats=char.feats||[];
-  char.effects=char.effects||{};
-  char.customEffects=char.customEffects||[];
-  const party=getParty();
-  if(party.find(c=>c.id===char.id)){toast('Already in party!','var(--gold)');return;}
-  party.push(char);
-  saveParty(party);
-  document.getElementById('addToPartyIn').value='';
-  toast('✦ '+char.name+' joined!');
-  renderPartyManage();
-}
+function addToParty(){const raw=(document.getElementById('addToPartyIn')?.value||'').trim();if(!raw){toast('Paste a code','var(--red)');return;}let char=decodeChar(raw);if(!char||!char.name){toast('Invalid code','var(--red)');return;}char.id=char.id||Date.now();char.currentHP=char.currentHP||char.maxHP;char.statuses=char.statuses||[];char.spells=char.spells||[];char.attacks=char.attacks||[];char.equipment=char.equipment||[];const party=getParty();if(party.find(c=>c.id===char.id)){toast('Already in party!','var(--gold)');return;}party.push(char);saveParty(party);document.getElementById('addToPartyIn').value='';toast('✦ '+char.name+' joined!');renderPartyManage();}
 
 // ── Party name ──
 function editPartyName(){
@@ -8616,7 +8544,7 @@ function genItemId() { return 'i_' + Date.now() + Math.random().toString(36).sli
 
 // Register a campaign's join code in Supabase settings so players can connect
 async function _registerCampJoinCode(camp){
-  const gid = getGroupId(); if(!gid || !camp?.joinCode) return false;
+  const gid = getGroupId(); if(!gid || !camp?.joinCode) return;
   try {
     const meta = JSON.stringify({ gid, campId: camp.id });
     // Try with updated_at (some Supabase settings tables require it)
@@ -8630,16 +8558,9 @@ async function _registerCampJoinCode(camp){
         { key: 'camp_'+camp.joinCode, value: meta },
         { onConflict: 'key' }
       );
-      if(e2){
-        console.warn('Could not register campaign join code:', e2.message, '| camp:', camp.name, 'code:', camp.joinCode);
-        return false;
-      }
+      if(e2) console.warn('Could not register campaign join code:', e2.message, '| camp:', camp.name, 'code:', camp.joinCode);
     }
-    return true;
-  } catch(e){
-    console.warn('_registerCampJoinCode threw:', e.message);
-    return false;
-  }
+  } catch(e){ console.warn('_registerCampJoinCode threw:', e.message); }
 }
 
 // Ensure all own campaigns have join codes — skips shared campaigns
@@ -8655,10 +8576,9 @@ async function ensureCampJoinCodes(){
       changed = true;
       console.log('[joinCodes] Generated', camp.joinCode, 'for', camp.name);
     }
-    // Register in settings table so share code lookup works cross-device.
-    // Await this — if it fails we warn the DM so they know sharing won't work.
-    const ok = await _registerCampJoinCode(camp);
-    if(!ok) toast('⚠ Share code for "'+camp.name+'" could not be registered — players may not be able to join. Check your Supabase settings table permissions.','var(--red)');
+    // Register in settings table so share code lookup works cross-device
+    // Don't block rendering on this — fire and forget
+    _registerCampJoinCode(camp).catch(()=>{});
   }
   if(document.getElementById('campList')) renderCampList();
 }
