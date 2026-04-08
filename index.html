@@ -1316,9 +1316,21 @@ async function pullAll(campId){
     else if(!cr.error && cr.data && cr.data.length === 0 && _db.chars.length > 0)
       console.log('pullAll: Supabase returned 0 chars — keeping existing _db.chars');
 
-    if(!campr.error && campr.data && campr.data.length > 0)
-      _db.campaigns = campr.data.map(r=>r.data||r).filter(c=>c && c.id && c.name);
-    else if(!campr.error && campr.data && campr.data.length === 0 && _db.campaigns.length > 0)
+    if(!campr.error && campr.data && campr.data.length > 0){
+      // Map data field, filter out any malformed rows (null data, missing id/name)
+      const validCamps = [];
+      for(const r of campr.data){
+        const camp = r.data || r;
+        if(camp && camp.id && camp.name){
+          validCamps.push(camp);
+        } else {
+          // Silently delete the bad row from Supabase so it never comes back
+          console.warn('pullAll: removing invalid campaign row', r.id);
+          supa.from('campaigns').delete().eq('id', r.id).eq('group_id', gid).then(()=>{});
+        }
+      }
+      _db.campaigns = validCamps;
+    } else if(!campr.error && campr.data && campr.data.length === 0 && _db.campaigns.length > 0)
       console.log('pullAll: Supabase returned 0 campaigns — keeping existing _db.campaigns');
 
     if(campId){
@@ -8365,6 +8377,8 @@ function renderCampList() {
 }
 
 function _renderCampListInner() {
+  // Purge any invalid campaigns that may have slipped in (no id or no name)
+  _db.campaigns = (_db.campaigns||[]).filter(c=>c && c.id && c.name);
   let camps = getCampaigns();
   // Player mode: only show campaign this player belongs to
   if(isPlayerMode()){
