@@ -8919,11 +8919,27 @@ function switchCampaign(id) {
 }
 
 /* ── Campaign detail ── */
-function openCamp(id) {
+async function openCamp(id) {
   editingCampId = id;
   document.getElementById('campListView').style.display = 'none';
   document.getElementById('campNewForm').style.display = 'none';
   document.getElementById('campDetailView').style.display = 'block';
+
+  // For shared campaigns, ensure chars are loaded before rendering
+  const camp = getCampaigns().find(c=>c.id===id);
+  if(camp?._shared){
+    const alreadyLoaded = getChars().some(c=>c._sharedCampId===id);
+    if(!alreadyLoaded){
+      const chars = await _fetchCampChars(camp._ownerGid, id, camp);
+      chars.forEach(c=>{
+        c._shared = true;
+        c._sharedCampId = id;
+        const ci = _db.chars.findIndex(x=>String(x.id)===String(c.id));
+        if(ci>=0) _db.chars[ci]=c; else _db.chars.push(c);
+      });
+    }
+  }
+
   renderCampDetailHeader();
   campTab('sessions');
 }
@@ -8947,8 +8963,20 @@ function renderCampDetailHeader() {
   if (!camp) return;
   const isActive = getActiveCampId() === camp.id;
   const el = document.getElementById('campDetailHeader');
-  const allChars = getChars();
-  // Use the real charIds from the server — never strip them
+  // For shared campaigns: get chars by _sharedCampId tag
+  // For own campaigns: get from full char list
+  let allChars;
+  if(camp._shared){
+    allChars = getChars().filter(c=>c._sharedCampId===camp.id);
+    // Also include any charIds-matched chars not yet tagged
+    const extraIds = new Set((camp.charIds||[]).map(String));
+    getChars().forEach(c=>{
+      if(extraIds.has(String(c.id)) && !allChars.find(x=>String(x.id)===String(c.id)))
+        allChars.push(c);
+    });
+  } else {
+    allChars = getChars();
+  }
   const realCharIds = camp.charIds || [];
   el.innerHTML = `
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:13px;padding:14px;margin-bottom:14px">
@@ -8972,15 +9000,25 @@ function renderCampDetailHeader() {
         <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
           ${(()=>{
             const assignedIds = new Set(realCharIds.map(String));
-            // Build set of all charIds globally to find unassigned chars
             const campaigns = getCampaigns();
             const globalAssigned = new Set();
             campaigns.forEach(c=>(c.charIds||[]).forEach(id=>globalAssigned.add(String(id))));
-            // Chars assigned to this campaign (loaded locally)
+
+            if(camp._shared){
+              // Shared campaign: show all loaded chars, no ghost pills, no add/remove controls
+              if(!allChars.length) return '<span style="font-size:12px;color:var(--muted);font-style:italic">No characters loaded yet</span>';
+              return allChars.map(c=>{
+                const cc = classColor(c.classIdx);
+                return `<div style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid ${cc};background:${cc}22">
+                  <span style="font-size:14px">${classIcon(c.classIdx)}</span>
+                  <span style="font-family:'Cinzel',serif;font-size:10px;color:${cc}">${c.name}</span>
+                </div>`;
+              }).join('');
+            }
+
+            // Own campaign: existing logic with ghost pills and add/remove
             const assignedChars = allChars.filter(c=>assignedIds.has(String(c.id)));
-            // Chars not assigned to any campaign (available to add)
             const unassignedChars = allChars.filter(c=>!globalAssigned.has(String(c.id)));
-            // Ghost pills for charIds not in local cache yet
             const loadedIds = new Set(assignedChars.map(c=>String(c.id)));
             const ghostIds = [...assignedIds].filter(id=>!loadedIds.has(id));
             const eligible = [...assignedChars, ...unassignedChars];
