@@ -143,17 +143,17 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     background: var(--bg2);
     border-bottom: none;
     border-right: 1px solid var(--border);
-    /* Hide scrollbar on desktop — panel scrolls but bar is invisible */
+    /* Hide scrollbar — panel scrolls but bar is invisible */
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
   #diceCharPanel::-webkit-scrollbar { display: none; }
   /* Desktop: body always visible, no max-height restriction */
   #diceCharPanel .dice-char-body { display: block !important; max-height: none !important; overflow: visible !important; }
-  /* Ignore collapsed state completely on desktop */
+  /* Ignore collapsed state on desktop */
   #diceCharPanel.collapsed { flex: 0 0 50%; padding: 16px 20px; overflow-y: auto; }
   #diceCharPanel.collapsed .dice-char-body { display: block !important; }
-  /* Hide toggle strip on desktop */
+  /* Hide toggle arrow on desktop */
   #diceCharPanel .dice-toggle-arrow { display: none !important; }
   #diceRollPanel {
     flex: 1 1 50%;
@@ -161,8 +161,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     height: 100%;
     padding: 14px 14px 20px;
   }
-  /* No collapse arrows on desktop */
-  #diceCharPanel .dice-toggle-arrow::before { content: '' !important; }
 
   /* Screens that are scroll-regions get extra padding on desktop */
   .scroll-region.screen.active { padding: 20px 28px 40px; }
@@ -7583,6 +7581,8 @@ function getActiveDiceChar(){
 function renderDiceCharPanel(){
   const el = document.getElementById('diceCharPanel');
   if(!el) return;
+  // Preserve scroll position so slot/pip toggles don't jump the panel
+  const savedScroll = el.scrollTop;
   const char = getActiveDiceChar();
   if(!char){ el.innerHTML=''; return; }
 
@@ -7855,6 +7855,7 @@ function filterFeatCards(listId, searchId){
     const match = c.dataset.feat.toLowerCase().includes(q) || c.textContent.toLowerCase().includes(q);
     c.style.display = match ? '' : 'none';
   });
+  el.scrollTop = savedScroll;
 }
 
 function toggleDicePrepSection(bodyId, arrowId){
