@@ -7262,7 +7262,8 @@ function _bootContinue(mode, nav_bar){
   if(!getActiveCampId() && _db.campaigns.length) setActiveCampId(_db.campaigns[0].id);
   if(nav_bar) nav_bar.style.display='flex';
   _applyUserBadge();
-  _loadSharedCamps().then(()=>renderCampList());
+  // Ensure codes exist then load shared camps and render
+  ensureCampJoinCodes().then(()=>_loadSharedCamps()).then(()=>renderCampList());
   nav('roster');
   setTimeout(applyDesktopSplit, 0);
 }
@@ -8426,22 +8427,21 @@ async function _registerCampJoinCode(camp){
   } catch(e){ console.warn('_registerCampJoinCode threw:', e.message); }
 }
 
-// Ensure all campaigns have join codes — call after pullAll for DM sessions
+// Ensure all own campaigns have join codes — skips shared campaigns
 async function ensureCampJoinCodes(){
   const gid = getGroupId(); if(!gid) return;
-  console.log('[joinCodes] Ensuring join codes for', _db.campaigns.length, 'campaigns...');
-  for(const camp of _db.campaigns){
+  const ownCamps = _db.campaigns.filter(c=>!c._shared);
+  if(!ownCamps.length) return;
+  console.log('[joinCodes] Checking', ownCamps.length, 'campaigns…');
+  for(const camp of ownCamps){
     if(!camp.joinCode){
       camp.joinCode = genCode();
       dbSaveCampaign(camp);
-      console.log('[joinCodes] Generated new code', camp.joinCode, 'for', camp.name);
+      console.log('[joinCodes] Generated', camp.joinCode, 'for', camp.name);
     }
-    // Always re-register in settings to ensure lookup works from any device
     await _registerCampJoinCode(camp);
   }
-  // Always re-render so codes appear on cards
   if(document.getElementById('campList')) renderCampList();
-  console.log('[joinCodes] Done.');
 }
 
 /* ── Campaign list view ── */
