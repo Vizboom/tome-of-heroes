@@ -2942,28 +2942,56 @@ async function _fetchCampRow(ownerGid, campId){
 // Fetch characters for a shared campaign
 // Returns all chars for the owner group (caller filters by _sharedCampId)
 async function _fetchCampChars(ownerGid, campId, campData){
+  const charIds = (campData?.charIds || []).map(String);
+  console.log('[fetchCampChars] ownerGid:', ownerGid, 'campId:', campId, 'charIds:', charIds);
+
+  let allChars = [];
+
+  // Strategy 1: fetch by group_id (standard)
   try {
-    console.log('[fetchCampChars] querying characters for group_id:', ownerGid);
-    const { data: rows, error } = await supa.from('characters').select('data').eq('group_id', ownerGid);
-    if(error) console.warn('[fetchCampChars] error:', error.message);
-    console.log('[fetchCampChars] got', rows?.length||0, 'character rows');
-    if(!rows?.length) return [];
-    const allChars = rows.map(r=>r.data||r).filter(c=>c && c.id);
-    console.log('[fetchCampChars] valid chars:', allChars.map(c=>c.name+'('+c.id+')').join(', '));
-    const charIds = campData?.charIds || [];
-    console.log('[fetchCampChars] campaign charIds:', charIds);
-    if(charIds.length){
-      const allowedIds = new Set(charIds.map(String));
-      const filtered = allChars.filter(c=>allowedIds.has(String(c.id)));
-      console.log('[fetchCampChars] filtered to', filtered.length, 'chars by charIds');
-      return filtered;
+    const { data: rows, error } = await supa.from('characters').select('*').eq('group_id', ownerGid);
+    console.log('[fetchCampChars] strategy1 group_id query:', rows?.length||0, 'rows, error:', error?.message||'none');
+    if(!error && rows?.length){
+      allChars = rows.map(r=>r.data||r).filter(c=>c && c.id);
     }
-    console.log('[fetchCampChars] no charIds filter — returning all', allChars.length, 'chars');
-    return allChars;
-  } catch(e){
-    console.warn('[fetchCampChars] threw:', e.message);
-    return [];
+  } catch(e){ console.warn('[fetchCampChars] strategy1 threw:', e.message); }
+
+  // Strategy 2: if we have charIds, fetch each character row by composite key
+  if(!allChars.length && charIds.length){
+    console.log('[fetchCampChars] strategy2: fetching by composite keys');
+    try {
+      const compositeIds = charIds.map(id => ownerGid + '_' + id);
+      const { data: rows, error } = await supa.from('characters').select('*').in('id', compositeIds);
+      console.log('[fetchCampChars] strategy2:', rows?.length||0, 'rows, error:', error?.message||'none');
+      if(!error && rows?.length){
+        allChars = rows.map(r=>r.data||r).filter(c=>c && c.id);
+      }
+    } catch(e){ console.warn('[fetchCampChars] strategy2 threw:', e.message); }
   }
+
+  // Strategy 3: scan all characters and match by charIds
+  if(!allChars.length && charIds.length){
+    console.log('[fetchCampChars] strategy3: broad scan filtered to charIds');
+    try {
+      const { data: rows, error } = await supa.from('characters').select('*');
+      console.log('[fetchCampChars] strategy3 broad scan:', rows?.length||0, 'rows, error:', error?.message||'none');
+      if(!error && rows?.length){
+        const all = rows.map(r=>r.data||r).filter(c=>c && c.id);
+        allChars = all.filter(c => charIds.includes(String(c.id)));
+        console.log('[fetchCampChars] strategy3 filtered:', allChars.length, 'of', all.length);
+      }
+    } catch(e){ console.warn('[fetchCampChars] strategy3 threw:', e.message); }
+  }
+
+  console.log('[fetchCampChars] final result:', allChars.length, 'chars:', allChars.map(c=>c.name+'(id:'+c.id+')').join(', '));
+
+  // If charIds defined, filter to only those
+  if(charIds.length && allChars.length){
+    const filtered = allChars.filter(c => charIds.includes(String(c.id)));
+    console.log('[fetchCampChars] charIds filter:', filtered.length, 'of', allChars.length);
+    return filtered.length ? filtered : allChars; // fallback to all if filter yields nothing
+  }
+  return allChars;
 }
 
 async function joinSharedCampaign(){
