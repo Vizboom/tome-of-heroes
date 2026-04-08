@@ -52,6 +52,36 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .nav-item .nav-icon{font-size:20px;line-height:1;}
 .nav-item{font-size:7px;}
 
+/* ── Mobile: dice screen stacks vertically ── */
+#scr-dice.active {
+  display: flex !important;
+  flex-direction: column;
+  overflow-y: auto;
+}
+#diceCharPanel {
+  width: 100%;
+  flex-shrink: 0;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  transition: max-height 0.25s ease, padding 0.25s ease;
+  max-height: 600px;
+  overflow: hidden;
+}
+#diceCharPanel.collapsed {
+  max-height: 44px;
+  padding: 0;
+  overflow: hidden;
+}
+#diceCharPanel.collapsed .dice-char-body { display: none; }
+#diceRollPanel {
+  width: 100%;
+  flex: 1;
+  padding: 14px 14px 20px;
+}
+/* Toggle strip arrow: down when expanded, right when collapsed on mobile */
+#diceCharPanel .dice-toggle-arrow::before { content: '▼'; }
+#diceCharPanel.collapsed .dice-toggle-arrow::before { content: '▶'; }
+
 /* ── Desktop responsive layout ── */
 @media (min-width: 768px) {
   html, body { overflow: auto; height: 100%; }
@@ -102,19 +132,22 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   }
   #diceCharPanel {
     flex: 0 0 50%;
+    max-height: none;
+    width: auto;
     overflow-y: auto;
     height: 100%;
     padding: 16px 20px;
     background: var(--bg2);
+    border-bottom: none;
     border-right: 1px solid var(--border);
     transition: flex-basis 0.2s ease, padding 0.2s ease;
   }
   #diceCharPanel.collapsed {
     flex: 0 0 36px;
+    max-height: none;
     padding: 0;
     overflow: hidden;
   }
-  #diceCharPanel.collapsed .dice-char-body { display: none; }
   #diceRollPanel {
     flex: 1 1 50%;
     overflow-y: auto;
@@ -122,6 +155,9 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     padding: 14px 14px 20px;
     transition: flex-basis 0.2s ease;
   }
+  /* Desktop collapse arrow: left when expanded, right when collapsed */
+  #diceCharPanel .dice-toggle-arrow::before { content: '◀'; }
+  #diceCharPanel.collapsed .dice-toggle-arrow::before { content: '▶'; }
 
   /* Screens that are scroll-regions get extra padding on desktop */
   .scroll-region.screen.active { padding: 20px 28px 40px; }
@@ -7502,7 +7538,7 @@ function renderDiceCharPanel(){
   const toggleStrip = `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);background:var(--surface2);position:sticky;top:0;z-index:2" onclick="toggleDiceCharPanel()">
     <span style="font-size:16px">${cls.icon}</span>
     <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${char.name}</span>
-    <span style="font-size:14px;color:var(--muted);flex-shrink:0" title="${isCollapsed?'Expand':'Collapse'} character panel">${isCollapsed?'▶':'◀'}</span>
+    <span class="dice-toggle-arrow" style="font-size:14px;color:var(--muted);flex-shrink:0" title="${isCollapsed?'Expand':'Collapse'} character panel"></span>
   </div>`;
 
   el.innerHTML = toggleStrip + `<div class="dice-char-body">
