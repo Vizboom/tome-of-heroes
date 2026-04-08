@@ -1819,18 +1819,20 @@ function renderRoster(){
 function _renderRosterInner(){
   try {
   let chars=getVisibleChars();
-  // In player mode, only show the player's own character
-  if(isPlayerMode()){
-    const pCharId=getPlayerCharId();
-    chars=chars.filter(c=>c.id==pCharId);
-  } else {
-    // In DM mode, if there's an active campaign with assigned characters,
-    // only show those characters on the roster
-    const activeCamp = getActiveCamp();
-    if(activeCamp && activeCamp.charIds && activeCamp.charIds.length){
-      const campCharIds = activeCamp.charIds.map(String);
-      chars=chars.filter(c=>campCharIds.includes(String(c.id)));
+  const activeCamp = getActiveCamp();
+  if(activeCamp?._shared){
+    // Shared campaign: show chars fetched for this campaign
+    const campId = activeCamp.id;
+    chars = getChars().filter(c=>c._shared && c._sharedCampId===campId);
+    // Also include charIds-matched chars
+    if(activeCamp.charIds?.length){
+      const byId = getChars().filter(c=>activeCamp.charIds.some(x=>String(x)===String(c.id)));
+      const seen = new Set(chars.map(c=>String(c.id)));
+      byId.forEach(c=>{ if(!seen.has(String(c.id))) chars.push(c); });
     }
+  } else if(activeCamp?.charIds?.length){
+    const campCharIds = activeCamp.charIds.map(String);
+    chars = chars.filter(c=>campCharIds.includes(String(c.id)));
   }
   // Guard against characters with invalid classIdx
   chars = chars.filter(c => c && Number.isInteger(c.classIdx) && CLASSES[c.classIdx]);
@@ -2618,16 +2620,26 @@ function partyTab(t){
 function getFullParty(){
   const allChars = getChars();
   const camp = getActiveCamp();
-  // In player mode show only the player's own char
-  if(isPlayerMode()){
-    const pid = getPlayerCharId();
-    return allChars.filter(c=>String(c.id)===String(pid));
+  if(!camp) return [];
+
+  // For shared campaigns: show all chars that were fetched for this campaign
+  if(camp._shared){
+    const campId = camp.id;
+    const sharedChars = allChars.filter(c=>c._shared && c._sharedCampId===campId);
+    // Also include any chars that match charIds if present
+    if(camp.charIds?.length){
+      const fromIds = allChars.filter(c=>camp.charIds.some(x=>String(x)===String(c.id)));
+      // Merge both lists deduped
+      const seen = new Set(sharedChars.map(c=>String(c.id)));
+      fromIds.forEach(c=>{ if(!seen.has(String(c.id))){ sharedChars.push(c); seen.add(String(c.id)); } });
+    }
+    return sharedChars;
   }
-  // Filter to active campaign's assigned characters
-  if(camp && camp.charIds && camp.charIds.length){
+
+  // Own campaign: filter to assigned chars
+  if(camp.charIds?.length){
     return allChars.filter(c=>camp.charIds.some(x=>String(x)===String(c.id)));
   }
-  // No active campaign — show nothing (avoids mixing campaigns)
   return [];
 }
 
@@ -2925,25 +2937,23 @@ async function _fetchCampRow(ownerGid, campId){
   } catch(e){ return null; }
 }
 
-// Fetch characters for a shared campaign, filtered to campData.charIds
-// Pass campData directly to avoid an extra Supabase round-trip
+// Fetch characters for a shared campaign
+// Returns all chars for the owner group (caller filters by _sharedCampId)
 async function _fetchCampChars(ownerGid, campId, campData){
   try {
     const { data: rows, error } = await supa.from('characters').select('data').eq('group_id', ownerGid);
     if(error) console.warn('[fetchCampChars] error:', error.message);
     if(!rows?.length) return [];
     const allChars = rows.map(r=>r.data||r).filter(c=>c && c.id);
-    // If campData provided, filter to charIds only
     const charIds = campData?.charIds || [];
-    if(!charIds.length){
-      // No charIds defined — return all chars for this group
-      // (some campaigns may not use charIds filtering)
-      return allChars;
+    // If charIds defined, filter to only those chars
+    if(charIds.length){
+      const allowedIds = new Set(charIds.map(String));
+      return allChars.filter(c=>allowedIds.has(String(c.id)));
     }
-    const allowedIds = new Set(charIds.map(String));
-    const filtered = allChars.filter(c=>allowedIds.has(String(c.id)));
-    console.log('[fetchCampChars] found', filtered.length, 'of', allChars.length, 'chars for camp', campId, 'charIds:', charIds);
-    return filtered;
+    // No charIds filter — return all chars for this group
+    // (they'll be tagged with _sharedCampId by the caller so we know which camp they belong to)
+    return allChars;
   } catch(e){
     console.warn('[fetchCampChars] threw:', e.message);
     return [];
