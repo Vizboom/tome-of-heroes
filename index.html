@@ -2980,46 +2980,67 @@ async function connectAsPlayer(){
   const btn = document.querySelector('#modeGatePlayerJoin .modegate-btn-player');
   if(btn){ btn.style.opacity='0.6'; btn.style.pointerEvents='none'; }
   toast('Looking up campaign…','var(--purple)');
+  console.log('[join] Looking up campaign code:', code);
 
   let meta = null;
 
-  // Step 1: look up settings table — key = 'camp_CODE', value = JSON {gid, campId}
+  // Step 1: settings table lookup — key = 'camp_CODE', value = JSON {gid, campId}
   try {
-    const { data: rows } = await supa.from('settings').select('key,value').eq('key','camp_'+code);
+    const { data: rows, error: re } = await supa.from('settings').select('key,value').eq('key','camp_'+code);
+    console.log('[join] Step 1 settings:', rows, re?.message);
     if(rows && rows.length > 0){
       try { meta = JSON.parse(rows[0].value); } catch(e){ meta = null; }
+      console.log('[join] Step 1 meta parsed:', meta);
     }
-  } catch(e){ console.warn('Settings lookup failed:', e.message); }
+  } catch(e){ console.warn('[join] Step 1 failed:', e.message); }
 
-  // Step 2: if not in settings, scan campaigns table directly for joinCode in data
+  // Step 2: scan campaigns.data jsonb for joinCode field
   if(!meta?.gid){
     try {
-      const { data: camps } = await supa.from('campaigns').select('id,group_id,data');
-      const match = (camps||[]).find(r=>{
-        const jc = (r.data?.joinCode||'');
-        return jc.toUpperCase() === code;
-      });
+      console.log('[join] Step 2: scanning campaigns table...');
+      // Use PostgREST's jsonb filter to find the campaign directly
+      const { data: camps, error: ce } = await supa
+        .from('campaigns')
+        .select('id,group_id,data')
+        .filter('data->>joinCode', 'eq', code);
+      console.log('[join] Step 2 jsonb filter result:', camps, ce?.message);
+
+      let match = (camps||[]).find(r => r.data?.joinCode?.toUpperCase() === code);
+
+      // If jsonb filter returned nothing (may not be supported), fall back to full scan
+      if(!match && (!camps || camps.length === 0)){
+        console.log('[join] Step 2: jsonb filter empty, trying full scan...');
+        const { data: all, error: ae } = await supa.from('campaigns').select('id,group_id,data');
+        console.log('[join] Step 2 full scan:', all?.length, 'rows', ae?.message);
+        match = (all||[]).find(r => (r.data?.joinCode||'').toUpperCase() === code);
+      }
+
       if(match){
         meta = { gid: match.group_id, campId: match.data?.id || match.id };
-        // Back-register this code so future lookups are fast
-        try {
-          await supa.from('settings').upsert({ key:'camp_'+code, value: JSON.stringify(meta) }, { onConflict:'key' });
-        } catch(e){}
+        console.log('[join] Step 2 match found:', meta);
+        // Back-register for fast future lookups
+        supa.from('settings').upsert({ key:'camp_'+code, value: JSON.stringify(meta) }, { onConflict:'key' }).then(()=>{});
+      } else {
+        console.log('[join] Step 2: no match found for code', code);
       }
-    } catch(e){ console.warn('Campaign scan failed:', e.message); }
+    } catch(e){ console.warn('[join] Step 2 failed:', e.message); }
   }
 
   if(!meta?.gid || !meta?.campId){
+    console.log('[join] Failed — meta:', meta);
     toast('Campaign code not found — check with your DM','var(--red)');
     if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
     return;
   }
 
-  // Step 3: connect with the group and find the campaign
+  // Step 3: pull data for this group and find the campaign
+  console.log('[join] Step 3: setting gid', meta.gid, 'pulling data...');
   setGroupId(meta.gid);
   await pullAll(null);
+  console.log('[join] Step 3: _db.campaigns after pull:', _db.campaigns.map(c=>c.id));
   const camp = _db.campaigns.find(c=>c.id===meta.campId);
   if(!camp){
+    console.log('[join] Step 3: camp', meta.campId, 'not in _db after pull');
     toast('Campaign not found — ask your DM to Force Sync','var(--red)');
     if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
     return;
@@ -8512,16 +8533,20 @@ async function _registerCampJoinCode(camp){
 async function ensureCampJoinCodes(){
   const gid = getGroupId(); if(!gid) return;
   let changed = false;
+  console.log('[joinCodes] Ensuring join codes for', _db.campaigns.length, 'campaigns...');
   for(const camp of _db.campaigns){
     if(!camp.joinCode){
       camp.joinCode = genCode();
       changed = true;
       dbSaveCampaign(camp);
+      console.log('[joinCodes] Generated new code', camp.joinCode, 'for', camp.name);
     }
     // Always re-register in settings to ensure lookup works from any device
-    _registerCampJoinCode(camp);
+    await _registerCampJoinCode(camp);
+    console.log('[joinCodes] Registered', camp.joinCode, '→', camp.id, '(gid:', gid+')');
   }
   if(changed) renderCampList();
+  console.log('[joinCodes] Done.');
 }
 
 /* ── Campaign list view ── */
