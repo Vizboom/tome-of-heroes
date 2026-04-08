@@ -8447,14 +8447,17 @@ async function ensureCampJoinCodes(){
   const gid = getGroupId(); if(!gid) return;
   const ownCamps = _db.campaigns.filter(c=>!c._shared);
   if(!ownCamps.length) return;
-  console.log('[joinCodes] Checking', ownCamps.length, 'campaigns…');
+  let changed = false;
   for(const camp of ownCamps){
     if(!camp.joinCode){
       camp.joinCode = genCode();
-      dbSaveCampaign(camp);
+      await dbSaveCampaign(camp); // await so it's in Supabase before we render
+      changed = true;
       console.log('[joinCodes] Generated', camp.joinCode, 'for', camp.name);
     }
-    await _registerCampJoinCode(camp);
+    // Register in settings table so share code lookup works cross-device
+    // Don't block rendering on this — fire and forget
+    _registerCampJoinCode(camp).catch(()=>{});
   }
   if(document.getElementById('campList')) renderCampList();
 }
@@ -8499,7 +8502,7 @@ function _renderCampListInner() {
           <span style="font-family:'Cinzel',serif;font-size:16px;color:var(--purple);letter-spacing:4px;font-weight:bold">${joinCode}</span>
           <span style="font-size:12px;color:var(--muted);margin-left:auto">📋</span>
         </div>`
-      : (!isShared && !joinCode ? `<div style="margin-top:6px;font-size:11px;color:var(--muted);font-style:italic">Generating share code…</div>` : '');
+      : (!isShared && !joinCode ? `<div style="margin-top:6px;font-size:11px;color:var(--purple);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();ensureCampJoinCodes().then(()=>renderCampList())" title="Tap to generate share code">Tap to generate share code</div>` : '');
     const sharedBadge = isShared ? `<span class="camp-badge" style="border-color:var(--purple);color:var(--purple)">🔗 Shared</span>` : '';
     const actions = isShared
       ? `<div class="camp-actions">
