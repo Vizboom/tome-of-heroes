@@ -83,8 +83,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 /* Toggle strip arrow: up when expanded (tap to hide), down when collapsed (tap to show) */
 #diceCharPanel .dice-toggle-arrow::before { content: '▲  Hide'; font-size:10px; letter-spacing:1px; }
 #diceCharPanel.collapsed .dice-toggle-arrow::before { content: '▼  Show Character'; font-size:10px; letter-spacing:1px; }
-/* When char panel is collapsed on mobile, roll panel fills all remaining space */
-#diceCharPanel.collapsed ~ #diceRollPanel { flex: 1; }
 
 /* ── Desktop responsive layout ── */
 @media (min-width: 768px) {
@@ -128,7 +126,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     width: 100%; height: 100%; overflow-y: auto;
   }
 
-  /* Dice screen desktop: char panel LEFT fixed, roll controls RIGHT scrollable */
+  /* Dice screen desktop: char panel LEFT, roll controls RIGHT — pure CSS */
   #scr-dice.active {
     display: flex !important;
     flex-direction: row;
@@ -137,27 +135,34 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   }
   #diceCharPanel {
     flex: 0 0 50%;
-    width: auto;
     max-height: none;
-    height: 100%;
+    width: auto;
     overflow-y: auto;
+    height: 100%;
     padding: 16px 20px;
     background: var(--bg2);
     border-bottom: none;
     border-right: 1px solid var(--border);
+    /* Hide scrollbar on desktop — panel scrolls but bar is invisible */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
-  /* Desktop: always fully visible, ignore any collapsed state */
-  #diceCharPanel .dice-char-body { display: block !important; max-height: none; overflow-y: visible; padding: 0; }
+  #diceCharPanel::-webkit-scrollbar { display: none; }
+  /* Desktop: body always visible, no max-height restriction */
+  #diceCharPanel .dice-char-body { display: block !important; max-height: none !important; overflow: visible !important; }
+  /* Ignore collapsed state completely on desktop */
   #diceCharPanel.collapsed { flex: 0 0 50%; padding: 16px 20px; overflow-y: auto; }
   #diceCharPanel.collapsed .dice-char-body { display: block !important; }
-  /* Hide the toggle strip on desktop */
-  #diceCharPanel > div:first-child .dice-toggle-arrow { display: none !important; }
+  /* Hide toggle strip on desktop */
+  #diceCharPanel .dice-toggle-arrow { display: none !important; }
   #diceRollPanel {
     flex: 1 1 50%;
     overflow-y: auto;
     height: 100%;
     padding: 14px 14px 20px;
   }
+  /* No collapse arrows on desktop */
+  #diceCharPanel .dice-toggle-arrow::before { content: '' !important; }
 
   /* Screens that are scroll-regions get extra padding on desktop */
   .scroll-region.screen.active { padding: 20px 28px 40px; }
