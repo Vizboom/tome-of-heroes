@@ -1258,10 +1258,11 @@ async function dbGetCampaigns(){
 }
 
 async function dbSaveCampaign(camp){
+  if(!camp || !camp.id) { console.warn('dbSaveCampaign: invalid camp', camp); return; }
   const gid = getGroupId()||await ensureGroupId(); if(!gid) return;
   // Use composite row key (group_id + camp.id) to prevent cross-group overwrites
   const rowId = gid + '_' + camp.id;
-  const row = { id: rowId, group_id: gid, name: camp.name||'', data: camp };
+  const row = { id: rowId, group_id: gid, name: camp.name||'Untitled Campaign', data: camp };
   const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
   if(error) console.warn('saveCampaign error:', error.message);
   const i = _db.campaigns.findIndex(c=>c.id===camp.id);
@@ -1311,12 +1312,12 @@ async function pullAll(campId){
     ]);
     // Only overwrite _db if we got actual data back (never wipe with empty)
     if(!cr.error && cr.data && cr.data.length > 0)
-      _db.chars = cr.data.map(r=>r.data||r);
+      _db.chars = cr.data.map(r=>r.data||r).filter(c=>c && c.id);
     else if(!cr.error && cr.data && cr.data.length === 0 && _db.chars.length > 0)
       console.log('pullAll: Supabase returned 0 chars — keeping existing _db.chars');
 
     if(!campr.error && campr.data && campr.data.length > 0)
-      _db.campaigns = campr.data.map(r=>r.data||r);
+      _db.campaigns = campr.data.map(r=>r.data||r).filter(c=>c && c.id && c.name);
     else if(!campr.error && campr.data && campr.data.length === 0 && _db.campaigns.length > 0)
       console.log('pullAll: Supabase returned 0 campaigns — keeping existing _db.campaigns');
 
@@ -1616,10 +1617,11 @@ function saveChar(char){
 // ── Campaigns ──
 function getCampaigns(){ return _db.campaigns||[]; }
 function saveCampaigns(camps){
-  _db.campaigns = camps;
-  camps.forEach(c => dbSaveCampaign(c));
+  _db.campaigns = (camps||[]).filter(c=>c&&c.id);
+  _db.campaigns.forEach(c => dbSaveCampaign(c));
 }
 function saveCampaign(camp){
+  if(!camp || !camp.id) return;
   const i = _db.campaigns.findIndex(c=>c.id===camp.id);
   if(i>=0) _db.campaigns[i]=camp; else _db.campaigns.push(camp);
   dbSaveCampaign(camp);
@@ -7039,7 +7041,18 @@ async function diagCampaigns(){
       else { writeOk=true; out.push(ok('WRITE: succeeded')); await supa.from(tbl).delete().eq('key',testId); }
     } else {
       const gid = getGroupId()||'test-group';
-      const {error:we} = await supa.from(tbl).upsert({id:testId,group_id:gid,name:'_healthcheck',data:{_test:true}},{onConflict:'id'});
+      // Each table has different required columns
+      let testRow;
+      if(tbl==='characters'){
+        testRow = {id:testId, group_id:gid, data:{_test:true}};
+      } else if(tbl==='campaigns'){
+        testRow = {id:testId, group_id:gid, name:'_healthcheck', data:{_test:true}};
+      } else if(tbl==='loot'){
+        testRow = {id:testId, group_id:gid, data:[], wealth:{}};
+      } else {
+        testRow = {id:testId, group_id:gid, data:{_test:true}};
+      }
+      const {error:we} = await supa.from(tbl).upsert(testRow,{onConflict:'id'});
       if(we) out.push(err('WRITE: '+we.message+' ['+we.code+']'));
       else {
         writeOk=true;
