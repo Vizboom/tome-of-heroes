@@ -943,54 +943,85 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   <div class="screen" data-panel-label="SETTINGS" id="scr-modegate">
     <div class="modegate-rune">📖</div>
     <div class="modegate-title">Tome of Heroes</div>
-    <div class="modegate-sub" id="modegate-sub-text">Enter your group code to connect<br>or create a new group to get started</div>
 
-    <!-- Group code entry (shown when no group connected) -->
-    <div id="modeGateConnect" style="width:100%;max-width:320px">
-      <div style="margin-bottom:16px">
-        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;text-align:left">GROUP CODE</div>
-        <input id="groupCodeInput" placeholder="e.g. ABC12"
-          style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-family:'Cinzel',serif;font-size:24px;letter-spacing:6px;text-align:center;text-transform:uppercase"
-          oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6)">
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Enter the code your DM gave you, or create a new group below</div>
-      </div>
-      <button class="modegate-btn modegate-btn-dm" onclick="connectWithCode()">
-        <span class="mb-icon">⚔</span>
-        <span class="mb-text">
-          <span class="mb-label">Connect to Group</span>
-          <span class="mb-desc">Join an existing campaign with a group code</span>
-        </span>
-      </button>
-      <button class="modegate-btn modegate-btn-player" onclick="createNewGroup()" style="margin-top:8px">
+    <!-- Initial choice (shown before either path is picked) -->
+    <div id="modeGateChoice" style="width:100%;max-width:320px">
+      <div class="modegate-sub" style="margin-bottom:20px">Who are you?</div>
+      <button class="modegate-btn modegate-btn-dm" onclick="showDMGate()">
         <span class="mb-icon">👑</span>
         <span class="mb-text">
-          <span class="mb-label">Create New Group</span>
-          <span class="mb-desc">Start fresh — generates a new group code to share</span>
+          <span class="mb-label">Dungeon Master</span>
+          <span class="mb-desc">Create or manage your campaigns</span>
+        </span>
+      </button>
+      <button class="modegate-btn modegate-btn-player" onclick="showPlayerJoinGate()" style="margin-top:8px">
+        <span class="mb-icon">⚔</span>
+        <span class="mb-text">
+          <span class="mb-label">Player</span>
+          <span class="mb-desc">Join a campaign with your code</span>
         </span>
       </button>
     </div>
 
-    <!-- Connected state (shown when group is active) -->
+    <!-- DM: group code entry -->
+    <div id="modeGateDM" style="display:none;width:100%;max-width:320px">
+      <div style="margin-bottom:16px">
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;text-align:left">DM GROUP CODE</div>
+        <input id="groupCodeInput" placeholder="e.g. ABC12"
+          style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-family:'Cinzel',serif;font-size:24px;letter-spacing:6px;text-align:center;text-transform:uppercase"
+          oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6)">
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Enter your existing DM code, or create a new group</div>
+      </div>
+      <button class="modegate-btn modegate-btn-dm" onclick="connectWithCode()">
+        <span class="mb-icon">🔑</span>
+        <span class="mb-text">
+          <span class="mb-label">Connect to My Group</span>
+          <span class="mb-desc">Resume with an existing DM group code</span>
+        </span>
+      </button>
+      <button class="modegate-btn modegate-btn-player" onclick="createNewGroup()" style="margin-top:8px">
+        <span class="mb-icon">✦</span>
+        <span class="mb-text">
+          <span class="mb-label">Create New Group</span>
+          <span class="mb-desc">Start fresh — generates a new DM group code</span>
+        </span>
+      </button>
+      <button onclick="showModeGateChoice()" style="margin-top:12px;background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;width:100%;text-align:center">← Back</button>
+    </div>
+
+    <!-- DM: connected state -->
     <div id="modeGateConnected" style="display:none;width:100%;max-width:320px">
       <div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:12px;padding:14px;margin-bottom:16px;text-align:center">
-        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:6px">CONNECTED — GROUP CODE</div>
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:6px">DM GROUP CODE</div>
         <div id="modeGateGroupCode" style="font-family:'Cinzel',serif;font-size:32px;color:var(--gold);letter-spacing:6px"></div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px">Share this code with all players and on all your devices</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Your DM code — keep private. Share campaign codes with players.</div>
       </div>
       <button class="modegate-btn modegate-btn-dm" onclick="enterAsDM()">
         <span class="mb-icon">👑</span>
         <span class="mb-text">
-          <span class="mb-label">Dungeon Master</span>
-          <span class="mb-desc">Full access — manage campaigns, characters, everything</span>
+          <span class="mb-label">Enter as Dungeon Master</span>
+          <span class="mb-desc">Full access — all campaigns, characters, tools</span>
         </span>
       </button>
-      <button class="modegate-btn modegate-btn-player" onclick="showPlayerGate()" style="margin-top:8px">
+    </div>
+
+    <!-- Player: campaign code entry -->
+    <div id="modeGatePlayerJoin" style="display:none;width:100%;max-width:320px">
+      <div style="margin-bottom:16px">
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;text-align:left">CAMPAIGN CODE</div>
+        <input id="campaignJoinCodeInput" placeholder="e.g. XYZABC"
+          style="width:100%;background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:14px;color:var(--purple);font-family:'Cinzel',serif;font-size:24px;letter-spacing:6px;text-align:center;text-transform:uppercase"
+          oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6)">
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Enter the campaign code your DM gave you</div>
+      </div>
+      <button class="modegate-btn modegate-btn-player" onclick="connectAsPlayer()">
         <span class="mb-icon">⚔</span>
         <span class="mb-text">
-          <span class="mb-label">Player</span>
-          <span class="mb-desc">Enter your character code to filter to your character</span>
+          <span class="mb-label">Join Campaign</span>
+          <span class="mb-desc">Connect to your campaign as a player</span>
         </span>
       </button>
+      <button onclick="showModeGateChoice()" style="margin-top:12px;background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;width:100%;text-align:center">← Back</button>
     </div>
 
     <div style="margin-top:24px;width:100%;max-width:280px">
@@ -1760,8 +1791,7 @@ function nav(id){
       if(gid){
         _showModeGateConnected(gid);
       } else {
-        document.getElementById('modeGateConnect').style.display = 'block';
-        document.getElementById('modeGateConnected').style.display = 'none';
+        showModeGateChoice();
       }
     }
     if(id==='loot'){lootTab('inventory');}
@@ -2822,7 +2852,7 @@ async function connectWithCode(){
   const code = (document.getElementById('groupCodeInput')?.value||'').trim().toUpperCase();
   if(!code || code.length < 3){ toast('Enter a group code','var(--red)'); return; }
 
-  const btn = document.querySelector('#modeGateConnect .modegate-btn-dm');
+  const btn = document.querySelector('#modeGateDM .modegate-btn-dm');
   if(btn){ btn.style.opacity='0.6'; btn.style.pointerEvents='none'; }
   toast('Connecting…','var(--purple)');
 
@@ -2871,7 +2901,7 @@ async function connectWithCode(){
 }
 
 async function createNewGroup(){
-  const btn = document.querySelector('#modeGateConnect .modegate-btn-player');
+  const btn = document.querySelector('#modeGateDM .modegate-btn-player');
   if(btn){ btn.style.opacity='0.6'; btn.style.pointerEvents='none'; }
   toast('Creating group…','var(--purple)');
 
@@ -2893,11 +2923,33 @@ async function createNewGroup(){
   _showModeGateConnected(gid);
 }
 
+function showModeGateChoice(){
+  document.getElementById('modeGateChoice').style.display = 'block';
+  document.getElementById('modeGateDM').style.display = 'none';
+  document.getElementById('modeGateConnected').style.display = 'none';
+  document.getElementById('modeGatePlayerJoin').style.display = 'none';
+}
+function showDMGate(){
+  document.getElementById('modeGateChoice').style.display = 'none';
+  document.getElementById('modeGateDM').style.display = 'block';
+  document.getElementById('modeGateConnected').style.display = 'none';
+  document.getElementById('modeGatePlayerJoin').style.display = 'none';
+  // Pre-fill if already have a group id
+  const gid = getGroupId();
+  if(gid){ const inp=document.getElementById('groupCodeInput'); if(inp) inp.value=gid; }
+}
+function showPlayerJoinGate(){
+  document.getElementById('modeGateChoice').style.display = 'none';
+  document.getElementById('modeGateDM').style.display = 'none';
+  document.getElementById('modeGateConnected').style.display = 'none';
+  document.getElementById('modeGatePlayerJoin').style.display = 'block';
+}
 function _showModeGateConnected(gid){
-  document.getElementById('modeGateConnect').style.display = 'none';
+  document.getElementById('modeGateChoice').style.display = 'none';
+  document.getElementById('modeGateDM').style.display = 'none';
   document.getElementById('modeGateConnected').style.display = 'block';
+  document.getElementById('modeGatePlayerJoin').style.display = 'none';
   document.getElementById('modeGateGroupCode').textContent = gid;
-  // Pre-fill the input for next time
   const inp = document.getElementById('groupCodeInput');
   if(inp) inp.value = gid;
 }
@@ -2912,9 +2964,72 @@ async function enterAsDM(){
     setActiveCampId(_db.campaigns[0].id);
   }
 
+  // Ensure all campaigns have player join codes
+  ensureCampJoinCodes();
+
   subscribeRealtime(getActiveCampId());
   document.querySelector('.bottomnav').style.display='flex';
   applyModeUI();
+  nav('roster');
+}
+
+// Players enter a campaign-specific join code (not the DM group code)
+async function connectAsPlayer(){
+  const code = (document.getElementById('campaignJoinCodeInput')?.value||'').trim().toUpperCase();
+  if(!code || code.length < 4){ toast('Enter your campaign code','var(--red)'); return; }
+  const btn = document.querySelector('#modeGatePlayerJoin .modegate-btn-player');
+  if(btn){ btn.style.opacity='0.6'; btn.style.pointerEvents='none'; }
+  toast('Looking up campaign…','var(--purple)');
+  try {
+    // Look up the campaign join code in settings: key = 'camp_CODE'
+    const { data, error } = await supa.from('settings').select('key,value').eq('key','camp_'+code).single();
+    if(error || !data){
+      // Fallback: search campaigns directly by joinCode in data field
+      const { data: camps } = await supa.from('campaigns').select('*').limit(200);
+      const match = (camps||[]).find(r=>(r.data?.joinCode||'').toUpperCase()===code);
+      if(!match){
+        toast('Campaign code not found — check with your DM','var(--red)');
+        if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
+        return;
+      }
+      // Found via direct search — set group and campaign
+      const gid = match.group_id;
+      setGroupId(gid);
+      await pullAll(null);
+      _enterPlayerForCampaign(code, match.data);
+    } else {
+      // data.value = JSON: { gid, campId }
+      let meta;
+      try { meta = JSON.parse(data.value); } catch(e){ meta = null; }
+      if(!meta?.gid || !meta?.campId){
+        toast('Campaign code invalid — ask your DM to reshare','var(--red)');
+        if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
+        return;
+      }
+      setGroupId(meta.gid);
+      await pullAll(null);
+      const camp = _db.campaigns.find(c=>c.id===meta.campId);
+      _enterPlayerForCampaign(code, camp);
+    }
+  } catch(e){
+    toast('Connection error — check your internet','var(--red)');
+    if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
+    return;
+  }
+  if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
+}
+
+function _enterPlayerForCampaign(joinCode, camp){
+  if(!camp){ toast('Campaign not found — try again','var(--red)'); return; }
+  setActiveCampId(camp.id);
+  S.set('toh_mode','player');
+  S.set('toh_player_camp_id', camp.id);
+  S.set('toh_player_char_id', null);
+  S.set('toh_player_join_code', joinCode);
+  subscribeRealtime(camp.id);
+  document.querySelector('.bottomnav').style.display='flex';
+  applyModeUI();
+  toast('✦ Joined '+camp.name+'!','var(--purple)');
   nav('roster');
 }
 
@@ -2924,6 +3039,7 @@ function showPlayerGate(){
 }
 
 function enterAsPlayer(){
+  // Legacy: character code entry from playergate screen
   const charCode = (document.getElementById('playerAccessCode')?.value||'').trim().toUpperCase();
   const chars = getChars();
   let char = null;
@@ -2931,12 +3047,13 @@ function enterAsPlayer(){
     char = chars.find(c=>c.shareCode&&c.shareCode.toUpperCase()===charCode);
     if(!char) toast('Character code not found — showing all characters','var(--gold)');
   }
+  // Restrict to the campaign this player joined
+  const playerCampId = S.get('toh_player_camp_id') || getActiveCampId();
   const campaigns = getCampaigns();
   const camp = char
     ? campaigns.find(c=>(c.charIds||[]).some(x=>String(x)===String(char.id)))
-    : (campaigns[0]||null);
+    : (campaigns.find(c=>c.id===playerCampId) || campaigns[0] || null);
 
-  S.set('toh_mode','player');
   S.set('toh_player_char_id', char?.id||null);
   S.set('toh_player_camp_id', camp?.id||null);
   if(camp) setActiveCampId(camp.id);
@@ -2962,12 +3079,23 @@ function applyModeUI(){
   const topbar=document.querySelector('.topbar');
   const existing=document.getElementById('modeBadge');
   if(existing)existing.remove();
+
+  // Reset nav visibility first
+  document.querySelectorAll('.nav-item').forEach(n=>n.style.display='');
+
   if(mode==='player'){
     const badge=document.createElement('div');
     badge.id='modeBadge';badge.className='player-mode-badge';
-    badge.innerHTML='⚔ Player';badge.style.cssText='flex-shrink:0;cursor:pointer;';
-    badge.onclick=()=>{ if(confirm('Leave player mode? This clears your session.')) resetMode(); };
+    const campName = getCampaigns().find(c=>c.id===getActiveCampId())?.name||'';
+    badge.innerHTML='⚔ '+( campName||'Player');badge.style.cssText='flex-shrink:0;cursor:pointer;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    badge.title = campName ? 'Playing: '+campName+'\nTap to leave' : 'Player mode — tap to leave';
+    badge.onclick=()=>{ if(confirm('Leave player mode?')) resetMode(); };
     topbar.appendChild(badge);
+
+    // Players cannot access Dice tab
+    const diceNav = document.getElementById('nav-dice');
+    if(diceNav) diceNav.style.display='none';
+
     // Hide DM-only roster buttons
     document.querySelectorAll('#scr-roster .btn-gold,#scr-roster .btn-outline').forEach(b=>{
       if(b.textContent.includes('Forge')||b.textContent.includes('Party')) b.style.display='none';
@@ -2976,13 +3104,14 @@ function applyModeUI(){
     const ptabs=document.querySelectorAll('#scr-party .tab-btn');
     if(ptabs[2])ptabs[2].style.display='none';
     if(ptabs[3])ptabs[3].style.display='none';
-    // Hide campaign create/import buttons (but NOT the restore button)
-    document.querySelectorAll('#campListView .btn-gold,#campListView .btn-outline:not(.btn-restore-presets)').forEach(b=>b.style.display='none');
+    // Hide campaign management buttons entirely for players
+    document.querySelectorAll('#campListView .btn-gold,#campListView .btn-outline:not(.btn-restore-presets),#campListView .btn-restore-presets').forEach(b=>b.style.display='none');
+
   } else if(mode==='dm'){
     const badge=document.createElement('div');
     badge.id='modeBadge';badge.className='dm-mode-badge';
     badge.innerHTML='👑 DM';badge.style.cssText='flex-shrink:0;cursor:pointer;';
-    badge.onclick=()=>{ if(confirm('Switch to Player mode?')){S.set('toh_mode',null);bootApp();} };
+    badge.onclick=()=>{ if(confirm('Switch back to start screen?')){ resetMode(); } };
     topbar.appendChild(badge);
     // Restore all hidden elements
     document.querySelectorAll('#scr-roster .btn-gold,#scr-roster .btn-outline').forEach(b=>b.style.display='');
@@ -2990,11 +3119,13 @@ function applyModeUI(){
     document.querySelectorAll('#campListView .btn-gold,#campListView .btn-outline').forEach(b=>b.style.display='');
   }
   // Always show restore button regardless of mode
-  document.querySelectorAll('.btn-restore-presets').forEach(b=>b.style.display='');
+  document.querySelectorAll('.btn-restore-presets').forEach(b=>{
+    if(!isPlayerMode()) b.style.display='';
+  });
 }
 
 function resetMode(){
-  ['toh_mode','toh_player_char_id','toh_player_camp_id'].forEach(k=>localStorage.removeItem(k));
+  ['toh_mode','toh_player_char_id','toh_player_camp_id','toh_player_join_code'].forEach(k=>localStorage.removeItem(k));
   bootApp();
 }
 
@@ -7198,10 +7329,12 @@ function _bootContinue(mode, nav_bar){
     document.getElementById('backBtn').style.visibility='hidden';
     if(nav_bar) nav_bar.style.display='none';
     const ex=document.getElementById('modeBadge');if(ex)ex.remove();
-    // If group_id already set, show connected state so user just picks DM/Player
+    // If DM group_id already set, go straight to DM connected state
     const gid = getGroupId();
     if(gid){
       _showModeGateConnected(gid);
+    } else {
+      showModeGateChoice();
     }
   } else {
     if(mode==='player'){
@@ -7215,7 +7348,6 @@ function _bootContinue(mode, nav_bar){
         }
       }
     } else if(mode==='dm'){
-      // Auto-set active campaign if none stored
       if(!getActiveCampId() && _db.campaigns.length){
         setActiveCampId(_db.campaigns[0].id);
       }
@@ -7223,7 +7355,7 @@ function _bootContinue(mode, nav_bar){
     if(nav_bar) nav_bar.style.display='flex';
     applyModeUI();
     nav('roster');
-    setTimeout(applyDesktopSplit, 0); // run after DOM renders
+    setTimeout(applyDesktopSplit, 0);
   }
 }
 
@@ -8358,6 +8490,30 @@ function saveCamp(camp) {
 function genCampId() { return 'camp_' + Date.now() + Math.random().toString(36).slice(2,5); }
 function genItemId() { return 'i_' + Date.now() + Math.random().toString(36).slice(2,5); }
 
+// Register a campaign's join code in Supabase settings so players can connect
+async function _registerCampJoinCode(camp){
+  const gid = getGroupId(); if(!gid || !camp?.joinCode) return;
+  try {
+    const meta = JSON.stringify({ gid, campId: camp.id });
+    await supa.from('settings').upsert({ key: 'camp_'+camp.joinCode, value: meta }, { onConflict: 'key' });
+  } catch(e){ console.warn('Could not register campaign join code:', e.message); }
+}
+
+// Ensure all campaigns have join codes — call after pullAll for DM sessions
+async function ensureCampJoinCodes(){
+  const gid = getGroupId(); if(!gid) return;
+  let changed = false;
+  for(const camp of _db.campaigns){
+    if(!camp.joinCode){
+      camp.joinCode = genCode();
+      changed = true;
+      dbSaveCampaign(camp);
+      _registerCampJoinCode(camp);
+    }
+  }
+  if(changed) renderCampList();
+}
+
 /* ── Campaign list view ── */
 let editingCampId = null;
 
@@ -8400,15 +8556,21 @@ function _renderCampListInner() {
     const isActive = c.id === activeId;
     const sesCount = (c.sessions||[]).length;
     const qCount = (c.quests||[]).filter(q=>q.status==='active').length;
+    const joinCode = c.joinCode||'';
     return `<div class="camp-card ${isActive?'active-camp':''} fadein" onclick="openCamp('${c.id}')">
       <div class="camp-title">${c.name}</div>
       <div class="camp-meta">${c.setting||'Custom Setting'}${c.dm?' · DM: '+c.dm:''}</div>
       <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;align-items:center">
         ${isActive?('<span class="camp-badge active">● Active</span>'):''}
         <span class="camp-badge">${sesCount} Session${sesCount!==1?'s':''}</span>
-        ${qCount?('<span class="camp-badge">'+qCount+' Active Quest'+qCount!==1?'s':''+'</span>'):''}
+        ${qCount?('<span class="camp-badge">'+qCount+' Active Quest'+(qCount!==1?'s':'')+'</span>'):''}
         <span style="font-size:10px;color:var(--muted);margin-left:auto">${c.charIds&&c.charIds.length?c.charIds.length+' character'+(c.charIds.length!==1?'s':''):'No characters'}</span>
       </div>
+      ${!isPlayerMode() && joinCode ? `<div style="margin-top:8px;display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:8px;padding:6px 10px" onclick="event.stopPropagation()">
+        <span style="font-size:10px;color:var(--muted);letter-spacing:1px;font-family:'Cinzel',serif">PLAYER CODE</span>
+        <span style="font-family:'Cinzel',serif;font-size:14px;color:var(--purple);letter-spacing:3px;cursor:pointer" onclick="copyText('${joinCode}');toast('Code copied!')" title="Tap to copy">${joinCode}</span>
+        <span style="font-size:11px;color:var(--muted);cursor:pointer;margin-left:auto" onclick="copyText('${joinCode}');toast('Code copied!')">📋</span>
+      </div>` : ''}
       ${!isPlayerMode()?('<div class="camp-actions"><button class="icon-btn" onclick="switchCampaign(\''+c.id+'\');event.stopPropagation()" title="Set Active" style="color:var(--green);font-size:16px">✓</button><button class="icon-btn" style="color:var(--red)" onclick="deleteCampaign(\''+c.id+'\');event.stopPropagation()">✕</button></div>'):''}
     </div>`;
   }).join('');
@@ -8605,6 +8767,9 @@ async function installPreset(id) {
   camp.sessions=camp.sessions||[]; camp.quests=camp.quests||[];
   camp.npcs=camp.npcs||[]; camp.arcs=camp.arcs||[];
   camp.notes=camp.notes||[]; camp.charIds=camp.charIds||[];
+  // Preserve existing joinCode if reinstalling, otherwise generate new
+  const existing = _db.campaigns.find(c=>c.id===camp.id);
+  camp.joinCode = existing?.joinCode || genCode();
 
   const gid = getGroupId();
   const rowId = gid + '_' + camp.id;
@@ -8617,6 +8782,7 @@ async function installPreset(id) {
   }
   const i = _db.campaigns.findIndex(c=>c.id===camp.id);
   if(i>=0) _db.campaigns[i]=camp; else _db.campaigns.push(camp);
+  _registerCampJoinCode(camp);
   if(!getActiveCampId()) setActiveCampId(camp.id);
   toast('✦ '+camp.name+' installed! '+(camp.sessions||[]).length+' sessions, '+(camp.npcs||[]).length+' NPCs.','var(--gold)');
   hideCampForm();
@@ -8645,6 +8811,8 @@ function doImportCampaign(raw) {
   camp.charIds = camp.charIds || [];
   const camps = getCampaigns();
   const existing = camps.findIndex(c => c.id === camp.id);
+  // Ensure imported campaign has a join code
+  if(!camp.joinCode) camp.joinCode = genCode();
   if (existing >= 0) {
     if (!confirm('Campaign already exists. Overwrite?')) return;
     camps[existing] = camp;
@@ -8652,6 +8820,7 @@ function doImportCampaign(raw) {
     camps.push(camp);
   }
   saveCampaigns(camps);
+  _registerCampJoinCode(camp);
   if (!getActiveCampId()) setActiveCampId(camp.id);
   const el = document.getElementById('campImportCode');
   if (el) el.value = '';
@@ -8677,10 +8846,13 @@ function createCampaign() {
     npcs: [],
     quests: [],
     notes: [],
+    joinCode: genCode(),
   };
   const camps = getCampaigns();
   camps.push(camp);
   saveCampaigns(camps);
+  // Register join code in settings so players can connect
+  _registerCampJoinCode(camp);
   if (!getActiveCampId()) setActiveCampId(camp.id);
   hideCampForm();
   toast('✦ '+name+' created!');
@@ -8689,6 +8861,9 @@ function createCampaign() {
 
 function deleteCampaign(id) {
   if (!confirm('Delete this campaign? This cannot be undone.')) return;
+  // Clean up join code from settings
+  const camp = getCampaigns().find(c=>c.id===id);
+  if(camp?.joinCode) supa.from('settings').delete().eq('key','camp_'+camp.joinCode).then(()=>{});
   const camps = getCampaigns().filter(c => c.id !== id);
   saveCampaigns(camps);
   if (getActiveCampId() === id) setActiveCampId(camps[0]?.id || null);
