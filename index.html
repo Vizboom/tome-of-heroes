@@ -2855,9 +2855,9 @@ function _showGate(){
   document.getElementById('backBtn').style.visibility='hidden';
   document.querySelector('.bottomnav').style.display='none';
   const ex=document.getElementById('modeBadge'); if(ex) ex.remove();
-  // Pre-fill saved username
-  const gid = getGroupId();
-  if(gid){ const inp=document.getElementById('usernameInput'); if(inp) inp.value=gid; }
+  // Pre-fill saved username (from active session or last logout)
+  const saved = localStorage.getItem('toh_group_id') || localStorage.getItem('toh_last_username');
+  if(saved){ const inp=document.getElementById('usernameInput'); if(inp) inp.value=saved; }
   setTimeout(()=>document.getElementById('usernameInput')?.focus(), 50);
 }
 
@@ -2872,6 +2872,7 @@ async function userLogin(){
   await pullAll(null);
   if(!getActiveCampId() && _db.campaigns.length) setActiveCampId(_db.campaigns[0].id);
   await ensureCampJoinCodes();
+  await _loadSharedCamps();
   if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
   _enterApp();
 }
@@ -7330,10 +7331,12 @@ async function skipLogin(){
 
 async function doLogout(){
   try { await supa.auth.signOut(); _supaUser = null; } catch(e){}
-  // Clear all toh_ keys but keep device_id
+  // Keep device_id and last username so login screen pre-fills
   const deviceId = localStorage.getItem('toh_device_id');
+  const lastUsername = localStorage.getItem('toh_group_id') || localStorage.getItem('toh_dm_username');
   Object.keys(localStorage).filter(k=>k.startsWith('toh_')||k.startsWith('sb-')||k.includes('supabase')||k.includes('auth-token')).forEach(k=>localStorage.removeItem(k));
   if(deviceId) localStorage.setItem('toh_device_id', deviceId);
+  if(lastUsername) localStorage.setItem('toh_last_username', lastUsername);
   _realtimeSubs.forEach(s=>supa.removeChannel(s));
   _realtimeSubs = [];
   _db.chars=[]; _db.campaigns=[];
