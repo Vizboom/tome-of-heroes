@@ -76,10 +76,32 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 #diceRollPanel {
   width: 100%;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+#diceRollPanel .roll-panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  flex-shrink: 0;
+}
+#diceRollPanel .roll-panel-body {
+  flex: 1;
   overflow-y: auto;
   padding: 14px 14px 80px;
   -webkit-overflow-scrolling: touch;
 }
+#diceRollPanel.collapsed .roll-panel-body { display: none !important; }
+#diceRollPanel .roll-panel-arrow::before { content: '▲  Hide Roller'; font-size:10px; letter-spacing:1px; }
+#diceRollPanel.collapsed .roll-panel-arrow::before { content: '▼  Show Roller'; font-size:10px; letter-spacing:1px; }
 /* Toggle strip arrow: up when expanded (tap to hide), down when collapsed (tap to show) */
 #diceCharPanel .dice-toggle-arrow::before { content: '▲  Hide'; font-size:10px; letter-spacing:1px; }
 #diceCharPanel.collapsed .dice-toggle-arrow::before { content: '▼  Show Character'; font-size:10px; letter-spacing:1px; }
@@ -137,30 +159,15 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     flex: 0 0 50%;
     max-height: none;
     width: auto;
-    overflow: hidden;
+    overflow-y: auto;
     height: 100%;
-    padding: 0;
+    padding: 16px 20px;
     background: var(--bg2);
     border-bottom: none;
     border-right: 1px solid var(--border);
     transition: flex-basis 0.2s ease, padding 0.2s ease;
-    display: flex;
-    flex-direction: column;
   }
-  #diceCharPanel .dice-char-body {
-    display: block;
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
-    padding: 12px 20px 20px;
-  }
-  #diceCharPanel .dice-char-body > div:first-child {
-    position: sticky;
-    top: 0;
-    z-index: 3;
-    background: var(--bg2);
-    box-shadow: 0 8px 18px rgba(0,0,0,0.24);
-  }
+  #diceCharPanel .dice-char-body { display: block; }
   #diceCharPanel.collapsed {
     flex: 0 0 36px;
     max-height: none;
@@ -170,10 +177,17 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   #diceCharPanel.collapsed .dice-char-body { display: none !important; }
   #diceRollPanel {
     flex: 1 1 50%;
-    overflow-y: auto;
     height: 100%;
-    padding: 14px 14px 20px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     transition: flex-basis 0.2s ease;
+  }
+  #diceRollPanel .roll-panel-toggle { display: none; }
+  #diceRollPanel .roll-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 14px 20px;
   }
   /* Desktop collapse arrow: left when expanded, right when collapsed */
   #diceCharPanel .dice-toggle-arrow::before { content: '◀'; }
@@ -943,6 +957,12 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   <div class="screen" id="scr-dice" data-panel-label="DICE ORACLE">
     <div id="diceCharPanel"></div>
     <div id="diceRollPanel">
+    <div class="roll-panel-toggle" onclick="toggleDiceRollPanel()">
+      <span style="font-size:16px">⬡</span>
+      <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);flex:1;letter-spacing:1px">DICE ROLLER</span>
+      <span class="roll-panel-arrow" style="font-size:10px;color:var(--muted);flex-shrink:0;font-family:'Cinzel',serif;letter-spacing:1px"></span>
+    </div>
+    <div class="roll-panel-body">
     <button class="roll-btn roll-n" id="rollBtn" onclick="doRoll()" style="margin-bottom:12px">Roll ⬡</button>
     <div id="rollResult" style="display:none"></div>
     <div class="divider"><span>Roll Mode</span></div>
@@ -965,6 +985,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <div id="condEffects"></div>
     <div class="divider"><span>History</span></div>
     <div class="hist-list" id="rollHistory"></div>
+    </div>
     </div>
   </div>
 
@@ -7574,6 +7595,12 @@ function copyText(txt){navigator.clipboard?.writeText(txt).then(()=>toast('Copie
 let diceState={mode:'normal',die:20,activeConds:new Set(),history:[]};
 function renderDiceScreen(){
   renderDiceCharPanel();
+  // Restore roll panel collapsed state
+  const rollEl = document.getElementById('diceRollPanel');
+  if(rollEl){
+    if(localStorage.getItem('toh_dice_roll_collapsed')==='1') rollEl.classList.add('collapsed');
+    else rollEl.classList.remove('collapsed');
+  }
   document.getElementById('dieStrip').innerHTML=[4,6,8,10,12,20,100].map(d=>`<button class="die-btn ${d===diceState.die?'sel':''}" onclick="selectDie(${d})">d${d}</button>`).join('');
   renderCondGrid();renderActiveConds();updateRollBtn();renderDiceHistory();
 }
@@ -7925,6 +7952,13 @@ function toggleDiceCharPanel(){
   localStorage.setItem('toh_dice_panel_collapsed', collapsed ? '1' : '0');
   // Re-render to flip the arrow direction
   renderDiceCharPanel();
+}
+
+function toggleDiceRollPanel(){
+  const el = document.getElementById('diceRollPanel');
+  if(!el) return;
+  const collapsed = el.classList.toggle('collapsed');
+  localStorage.setItem('toh_dice_roll_collapsed', collapsed ? '1' : '0');
 }
 
 function _getResState(charId){ try{ return JSON.parse(localStorage.getItem('toh_res_'+charId)||'{}'); }catch{ return {}; } }
