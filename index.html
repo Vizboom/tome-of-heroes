@@ -925,7 +925,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   </div>
 
   <!-- DICE -->
-  <div class="scroll-region screen" id="scr-dice" data-panel-label="DICE ORACLE">
+  <div class="screen" id="scr-dice" data-panel-label="DICE ORACLE">
     <div id="diceCharPanel"></div>
     <div id="diceRollPanel">
     <button class="roll-btn roll-n" id="rollBtn" onclick="doRoll()" style="margin-bottom:12px">Roll ⬡</button>
@@ -1345,28 +1345,35 @@ async function pullAll(campId){
       supa.from('characters').select('*').eq('group_id', gid),
       supa.from('campaigns').select('*').eq('group_id', gid),
     ]);
-    // Only overwrite _db if we got actual data back (never wipe with empty)
-    if(!cr.error && cr.data && cr.data.length > 0)
-      _db.chars = cr.data.map(r=>r.data||r).filter(c=>c && c.id);
-    else if(!cr.error && cr.data && cr.data.length === 0 && _db.chars.length > 0)
-      console.log('pullAll: Supabase returned 0 chars — keeping existing _db.chars');
 
+    // Preserve shared chars — only replace own chars
+    const sharedChars = _db.chars.filter(c=>c._shared);
+    if(!cr.error && cr.data && cr.data.length > 0){
+      const ownChars = cr.data.map(r=>r.data||r).filter(c=>c && c.id);
+      _db.chars = [...ownChars, ...sharedChars];
+    } else if(!cr.error && cr.data && cr.data.length === 0 && _db.chars.filter(c=>!c._shared).length > 0){
+      console.log('pullAll: Supabase returned 0 own chars — keeping existing');
+      // Still restore sharedChars in case they were wiped
+      _db.chars = [..._db.chars.filter(c=>!c._shared), ...sharedChars];
+    }
+
+    // Preserve shared campaigns — only replace own campaigns
+    const sharedCamps = _db.campaigns.filter(c=>c._shared);
     if(!campr.error && campr.data && campr.data.length > 0){
-      // Map data field, filter out any malformed rows (null data, missing id/name)
       const validCamps = [];
       for(const r of campr.data){
         const camp = r.data || r;
         if(camp && camp.id && camp.name){
           validCamps.push(camp);
         } else {
-          // Silently delete the bad row from Supabase so it never comes back
           console.warn('pullAll: removing invalid campaign row', r.id);
           supa.from('campaigns').delete().eq('id', r.id).eq('group_id', gid).then(()=>{});
         }
       }
-      _db.campaigns = validCamps;
-    } else if(!campr.error && campr.data && campr.data.length === 0 && _db.campaigns.length > 0)
-      console.log('pullAll: Supabase returned 0 campaigns — keeping existing _db.campaigns');
+      _db.campaigns = [...validCamps, ...sharedCamps];
+    } else if(!campr.error && campr.data && campr.data.length === 0 && _db.campaigns.filter(c=>!c._shared).length > 0){
+      console.log('pullAll: Supabase returned 0 own campaigns — keeping existing');
+    }
 
     if(campId){
       const { data: loot } = await supa.from('loot').select('*').eq('campaign_id', campId).single();
