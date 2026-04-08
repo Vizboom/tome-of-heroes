@@ -2964,8 +2964,8 @@ async function enterAsDM(){
     setActiveCampId(_db.campaigns[0].id);
   }
 
-  // Ensure all campaigns have player join codes
-  ensureCampJoinCodes();
+  // Ensure all campaigns have player join codes (await so they're registered before DM navigates)
+  await ensureCampJoinCodes();
 
   subscribeRealtime(getActiveCampId());
   document.querySelector('.bottomnav').style.display='flex';
@@ -2980,68 +2980,67 @@ async function connectAsPlayer(){
   const btn = document.querySelector('#modeGatePlayerJoin .modegate-btn-player');
   if(btn){ btn.style.opacity='0.6'; btn.style.pointerEvents='none'; }
   toast('Looking up campaign…','var(--purple)');
-  console.log('[join] Looking up campaign code:', code);
+  console.log('[join] code:', code);
 
-  let meta = null;
+  let matchGid = null, matchCampId = null;
 
-  // Step 1: settings table lookup — key = 'camp_CODE', value = JSON {gid, campId}
+  // PRIMARY: scan all campaigns for matching joinCode in data field
+  // This works regardless of settings table structure
   try {
-    const { data: rows, error: re } = await supa.from('settings').select('key,value').eq('key','camp_'+code);
-    console.log('[join] Step 1 settings:', rows, re?.message);
-    if(rows && rows.length > 0){
-      try { meta = JSON.parse(rows[0].value); } catch(e){ meta = null; }
-      console.log('[join] Step 1 meta parsed:', meta);
-    }
-  } catch(e){ console.warn('[join] Step 1 failed:', e.message); }
-
-  // Step 2: scan campaigns.data jsonb for joinCode field
-  if(!meta?.gid){
-    try {
-      console.log('[join] Step 2: scanning campaigns table...');
-      // Use PostgREST's jsonb filter to find the campaign directly
-      const { data: camps, error: ce } = await supa
-        .from('campaigns')
-        .select('id,group_id,data')
-        .filter('data->>joinCode', 'eq', code);
-      console.log('[join] Step 2 jsonb filter result:', camps, ce?.message);
-
-      let match = (camps||[]).find(r => r.data?.joinCode?.toUpperCase() === code);
-
-      // If jsonb filter returned nothing (may not be supported), fall back to full scan
-      if(!match && (!camps || camps.length === 0)){
-        console.log('[join] Step 2: jsonb filter empty, trying full scan...');
-        const { data: all, error: ae } = await supa.from('campaigns').select('id,group_id,data');
-        console.log('[join] Step 2 full scan:', all?.length, 'rows', ae?.message);
-        match = (all||[]).find(r => (r.data?.joinCode||'').toUpperCase() === code);
-      }
-
-      if(match){
-        meta = { gid: match.group_id, campId: match.data?.id || match.id };
-        console.log('[join] Step 2 match found:', meta);
-        // Back-register for fast future lookups
-        supa.from('settings').upsert({ key:'camp_'+code, value: JSON.stringify(meta) }, { onConflict:'key' }).then(()=>{});
+    const { data: allRows, error: scanErr } = await supa
+      .from('campaigns')
+      .select('id,group_id,name,data');
+    console.log('[join] scan rows:', allRows?.length, scanErr?.message);
+    if(allRows){
+      const row = allRows.find(r => {
+        const jc = r.data?.joinCode || r.data?.joincode || r.data?.join_code || '';
+        return jc.toString().toUpperCase() === code;
+      });
+      if(row){
+        matchGid = row.group_id;
+        // camp.id lives inside data, row.id is the composite key (gid_campId)
+        matchCampId = row.data?.id || row.id;
+        console.log('[join] found via scan:', matchGid, matchCampId, row.name);
       } else {
-        console.log('[join] Step 2: no match found for code', code);
+        console.log('[join] no match in', allRows.length, 'rows. Sample joinCodes:',
+          allRows.slice(0,5).map(r=>r.data?.joinCode||'(none)').join(', '));
       }
-    } catch(e){ console.warn('[join] Step 2 failed:', e.message); }
+    }
+  } catch(e){ console.warn('[join] scan failed:', e.message); }
+
+  // FALLBACK: check settings table
+  if(!matchGid){
+    try {
+      const { data: rows, error: se } = await supa.from('settings').select('key,value').eq('key','camp_'+code);
+      console.log('[join] settings lookup:', rows, se?.message);
+      if(rows?.length > 0){
+        let meta = null;
+        try { meta = JSON.parse(rows[0].value); } catch(e){}
+        if(meta?.gid && meta?.campId){
+          matchGid = meta.gid;
+          matchCampId = meta.campId;
+          console.log('[join] found via settings:', matchGid, matchCampId);
+        }
+      }
+    } catch(e){ console.warn('[join] settings lookup failed:', e.message); }
   }
 
-  if(!meta?.gid || !meta?.campId){
-    console.log('[join] Failed — meta:', meta);
-    toast('Campaign code not found — check with your DM','var(--red)');
+  if(!matchGid || !matchCampId){
+    console.log('[join] not found');
+    toast('Campaign code not found — make sure your DM has entered the app after the last update','var(--red)');
     if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
     return;
   }
 
-  // Step 3: pull data for this group and find the campaign
-  console.log('[join] Step 3: setting gid', meta.gid, 'pulling data...');
-  setGroupId(meta.gid);
+  // Pull all data for this group
+  setGroupId(matchGid);
   await pullAll(null);
-  console.log('[join] Step 3: _db.campaigns after pull:', _db.campaigns.map(c=>c.id));
-  const camp = _db.campaigns.find(c=>c.id===meta.campId);
+  console.log('[join] _db.campaigns after pull:', _db.campaigns.map(c=>c.id+'/'+c.joinCode));
+
+  const camp = _db.campaigns.find(c => c.id === matchCampId);
   if(!camp){
-    console.log('[join] Step 3: camp', meta.campId, 'not in _db after pull');
-    toast('Campaign not found — ask your DM to Force Sync','var(--red)');
+    console.log('[join] camp not found in _db, campId was:', matchCampId);
+    toast('Campaign not found in group — ask your DM to Force Sync','var(--red)');
     if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
     return;
   }
@@ -7250,12 +7249,19 @@ async function diagCampaigns(){
       out.push(ok('characters: '+gc.length+' in group'));
       gc.forEach(r=>out.push('  • '+(r.data?.name||r.id)));
     }
-    const {data:gcamp,error:gcampe}=await supa.from('campaigns').select('id,name').eq('group_id',gid);
+    const {data:gcamp,error:gcampe}=await supa.from('campaigns').select('id,name,data').eq('group_id',gid);
     if(gcampe) out.push(err('campaigns: '+gcampe.message));
     else {
       out.push(ok('campaigns: '+gcamp.length+' in group'));
-      gcamp.forEach(r=>out.push('  • '+(r.name||r.id)));
+      gcamp.forEach(r=>{
+        const jc = r.data?.joinCode || '(no code)';
+        out.push('  • '+(r.data?.name||r.name||r.id)+' — player code: '+jc);
+      });
     }
+    // Check settings for camp_ keys
+    const {data:campKeys}=await supa.from('settings').select('key,value').like('key','camp_%');
+    out.push('join codes in settings: '+(campKeys?.length||0));
+    (campKeys||[]).forEach(r=>out.push('  • '+r.key+' → '+r.value));
     out.push('');
   }
 
@@ -8525,8 +8531,20 @@ async function _registerCampJoinCode(camp){
   const gid = getGroupId(); if(!gid || !camp?.joinCode) return;
   try {
     const meta = JSON.stringify({ gid, campId: camp.id });
-    await supa.from('settings').upsert({ key: 'camp_'+camp.joinCode, value: meta }, { onConflict: 'key' });
-  } catch(e){ console.warn('Could not register campaign join code:', e.message); }
+    // Try with updated_at (some Supabase settings tables require it)
+    const { error: e1 } = await supa.from('settings').upsert(
+      { key: 'camp_'+camp.joinCode, value: meta, updated_at: new Date().toISOString() },
+      { onConflict: 'key' }
+    );
+    if(e1){
+      // Retry without updated_at
+      const { error: e2 } = await supa.from('settings').upsert(
+        { key: 'camp_'+camp.joinCode, value: meta },
+        { onConflict: 'key' }
+      );
+      if(e2) console.warn('Could not register campaign join code:', e2.message, '| camp:', camp.name, 'code:', camp.joinCode);
+    }
+  } catch(e){ console.warn('_registerCampJoinCode threw:', e.message); }
 }
 
 // Ensure all campaigns have join codes — call after pullAll for DM sessions
