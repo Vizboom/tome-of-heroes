@@ -939,19 +939,19 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   <!-- login screen removed — app uses group codes only -->
   <div class="screen" id="scr-login" style="display:none"></div>
 
-  <!-- MODE GATE (first launch) -->
+  <!-- MODE GATE -->
   <div class="screen" data-panel-label="SETTINGS" id="scr-modegate">
     <div class="modegate-rune">📖</div>
     <div class="modegate-title">Tome of Heroes</div>
 
-    <!-- Initial choice (shown before either path is picked) -->
+    <!-- Initial choice -->
     <div id="modeGateChoice" style="width:100%;max-width:320px">
       <div class="modegate-sub" style="margin-bottom:20px">Who are you?</div>
       <button class="modegate-btn modegate-btn-dm" onclick="showDMGate()">
         <span class="mb-icon">👑</span>
         <span class="mb-text">
           <span class="mb-label">Dungeon Master</span>
-          <span class="mb-desc">Create or manage your campaigns</span>
+          <span class="mb-desc">Sign in or create your DM account</span>
         </span>
       </button>
       <button class="modegate-btn modegate-btn-player" onclick="showPlayerJoinGate()" style="margin-top:8px">
@@ -963,38 +963,33 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       </button>
     </div>
 
-    <!-- DM: group code entry -->
+    <!-- DM: username login -->
     <div id="modeGateDM" style="display:none;width:100%;max-width:320px">
-      <div style="margin-bottom:16px">
-        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;text-align:left">DM GROUP CODE</div>
-        <input id="groupCodeInput" placeholder="e.g. ABC12"
-          style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-family:'Cinzel',serif;font-size:24px;letter-spacing:6px;text-align:center;text-transform:uppercase"
-          oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6)">
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Enter your existing DM code, or create a new group</div>
+      <div style="margin-bottom:20px">
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;text-align:left">DM USERNAME</div>
+        <input id="dmUsernameInput" placeholder="e.g. NAROG_DM"
+          autocomplete="username"
+          style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-family:'Cinzel',serif;font-size:20px;letter-spacing:3px;text-align:center;text-transform:uppercase;box-sizing:border-box"
+          oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'').slice(0,20)"
+          onkeydown="if(event.key==='Enter')dmLogin()">
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Pick a username — same username always loads your campaigns.<br>New username = new empty account.</div>
       </div>
-      <button class="modegate-btn modegate-btn-dm" onclick="connectWithCode()">
-        <span class="mb-icon">🔑</span>
+      <button class="modegate-btn modegate-btn-dm" onclick="dmLogin()">
+        <span class="mb-icon">👑</span>
         <span class="mb-text">
-          <span class="mb-label">Connect to My Group</span>
-          <span class="mb-desc">Resume with an existing DM group code</span>
-        </span>
-      </button>
-      <button class="modegate-btn modegate-btn-player" onclick="createNewGroup()" style="margin-top:8px">
-        <span class="mb-icon">✦</span>
-        <span class="mb-text">
-          <span class="mb-label">Create New Group</span>
-          <span class="mb-desc">Start fresh — generates a new DM group code</span>
+          <span class="mb-label">Enter as Dungeon Master</span>
+          <span class="mb-desc">Creates account if new, resumes if existing</span>
         </span>
       </button>
       <button onclick="showModeGateChoice()" style="margin-top:12px;background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;width:100%;text-align:center">← Back</button>
     </div>
 
-    <!-- DM: connected state -->
+    <!-- DM: signed in state -->
     <div id="modeGateConnected" style="display:none;width:100%;max-width:320px">
       <div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:12px;padding:14px;margin-bottom:16px;text-align:center">
-        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:6px">DM GROUP CODE</div>
-        <div id="modeGateGroupCode" style="font-family:'Cinzel',serif;font-size:32px;color:var(--gold);letter-spacing:6px"></div>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px">Your DM code — keep private. Share campaign codes with players.</div>
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:6px">SIGNED IN AS</div>
+        <div id="modeGateGroupCode" style="font-family:'Cinzel',serif;font-size:28px;color:var(--gold);letter-spacing:4px"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Share campaign codes with players — not this name.</div>
       </div>
       <button class="modegate-btn modegate-btn-dm" onclick="enterAsDM()">
         <span class="mb-icon">👑</span>
@@ -1010,8 +1005,9 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <div style="margin-bottom:16px">
         <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;text-align:left">CAMPAIGN CODE</div>
         <input id="campaignJoinCodeInput" placeholder="e.g. XYZABC"
-          style="width:100%;background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:14px;color:var(--purple);font-family:'Cinzel',serif;font-size:24px;letter-spacing:6px;text-align:center;text-transform:uppercase"
-          oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6)">
+          style="width:100%;background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:14px;color:var(--purple);font-family:'Cinzel',serif;font-size:24px;letter-spacing:6px;text-align:center;text-transform:uppercase;box-sizing:border-box"
+          oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6)"
+          onkeydown="if(event.key==='Enter')connectAsPlayer()">
         <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Enter the campaign code your DM gave you</div>
       </div>
       <button class="modegate-btn modegate-btn-player" onclick="connectAsPlayer()">
@@ -1028,8 +1024,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;text-align:left">CLAUDE API KEY <span style="color:var(--muted);font-style:italic;font-family:'Crimson Pro',serif;letter-spacing:0">(for 🤖 AI imports)</span></div>
       <input id="claudeApiKeyInput" type="password" placeholder="sk-ant-api03-…"
         style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace"
-        oninput="saveClaudeApiKey(this.value)"
-        value="">
+        oninput="saveClaudeApiKey(this.value)" value="">
     </div>
     <button onclick="clearAllData()" style="margin-top:16px;background:none;border:1px solid var(--red);border-radius:8px;color:var(--red);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.6">
       🗑 Clear All Data
@@ -2855,81 +2850,6 @@ function getPlayerCampId(){ return S.get('toh_player_camp_id'); }
 
 /* ── MODEGATE: group code connects everyone to shared data ── */
 
-async function connectWithCode(){
-  const code = (document.getElementById('groupCodeInput')?.value||'').trim().toUpperCase();
-  if(!code || code.length < 3){ toast('Enter a group code','var(--red)'); return; }
-
-  const btn = document.querySelector('#modeGateDM .modegate-btn-dm');
-  if(btn){ btn.style.opacity='0.6'; btn.style.pointerEvents='none'; }
-  toast('Connecting…','var(--purple)');
-
-  try {
-    // First try settings table lookup (registered groups)
-    let found = false;
-    try {
-      const { data, error } = await supa.from('settings').select('key,value').eq('value', code);
-      if(!error && data?.length) found = true;
-    } catch(e){}
-
-    // Fallback: try to pull data directly with this group_id
-    // If there are characters or campaigns with this group_id, the code is valid
-    if(!found){
-      const { data: chars } = await supa.from('characters').select('id').eq('group_id', code).limit(1);
-      const { data: camps } = await supa.from('campaigns').select('id').eq('group_id', code).limit(1);
-      if(chars?.length || camps?.length){
-        found = true;
-        // Register this code in settings for future lookups
-        try { await supa.from('settings').upsert({ key:'group_'+code, value:code },{ onConflict:'key' }); } catch(e){}
-      }
-    }
-
-    if(!found){
-      toast('Group code not found — check the code or create a new group','var(--red)');
-      if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
-      return;
-    }
-  } catch(e){
-    toast('Could not connect to server — check your internet connection','var(--red)');
-    if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
-    return;
-  }
-
-  setGroupId(code);
-  await pullAll(null);
-
-  // Auto-set active campaign if none set
-  if(!getActiveCampId() && _db.campaigns.length){
-    setActiveCampId(_db.campaigns[0].id);
-  }
-
-  subscribeRealtime(getActiveCampId());
-  if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
-  _showModeGateConnected(code);
-}
-
-async function createNewGroup(){
-  const btn = document.querySelector('#modeGateDM .modegate-btn-player');
-  if(btn){ btn.style.opacity='0.6'; btn.style.pointerEvents='none'; }
-  toast('Creating group…','var(--purple)');
-
-  // Clear any existing group_id so ensureGroupId creates a fresh one
-  localStorage.removeItem('toh_group_id');
-  const user = await getSupaUser();
-  if(user){
-    try { await supa.from('settings').delete().eq('key','group_id_'+user.id); } catch(e){}
-  }
-
-  const gid = await ensureGroupId();
-  if(!gid){
-    toast('Could not connect — check your internet','var(--red)');
-    if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
-    return;
-  }
-
-  if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
-  _showModeGateConnected(gid);
-}
-
 function showModeGateChoice(){
   document.getElementById('modeGateChoice').style.display = 'block';
   document.getElementById('modeGateDM').style.display = 'none';
@@ -2941,9 +2861,10 @@ function showDMGate(){
   document.getElementById('modeGateDM').style.display = 'block';
   document.getElementById('modeGateConnected').style.display = 'none';
   document.getElementById('modeGatePlayerJoin').style.display = 'none';
-  // Pre-fill if already have a group id
+  // Pre-fill if already have a username saved
   const gid = getGroupId();
-  if(gid){ const inp=document.getElementById('groupCodeInput'); if(inp) inp.value=gid; }
+  if(gid){ const inp=document.getElementById('dmUsernameInput'); if(inp) inp.value=gid; }
+  setTimeout(()=>document.getElementById('dmUsernameInput')?.focus(), 50);
 }
 function showPlayerJoinGate(){
   document.getElementById('modeGateChoice').style.display = 'none';
@@ -2957,9 +2878,33 @@ function _showModeGateConnected(gid){
   document.getElementById('modeGateConnected').style.display = 'block';
   document.getElementById('modeGatePlayerJoin').style.display = 'none';
   document.getElementById('modeGateGroupCode').textContent = gid;
-  const inp = document.getElementById('groupCodeInput');
-  if(inp) inp.value = gid;
 }
+
+// DM logs in with a username — the username IS their group_id
+async function dmLogin(){
+  const username = (document.getElementById('dmUsernameInput')?.value||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,'');
+  if(!username || username.length < 2){ toast('Enter a username (letters and numbers)','var(--red)'); return; }
+  const btn = document.querySelector('#modeGateDM .modegate-btn-dm');
+  if(btn){ btn.style.opacity='0.6'; btn.style.pointerEvents='none'; }
+  toast('Signing in…','var(--purple)');
+
+  // Username is the group_id — deterministic, no lookup needed
+  setGroupId(username);
+
+  // Pull existing data for this username
+  await pullAll(null);
+
+  if(!getActiveCampId() && _db.campaigns.length){
+    setActiveCampId(_db.campaigns[0].id);
+  }
+
+  if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
+  _showModeGateConnected(username);
+}
+
+// Legacy stubs — replaced by dmLogin
+async function connectWithCode(){ dmLogin(); }
+async function createNewGroup(){ dmLogin(); }
 
 async function enterAsDM(){
   S.set('toh_mode','dm');
@@ -3146,8 +3091,9 @@ function applyModeUI(){
   } else if(mode==='dm'){
     const badge=document.createElement('div');
     badge.id='modeBadge';badge.className='dm-mode-badge';
-    badge.innerHTML='👑 DM';badge.style.cssText='flex-shrink:0;cursor:pointer;';
-    badge.onclick=()=>{ if(confirm('Switch back to start screen?')){ resetMode(); } };
+    badge.innerHTML='👑 '+( getGroupId()||'DM');badge.style.cssText='flex-shrink:0;cursor:pointer;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;';
+    badge.title = 'DM: '+(getGroupId()||'')+'\nTap to switch account';
+    badge.onclick=()=>{ if(confirm('Switch account or sign out?')){ resetMode(); } };
     topbar.appendChild(badge);
     // Restore all hidden elements
     document.querySelectorAll('#scr-roster .btn-gold,#scr-roster .btn-outline').forEach(b=>b.style.display='');
@@ -7393,7 +7339,7 @@ function _bootContinue(mode, nav_bar){
     document.getElementById('backBtn').style.visibility='hidden';
     if(nav_bar) nav_bar.style.display='none';
     const ex=document.getElementById('modeBadge');if(ex)ex.remove();
-    // If DM group_id already set, go straight to DM connected state
+    // If DM username already saved, skip to connected state
     const gid = getGroupId();
     if(gid){
       _showModeGateConnected(gid);
