@@ -1820,15 +1820,17 @@ function _renderRosterInner(){
   try {
   let chars=getVisibleChars();
   const activeCamp = getActiveCamp();
+  console.log('[roster] activeCamp:', activeCamp?.name, '_shared:', activeCamp?._shared, 'charIds:', activeCamp?.charIds);
+  console.log('[roster] _db.chars:', _db.chars.length, 'total, shared:', _db.chars.filter(c=>c._shared).length, _db.chars.filter(c=>c._shared).map(c=>c.name+'(campId:'+c._sharedCampId+')').join(', '));
   if(activeCamp?._shared){
-    // Shared campaign: show chars fetched for this campaign
     const campId = activeCamp.id;
     chars = getChars().filter(c=>c._shared && c._sharedCampId===campId);
-    // Also include charIds-matched chars
+    console.log('[roster] shared filter by _sharedCampId='+campId+':', chars.length, chars.map(c=>c.name).join(', '));
     if(activeCamp.charIds?.length){
       const byId = getChars().filter(c=>activeCamp.charIds.some(x=>String(x)===String(c.id)));
       const seen = new Set(chars.map(c=>String(c.id)));
       byId.forEach(c=>{ if(!seen.has(String(c.id))) chars.push(c); });
+      console.log('[roster] after charIds merge:', chars.length);
     }
   } else if(activeCamp?.charIds?.length){
     const campCharIds = activeCamp.charIds.map(String);
@@ -2941,18 +2943,22 @@ async function _fetchCampRow(ownerGid, campId){
 // Returns all chars for the owner group (caller filters by _sharedCampId)
 async function _fetchCampChars(ownerGid, campId, campData){
   try {
+    console.log('[fetchCampChars] querying characters for group_id:', ownerGid);
     const { data: rows, error } = await supa.from('characters').select('data').eq('group_id', ownerGid);
     if(error) console.warn('[fetchCampChars] error:', error.message);
+    console.log('[fetchCampChars] got', rows?.length||0, 'character rows');
     if(!rows?.length) return [];
     const allChars = rows.map(r=>r.data||r).filter(c=>c && c.id);
+    console.log('[fetchCampChars] valid chars:', allChars.map(c=>c.name+'('+c.id+')').join(', '));
     const charIds = campData?.charIds || [];
-    // If charIds defined, filter to only those chars
+    console.log('[fetchCampChars] campaign charIds:', charIds);
     if(charIds.length){
       const allowedIds = new Set(charIds.map(String));
-      return allChars.filter(c=>allowedIds.has(String(c.id)));
+      const filtered = allChars.filter(c=>allowedIds.has(String(c.id)));
+      console.log('[fetchCampChars] filtered to', filtered.length, 'chars by charIds');
+      return filtered;
     }
-    // No charIds filter — return all chars for this group
-    // (they'll be tagged with _sharedCampId by the caller so we know which camp they belong to)
+    console.log('[fetchCampChars] no charIds filter — returning all', allChars.length, 'chars');
     return allChars;
   } catch(e){
     console.warn('[fetchCampChars] threw:', e.message);
@@ -2969,12 +2975,20 @@ async function joinSharedCampaign(){
 
   let matchGid = null, matchCampId = null;
 
-  // Scan campaigns for matching joinCode — only reads the specific row we need
   try {
-    const { data: rows } = await supa.from('campaigns').select('id,group_id,data');
+    const { data: rows, error } = await supa.from('campaigns').select('id,group_id,data');
+    if(error) console.error('[join] scan error:', error.message);
+    console.log('[join] scanned', rows?.length, 'campaign rows looking for code', code);
     const row = (rows||[]).find(r=>(r.data?.joinCode||'').toUpperCase()===code);
-    if(row){ matchGid=row.group_id; matchCampId=row.data?.id||row.id; }
-  } catch(e){ console.warn('join scan failed:', e.message); }
+    if(row){
+      matchGid = row.group_id;
+      // IMPORTANT: use data.id (real campaign id), fall back to stripping composite key
+      matchCampId = row.data?.id || row.id.replace(row.group_id+'_','');
+      console.log('[join] found campaign:', row.id, '→ gid:', matchGid, 'campId:', matchCampId);
+    } else {
+      console.log('[join] no match. Sample joinCodes:', (rows||[]).slice(0,5).map(r=>r.data?.joinCode||'(none)').join(', '));
+    }
+  } catch(e){ console.warn('[join] scan failed:', e.message); }
 
   // Fallback: settings table
   if(!matchGid){
@@ -2995,20 +3009,22 @@ async function joinSharedCampaign(){
     hideCampForm(); return;
   }
 
-  // Fetch only this specific campaign — do NOT pull all owner data
+  console.log('[join] fetching campaign row for gid:', matchGid, 'campId:', matchCampId);
   const campData = await _fetchCampRow(matchGid, matchCampId);
+  console.log('[join] campData:', campData?.name, 'charIds:', campData?.charIds);
   if(!campData){ toast('Campaign data not found — ask the owner to Force Sync','var(--red)'); return; }
 
   campData._shared = true;
   campData._ownerGid = matchGid;
 
-  // Merge campaign into _db
   const existing = _db.campaigns.findIndex(c=>c.id===matchCampId);
   if(existing >= 0) _db.campaigns[existing] = campData;
   else _db.campaigns.push(campData);
 
-  // Fetch characters assigned to this campaign
+  console.log('[join] fetching chars for gid:', matchGid, 'campId:', matchCampId);
   const chars = await _fetchCampChars(matchGid, matchCampId, campData);
+  console.log('[join] fetched', chars.length, 'chars:', chars.map(c=>c.name+' ('+c.id+')').join(', '));
+
   chars.forEach(c=>{
     c._shared = true;
     c._sharedCampId = matchCampId;
@@ -3016,13 +3032,13 @@ async function joinSharedCampaign(){
     if(ci >= 0) _db.chars[ci] = c; else _db.chars.push(c);
   });
 
-  // Set as active campaign so roster/party/loot populate immediately
-  setActiveCampId(matchCampId);
+  console.log('[join] _db.chars now has', _db.chars.length, 'total, shared:', _db.chars.filter(c=>c._shared).length);
+  console.log('[join] _db.campaigns now has', _db.campaigns.length, 'total');
 
-  // Store reference for reload
+  setActiveCampId(matchCampId);
   await _saveSharedCamp({ code, ownerGid: matchGid, campId: matchCampId, name: campData.name });
 
-  toast('✦ Joined: '+campData.name,'var(--purple)');
+  toast('✦ Joined: '+campData.name+' ('+chars.length+' chars)','var(--purple)');
   hideCampForm();
   renderCampList();
   renderRoster();
