@@ -107,12 +107,20 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     padding: 16px 20px;
     background: var(--bg2);
     border-right: 1px solid var(--border);
+    transition: flex-basis 0.2s ease, padding 0.2s ease;
   }
+  #diceCharPanel.collapsed {
+    flex: 0 0 36px;
+    padding: 0;
+    overflow: hidden;
+  }
+  #diceCharPanel.collapsed .dice-char-body { display: none; }
   #diceRollPanel {
-    flex: 0 0 50%;
+    flex: 1 1 50%;
     overflow-y: auto;
     height: 100%;
     padding: 14px 14px 20px;
+    transition: flex-basis 0.2s ease;
   }
 
   /* Screens that are scroll-regions get extra padding on desktop */
@@ -2853,6 +2861,30 @@ function _applyUserBadge(){
 }
 
 // Campaign sharing — join a shared campaign by code (adds it to your campaign list)
+// Fetch a single specific campaign row without affecting group_id or _db
+async function _fetchCampRow(ownerGid, campId){
+  try {
+    const rowId = ownerGid + '_' + campId;
+    const { data: rows } = await supa.from('campaigns').select('data').eq('id', rowId);
+    if(rows?.[0]?.data) return rows[0].data;
+    // Fallback: scan by group_id
+    const { data: all } = await supa.from('campaigns').select('data').eq('group_id', ownerGid);
+    return (all||[]).map(r=>r.data).find(d=>d?.id===campId) || null;
+  } catch(e){ return null; }
+}
+
+// Fetch characters for a shared campaign — only chars assigned to that campaign
+async function _fetchCampChars(ownerGid, campId){
+  try {
+    const { data: rows } = await supa.from('characters').select('data').eq('group_id', ownerGid);
+    if(!rows) return [];
+    // Get list of charIds from the campaign to filter
+    const campData = await _fetchCampRow(ownerGid, campId);
+    const allowedIds = new Set((campData?.charIds||[]).map(String));
+    return rows.map(r=>r.data||r).filter(c=>c && c.id && allowedIds.has(String(c.id)));
+  } catch(e){ return []; }
+}
+
 async function joinSharedCampaign(){
   const code = (document.getElementById('joinCampCodeInput')?.value||'').trim().toUpperCase();
   if(!code || code.length < 4){ toast('Enter a campaign code','var(--red)'); return; }
@@ -2862,9 +2894,9 @@ async function joinSharedCampaign(){
 
   let matchGid = null, matchCampId = null;
 
-  // Scan campaigns for matching joinCode
+  // Scan campaigns for matching joinCode — only reads the specific row we need
   try {
-    const { data: rows } = await supa.from('campaigns').select('id,group_id,name,data');
+    const { data: rows } = await supa.from('campaigns').select('id,group_id,data');
     const row = (rows||[]).find(r=>(r.data?.joinCode||'').toUpperCase()===code);
     if(row){ matchGid=row.group_id; matchCampId=row.data?.id||row.id; }
   } catch(e){ console.warn('join scan failed:', e.message); }
@@ -2883,31 +2915,27 @@ async function joinSharedCampaign(){
     toast('Campaign code not found — check with the campaign owner','var(--red)');
     return;
   }
-
   if(matchGid === getGroupId()){
     toast('That\'s one of your own campaigns!','var(--gold)');
     hideCampForm(); return;
   }
 
-  // Pull the campaign data and add it as a shared campaign
-  const prevGid = getGroupId();
-  localStorage.setItem('toh_group_id', matchGid);
-  await pullAll(null);
-  localStorage.setItem('toh_group_id', prevGid); // restore own group
+  // Fetch only this specific campaign — do NOT pull all owner data
+  const campData = await _fetchCampRow(matchGid, matchCampId);
+  if(!campData){ toast('Campaign data not found — ask the owner to Force Sync','var(--red)'); return; }
 
-  const camp = _db.campaigns.find(c=>c.id===matchCampId);
-  if(!camp){ toast('Campaign data not found — ask the owner to Force Sync','var(--red)'); return; }
+  campData._shared = true;
+  campData._ownerGid = matchGid;
 
-  // Store shared campaign reference in own settings
-  await _saveSharedCamp({ code, ownerGid: matchGid, campId: matchCampId, name: camp.name });
-  // Merge into _db so it shows in the list
-  if(!_db.campaigns.find(c=>c.id===camp.id)){
-    camp._shared = true;
-    camp._ownerGid = matchGid;
-    _db.campaigns.push(camp);
-  }
+  // Merge into _db — only this campaign
+  const existing = _db.campaigns.findIndex(c=>c.id===matchCampId);
+  if(existing >= 0) _db.campaigns[existing] = campData;
+  else _db.campaigns.push(campData);
 
-  toast('✦ Joined: '+camp.name,'var(--purple)');
+  // Store reference for reload
+  await _saveSharedCamp({ code, ownerGid: matchGid, campId: matchCampId, name: campData.name });
+
+  toast('✦ Joined: '+campData.name,'var(--purple)');
   hideCampForm();
   renderCampList();
 }
@@ -2930,14 +2958,19 @@ async function _saveSharedCamp(entry){
 async function _loadSharedCamps(){
   const shared = await _getSharedCamps();
   for(const e of shared){
-    if(_db.campaigns.find(c=>c.id===e.campId)) continue;
-    // Pull from owner's group
-    const prevGid = getGroupId();
-    localStorage.setItem('toh_group_id', e.ownerGid);
-    await pullAll(null);
-    localStorage.setItem('toh_group_id', prevGid);
-    const camp = _db.campaigns.find(c=>c.id===e.campId);
-    if(camp){ camp._shared=true; camp._ownerGid=e.ownerGid; }
+    // Fetch only the specific campaign row — never pull all owner data
+    const campData = await _fetchCampRow(e.ownerGid, e.campId);
+    if(!campData) continue;
+    campData._shared = true;
+    campData._ownerGid = e.ownerGid;
+    const idx = _db.campaigns.findIndex(c=>c.id===e.campId);
+    if(idx >= 0) _db.campaigns[idx] = campData;
+    else _db.campaigns.push(campData);
+    // Also fetch characters for this campaign
+    const chars = await _fetchCampChars(e.ownerGid, e.campId);
+    chars.forEach(c=>{
+      if(!_db.chars.find(x=>String(x.id)===String(c.id))) _db.chars.push(c);
+    });
   }
 }
 async function leaveSharedCampaign(campId){
@@ -2946,6 +2979,9 @@ async function leaveSharedCampaign(campId){
   const filtered = arr.filter(e=>e.campId!==campId);
   try { await supa.from('settings').upsert({key:_sharedCampsKey(), value:JSON.stringify(filtered)},{onConflict:'key'}); } catch(e){}
   _db.campaigns = _db.campaigns.filter(c=>c.id!==campId);
+  // Remove chars that were only in this shared campaign
+  const ownCampIds = new Set(_db.campaigns.map(c=>c.id));
+  _db.chars = _db.chars.filter(c=>!c._shared || ownCampIds.has(c._sharedCampId));
   if(getActiveCampId()===campId) setActiveCampId(_db.campaigns[0]?.id||null);
   renderCampList();
   toast('Left shared campaign','var(--muted)');
@@ -7400,6 +7436,12 @@ function renderDiceCharPanel(){
   if(!el) return;
   const char = getActiveDiceChar();
   if(!char){ el.innerHTML=''; return; }
+
+  // Restore collapsed state
+  const isCollapsed = localStorage.getItem('toh_dice_panel_collapsed') === '1';
+  if(isCollapsed) el.classList.add('collapsed');
+  else el.classList.remove('collapsed');
+
   const cls = CLASSES[char.classIdx];
   const cc = classColor(char.classIdx);
   const pb = getPB(char.level);
@@ -7428,7 +7470,14 @@ function renderDiceCharPanel(){
   const activeEffects = Object.entries(effects).filter(([,v])=>v);
   const customFx = char.customEffects||[];
 
-  el.innerHTML = `
+  // Collapse toggle strip — always visible even when collapsed
+  const toggleStrip = `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--border);background:var(--surface2);position:sticky;top:0;z-index:2" onclick="toggleDiceCharPanel()">
+    <span style="font-size:16px">${cls.icon}</span>
+    <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${char.name}</span>
+    <span style="font-size:14px;color:var(--muted);flex-shrink:0" title="${isCollapsed?'Expand':'Collapse'} character panel">${isCollapsed?'▶':'◀'}</span>
+  </div>`;
+
+  el.innerHTML = toggleStrip + `<div class="dice-char-body">
     <div style="background:var(--surface2);border:1px solid ${cc};border-radius:13px;padding:14px;margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
         <div style="width:40px;height:40px;border-radius:50%;background:${cc}22;border:2px solid ${cc};display:flex;align-items:center;justify-content:center;font-size:20px">${cls.icon}</div>
@@ -7629,7 +7678,7 @@ function renderDiceCharPanel(){
         html2 += '</div></div>';
         return html2;
       })()}
-    </div>`;
+    </div></div>`;
 }
 
 function selectFeatCard(el, hiddenId){
@@ -7703,6 +7752,15 @@ function quickRoll(label, mod){
   // Scroll to roll button so it's visible
   const rollBtn = document.getElementById('rollBtn');
   if(rollBtn) rollBtn.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function toggleDiceCharPanel(){
+  const el = document.getElementById('diceCharPanel');
+  if(!el) return;
+  const collapsed = el.classList.toggle('collapsed');
+  localStorage.setItem('toh_dice_panel_collapsed', collapsed ? '1' : '0');
+  // Re-render to flip the arrow direction
+  renderDiceCharPanel();
 }
 
 function _getResState(charId){ try{ return JSON.parse(localStorage.getItem('toh_res_'+charId)||'{}'); }catch{ return {}; } }
