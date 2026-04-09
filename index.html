@@ -2603,7 +2603,7 @@ function partySheetTab(t){
 let combatants=[],currentTurn=0,combatRound=1;
 function partyTab(t){
   // Player mode: restrict to overview and initiative
-  const allTabs=['overview','initiative','history','share','manage'];
+  const allTabs=['initiative','overview','history','share','manage'];
   document.querySelectorAll('#scr-party .tab-btn').forEach((b,i)=>b.classList.toggle('active',allTabs[i]===t));
   document.querySelectorAll('#scr-party .tab-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('ptab-'+t).classList.add('active');
