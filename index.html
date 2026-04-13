@@ -7223,15 +7223,10 @@ function toggleCampCharAndRefresh(campId, charId, el){
   if(!camps[ci].charIds) camps[ci].charIds=[];
   const cid = String(charId);
   const idx = camps[ci].charIds.findIndex(x=>String(x)===cid);
-  if(idx>=0){
-    camps[ci].charIds.splice(idx,1);
-  } else {
+  if(idx>=0){ camps[ci].charIds.splice(idx,1); }
+  else {
     const otherCamp = camps.find(c=>c.id!==campId&&(c.charIds||[]).some(x=>String(x)===cid));
-    if(otherCamp){
-      const char = getChars().find(c=>String(c.id)===cid);
-      toast(`${char?.name||'Character'} is already in "${otherCamp.name}"`, 'var(--red)');
-      return;
-    }
+    if(otherCamp){ toast(`${getChars().find(c=>String(c.id)===cid)?.name||'Character'} is already in "${otherCamp.name}"`, 'var(--red)'); return; }
     camps[ci].charIds.push(charId);
   }
   saveCampaign(camps[ci]);
@@ -9209,6 +9204,7 @@ function renderSessions() {
   <div class="tab-row" style="margin-bottom:12px">
     <button class="tab-btn active" id="sessTabManual" onclick="sessImportTab('manual',this)">✏ Manual</button>
     <button class="tab-btn" id="sessTabClaude" onclick="sessImportTab('claude',this)">🤖 Claude</button>
+    <button class="tab-btn" id="sessTabBulk" onclick="sessImportTab('bulk',this)">📋 Bulk</button>
   </div>
 
   <div id="sessFormManual"><div class="card" style="margin-bottom:14px">
@@ -9241,6 +9237,7 @@ function renderSessions() {
       </div>
     </div>` : ''}
     <button class="btn btn-primary" onclick="addSession()">Log Session</button>
+    <button class="btn btn-outline" onclick="showBulkImport()" style="border-color:var(--purple);color:var(--purple)">🤖 Bulk Import</button>
   </div></div>
 
   <div id="sessFormClaude" style="display:none"><div class="card" style="margin-bottom:14px">
@@ -9252,6 +9249,20 @@ function renderSessions() {
     <button class="btn btn-gold" onclick="doClaudeSessionImport()" id="claudeSessionBtn">🤖 Extract Session</button>
     <div id="claudeSessionStatus" style="margin-top:8px;font-size:12px;text-align:center;min-height:16px"></div>
     <div id="claudeSessionPreview" style="margin-top:8px"></div>
+  </div></div>
+
+  <div id="sessBulkImport" style="display:none"><div class="card" style="margin-bottom:14px">
+    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-bottom:8px">🤖 Bulk Campaign Import</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Paste notes under any of these headings — Claude will sort everything into the right category. You don't need all sections.</p>
+    <div style="background:var(--surface);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:var(--muted);line-height:1.8;font-family:monospace">
+      ## SESSION<br>## QUESTS<br>## NPCS<br>## NOTES<br>## ARCS
+    </div>
+    <div class="field"><label>Your Notes</label>
+      <textarea id="bulkImportNotes" placeholder="## SESSION&#10;We arrived in Krezk and met the Abbot...&#10;&#10;## QUESTS&#10;- Get the Holy Symbol from Krezk Abbey&#10;- Escort Ireena to safety&#10;&#10;## NPCS&#10;- The Abbot: powerful celestial at Krezk Abbey, holds Holy Symbol, friendly&#10;- Rahadin: Strahd's dusk elf butler, extremely dangerous, hostile&#10;&#10;## NOTES&#10;Strahd fears the Sword of Sunlight above all else." style="min-height:200px;font-size:12px;line-height:1.6;font-family:monospace"></textarea>
+    </div>
+    <button class="btn btn-gold" onclick="doBulkImport()" id="bulkImportBtn" style="background:var(--purple);border-color:var(--purple)">🤖 Parse & Import</button>
+    <div id="bulkImportStatus" style="margin-top:8px;font-size:12px;text-align:center;min-height:16px"></div>
+    <div id="bulkImportPreview" style="margin-top:8px"></div>
   </div></div>`;
 
   if (!sessions.length) {
@@ -9369,8 +9380,206 @@ function updateGoldHint(val){
 function sessImportTab(tab, btn){
   document.querySelectorAll('#ctab-sessions .tab-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('sessFormManual').style.display = tab==='manual' ? '' : 'none';
+  document.getElementById('sessFormManual').style.display  = tab==='manual' ? '' : 'none';
   document.getElementById('sessFormClaude').style.display  = tab==='claude' ? '' : 'none';
+  document.getElementById('sessBulkImport').style.display  = tab==='bulk'   ? '' : 'none';
+}
+
+function showBulkImport(){
+  const sf = document.getElementById('sessFormClaude');
+  const sb = document.getElementById('sessBulkImport');
+  if(!sf||!sb) return;
+  sf.style.display = 'none';
+  sb.style.display = sb.style.display==='none' ? '' : 'none';
+}
+
+async function doBulkImport(){
+  const notes = (document.getElementById('bulkImportNotes')?.value||'').trim();
+  if(!notes){ toast('Paste your notes first','var(--red)'); return; }
+  const btn = document.getElementById('bulkImportBtn');
+  const statusEl = document.getElementById('bulkImportStatus');
+  const previewEl = document.getElementById('bulkImportPreview');
+  btn.disabled = true;
+  statusEl.innerHTML = '<span style="color:var(--purple)">🤖 Parsing notes…</span>';
+  previewEl.innerHTML = '';
+
+  const camp = getCampaigns().find(c=>c.id===editingCampId);
+  const sessionNum = (camp?.sessions?.length||0) + 1;
+
+  const systemPrompt = `You are a D&D campaign notes parser. The user will give you notes under subheadings like ## SESSION, ## QUESTS, ## NPCS, ## NOTES, ## ARCS. Parse them and return ONLY valid JSON, no markdown, no backticks.
+
+Return this exact structure (omit any section the user didn't provide, but always include the key):
+{
+  "session": null | {
+    "title": "short evocative title",
+    "date": "YYYY-MM-DD or empty string",
+    "summary": "2-4 sentence prose summary",
+    "xpAwarded": 0,
+    "goldAwarded": 0,
+    "highlights": ["key moment 1", "key moment 2"]
+  },
+  "quests": [
+    { "title": "quest title", "desc": "1-2 sentence description", "priority": "main|side|personal", "status": "active|completed|failed" }
+  ],
+  "npcs": [
+    { "name": "NPC name", "role": "role or title", "desc": "description", "relationship": "allied|friendly|neutral|hostile" }
+  ],
+  "notes": [
+    { "title": "note title", "body": "full note text" }
+  ],
+  "arcs": [
+    { "title": "arc title", "description": "arc description", "status": "active|upcoming|resolved" }
+  ]
+}
+
+Rules:
+- Parse bullet points, dashes, and numbered lists into individual items
+- Infer relationship from context (allied=party member/close ally, friendly=helpful NPC, neutral=unknown/shopkeeper, hostile=enemy)
+- Infer quest priority from context (main=primary objective, side=secondary, personal=character-specific)
+- If a section heading is missing, set its value to null or empty array
+- Return ONLY the JSON`;
+
+  try {
+    const res = await callClaude({ model:'claude-sonnet-4-20250514', max_tokens:2000, system:systemPrompt,
+        messages:[{ role:'user', content: notes }] });
+    const raw = (res.content?.find(b=>b.type==='text')?.text||'').replace(/^[\s\S]*?(?=\{)/,'').replace(/\}[\s\S]*$/,'}').trim();
+    let parsed;
+    try { parsed = JSON.parse(raw); }
+    catch(e) {
+      const clean = res.content?.find(b=>b.type==='text')?.text||'';
+      const m = clean.match(/\{[\s\S]*\}/);
+      if(m) parsed = JSON.parse(m[0]);
+      else throw new Error('Could not parse response as JSON');
+    }
+    window._pendingBulkImport = parsed;
+
+    const s = parsed.session;
+    const q = parsed.quests||[];
+    const n = parsed.npcs||[];
+    const nt = parsed.notes||[];
+    const a = parsed.arcs||[];
+
+    let html = '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">';
+
+    if(s) html += \`<div style="background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);margin-bottom:4px">📜 SESSION: \${s.title}</div>
+      <div style="font-size:11px;color:var(--muted)">\${s.summary}</div>
+    </div>\`;
+
+    if(q.length) html += \`<div style="background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--purple);margin-bottom:6px">📋 \${q.length} QUEST\${q.length!==1?'S':''}</div>
+      \${q.map(x=>\`<div style="font-size:11px;color:var(--text);padding:2px 0">✦ \${x.title} <span style="color:var(--muted)">(\${x.status||'active'})</span></div>\`).join('')}
+    </div>\`;
+
+    if(n.length) html += \`<div style="background:var(--surface2);border:1px solid var(--teal);border-radius:10px;padding:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--teal);margin-bottom:6px">👥 \${n.length} NPC\${n.length!==1?'S':''}</div>
+      \${n.map(x=>\`<div style="font-size:11px;color:var(--text);padding:2px 0">✦ \${x.name} <span style="color:var(--muted)">— \${x.role||''}</span></div>\`).join('')}
+    </div>\`;
+
+    if(nt.length) html += \`<div style="background:var(--surface2);border:1px solid var(--blue);border-radius:10px;padding:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--blue);margin-bottom:6px">📝 \${nt.length} NOTE\${nt.length!==1?'S':''}</div>
+      \${nt.map(x=>\`<div style="font-size:11px;color:var(--text);padding:2px 0">✦ \${x.title}</div>\`).join('')}
+    </div>\`;
+
+    if(a.length) html += \`<div style="background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);margin-bottom:6px">⚔ \${a.length} ARC\${a.length!==1?'S':''}</div>
+      \${a.map(x=>\`<div style="font-size:11px;color:var(--text);padding:2px 0">✦ \${x.title}</div>\`).join('')}
+    </div>\`;
+
+    html += '</div>';
+    html += '<button class="btn btn-gold" onclick="confirmBulkImport()" style="background:var(--purple);border-color:var(--purple)">✦ Import All</button>';
+    previewEl.innerHTML = html;
+    statusEl.innerHTML = '';
+  } catch(e) {
+    statusEl.innerHTML = \`<span style="color:var(--red)">⚠ \${e.message}</span>\`;
+    console.error(e);
+  }
+  btn.disabled = false;
+}
+
+function confirmBulkImport(){
+  const p = window._pendingBulkImport;
+  if(!p) return;
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c=>c.id===editingCampId);
+  if(ci<0) return;
+  const camp = camps[ci];
+  let added = [];
+
+  // Session
+  if(p.session){
+    const s = p.session;
+    if(!camp.sessions) camp.sessions=[];
+    const sessionNum = camp.sessions.length + 1;
+    const session = {
+      id: genItemId(), title: s.title||'Untitled Session',
+      date: s.date||new Date().toISOString().split('T')[0],
+      summary: s.summary||'', xpAwarded: s.xpAwarded||0,
+      goldAwarded: s.goldAwarded||0, highlights: s.highlights||[],
+      presentCharIds: [], goldAddedToLoot: false,
+    };
+    camp.sessions.push(session);
+    camp.lastPlayed = Date.now();
+    addPartyHistoryEvent(camp,'session',\`Session \${sessionNum}: "\${session.title}"\`,'📜');
+    if(session.goldAwarded > 0){
+      const w = getWealth();
+      if(!w['party']) w['party']={gp:0,sp:0,ep:0,cp:0};
+      w['party'].gp = (w['party'].gp||0) + session.goldAwarded;
+      saveWealth(w);
+    }
+    added.push('session');
+  }
+
+  // Quests
+  if(p.quests?.length){
+    if(!camp.quests) camp.quests=[];
+    p.quests.forEach(q => camp.quests.push({
+      id: genItemId(), title: q.title||'Untitled Quest',
+      desc: q.desc||'', priority: q.priority||'side',
+      status: q.status||'active', objectives: []
+    }));
+    added.push(\`\${p.quests.length} quest\${p.quests.length!==1?'s':''}\`);
+  }
+
+  // NPCs
+  if(p.npcs?.length){
+    if(!camp.npcs) camp.npcs=[];
+    p.npcs.forEach(n => camp.npcs.push({
+      id: genItemId(), name: n.name||'Unknown',
+      role: n.role||'', desc: n.desc||'',
+      relationship: n.relationship||'neutral', alive: true
+    }));
+    added.push(\`\${p.npcs.length} NPC\${p.npcs.length!==1?'s':''}\`);
+  }
+
+  // Notes
+  if(p.notes?.length){
+    if(!camp.notes) camp.notes=[];
+    p.notes.forEach(n => camp.notes.push({
+      id: genItemId(), title: n.title||'Note',
+      body: n.body||'', updated: Date.now()
+    }));
+    added.push(\`\${p.notes.length} note\${p.notes.length!==1?'s':''}\`);
+  }
+
+  // Arcs
+  if(p.arcs?.length){
+    if(!camp.arcs) camp.arcs=[];
+    p.arcs.forEach(a => camp.arcs.push({
+      id: genItemId(), title: a.title||'Untitled Arc',
+      description: a.description||'', status: a.status||'active', notes:''
+    }));
+    added.push(\`\${p.arcs.length} arc\${p.arcs.length!==1?'s':''}\`);
+  }
+
+  saveCampaign(camp);
+  window._pendingBulkImport = null;
+  document.getElementById('bulkImportNotes').value = '';
+  document.getElementById('bulkImportPreview').innerHTML = '';
+  document.getElementById('sessBulkImport').style.display = 'none';
+  toast(\`✦ Imported: \${added.join(', ')}!\`, 'var(--purple)');
+  renderSessions();
+  renderCampDetailHeader();
 }
 
 async function doClaudeSessionImport(){
