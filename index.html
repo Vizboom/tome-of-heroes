@@ -9461,37 +9461,37 @@ Rules:
 
     let html = '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">';
 
-    if(s) html += \`<div style="background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px">
-      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);margin-bottom:4px">📜 SESSION: \${s.title}</div>
-      <div style="font-size:11px;color:var(--muted)">\${s.summary}</div>
-    </div>\`;
+    if(s) html += `<div style="background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);margin-bottom:4px">📜 SESSION: ${s.title}</div>
+      <div style="font-size:11px;color:var(--muted)">${s.summary}</div>
+    </div>`;
 
-    if(q.length) html += \`<div style="background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:12px">
-      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--purple);margin-bottom:6px">📋 \${q.length} QUEST\${q.length!==1?'S':''}</div>
-      \${q.map(x=>\`<div style="font-size:11px;color:var(--text);padding:2px 0">✦ \${x.title} <span style="color:var(--muted)">(\${x.status||'active'})</span></div>\`).join('')}
-    </div>\`;
+    if(q.length) html += `<div style="background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--purple);margin-bottom:6px">📋 ${q.length} QUEST${q.length!==1?'S':''}</div>
+      ${q.map(x=>`<div style="font-size:11px;color:var(--text);padding:2px 0">✦ ${x.title} <span style="color:var(--muted)">(${x.status||'active'})</span></div>`).join('')}
+    </div>`;
 
-    if(n.length) html += \`<div style="background:var(--surface2);border:1px solid var(--teal);border-radius:10px;padding:12px">
-      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--teal);margin-bottom:6px">👥 \${n.length} NPC\${n.length!==1?'S':''}</div>
-      \${n.map(x=>\`<div style="font-size:11px;color:var(--text);padding:2px 0">✦ \${x.name} <span style="color:var(--muted)">— \${x.role||''}</span></div>\`).join('')}
-    </div>\`;
+    if(n.length) html += `<div style="background:var(--surface2);border:1px solid var(--teal);border-radius:10px;padding:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--teal);margin-bottom:6px">👥 ${n.length} NPC${n.length!==1?'S':''}</div>
+      ${n.map(x=>`<div style="font-size:11px;color:var(--text);padding:2px 0">✦ ${x.name} <span style="color:var(--muted)">— ${x.role||''}</span></div>`).join('')}
+    </div>`;
 
-    if(nt.length) html += \`<div style="background:var(--surface2);border:1px solid var(--blue);border-radius:10px;padding:12px">
-      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--blue);margin-bottom:6px">📝 \${nt.length} NOTE\${nt.length!==1?'S':''}</div>
-      \${nt.map(x=>\`<div style="font-size:11px;color:var(--text);padding:2px 0">✦ \${x.title}</div>\`).join('')}
-    </div>\`;
+    if(nt.length) html += `<div style="background:var(--surface2);border:1px solid var(--blue);border-radius:10px;padding:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--blue);margin-bottom:6px">📝 ${nt.length} NOTE${nt.length!==1?'S':''}</div>
+      ${nt.map(x=>`<div style="font-size:11px;color:var(--text);padding:2px 0">✦ ${x.title}</div>`).join('')}
+    </div>`;
 
-    if(a.length) html += \`<div style="background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px">
-      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);margin-bottom:6px">⚔ \${a.length} ARC\${a.length!==1?'S':''}</div>
-      \${a.map(x=>\`<div style="font-size:11px;color:var(--text);padding:2px 0">✦ \${x.title}</div>\`).join('')}
-    </div>\`;
+    if(a.length) html += `<div style="background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);margin-bottom:6px">⚔ ${a.length} ARC${a.length!==1?'S':''}</div>
+      ${a.map(x=>`<div style="font-size:11px;color:var(--text);padding:2px 0">✦ ${x.title}</div>`).join('')}
+    </div>`;
 
     html += '</div>';
     html += '<button class="btn btn-gold" onclick="confirmBulkImport()" style="background:var(--purple);border-color:var(--purple)">✦ Import All</button>';
     previewEl.innerHTML = html;
     statusEl.innerHTML = '';
   } catch(e) {
-    statusEl.innerHTML = \`<span style="color:var(--red)">⚠ \${e.message}</span>\`;
+    statusEl.innerHTML = `<span style="color:var(--red)">⚠ ${e.message}</span>`;
     console.error(e);
   }
   btn.disabled = false;
@@ -9520,7 +9520,7 @@ function confirmBulkImport(){
     };
     camp.sessions.push(session);
     camp.lastPlayed = Date.now();
-    addPartyHistoryEvent(camp,'session',\`Session \${sessionNum}: "\${session.title}"\`,'📜');
+    addPartyHistoryEvent(camp,'session',`Session ${sessionNum}: "${session.title}"`,'📜');
     if(session.goldAwarded > 0){
       const w = getWealth();
       if(!w['party']) w['party']={gp:0,sp:0,ep:0,cp:0};
@@ -9538,7 +9538,7 @@ function confirmBulkImport(){
       desc: q.desc||'', priority: q.priority||'side',
       status: q.status||'active', objectives: []
     }));
-    added.push(\`\${p.quests.length} quest\${p.quests.length!==1?'s':''}\`);
+    added.push(`${p.quests.length} quest${p.quests.length!==1?'s':''}`);
   }
 
   // NPCs
@@ -9549,7 +9549,7 @@ function confirmBulkImport(){
       role: n.role||'', desc: n.desc||'',
       relationship: n.relationship||'neutral', alive: true
     }));
-    added.push(\`\${p.npcs.length} NPC\${p.npcs.length!==1?'s':''}\`);
+    added.push(`${p.npcs.length} NPC${p.npcs.length!==1?'s':''}`);
   }
 
   // Notes
@@ -9559,7 +9559,7 @@ function confirmBulkImport(){
       id: genItemId(), title: n.title||'Note',
       body: n.body||'', updated: Date.now()
     }));
-    added.push(\`\${p.notes.length} note\${p.notes.length!==1?'s':''}\`);
+    added.push(`${p.notes.length} note${p.notes.length!==1?'s':''}`);
   }
 
   // Arcs
@@ -9569,7 +9569,7 @@ function confirmBulkImport(){
       id: genItemId(), title: a.title||'Untitled Arc',
       description: a.description||'', status: a.status||'active', notes:''
     }));
-    added.push(\`\${p.arcs.length} arc\${p.arcs.length!==1?'s':''}\`);
+    added.push(`${p.arcs.length} arc${p.arcs.length!==1?'s':''}`);
   }
 
   saveCampaign(camp);
@@ -9577,7 +9577,7 @@ function confirmBulkImport(){
   document.getElementById('bulkImportNotes').value = '';
   document.getElementById('bulkImportPreview').innerHTML = '';
   document.getElementById('sessBulkImport').style.display = 'none';
-  toast(\`✦ Imported: \${added.join(', ')}!\`, 'var(--purple)');
+  toast(`✦ Imported: ${added.join(', ')}!`, 'var(--purple)');
   renderSessions();
   renderCampDetailHeader();
 }
