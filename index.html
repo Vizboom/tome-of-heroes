@@ -719,7 +719,24 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   display: flex; align-items: center; justify-content: center;
   pointer-events: none; position: relative;
 }
-.paperdoll-body svg { width: 90px; height: 220px; opacity: 0.09; }
+.paperdoll-body svg { width: 96px; height: 310px; overflow: visible; }
+.paperdoll-body .doll-glow {
+  position: absolute; inset: 0;
+  border-radius: 12px;
+  pointer-events: none;
+  animation: dollPulse 3s ease-in-out infinite;
+}
+@keyframes dollPulse {
+  0%,100% { opacity: 0.18; }
+  50%      { opacity: 0.38; }
+}
+.paperdoll-section { position: relative; overflow: hidden; }
+.paperdoll-section .class-bg-rune {
+  position: absolute; bottom: -10px; right: -10px;
+  font-size: 90px; opacity: 0.04; pointer-events: none;
+  user-select: none; line-height: 1;
+  filter: blur(2px);
+}
 
 /* Equipment slot — base */
 .equip-slot {
@@ -11522,21 +11539,188 @@ function renderCharacterScreen(){
 function selectCharScreen(id){ charScreenId=id; renderCharacterScreen(); }
 
 /* ── Paperdoll ── */
+/* ── Class silhouette SVGs — one per class ── */
+function getClassDollSVG(className, color) {
+  var c = color || '#aaa';
+  var dim = 'opacity:0.13';
+  // Shared base body parts
+  var head   = '<ellipse cx="48" cy="22" rx="14" ry="15" fill="'+c+'" style="'+dim+'"/>';
+  var neck   = '<rect x="43" y="37" width="10" height="9" rx="3" fill="'+c+'" style="'+dim+'"/>';
+  var torso  = '<path d="M28 46 Q24 52 23 66 L22 128 Q22 134 28 136 L68 136 Q74 134 74 128 L73 66 Q72 52 68 46 Z" fill="'+c+'" style="'+dim+'"/>';
+  var legL   = '<path d="M30 136 L28 208 Q28 214 34 215 L42 215 Q46 214 47 208 L48 136 Z" fill="'+c+'" style="'+dim+'"/>';
+  var legR   = '<path d="M66 136 L68 208 Q68 214 62 215 L54 215 Q50 214 49 208 L48 136 Z" fill="'+c+'" style="'+dim+'"/>';
+  var armL   = '<path d="M28 48 Q18 54 16 66 L14 112 Q14 118 20 119 L28 119 Q33 118 34 112 L35 80 Z" fill="'+c+'" style="'+dim+'"/>';
+  var armR   = '<path d="M68 48 Q78 54 80 66 L82 112 Q82 118 76 119 L68 119 Q63 118 62 112 L61 80 Z" fill="'+c+'" style="'+dim+'"/>';
+  var body   = head+neck+torso+legL+legR+armL+armR;
+
+  // Class-specific weapon / prop overlays (higher opacity, class colour)
+  var props = '';
+  var cl = (className||'').toLowerCase();
+
+  if(cl === 'barbarian'){
+    // Greataxe raised over right shoulder
+    props = '<line x1="72" y1="20" x2="72" y2="130" stroke="'+c+'" stroke-width="4" stroke-linecap="round" opacity="0.55"/>'
+          + '<path d="M56 20 Q72 10 88 20 Q80 36 72 28 Z" fill="'+c+'" opacity="0.55"/>'
+          + '<path d="M72 18 Q58 8 60 24 Q66 30 72 28 Z" fill="'+c+'" opacity="0.35"/>'
+          // rage marks on chest
+          + '<line x1="38" y1="72" x2="44" y2="84" stroke="'+c+'" stroke-width="1.5" opacity="0.3"/>'
+          + '<line x1="42" y1="70" x2="48" y2="82" stroke="'+c+'" stroke-width="1.5" opacity="0.3"/>';
+  } else if(cl === 'bard'){
+    // Lute
+    props = '<ellipse cx="62" cy="140" rx="12" ry="16" fill="'+c+'" opacity="0.4"/>'
+          + '<line x1="62" y1="124" x2="62" y2="82" stroke="'+c+'" stroke-width="2.5" stroke-linecap="round" opacity="0.45"/>'
+          + '<line x1="58" y1="90" x2="66" y2="90" stroke="'+c+'" stroke-width="1.5" opacity="0.35"/>'
+          + '<line x1="57" y1="96" x2="67" y2="96" stroke="'+c+'" stroke-width="1.5" opacity="0.35"/>'
+          + '<line x1="58" y1="102" x2="66" y2="102" stroke="'+c+'" stroke-width="1.5" opacity="0.35"/>'
+          // musical notes
+          + '<text x="14" y="60" font-size="12" fill="'+c+'" opacity="0.3" font-family="serif">♪</text>'
+          + '<text x="76" y="75" font-size="9" fill="'+c+'" opacity="0.25" font-family="serif">♫</text>';
+  } else if(cl === 'cleric'){
+    // Holy symbol on chest + mace
+    props = '<circle cx="48" cy="82" r="10" fill="none" stroke="'+c+'" stroke-width="2" opacity="0.45"/>'
+          + '<line x1="48" y1="72" x2="48" y2="92" stroke="'+c+'" stroke-width="2" opacity="0.45"/>'
+          + '<line x1="38" y1="82" x2="58" y2="82" stroke="'+c+'" stroke-width="2" opacity="0.45"/>'
+          // Mace in right hand
+          + '<line x1="76" y1="60" x2="76" y2="130" stroke="'+c+'" stroke-width="3.5" stroke-linecap="round" opacity="0.4"/>'
+          + '<ellipse cx="76" cy="55" rx="7" ry="9" fill="'+c+'" opacity="0.45"/>'
+          // Divine rays from above
+          + '<line x1="48" y1="0" x2="48" y2="14" stroke="'+c+'" stroke-width="1.5" opacity="0.25"/>'
+          + '<line x1="36" y1="2" x2="40" y2="14" stroke="'+c+'" stroke-width="1" opacity="0.2"/>'
+          + '<line x1="60" y1="2" x2="56" y2="14" stroke="'+c+'" stroke-width="1" opacity="0.2"/>';
+  } else if(cl === 'druid'){
+    // Staff with leaf motif
+    props = '<line x1="18" y1="10" x2="20" y2="210" stroke="'+c+'" stroke-width="3" stroke-linecap="round" opacity="0.45"/>'
+          + '<path d="M10 10 Q18 0 26 8 Q20 18 14 14 Z" fill="'+c+'" opacity="0.5"/>'
+          + '<path d="M26 8 Q18 4 14 14 Q20 18 26 8 Z" fill="'+c+'" opacity="0.3"/>'
+          // Floating leaves
+          + '<ellipse cx="70" cy="50" rx="8" ry="4" fill="'+c+'" opacity="0.25" transform="rotate(-30 70 50)"/>'
+          + '<ellipse cx="76" cy="70" rx="6" ry="3" fill="'+c+'" opacity="0.2" transform="rotate(20 76 70)"/>'
+          + '<ellipse cx="68" cy="90" rx="7" ry="3.5" fill="'+c+'" opacity="0.2" transform="rotate(-15 68 90)"/>'
+          // Nature circle
+          + '<circle cx="48" cy="80" r="18" fill="none" stroke="'+c+'" stroke-width="1" stroke-dasharray="3 3" opacity="0.2"/>';
+  } else if(cl === 'fighter'){
+    // Sword + shield
+    props = '<rect x="6" y="50" width="18" height="26" rx="3" fill="'+c+'" opacity="0.45"/>'
+          + '<path d="M6 50 Q15 44 24 50" fill="'+c+'" opacity="0.45"/>'
+          + '<path d="M15 50 L15 76" stroke="'+c+'" stroke-width="1.5" opacity="0.3"/>'
+          + '<path d="M6 63 L24 63" stroke="'+c+'" stroke-width="1.5" opacity="0.3"/>'
+          // Longsword
+          + '<line x1="78" y1="15" x2="78" y2="125" stroke="'+c+'" stroke-width="3.5" stroke-linecap="round" opacity="0.5"/>'
+          + '<line x1="70" y1="52" x2="86" y2="52" stroke="'+c+'" stroke-width="3" stroke-linecap="round" opacity="0.45"/>'
+          + '<rect x="75" y="120" width="6" height="10" rx="2" fill="'+c+'" opacity="0.4"/>';
+  } else if(cl === 'monk'){
+    // Fighting stance — extended arm + kick
+    props = '<line x1="14" y1="70" x2="30" y2="58" stroke="'+c+'" stroke-width="3" stroke-linecap="round" opacity="0.45"/>'
+          // Ki energy circles
+          + '<circle cx="48" cy="80" r="22" fill="none" stroke="'+c+'" stroke-width="1" opacity="0.2"/>'
+          + '<circle cx="48" cy="80" r="14" fill="none" stroke="'+c+'" stroke-width="0.5" opacity="0.15"/>'
+          // Yin-yang hint
+          + '<path d="M40 80 Q40 68 48 68 Q56 68 56 74 Q56 80 48 80 Q44 80 44 76 Q44 72 48 72" fill="none" stroke="'+c+'" stroke-width="1" opacity="0.25"/>'
+          // Raised leg
+          + '<path d="M30 136 L18 175 Q16 180 22 182 L28 181 Q32 180 34 175 L42 140 Z" fill="'+c+'" style="'+dim+'" opacity="0.4"/>';
+  } else if(cl === 'paladin'){
+    // Sword raised + holy radiance
+    props = '<line x1="72" y1="10" x2="72" y2="130" stroke="'+c+'" stroke-width="4" stroke-linecap="round" opacity="0.52"/>'
+          + '<line x1="62" y1="42" x2="82" y2="42" stroke="'+c+'" stroke-width="3.5" stroke-linecap="round" opacity="0.5"/>'
+          + '<rect x="69" y="125" width="6" height="9" rx="2" fill="'+c+'" opacity="0.45"/>'
+          // Radiance burst
+          + '<circle cx="48" cy="72" r="24" fill="none" stroke="'+c+'" stroke-width="1" opacity="0.2"/>'
+          + '<line x1="48" y1="44" x2="48" y2="38" stroke="'+c+'" stroke-width="1.5" opacity="0.2"/>'
+          + '<line x1="26" y1="52" x2="22" y2="48" stroke="'+c+'" stroke-width="1.5" opacity="0.2"/>'
+          + '<line x1="70" y1="52" x2="74" y2="48" stroke="'+c+'" stroke-width="1.5" opacity="0.2"/>'
+          // Cross on shield/chest
+          + '<line x1="48" y1="62" x2="48" y2="90" stroke="'+c+'" stroke-width="2" opacity="0.3"/>'
+          + '<line x1="36" y1="74" x2="60" y2="74" stroke="'+c+'" stroke-width="2" opacity="0.3"/>';
+  } else if(cl === 'ranger'){
+    // Longbow drawn
+    props = '<path d="M14 20 Q8 80 14 140" fill="none" stroke="'+c+'" stroke-width="3.5" stroke-linecap="round" opacity="0.5"/>'
+          + '<line x1="14" y1="20" x2="14" y2="140" stroke="'+c+'" stroke-width="1" opacity="0.3"/>'
+          + '<line x1="14" y1="80" x2="68" y2="80" stroke="'+c+'" stroke-width="1.5" opacity="0.4"/>'
+          // Arrow nocked
+          + '<line x1="14" y1="78" x2="75" y2="72" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round" opacity="0.45"/>'
+          + '<path d="M75 72 L80 68 L76 76 Z" fill="'+c+'" opacity="0.5"/>'
+          // Leaf marks
+          + '<ellipse cx="78" cy="95" rx="6" ry="3" fill="'+c+'" opacity="0.18" transform="rotate(20 78 95)"/>'
+          + '<ellipse cx="74" cy="108" rx="5" ry="2.5" fill="'+c+'" opacity="0.15" transform="rotate(-10 74 108)"/>';
+  } else if(cl === 'rogue'){
+    // Dagger + cloak suggestion
+    props = '<line x1="74" y1="40" x2="66" y2="110" stroke="'+c+'" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>'
+          + '<path d="M74 40 L80 32 L76 44 Z" fill="'+c+'" opacity="0.55"/>'
+          // Shadow cloak trailing
+          + '<path d="M22 46 Q10 90 8 160 Q12 165 18 162 Q20 140 28 136" fill="'+c+'" opacity="0.15"/>'
+          // Second dagger
+          + '<line x1="16" y1="55" x2="22" y2="108" stroke="'+c+'" stroke-width="2" stroke-linecap="round" opacity="0.35"/>'
+          + '<path d="M16 55 L12 47 L18 57 Z" fill="'+c+'" opacity="0.4"/>';
+  } else if(cl === 'sorcerer'){
+    // Arcane orb + magic trails
+    props = '<circle cx="20" cy="90" r="12" fill="'+c+'" opacity="0.35"/>'
+          + '<circle cx="20" cy="90" r="8" fill="none" stroke="'+c+'" stroke-width="1.5" opacity="0.5"/>'
+          // Arcane swirl lines
+          + '<path d="M26 86 Q42 70 44 54" fill="none" stroke="'+c+'" stroke-width="1.5" opacity="0.3" stroke-dasharray="3 2"/>'
+          + '<path d="M16 96 Q8 120 14 140" fill="none" stroke="'+c+'" stroke-width="1" opacity="0.2" stroke-dasharray="2 2"/>'
+          // Stars
+          + '<circle cx="70" cy="38" r="2" fill="'+c+'" opacity="0.45"/>'
+          + '<circle cx="78" cy="58" r="1.5" fill="'+c+'" opacity="0.35"/>'
+          + '<circle cx="12" cy="48" r="1.5" fill="'+c+'" opacity="0.3"/>'
+          + '<circle cx="80" cy="100" r="2" fill="'+c+'" opacity="0.3"/>'
+          // Spell lines from hands
+          + '<path d="M22 96 Q14 108 10 130" fill="none" stroke="'+c+'" stroke-width="2" opacity="0.25"/>';
+  } else if(cl === 'warlock'){
+    // Dark pact symbol + eldritch hand
+    props = '<circle cx="48" cy="76" r="18" fill="none" stroke="'+c+'" stroke-width="1.5" opacity="0.3"/>'
+          + '<polygon points="48,58 52,70 64,70 55,78 58,90 48,82 38,90 41,78 32,70 44,70" fill="none" stroke="'+c+'" stroke-width="1.2" opacity="0.35"/>'
+          // Eldritch blast from hand
+          + '<path d="M80 90 Q94 80 96 64" fill="none" stroke="'+c+'" stroke-width="2" opacity="0.4" stroke-dasharray="4 2"/>'
+          + '<circle cx="82" cy="92" r="5" fill="'+c+'" opacity="0.4"/>'
+          // Dark tendrils
+          + '<path d="M22 100 Q10 115 8 138" fill="none" stroke="'+c+'" stroke-width="1.5" opacity="0.2" stroke-dasharray="2 3"/>'
+          + '<path d="M18 112 Q6 124 6 148" fill="none" stroke="'+c+'" stroke-width="1" opacity="0.15" stroke-dasharray="2 3"/>';
+  } else if(cl === 'wizard'){
+    // Staff + spellbook + stars
+    props = '<line x1="16" y1="8" x2="18" y2="210" stroke="'+c+'" stroke-width="2.5" stroke-linecap="round" opacity="0.45"/>'
+          + '<circle cx="16" cy="8" r="8" fill="none" stroke="'+c+'" stroke-width="1.5" opacity="0.5"/>'
+          + '<circle cx="16" cy="8" r="4" fill="'+c+'" opacity="0.45"/>'
+          // Arcane runes floating
+          + '<text x="62" y="52" font-size="10" fill="'+c+'" opacity="0.28" font-family="serif">✦</text>'
+          + '<text x="70" y="78" font-size="8"  fill="'+c+'" opacity="0.22" font-family="serif">⌬</text>'
+          + '<text x="64" y="100" font-size="9" fill="'+c+'" opacity="0.2"  font-family="serif">◈</text>'
+          // Star field
+          + '<circle cx="78" cy="36" r="1.5" fill="'+c+'" opacity="0.4"/>'
+          + '<circle cx="84" cy="58" r="1" fill="'+c+'" opacity="0.3"/>'
+          + '<circle cx="74" cy="110" r="1.5" fill="'+c+'" opacity="0.3"/>'
+          + '<circle cx="10" cy="140" r="1" fill="'+c+'" opacity="0.25"/>';
+  }
+
+  return '<svg viewBox="0 0 96 230" fill="none" xmlns="http://www.w3.org/2000/svg" overflow="visible">'
+    + props
+    + body
+    + '</svg>';
+}
+
 function renderPaperdoll(char, cls){
   const gridEl = document.getElementById('paperdollGrid');
   if(!gridEl) return;
   const slots = getEquippedItems(char);
+  const cc = cls.color || '#aaa';
+
+  // Add class bg rune to section
+  const section = document.querySelector('.paperdoll-section');
+  if(section){
+    // Remove old rune if any
+    var old = section.querySelector('.class-bg-rune');
+    if(old) old.remove();
+    var rune = document.createElement('div');
+    rune.className = 'class-bg-rune';
+    rune.textContent = cls.icon;
+    section.appendChild(rune);
+    // Class-colour tint on section border-bottom
+    section.style.borderBottom = '1px solid '+cc+'44';
+  }
 
   let html = '<div class="paperdoll-body" style="grid-column:2;grid-row:1/6">'
-    + '<svg viewBox="0 0 80 220" fill="none" xmlns="http://www.w3.org/2000/svg">'
-    + '<ellipse cx="40" cy="18" rx="15" ry="16" fill="white"/>'
-    + '<rect x="35" y="34" width="10" height="10" rx="3" fill="white"/>'
-    + '<path d="M20 44 Q16 48 15 60 L14 120 Q14 126 20 128 L60 128 Q66 126 66 120 L65 60 Q64 48 60 44 Z" fill="white"/>'
-    + '<path d="M20 46 Q10 50 8 60 L6 104 Q6 110 11 111 L18 111 Q23 110 24 105 L26 72 Z" fill="white"/>'
-    + '<path d="M60 46 Q70 50 72 60 L74 104 Q74 110 69 111 L62 111 Q57 110 56 105 L54 72 Z" fill="white"/>'
-    + '<path d="M22 128 L20 196 Q20 202 26 203 L34 203 Q38 202 39 196 L40 128 Z" fill="white"/>'
-    + '<path d="M58 128 L60 196 Q60 202 54 203 L46 203 Q42 202 41 196 L40 128 Z" fill="white"/>'
-    + '</svg></div>';
+    + '<div class="doll-glow" style="background:radial-gradient(ellipse at center, '+cc+'28 0%, transparent 70%)"></div>'
+    + getClassDollSVG(cls.name, cc)
+    + '</div>';
 
   EQUIP_SLOTS.forEach(function(slot){
     const item = slots[slot.id];
