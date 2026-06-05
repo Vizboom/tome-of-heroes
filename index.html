@@ -656,81 +656,228 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .quick-tile{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px;cursor:pointer;transition:var(--trans);display:flex;align-items:center;gap:8px;}
 .quick-tile:active{transform:scale(0.96);}
 
-/* ── Character / Paperdoll Screen ── */
-.char-screen-wrap { display: flex; flex-direction: column; gap: 12px; padding: 14px; }
-@media (min-width: 600px) {
-  .char-screen-wrap { flex-direction: row; align-items: flex-start; gap: 16px; padding: 20px; }
-}
+/* ══ CHARACTER SCREEN ══════════════════════════════════════════════ */
 
-/* Paperdoll container */
-.paperdoll-container {
+/* Character selector bar */
+.char-select-bar {
+  display: flex; gap: 6px; overflow-x: auto; padding: 10px 14px 0;
+  scrollbar-width: none; -ms-overflow-style: none; border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  width: 100%;
-  max-width: 340px;
-  margin: 0 auto;
-  position: relative;
 }
-@media (min-width: 600px) { .paperdoll-container { width: 280px; } }
+.char-select-bar::-webkit-scrollbar { display: none; }
+.char-select-pill {
+  flex-shrink: 0; display: flex; align-items: center; gap: 5px; padding: 6px 12px;
+  border-radius: 20px; border: 1px solid var(--border); background: var(--surface2);
+  cursor: pointer; transition: var(--trans); font-family: 'Cinzel', serif; font-size: 9px;
+  letter-spacing: 0.5px; color: var(--muted); white-space: nowrap;
+}
+.char-select-pill.active { border-color: var(--cc, var(--gold)); color: var(--cc, var(--gold)); background: var(--cc-dim, var(--gold-dim)); }
+.char-select-pill .csp-icon { font-size: 16px; }
 
-/* Slot grid around a central body silhouette */
+/* Main layout: paperdoll left, stats right (stacks on mobile) */
+.char-main-layout {
+  display: flex; flex-direction: column; gap: 0;
+  flex: 1; min-height: 0;
+}
+@media (min-width: 720px) {
+  .char-main-layout { flex-direction: row; align-items: flex-start; }
+}
+
+/* LEFT PANE: paperdoll + inventory bag */
+.char-left-pane {
+  display: flex; flex-direction: column; gap: 0;
+  background: var(--bg2); border-right: 1px solid var(--border);
+}
+@media (min-width: 720px) {
+  .char-left-pane { width: 320px; flex-shrink: 0; height: calc(100vh - 54px - 48px - 42px); overflow-y: auto; }
+}
+
+/* Paperdoll section */
+.paperdoll-section {
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.paperdoll-section-label {
+  font-family: 'Cinzel', serif; font-size: 9px; letter-spacing: 1.5px;
+  color: var(--gold); margin-bottom: 10px;
+}
+
+/* The 3-column grid with body silhouette */
 .paperdoll-grid {
   display: grid;
-  grid-template-columns: 72px 1fr 72px;
-  grid-template-rows: repeat(5, 72px);
-  gap: 6px;
+  grid-template-columns: 62px 1fr 62px;
+  grid-template-rows: repeat(5, 62px);
+  gap: 5px;
   align-items: center;
   justify-items: center;
   position: relative;
 }
 
-/* Body silhouette in center column */
 .paperdoll-body {
-  grid-column: 2;
-  grid-row: 1 / 6;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
+  grid-column: 2; grid-row: 1 / 6;
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; position: relative;
 }
-.paperdoll-body svg { width: 100%; height: 100%; opacity: 0.12; }
+.paperdoll-body svg { width: 90px; height: 220px; opacity: 0.09; }
 
-/* Individual equipment slot */
+/* Equipment slot — base */
 .equip-slot {
-  width: 66px;
-  height: 66px;
-  border: 1.5px dashed rgba(255,255,255,0.2);
-  border-radius: 10px;
+  width: 58px; height: 58px;
+  border: 1.5px dashed rgba(255,255,255,0.18);
+  border-radius: 9px;
   background: var(--surface);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
   cursor: pointer;
-  transition: var(--trans);
-  position: relative;
-  overflow: hidden;
-  z-index: 2;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
+  position: relative; overflow: hidden; z-index: 2;
+  user-select: none; -webkit-user-select: none;
 }
-.equip-slot:hover { border-color: var(--gold); background: var(--gold-dim); }
-.equip-slot.filled { border-style: solid; border-color: var(--slot-c, var(--purple)); background: var(--slot-bg, var(--purple-dim)); }
-.equip-slot.filled:hover { border-color: var(--red); background: rgba(192,57,43,0.15); }
-.equip-slot .slot-icon { font-size: 22px; line-height: 1; }
-.equip-slot .slot-label { font-family: 'Cinzel', serif; font-size: 7px; letter-spacing: 0.5px; color: var(--muted); margin-top: 3px; text-align: center; line-height: 1.2; }
-.equip-slot.filled .slot-label { color: var(--slot-c, var(--purple)); }
-.equip-slot .slot-name { font-family: 'Cinzel', serif; font-size: 7px; color: var(--text); text-align: center; line-height: 1.2; max-width: 62px; word-break: break-word; margin-top: 2px; }
-.equip-slot .slot-bonus { position: absolute; top: 3px; right: 4px; font-family: 'Cinzel', serif; font-size: 8px; color: var(--gold); font-weight: 700; }
+.equip-slot:hover { border-color: rgba(201,162,39,0.6); background: var(--gold-dim); }
+.equip-slot.filled {
+  border-style: solid; border-color: var(--slot-c, var(--purple));
+  background: var(--slot-bg, var(--purple-dim));
+}
+.equip-slot.drag-over {
+  border-color: var(--gold) !important; border-style: solid !important;
+  background: rgba(201,162,39,0.2) !important;
+  box-shadow: 0 0 12px rgba(201,162,39,0.4);
+  transform: scale(1.06);
+}
+.equip-slot.drag-reject {
+  border-color: var(--red) !important; border-style: solid !important;
+  background: rgba(192,57,43,0.15) !important;
+}
+.equip-slot .slot-icon { font-size: 20px; line-height: 1; }
+.equip-slot .slot-label {
+  font-family: 'Cinzel', serif; font-size: 6.5px; letter-spacing: 0.3px;
+  color: var(--muted); margin-top: 3px; text-align: center; line-height: 1.2;
+}
+.equip-slot.filled .slot-label { color: var(--slot-c, var(--purple)); font-size: 6px; }
+.equip-slot .slot-name {
+  font-family: 'Cinzel', serif; font-size: 6px; color: var(--text);
+  text-align: center; line-height: 1.2; max-width: 54px;
+  word-break: break-word; margin-top: 1px;
+}
+.equip-slot .slot-bonus {
+  position: absolute; top: 2px; right: 3px;
+  font-family: 'Cinzel', serif; font-size: 8px; color: var(--gold); font-weight: 700;
+}
+.equip-slot .slot-unequip-hint {
+  position: absolute; inset: 0; background: rgba(192,57,43,0.85);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; opacity: 0; transition: opacity 0.15s; border-radius: 8px;
+}
+.equip-slot.filled:hover .slot-unequip-hint { opacity: 1; }
 
-/* Slot picker modal */
+/* Inventory bag section */
+.inv-bag-section { padding: 12px 14px 14px; }
+.inv-bag-label {
+  font-family: 'Cinzel', serif; font-size: 9px; letter-spacing: 1.5px;
+  color: var(--gold); margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+}
+.inv-bag-label span { color: var(--muted); font-size: 8px; }
+.inv-bag-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+}
+/* Inventory item tile */
+.inv-tile {
+  aspect-ratio: 1;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  position: relative; cursor: grab; overflow: hidden;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+  user-select: none; -webkit-user-select: none;
+}
+.inv-tile:active { cursor: grabbing; }
+.inv-tile.dragging {
+  opacity: 0.35; transform: scale(0.9);
+}
+.inv-tile:hover { border-color: var(--gold); transform: scale(1.05); z-index: 3; }
+.inv-tile .it-icon { font-size: 18px; line-height: 1; }
+.inv-tile .it-name {
+  font-family: 'Cinzel', serif; font-size: 5.5px; color: var(--text);
+  text-align: center; line-height: 1.2; padding: 0 2px; margin-top: 2px;
+  max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.inv-tile .it-bonus {
+  position: absolute; top: 1px; right: 2px;
+  font-family: 'Cinzel', serif; font-size: 7px; color: var(--gold); font-weight: 700;
+}
+.inv-tile .it-qty {
+  position: absolute; bottom: 1px; right: 3px;
+  font-family: 'Cinzel', serif; font-size: 7px; color: var(--muted);
+}
+.inv-tile .it-equipped-dot {
+  position: absolute; top: 2px; left: 2px;
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--green);
+}
+
+/* Drag ghost element */
+#dragGhost {
+  position: fixed; pointer-events: none; z-index: 9999;
+  width: 60px; height: 60px; border-radius: 10px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 24px; background: var(--surface2);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  border: 2px solid var(--gold);
+  transform: translate(-50%, -50%) scale(1.15);
+  transition: transform 0.1s;
+  opacity: 0.92;
+}
+
+/* RIGHT PANE: stats */
+.char-right-pane {
+  flex: 1; padding: 14px 14px 20px; min-width: 0;
+}
+@media (min-width: 720px) {
+  .char-right-pane { overflow-y: auto; height: calc(100vh - 54px - 48px - 42px); }
+}
+
+.char-stat-section { margin-bottom: 14px; }
+.char-stat-section-label {
+  font-family: 'Cinzel', serif; font-size: 9px; letter-spacing: 1.5px;
+  color: var(--gold); border-bottom: 1px solid var(--gold-dim);
+  padding-bottom: 5px; margin-bottom: 8px;
+}
+.char-derived-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.char-derived-box {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 9px;
+  padding: 8px 4px; text-align: center;
+}
+.char-derived-val { font-family: 'Cinzel', serif; font-size: 19px; color: var(--cc, var(--gold)); }
+.char-derived-val.boosted { color: var(--green); }
+.char-derived-label { font-family: 'Cinzel', serif; font-size: 8px; color: var(--muted); letter-spacing: 0.5px; margin-top: 2px; }
+.char-equip-bonus-tag { font-size: 9px; color: var(--green); font-family: 'Cinzel', serif; display: block; letter-spacing: 0.5px; }
+
+/* Equipped summary list */
+.equipped-list { display: flex; flex-direction: column; gap: 5px; }
+.equipped-item-row {
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px;
+  background: var(--surface2); border-radius: 8px; border: 1px solid var(--border);
+}
+.equipped-item-row .ei-slot-label { font-family: 'Cinzel', serif; font-size: 7.5px; letter-spacing: 0.5px; color: var(--muted); width: 50px; flex-shrink: 0; }
+.equipped-item-row .ei-icon { font-size: 16px; width: 24px; text-align: center; flex-shrink: 0; }
+.equipped-item-row .ei-name { font-family: 'Cinzel', serif; font-size: 11px; flex: 1; }
+.equipped-item-row .ei-effect { font-size: 10px; color: var(--green); }
+.equipped-item-row .ei-unequip { cursor: pointer; opacity: 0.35; font-size: 12px; transition: opacity 0.15s; flex-shrink: 0; }
+.equipped-item-row .ei-unequip:hover { opacity: 1; color: var(--red); }
+
+/* Slot picker bottom sheet */
 .slot-picker-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 200;
   display: flex; align-items: flex-end; justify-content: center;
 }
 .slot-picker-sheet {
   width: 100%; max-width: 480px; background: var(--bg2);
-  border-radius: 20px 20px 0 0; padding: 0 0 env(safe-area-inset-bottom);
-  max-height: 70vh; overflow-y: auto;
+  border-radius: 20px 20px 0 0; max-height: 72vh; overflow-y: auto;
 }
 .slot-picker-header {
   display: flex; align-items: center; padding: 16px 18px 12px;
@@ -750,57 +897,19 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .slot-picker-item .pi-meta { font-size: 11px; color: var(--muted); }
 .slot-picker-empty { font-size: 13px; color: var(--muted); font-style: italic; text-align: center; padding: 20px 0; }
 
-/* Stats panel beside doll */
-.char-stats-panel { flex: 1; min-width: 0; }
-.char-stat-section { margin-bottom: 14px; }
-.char-stat-section-label {
-  font-family: 'Cinzel', serif; font-size: 9px; letter-spacing: 1.5px;
-  color: var(--gold); border-bottom: 1px solid var(--gold-dim);
-  padding-bottom: 5px; margin-bottom: 8px;
+/* Item tooltip on hover */
+.inv-tooltip {
+  position: fixed; z-index: 500; pointer-events: none;
+  background: var(--bg2); border: 1px solid var(--gold);
+  border-radius: 10px; padding: 10px 13px; min-width: 160px; max-width: 220px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.7);
+  transition: opacity 0.1s;
 }
-.char-derived-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
-.char-derived-box {
-  background: var(--surface2); border: 1px solid var(--border); border-radius: 9px;
-  padding: 8px 4px; text-align: center;
-}
-.char-derived-val { font-family: 'Cinzel', serif; font-size: 19px; color: var(--cc, var(--gold)); }
-.char-derived-val.boosted { color: var(--green); }
-.char-derived-label { font-family: 'Cinzel', serif; font-size: 8px; color: var(--muted); letter-spacing: 0.5px; margin-top: 2px; }
-.char-equip-bonus-tag {
-  font-size: 9px; color: var(--green); font-family: 'Cinzel', serif;
-  display: block; letter-spacing: 0.5px;
-}
-
-/* Equipped items list */
-.equipped-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
-.equipped-item-row {
-  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-  background: var(--surface2); border-radius: 9px; border: 1px solid var(--border);
-}
-.equipped-item-row .ei-slot-label {
-  font-family: 'Cinzel', serif; font-size: 8px; letter-spacing: 0.5px;
-  color: var(--muted); width: 52px; flex-shrink: 0;
-}
-.equipped-item-row .ei-icon { font-size: 18px; width: 28px; text-align: center; flex-shrink: 0; }
-.equipped-item-row .ei-name { font-family: 'Cinzel', serif; font-size: 11px; flex: 1; }
-.equipped-item-row .ei-effect { font-size: 10px; color: var(--green); }
-.equipped-item-row .ei-unequip { cursor: pointer; opacity: 0.4; font-size: 12px; transition: var(--trans); }
-.equipped-item-row .ei-unequip:hover { opacity: 1; color: var(--red); }
-
-/* Char selector bar at top of character screen */
-.char-select-bar {
-  display: flex; gap: 6px; overflow-x: auto; padding: 10px 14px 0;
-  scrollbar-width: none; -ms-overflow-style: none; border-bottom: 1px solid var(--border);
-}
-.char-select-bar::-webkit-scrollbar { display: none; }
-.char-select-pill {
-  flex-shrink: 0; display: flex; align-items: center; gap: 5px; padding: 6px 12px;
-  border-radius: 20px; border: 1px solid var(--border); background: var(--surface2);
-  cursor: pointer; transition: var(--trans); font-family: 'Cinzel', serif; font-size: 9px;
-  letter-spacing: 0.5px; color: var(--muted); white-space: nowrap;
-}
-.char-select-pill.active { border-color: var(--cc, var(--gold)); color: var(--cc, var(--gold)); background: var(--cc-dim, var(--gold-dim)); }
-.char-select-pill .csp-icon { font-size: 16px; }
+.inv-tooltip-name { font-family: 'Cinzel', serif; font-size: 12px; color: var(--text); margin-bottom: 3px; }
+.inv-tooltip-type { font-size: 10px; color: var(--muted); font-style: italic; margin-bottom: 4px; }
+.inv-tooltip-effect { font-size: 11px; color: var(--green); margin-bottom: 3px; }
+.inv-tooltip-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.inv-tooltip-hint { font-size: 9px; color: var(--gold); font-family: 'Cinzel', serif; margin-top: 5px; letter-spacing: 0.5px; }
 
 
 .mode-btn{flex:1;padding:10px 4px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;cursor:pointer;transition:var(--trans);display:flex;flex-direction:column;align-items:center;gap:4px;}
@@ -1131,10 +1240,25 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <div class="empty-state"><div class="es-icon">🧙</div><p>No character selected.<br>Select a character from the Roster first.</p></div>
     </div>
     <div id="charScreenMain" style="display:none">
-      <!-- Paperdoll + Stats layout -->
-      <div id="charDollLayout"></div>
+      <div class="char-main-layout">
+        <div class="char-left-pane">
+          <div class="paperdoll-section">
+            <div class="paperdoll-section-label">EQUIPMENT SLOTS</div>
+            <div id="paperdollGrid" class="paperdoll-grid"></div>
+          </div>
+          <div class="inv-bag-section">
+            <div class="inv-bag-label">INVENTORY BAG <span id="invBagCount"></span></div>
+            <div id="invBagGrid" class="inv-bag-grid"></div>
+          </div>
+        </div>
+        <div class="char-right-pane" id="charStatsPane"></div>
+      </div>
     </div>
   </div>
+  <!-- Drag ghost -->
+  <div id="dragGhost" style="display:none"></div>
+  <!-- Item tooltip -->
+  <div id="invTooltip" class="inv-tooltip" style="display:none;opacity:0"></div>
 
   <!-- LOGIN SCREEN -->
   <div class="screen" id="scr-login" style="display:none"></div>
@@ -10654,7 +10778,7 @@ async function forceReinstallPresets(){
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   CHARACTER SCREEN — Paperdoll Inventory
+   CHARACTER SCREEN — Paperdoll + Inventory with Drag & Drop
    ══════════════════════════════════════════════════════════════════ */
 
 let charScreenId = null;
@@ -10689,27 +10813,25 @@ function saveEquippedItems(charId, slots){
 
 function getEquipSlotAC(char){
   const slots = getEquippedItems(char);
-  const dex = parseInt(getMod(char.abilities?.DEX||10))||0;
+  const dex = parseInt(getMod(char.abilities&&char.abilities.DEX?char.abilities.DEX:10))||0;
   let armorAC = 0, hasArmor = false, shieldBonus = 0;
-  Object.values(slots).forEach(item=>{
-    if(!item) return;
-    if(item.type==='armor'){
-      const magicM = item.name.match(/[+](\d)/);
-      const magic = magicM ? parseInt(magicM[1]) : 0;
-      const n = item.name.toLowerCase();
-      if(/shield/i.test(item.name)){ shieldBonus = 2 + magic; return; }
-      if(n.includes('plate')&&!n.includes('half')){ armorAC=18+magic; hasArmor=true; }
-      else if(n.includes('splint')){ armorAC=17+magic; hasArmor=true; }
-      else if(n.includes('half plate')||n.includes('half-plate')){ armorAC=15+Math.min(dex,2)+magic; hasArmor=true; }
-      else if(n.includes('chain mail')||n.includes('chainmail')){ armorAC=16+magic; hasArmor=true; }
-      else if(n.includes('scale mail')||n.includes('breastplate')){ armorAC=14+Math.min(dex,2)+magic; hasArmor=true; }
-      else if(n.includes('hide')){ armorAC=12+Math.min(dex,2)+magic; hasArmor=true; }
-      else if(n.includes('chain shirt')){ armorAC=13+Math.min(dex,2)+magic; hasArmor=true; }
-      else if(n.includes('studded leather')){ armorAC=12+dex+magic; hasArmor=true; }
-      else if(n.includes('leather')){ armorAC=11+dex+magic; hasArmor=true; }
-      else if(n.includes('padded')){ armorAC=11+dex+magic; hasArmor=true; }
-      else if(magic){ armorAC=10+dex+magic; hasArmor=true; }
-    }
+  Object.values(slots).forEach(function(item){
+    if(!item || item.type!=='armor') return;
+    var magicM = item.name.match(/[+](\d)/);
+    var magic = magicM ? parseInt(magicM[1]) : 0;
+    var n = item.name.toLowerCase();
+    if(/shield/i.test(item.name)){ shieldBonus = 2 + magic; return; }
+    if(n.indexOf('plate')>=0 && n.indexOf('half')<0){ armorAC=18+magic; hasArmor=true; }
+    else if(n.indexOf('splint')>=0){ armorAC=17+magic; hasArmor=true; }
+    else if(n.indexOf('half plate')>=0||n.indexOf('half-plate')>=0){ armorAC=15+Math.min(dex,2)+magic; hasArmor=true; }
+    else if(n.indexOf('chain mail')>=0||n.indexOf('chainmail')>=0){ armorAC=16+magic; hasArmor=true; }
+    else if(n.indexOf('scale mail')>=0||n.indexOf('breastplate')>=0){ armorAC=14+Math.min(dex,2)+magic; hasArmor=true; }
+    else if(n.indexOf('hide')>=0){ armorAC=12+Math.min(dex,2)+magic; hasArmor=true; }
+    else if(n.indexOf('chain shirt')>=0){ armorAC=13+Math.min(dex,2)+magic; hasArmor=true; }
+    else if(n.indexOf('studded leather')>=0){ armorAC=12+dex+magic; hasArmor=true; }
+    else if(n.indexOf('leather')>=0){ armorAC=11+dex+magic; hasArmor=true; }
+    else if(n.indexOf('padded')>=0){ armorAC=11+dex+magic; hasArmor=true; }
+    else if(magic){ armorAC=10+dex+magic; hasArmor=true; }
   });
   if(!hasArmor) return (char.ac||(10+dex)) + shieldBonus;
   return armorAC + shieldBonus;
@@ -10720,8 +10842,8 @@ function getEquipSlotATK(char){
   const weapon = slots['mainhand'];
   if(!weapon || weapon.type!=='weapon') return null;
   const pb = getPB(char.level);
-  const str = parseInt(getMod(char.abilities?.STR||10))||0;
-  const dex = parseInt(getMod(char.abilities?.DEX||10))||0;
+  const str = parseInt(getMod(char.abilities&&char.abilities.STR?char.abilities.STR:10))||0;
+  const dex = parseInt(getMod(char.abilities&&char.abilities.DEX?char.abilities.DEX:10))||0;
   const magicM = weapon.name.match(/[+\-](\d)/);
   const magic = magicM ? parseInt(magicM[0]) : 0;
   const isFinesse = /rapier|shortsword|dagger|whip/i.test(weapon.name);
@@ -10731,219 +10853,470 @@ function getEquipSlotATK(char){
   return (total>=0?'+':'')+total;
 }
 
+function getItemEffect(item){
+  if(!item) return '';
+  const n = item.name.toLowerCase();
+  const magicM = item.name.match(/[+](\d)/);
+  const magic = magicM ? parseInt(magicM[1]) : 0;
+  if(item.type==='armor'){
+    if(/shield/i.test(item.name)) return '+' + (2+magic) + ' AC (shield)';
+    var armorNames=['plate','splint','half plate','chain mail','chainmail','scale mail','breastplate','hide','chain shirt','studded leather','leather','padded'];
+    for(var ai=0;ai<armorNames.length;ai++){ if(n.indexOf(armorNames[ai])>=0) return (magic?'+'+magic+' ':'')+armorNames[ai].charAt(0).toUpperCase()+armorNames[ai].slice(1)+' armor'; }
+    return magic ? '+'+magic+' AC bonus' : 'Armor';
+  }
+  if(item.type==='weapon') return magic ? '+'+magic+' to attack & damage' : 'Weapon';
+  if(item.desc) return item.desc.slice(0,60)+(item.desc.length>60?'…':'');
+  return '';
+}
+
+function getCurrentCharItems(){
+  const char = getVisibleChars().find(function(c){return c.id===charScreenId;});
+  return char ? getCharLootItems(char) : [];
+}
+
+/* ── Render entry point ── */
 function renderCharacterScreen(){
   const chars = getVisibleChars();
   if(!charScreenId && chars.length>0) charScreenId = chars[0].id;
-  const heroEl = document.getElementById('charScreenHero');
-  const emptyEl = document.getElementById('charScreenEmpty');
-  const mainEl  = document.getElementById('charScreenMain');
+  const heroEl   = document.getElementById('charScreenHero');
+  const emptyEl  = document.getElementById('charScreenEmpty');
+  const mainEl   = document.getElementById('charScreenMain');
   if(!chars.length){
     heroEl.innerHTML=''; emptyEl.style.display=''; mainEl.style.display='none'; return;
   }
   emptyEl.style.display='none'; mainEl.style.display='';
-  let char = chars.find(c=>c.id===charScreenId)||chars[0];
+  let char = chars.find(function(c){return c.id===charScreenId;})||chars[0];
   charScreenId = char.id;
   const cls = CLASSES[char.classIdx];
-  heroEl.innerHTML=`<div class="char-select-bar">${chars.map(c=>{
+
+  heroEl.innerHTML='<div class="char-select-bar">'+chars.map(function(c){
     const cc=classColor(c.classIdx);
-    return`<div class="char-select-pill ${c.id===charScreenId?'active':''}" style="--cc:${cc};--cc-dim:${cc}22" onclick="selectCharScreen(${c.id})"><span class="csp-icon">${classIcon(c.classIdx)}</span>${c.name}</div>`;
-  }).join('')}</div>`;
-  renderCharDoll(char, cls);
+    return '<div class="char-select-pill '+(c.id===charScreenId?'active':'')+'" style="--cc:'+cc+';--cc-dim:'+cc+'22" onclick="selectCharScreen('+c.id+')"><span class="csp-icon">'+classIcon(c.classIdx)+'</span>'+c.name+'</div>';
+  }).join('')+'</div>';
+
+  renderPaperdoll(char, cls);
+  renderInvBag(char, cls);
+  renderCharStats(char, cls);
+  initDragAndDrop();
 }
 
 function selectCharScreen(id){ charScreenId=id; renderCharacterScreen(); }
 
-function renderCharDoll(char, cls){
+/* ── Paperdoll ── */
+function renderPaperdoll(char, cls){
+  const gridEl = document.getElementById('paperdollGrid');
+  if(!gridEl) return;
   const slots = getEquippedItems(char);
-  const dex = parseInt(getMod(char.abilities?.DEX||10))||0;
-  const str = parseInt(getMod(char.abilities?.STR||10))||0;
+
+  let html = '<div class="paperdoll-body" style="grid-column:2;grid-row:1/6">'
+    + '<svg viewBox="0 0 80 220" fill="none" xmlns="http://www.w3.org/2000/svg">'
+    + '<ellipse cx="40" cy="18" rx="15" ry="16" fill="white"/>'
+    + '<rect x="35" y="34" width="10" height="10" rx="3" fill="white"/>'
+    + '<path d="M20 44 Q16 48 15 60 L14 120 Q14 126 20 128 L60 128 Q66 126 66 120 L65 60 Q64 48 60 44 Z" fill="white"/>'
+    + '<path d="M20 46 Q10 50 8 60 L6 104 Q6 110 11 111 L18 111 Q23 110 24 105 L26 72 Z" fill="white"/>'
+    + '<path d="M60 46 Q70 50 72 60 L74 104 Q74 110 69 111 L62 111 Q57 110 56 105 L54 72 Z" fill="white"/>'
+    + '<path d="M22 128 L20 196 Q20 202 26 203 L34 203 Q38 202 39 196 L40 128 Z" fill="white"/>'
+    + '<path d="M58 128 L60 196 Q60 202 54 203 L46 203 Q42 202 41 196 L40 128 Z" fill="white"/>'
+    + '</svg></div>';
+
+  EQUIP_SLOTS.forEach(function(slot){
+    const item = slots[slot.id];
+    const rc = item ? (RARITY_COLORS[item.rarity]||'#aaa') : null;
+    const styleStr = item ? '--slot-c:'+rc+';--slot-bg:'+rc+'22;' : '';
+    const gridPos = 'grid-column:'+slot.col+';grid-row:'+slot.row+';';
+    const magicM = item ? item.name.match(/[+](\d)/) : null;
+    html += '<div class="equip-slot '+(item?'filled':'')+'" id="eslot-'+slot.id+'" data-slot="'+slot.id+'" data-accepts="'+slot.accepts.join(',')+'" style="'+styleStr+gridPos+'"'
+      +' ondragover="onSlotDragOver(event,\''+slot.id+'\')" ondragleave="onSlotDragLeave(event,\''+slot.id+'\')" ondrop="onSlotDrop(event,\''+slot.id+'\')"'
+      +' onclick="handleSlotClick(\''+slot.id+'\')" title="'+slot.label+'">';
+    if(item){
+      if(magicM) html+='<div class="slot-bonus">+'+magicM[1]+'</div>';
+      html+='<div class="slot-icon">'+(TYPE_ICONS[item.type]||'📦')+'</div>';
+      const shortName = item.name.length>12 ? item.name.slice(0,10)+'…' : item.name;
+      html+='<div class="slot-name">'+shortName+'</div>';
+      html+='<div class="slot-unequip-hint">✕</div>';
+    } else {
+      html+='<div class="slot-icon" style="opacity:0.28">'+slot.icon+'</div>';
+      html+='<div class="slot-label">'+slot.label+'</div>';
+    }
+    html+='</div>';
+  });
+  gridEl.innerHTML = html;
+}
+
+/* ── Inventory bag ── */
+function renderInvBag(char, cls){
+  const bagEl  = document.getElementById('invBagGrid');
+  const cntEl  = document.getElementById('invBagCount');
+  if(!bagEl) return;
+  const items = getCharLootItems(char);
+  const slots = getEquippedItems(char);
+  const equippedIds = {};
+  Object.values(slots).forEach(function(i){ if(i) equippedIds[String(i.id)]=true; });
+
+  if(cntEl) cntEl.textContent = '('+items.length+' items)';
+
+  if(!items.length){
+    bagEl.innerHTML='<div style="grid-column:1/-1;color:var(--muted);font-size:12px;font-style:italic;padding:8px 0">No items in inventory.<br><span style="font-size:10px">Add items in the Loot tab.</span></div>';
+    return;
+  }
+
+  const cols = 5;
+  let html = '';
+  items.forEach(function(item){
+    const rc = RARITY_COLORS[item.rarity]||'#aaa';
+    const magicM = item.name.match(/[+](\d)/);
+    const isEq = !!equippedIds[String(item.id)];
+    html+='<div class="inv-tile" id="itile-'+item.id+'" data-item-id="'+item.id+'" data-item-type="'+item.type+'" draggable="true"'
+      +' ondragstart="onItemDragStart(event,\''+item.id+'\')" ondragend="onItemDragEnd(event)"'
+      +' onmouseenter="showItemTooltip(event,\''+item.id+'\')" onmouseleave="hideItemTooltip()"'
+      +' onclick="handleItemClick(\''+item.id+'\')"'
+      +' style="border-color:'+rc+'44;'+(isEq?'opacity:0.52':''')+'">'
+      +(isEq?'<div class="it-equipped-dot"></div>':'')
+      +(magicM?'<div class="it-bonus">+'+magicM[1]+'</div>':'')
+      +'<div class="it-icon">'+(TYPE_ICONS[item.type]||'📦')+'</div>'
+      +'<div class="it-name" style="color:'+rc+'">'+item.name+'</div>'
+      +(item.qty>1?'<div class="it-qty">×'+item.qty+'</div>':'')
+      +'</div>';
+  });
+  const rem = items.length % cols;
+  if(rem){ for(let fi=0;fi<cols-rem;fi++) html+='<div class="inv-tile" style="opacity:0;pointer-events:none"></div>'; }
+  bagEl.innerHTML = html;
+
+  items.forEach(function(item){
+    const tile = document.getElementById('itile-'+item.id);
+    if(tile) attachTouchDrag(tile, item.id);
+  });
+}
+
+/* ── Stats pane ── */
+function renderCharStats(char, cls){
+  const el = document.getElementById('charStatsPane');
+  if(!el) return;
+  const slots = getEquippedItems(char);
+  const dex = parseInt(getMod(char.abilities&&char.abilities.DEX?char.abilities.DEX:10))||0;
+  const str = parseInt(getMod(char.abilities&&char.abilities.STR?char.abilities.STR:10))||0;
   const pb = getPB(char.level);
   const displayAC = getEquipSlotAC(char);
   const baseAC = char.ac||(10+dex);
   const acBoosted = displayAC !== baseAC;
-  const atkBonus = getEquipSlotATK(char) || ((str>=dex?(str+pb):(dex+pb))>=0?'+':'')+(str>=dex?(str+pb):(dex+pb));
-  const initMod = getMod(char.abilities?.DEX||10);
-
-  let dollHTML = `<div class="paperdoll-grid">
-    <div class="paperdoll-body" style="grid-column:2;grid-row:1/6">
-      <svg viewBox="0 0 80 220" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <ellipse cx="40" cy="20" rx="16" ry="18" fill="white"/>
-        <rect x="18" y="40" width="44" height="80" rx="8" fill="white"/>
-        <rect x="2" y="42" width="18" height="60" rx="7" fill="white"/>
-        <rect x="60" y="42" width="18" height="60" rx="7" fill="white"/>
-        <rect x="24" y="118" width="14" height="80" rx="7" fill="white"/>
-        <rect x="42" y="118" width="14" height="80" rx="7" fill="white"/>
-      </svg>
-    </div>`;
-
-  EQUIP_SLOTS.forEach(slot=>{
-    const item = slots[slot.id];
-    const rc = item ? (RARITY_COLORS[item.rarity]||'var(--muted)') : null;
-    const style = item ? `--slot-c:${rc};--slot-bg:${rc}22;` : '';
-    dollHTML += `<div class="equip-slot ${item?'filled':''}" style="${style}grid-column:${slot.col};grid-row:${slot.row}" onclick="openSlotPicker('${slot.id}')" title="${slot.label}">`;
-    if(item){
-      const magicM = item.name.match(/[+](\d)/);
-      if(magicM) dollHTML+=`<div class="slot-bonus">+${magicM[1]}</div>`;
-      dollHTML+=`<div class="slot-icon">${TYPE_ICONS[item.type]||'📦'}</div>`;
-      const shortName = item.name.length>13 ? item.name.slice(0,11)+'…' : item.name;
-      dollHTML+=`<div class="slot-name">${shortName}</div>`;
-    } else {
-      dollHTML+=`<div class="slot-icon" style="opacity:0.3">${slot.icon}</div><div class="slot-label">${slot.label}</div>`;
-    }
-    dollHTML+=`</div>`;
-  });
-  dollHTML+=`</div>`;
-
+  const atkBonus = getEquipSlotATK(char) || ((str+pb>=0?'+':'')+(str+pb));
+  const initMod = getMod(char.abilities&&char.abilities.DEX?char.abilities.DEX:10);
   const mainHandItem = slots['mainhand'];
-  const statsHTML = `<div class="char-stats-panel">
-    <div class="char-stat-section">
-      <div class="char-stat-section-label">COMBAT STATS</div>
-      <div class="char-derived-grid" style="--cc:${cls.color}">
-        <div class="char-derived-box"><div class="char-derived-val ${acBoosted?'boosted':''}">${displayAC}</div><div class="char-derived-label">AC${acBoosted?' ✦':''}</div>${acBoosted?'<span class="char-equip-bonus-tag">equipped</span>':''}</div>
-        <div class="char-derived-box"><div class="char-derived-val">${initMod}</div><div class="char-derived-label">INITIATIVE</div></div>
-        <div class="char-derived-box"><div class="char-derived-val">+${pb}</div><div class="char-derived-label">PROF</div></div>
-        <div class="char-derived-box"><div class="char-derived-val">${atkBonus}</div><div class="char-derived-label">ATK BONUS</div>${mainHandItem?`<span class="char-equip-bonus-tag">${mainHandItem.name.slice(0,10)}</span>`:''}</div>
-        <div class="char-derived-box"><div class="char-derived-val">${char.currentHP}</div><div class="char-derived-label">HP</div></div>
-        <div class="char-derived-box"><div class="char-derived-val">${char.maxHP}</div><div class="char-derived-label">MAX HP</div></div>
-      </div>
-    </div>
-    <div class="char-stat-section">
-      <div class="char-stat-section-label">EQUIPPED ITEMS</div>
-      ${renderEquippedList(char,slots)}
-    </div>
-    <div class="char-stat-section">
-      <div class="char-stat-section-label">ABILITY SCORES</div>
-      <div class="char-derived-grid" style="--cc:${cls.color}">
-        ${['STR','DEX','CON','INT','WIS','CHA'].map(ab=>`
-          <div class="char-derived-box">
-            <div class="char-derived-val" style="font-size:15px">${char.abilities[ab]}</div>
-            <div class="char-derived-label">${ab} <span style="color:var(--muted);font-size:9px">${getMod(char.abilities[ab])}</span></div>
-          </div>`).join('')}
-      </div>
-    </div>
-  </div>`;
+  const equipped = EQUIP_SLOTS.filter(function(s){return !!slots[s.id];});
 
-  document.getElementById('charDollLayout').innerHTML=`<div class="char-screen-wrap"><div class="paperdoll-container">${dollHTML}</div>${statsHTML}</div>`;
-}
+  let html = '<div class="char-stat-section">'
+    +'<div class="char-stat-section-label">COMBAT STATS</div>'
+    +'<div class="char-derived-grid" style="--cc:'+cls.color+'">'
+    +'<div class="char-derived-box"><div class="char-derived-val '+(acBoosted?'boosted':'')+'">'+displayAC+'</div><div class="char-derived-label">AC'+(acBoosted?' ✦':'')+'</div>'+(acBoosted?'<span class="char-equip-bonus-tag">equipped</span>':'')+'</div>'
+    +'<div class="char-derived-box"><div class="char-derived-val">'+initMod+'</div><div class="char-derived-label">INITIATIVE</div></div>'
+    +'<div class="char-derived-box"><div class="char-derived-val">+'+pb+'</div><div class="char-derived-label">PROF</div></div>'
+    +'<div class="char-derived-box"><div class="char-derived-val">'+atkBonus+'</div><div class="char-derived-label">ATK BONUS</div>'+(mainHandItem?'<span class="char-equip-bonus-tag">'+mainHandItem.name.slice(0,12)+'</span>':'')+'</div>'
+    +'<div class="char-derived-box"><div class="char-derived-val">'+char.currentHP+'</div><div class="char-derived-label">HP</div></div>'
+    +'<div class="char-derived-box"><div class="char-derived-val">'+char.maxHP+'</div><div class="char-derived-label">MAX HP</div></div>'
+    +'</div></div>';
 
-function renderEquippedList(char,slots){
-  const equipped = EQUIP_SLOTS.filter(s=>slots[s.id]);
-  if(!equipped.length) return `<div style="color:var(--muted);font-size:12px;font-style:italic;padding:8px 0">No items equipped. Tap a slot to equip.</div>`;
-  return `<div class="equipped-list">`+equipped.map(slot=>{
-    const item=slots[slot.id];
-    const rc=RARITY_COLORS[item.rarity]||'var(--muted)';
-    const eff=getItemEffect(item,slot);
-    return`<div class="equipped-item-row">
-      <span class="ei-slot-label">${slot.label.toUpperCase()}</span>
-      <span class="ei-icon">${TYPE_ICONS[item.type]||'📦'}</span>
-      <div style="flex:1;min-width:0">
-        <div class="ei-name" style="color:${rc}">${item.name}</div>
-        ${eff?`<div class="ei-effect">${eff}</div>`:''}
-      </div>
-      <span class="ei-unequip" onclick="unequipSlot('${slot.id}')" title="Unequip">✕</span>
-    </div>`;
-  }).join('')+`</div>`;
-}
-
-function getItemEffect(item,slot){
-  if(!item) return '';
-  const n=item.name.toLowerCase();
-  const magicM=item.name.match(/[+](\d)/);
-  const magic=magicM?parseInt(magicM[1]):0;
-  if(item.type==='armor'){
-    if(/shield/i.test(item.name)) return`+${2+magic} AC (shield)`;
-    const armorNames=['plate','splint','half plate','chain mail','chainmail','scale mail','breastplate','hide','chain shirt','studded leather','leather','padded'];
-    for(const a of armorNames){ if(n.includes(a)) return`${magic?'+'+magic+' ':''}${a.charAt(0).toUpperCase()+a.slice(1)} armor`; }
-    return magic?`+${magic} AC bonus`:'Armor';
-  }
-  if(item.type==='weapon') return magic?`+${magic} to attack & damage`:'Weapon';
-  if(item.desc) return item.desc.slice(0,50)+(item.desc.length>50?'…':'');
-  return '';
-}
-
-let _pickerSlotId=null;
-
-function openSlotPicker(slotId){
-  const char = getVisibleChars().find(c=>c.id===charScreenId);
-  if(!char) return;
-  const slot = EQUIP_SLOTS.find(s=>s.id===slotId);
-  if(!slot) return;
-  _pickerSlotId=slotId;
-  const slots=getEquippedItems(char);
-  const currentItem=slots[slotId];
-  const lootItems=getCharLootItems(char).filter(i=>slot.accepts.includes(i.type));
-
-  let listHTML='';
-  if(currentItem){
-    listHTML+=`<div class="slot-picker-item" onclick="unequipSlot('${slotId}');closeSlotPicker()" style="border-color:var(--red)">
-      <div class="pi-icon">✕</div>
-      <div><div class="pi-name" style="color:var(--red)">Remove — ${currentItem.name}</div><div class="pi-meta">Unequip this slot</div></div>
-    </div>`;
-  }
-  if(!lootItems.length){
-    listHTML+=`<div class="slot-picker-empty">No eligible items in your inventory.<br><span style="font-size:11px">Add ${slot.accepts.join(', ')} items in the <strong>Loot</strong> tab.</span></div>`;
+  html+='<div class="char-stat-section"><div class="char-stat-section-label">EQUIPPED ITEMS</div>';
+  if(equipped.length){
+    html+='<div class="equipped-list">'+equipped.map(function(slot){
+      const item=slots[slot.id];
+      const rc=RARITY_COLORS[item.rarity]||'#aaa';
+      const eff=getItemEffect(item);
+      return '<div class="equipped-item-row">'
+        +'<span class="ei-slot-label">'+slot.label.toUpperCase()+'</span>'
+        +'<span class="ei-icon">'+(TYPE_ICONS[item.type]||'📦')+'</span>'
+        +'<div style="flex:1;min-width:0"><div class="ei-name" style="color:'+rc+'">'+item.name+'</div>'+(eff?'<div class="ei-effect">'+eff+'</div>':'')+'</div>'
+        +'<span class="ei-unequip" onclick="unequipSlot(\''+slot.id+'\')" title="Unequip">✕</span>'
+        +'</div>';
+    }).join('')+'</div>';
   } else {
-    lootItems.forEach(item=>{
-      const rc=RARITY_COLORS[item.rarity]||'var(--muted)';
-      const eff=getItemEffect(item,slot);
-      const isEquipped=Object.values(slots).some(s=>s&&String(s.id)===String(item.id));
-      listHTML+=`<div class="slot-picker-item" onclick="equipItem('${slotId}','${item.id}')">
-        <div class="pi-icon">${TYPE_ICONS[item.type]||'📦'}</div>
-        <div style="flex:1">
-          <div class="pi-name" style="color:${rc}">${item.name}</div>
-          <div class="pi-meta">${item.rarity}${eff?' · '+eff:''}${isEquipped?' · (equipped elsewhere)':''}</div>
-        </div>
-      </div>`;
-    });
+    html+='<div style="color:var(--muted);font-size:12px;font-style:italic;padding:6px 0">No items equipped.<br><span style="font-size:10px">Drag items to slots, or tap a slot.</span></div>';
   }
+  html+='</div>';
 
-  const overlay=document.createElement('div');
-  overlay.className='slot-picker-overlay'; overlay.id='slotPickerOverlay';
-  overlay.onclick=e=>{if(e.target===overlay)closeSlotPicker();};
-  overlay.innerHTML=`<div class="slot-picker-sheet">
-    <div class="slot-picker-header">
-      <div class="slot-picker-title">${slot.icon} ${slot.label.toUpperCase()} SLOT</div>
-      <button onclick="closeSlotPicker()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px">✕</button>
-    </div>
-    <div class="slot-picker-list">${listHTML}</div>
-  </div>`;
-  document.body.appendChild(overlay);
+  html+='<div class="char-stat-section"><div class="char-stat-section-label">ABILITY SCORES</div>'
+    +'<div class="char-derived-grid" style="--cc:'+cls.color+'">'
+    +['STR','DEX','CON','INT','WIS','CHA'].map(function(ab){
+      return '<div class="char-derived-box"><div class="char-derived-val" style="font-size:15px">'+char.abilities[ab]+'</div><div class="char-derived-label">'+ab+' <span style="color:var(--muted);font-size:9px">'+getMod(char.abilities[ab])+'</span></div></div>';
+    }).join('')
+    +'</div></div>';
+
+  el.innerHTML = html;
 }
 
-function closeSlotPicker(){
-  const el=document.getElementById('slotPickerOverlay');
-  if(el) el.remove();
-  _pickerSlotId=null;
+/* ══ DRAG AND DROP ══ */
+let _dragItemId = null;
+
+function initDragAndDrop(){}
+
+function onItemDragStart(evt, itemId){
+  _dragItemId = itemId;
+  evt.dataTransfer.setData('text/plain', String(itemId));
+  evt.dataTransfer.effectAllowed = 'move';
+  const ghost = document.getElementById('dragGhost');
+  const item = getCurrentCharItems().find(function(i){return String(i.id)===String(itemId);});
+  if(item && ghost){
+    ghost.textContent = TYPE_ICONS[item.type]||'📦';
+    ghost.style.display='flex';
+    evt.dataTransfer.setDragImage(ghost, 30, 30);
+  }
+  setTimeout(function(){
+    const tile = document.getElementById('itile-'+itemId);
+    if(tile) tile.classList.add('dragging');
+  }, 0);
 }
 
-function equipItem(slotId, itemId){
-  closeSlotPicker();
-  const char = getVisibleChars().find(c=>c.id===charScreenId);
+function onItemDragEnd(evt){
+  _dragItemId = null;
+  document.querySelectorAll('.inv-tile').forEach(function(t){t.classList.remove('dragging');});
+  document.querySelectorAll('.equip-slot').forEach(function(s){s.classList.remove('drag-over','drag-reject');});
+  document.getElementById('dragGhost').style.display='none';
+}
+
+function onSlotDragOver(evt, slotId){
+  evt.preventDefault();
+  const itemId = _dragItemId || evt.dataTransfer.getData('text/plain');
+  const slot = EQUIP_SLOTS.find(function(s){return s.id===slotId;});
+  const item = getCurrentCharItems().find(function(i){return String(i.id)===String(itemId);});
+  const slotEl = document.getElementById('eslot-'+slotId);
+  if(!slotEl) return;
+  slotEl.classList.remove('drag-over','drag-reject');
+  if(item && slot && slot.accepts.indexOf(item.type)>=0){
+    slotEl.classList.add('drag-over');
+    evt.dataTransfer.dropEffect='move';
+  } else {
+    slotEl.classList.add('drag-reject');
+    evt.dataTransfer.dropEffect='none';
+  }
+}
+
+function onSlotDragLeave(evt, slotId){
+  const slotEl = document.getElementById('eslot-'+slotId);
+  if(slotEl){ slotEl.classList.remove('drag-over','drag-reject'); }
+}
+
+function onSlotDrop(evt, slotId){
+  evt.preventDefault();
+  const itemId = _dragItemId || evt.dataTransfer.getData('text/plain');
+  const slot = EQUIP_SLOTS.find(function(s){return s.id===slotId;});
+  const item = getCurrentCharItems().find(function(i){return String(i.id)===String(itemId);});
+  const slotEl = document.getElementById('eslot-'+slotId);
+  if(slotEl){ slotEl.classList.remove('drag-over','drag-reject'); }
+  if(!item || !slot) return;
+  if(slot.accepts.indexOf(item.type)<0){ toast(item.name+" can't go in "+slot.label+' slot','var(--red)'); return; }
+  _doEquipItem(slotId, itemId);
+}
+
+/* ── Touch drag ── */
+function attachTouchDrag(tile, itemId){
+  let startX, startY, moved=false, lastSlotId=null;
+  tile.addEventListener('touchstart', function(e){
+    if(e.touches.length!==1) return;
+    var t=e.touches[0]; startX=t.clientX; startY=t.clientY; moved=false;
+    const item=getCurrentCharItems().find(function(i){return String(i.id)===String(itemId);});
+    const ghost=document.getElementById('dragGhost');
+    ghost.textContent=TYPE_ICONS[item&&item.type||'misc']||'📦';
+    ghost.style.display='flex'; ghost.style.left=startX+'px'; ghost.style.top=startY+'px';
+  },{passive:true});
+  tile.addEventListener('touchmove', function(e){
+    e.preventDefault();
+    var t=e.touches[0];
+    if(!moved && Math.hypot(t.clientX-startX,t.clientY-startY)>8){ moved=true; tile.classList.add('dragging'); }
+    if(!moved) return;
+    const ghost=document.getElementById('dragGhost');
+    ghost.style.left=t.clientX+'px'; ghost.style.top=t.clientY+'px';
+    ghost.style.display='none';
+    const elBelow=document.elementFromPoint(t.clientX,t.clientY);
+    ghost.style.display='flex';
+    const slotEl=elBelow&&elBelow.closest?elBelow.closest('.equip-slot'):null;
+    const newSlotId=slotEl&&slotEl.dataset?slotEl.dataset.slot:null;
+    if(newSlotId!==lastSlotId){
+      if(lastSlotId){ var old=document.getElementById('eslot-'+lastSlotId); if(old) old.classList.remove('drag-over','drag-reject'); }
+      if(newSlotId){
+        const slot=EQUIP_SLOTS.find(function(s){return s.id===newSlotId;});
+        const item=getCurrentCharItems().find(function(i){return String(i.id)===String(itemId);});
+        const el=document.getElementById('eslot-'+newSlotId);
+        if(el){ if(item&&slot&&slot.accepts.indexOf(item.type)>=0) el.classList.add('drag-over'); else el.classList.add('drag-reject'); }
+      }
+      lastSlotId=newSlotId;
+    }
+  },{passive:false});
+  tile.addEventListener('touchend', function(e){
+    tile.classList.remove('dragging');
+    document.getElementById('dragGhost').style.display='none';
+    document.querySelectorAll('.equip-slot').forEach(function(s){s.classList.remove('drag-over','drag-reject');});
+    if(moved && lastSlotId){
+      const slot=EQUIP_SLOTS.find(function(s){return s.id===lastSlotId;});
+      const item=getCurrentCharItems().find(function(i){return String(i.id)===String(itemId);});
+      if(item&&slot&&slot.accepts.indexOf(item.type)>=0) _doEquipItem(lastSlotId,itemId);
+      else if(slot) toast((item&&item.name||'Item')+" can't go in "+slot.label+' slot','var(--red)');
+    } else if(!moved){ handleItemClick(itemId); }
+    moved=false; lastSlotId=null;
+  },{passive:true});
+}
+
+/* ── Equip/Unequip ── */
+function _doEquipItem(slotId, itemId){
+  const char=getVisibleChars().find(function(c){return c.id===charScreenId;});
   if(!char) return;
-  const item = getCharLootItems(char).find(i=>String(i.id)===String(itemId));
+  const item=getCurrentCharItems().find(function(i){return String(i.id)===String(itemId);});
   if(!item) return;
-  const slots={...getEquippedItems(char)};
-  Object.keys(slots).forEach(k=>{if(slots[k]&&String(slots[k].id)===String(itemId))delete slots[k];});
+  const slots=Object.assign({},getEquippedItems(char));
+  Object.keys(slots).forEach(function(k){if(slots[k]&&String(slots[k].id)===String(itemId)) delete slots[k];});
   slots[slotId]=item;
   saveEquippedItems(charScreenId,slots);
-  toast(`${item.name} equipped!`,'var(--green)');
-  const updChar=getVisibleChars().find(c=>c.id===charScreenId);
-  if(updChar) renderCharDoll(updChar,CLASSES[updChar.classIdx]);
+  toast(item.name+' equipped!','var(--green)');
+  _refreshCharScreen();
   if(currentScreen==='sheet'&&sheetCharId===charScreenId) sheetTab('combat');
 }
 
 function unequipSlot(slotId){
-  closeSlotPicker();
-  const char=getVisibleChars().find(c=>c.id===charScreenId);
+  const char=getVisibleChars().find(function(c){return c.id===charScreenId;});
   if(!char) return;
-  const slots={...getEquippedItems(char)};
+  const slots=Object.assign({},getEquippedItems(char));
   const item=slots[slotId];
   delete slots[slotId];
   saveEquippedItems(charScreenId,slots);
-  if(item) toast(`${item.name} unequipped`,'var(--muted)');
-  const updChar=getVisibleChars().find(c=>c.id===charScreenId);
-  if(updChar) renderCharDoll(updChar,CLASSES[updChar.classIdx]);
+  if(item) toast(item.name+' unequipped','var(--muted)');
+  _refreshCharScreen();
   if(currentScreen==='sheet'&&sheetCharId===charScreenId) sheetTab('combat');
+}
+
+function equipItem(slotId, itemId){ _doEquipItem(slotId, itemId); closeSlotPicker(); }
+
+function _refreshCharScreen(){
+  const char=getVisibleChars().find(function(c){return c.id===charScreenId;});
+  if(!char) return;
+  const cls=CLASSES[char.classIdx];
+  renderPaperdoll(char,cls); renderInvBag(char,cls); renderCharStats(char,cls);
+}
+
+/* ── Slot click (when empty) ── */
+function handleSlotClick(slotId){
+  const char=getVisibleChars().find(function(c){return c.id===charScreenId;});
+  if(!char) return;
+  const slots=getEquippedItems(char);
+  if(slots[slotId]) unequipSlot(slotId); else openSlotPicker(slotId);
+}
+
+/* ── Item tile click ── */
+function handleItemClick(itemId){
+  const char=getVisibleChars().find(function(c){return c.id===charScreenId;});
+  if(!char) return;
+  const item=getCurrentCharItems().find(function(i){return String(i.id)===String(itemId);});
+  if(!item) return;
+  const eligibleSlots=EQUIP_SLOTS.filter(function(s){return s.accepts.indexOf(item.type)>=0;});
+  const slots=getEquippedItems(char);
+  const rc=RARITY_COLORS[item.rarity]||'#aaa';
+  const eff=getItemEffect(item);
+  const equippedInSlot=EQUIP_SLOTS.find(function(s){return slots[s.id]&&String(slots[s.id].id)===String(itemId);});
+
+  let listHTML='<div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border)">'
+    +'<div style="font-size:28px">'+(TYPE_ICONS[item.type]||'📦')+'</div>'
+    +'<div><div style="font-family:\'Cinzel\',serif;font-size:14px;color:'+rc+'">'+item.name+'</div>'
+    +'<div style="font-size:11px;color:var(--muted)">'+item.rarity+' '+item.type+(eff?' · '+eff:'')+'</div></div></div>'
+    +'<div style="padding:10px 18px 4px;font-family:\'Cinzel\',serif;font-size:9px;letter-spacing:1.5px;color:var(--muted)">EQUIP TO SLOT</div>'
+    +'<div style="padding:0 14px 16px;display:flex;flex-direction:column;gap:5px">';
+
+  if(!eligibleSlots.length){
+    listHTML+='<div style="color:var(--muted);font-size:13px;font-style:italic;padding:10px 0">This item has no equippable slots.</div>';
+  } else {
+    eligibleSlots.forEach(function(slot){
+      const isOccupied=!!slots[slot.id];
+      const isThisItem=slots[slot.id]&&String(slots[slot.id].id)===String(itemId);
+      listHTML+='<div class="slot-picker-item" onclick="equipItem(\''+slot.id+'\',\''+itemId+'\');closeSlotPicker()" style="'+(isThisItem?'border-color:var(--green);':'')+'">'
+        +'<div class="pi-icon">'+slot.icon+'</div>'
+        +'<div style="flex:1"><div class="pi-name">'+slot.label+'</div>'
+        +'<div class="pi-meta">'+(isThisItem?'Currently equipped here':isOccupied?'Replace: '+slots[slot.id].name:'Empty')+'</div></div>'
+        +(isThisItem?'<span style="color:var(--green);font-size:12px">✓</span>':'')
+        +'</div>';
+    });
+    if(equippedInSlot){
+      listHTML+='<div class="slot-picker-item" onclick="unequipSlot(\''+equippedInSlot.id+'\');closeSlotPicker()" style="border-color:var(--red)">'
+        +'<div class="pi-icon">✕</div>'
+        +'<div><div class="pi-name" style="color:var(--red)">Unequip</div><div class="pi-meta">Remove from '+equippedInSlot.label+'</div></div>'
+        +'</div>';
+    }
+  }
+  listHTML+='</div>';
+
+  const overlay=document.createElement('div');
+  overlay.className='slot-picker-overlay'; overlay.id='slotPickerOverlay';
+  overlay.onclick=function(e){if(e.target===overlay)closeSlotPicker();};
+  overlay.innerHTML='<div class="slot-picker-sheet">'+listHTML+'</div>';
+  document.body.appendChild(overlay);
+}
+
+/* ── Slot picker (from empty slot tap) ── */
+let _pickerSlotId=null;
+
+function openSlotPicker(slotId){
+  const char=getVisibleChars().find(function(c){return c.id===charScreenId;});
+  if(!char) return;
+  const slot=EQUIP_SLOTS.find(function(s){return s.id===slotId;});
+  if(!slot) return;
+  _pickerSlotId=slotId;
+  const slots=getEquippedItems(char);
+  const lootItems=getCharLootItems(char).filter(function(i){return slot.accepts.indexOf(i.type)>=0;});
+
+  let listHTML='<div class="slot-picker-header">'
+    +'<div class="slot-picker-title">'+slot.icon+' '+slot.label.toUpperCase()+' SLOT</div>'
+    +'<button onclick="closeSlotPicker()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px">✕</button>'
+    +'</div><div class="slot-picker-list">';
+
+  if(!lootItems.length){
+    listHTML+='<div class="slot-picker-empty">No eligible items in inventory.<br><span style="font-size:11px">Add '+slot.accepts.join(', ')+' items in the <strong>Loot</strong> tab.</span></div>';
+  } else {
+    lootItems.forEach(function(item){
+      const rc=RARITY_COLORS[item.rarity]||'#aaa';
+      const eff=getItemEffect(item);
+      const isEq=Object.values(slots).some(function(s){return s&&String(s.id)===String(item.id);});
+      listHTML+='<div class="slot-picker-item" onclick="equipItem(\''+slotId+'\',\''+item.id+'\');closeSlotPicker()">'
+        +'<div class="pi-icon">'+(TYPE_ICONS[item.type]||'📦')+'</div>'
+        +'<div style="flex:1"><div class="pi-name" style="color:'+rc+'">'+item.name+'</div>'
+        +'<div class="pi-meta">'+item.rarity+(eff?' · '+eff:'')+(isEq?' · (equipped elsewhere)':'')+'</div></div>'
+        +'</div>';
+    });
+  }
+  listHTML+='</div>';
+
+  const overlay=document.createElement('div');
+  overlay.className='slot-picker-overlay'; overlay.id='slotPickerOverlay';
+  overlay.onclick=function(e){if(e.target===overlay)closeSlotPicker();};
+  overlay.innerHTML='<div class="slot-picker-sheet">'+listHTML+'</div>';
+  document.body.appendChild(overlay);
+}
+
+function closeSlotPicker(){
+  var el=document.getElementById('slotPickerOverlay');
+  if(el) el.remove();
+  _pickerSlotId=null;
+}
+
+/* ── Tooltip ── */
+function showItemTooltip(evt, itemId){
+  const item=getCurrentCharItems().find(function(i){return String(i.id)===String(itemId);});
+  if(!item) return;
+  const char=getVisibleChars().find(function(c){return c.id===charScreenId;});
+  const slots=char?getEquippedItems(char):{};
+  const equippedIn=EQUIP_SLOTS.find(function(s){return slots[s.id]&&String(slots[s.id].id)===String(itemId);});
+  const rc=RARITY_COLORS[item.rarity]||'#aaa';
+  const eff=getItemEffect(item);
+  const eligible=EQUIP_SLOTS.filter(function(s){return s.accepts.indexOf(item.type)>=0;}).map(function(s){return s.label;}).join(', ');
+  const tt=document.getElementById('invTooltip');
+  tt.innerHTML='<div class="inv-tooltip-name" style="color:'+rc+'">'+item.name+'</div>'
+    +'<div class="inv-tooltip-type">'+item.rarity+' '+item.type+'</div>'
+    +(eff?'<div class="inv-tooltip-effect">⚡ '+eff+'</div>':'')
+    +(item.desc?'<div class="inv-tooltip-desc">'+item.desc.slice(0,80)+(item.desc.length>80?'…':'')+'</div>':'')
+    +(equippedIn?'<div class="inv-tooltip-hint">✓ EQUIPPED — '+equippedIn.label+'</div>':'<div class="inv-tooltip-hint">Slots: '+(eligible||'none')+'</div>');
+  const x=evt.clientX+12, y=evt.clientY-10;
+  tt.style.left=Math.min(x,window.innerWidth-240)+'px';
+  tt.style.top=Math.min(y,window.innerHeight-180)+'px';
+  tt.style.display='block'; tt.style.opacity='1';
+}
+
+function hideItemTooltip(){
+  const tt=document.getElementById('invTooltip');
+  if(tt){ tt.style.opacity='0'; setTimeout(function(){tt.style.display='none';},100); }
 }
 
 bootApp();
