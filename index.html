@@ -1895,20 +1895,45 @@ function getCharLootWeapons(char){
 }
 
 // Get AC bonus from assigned armor/shield loot items
-function getCharLootAC(char){
-  const items = getCharLootItems(char);
-  let bonus = 0;
-  items.forEach(i=>{
-    if(i.type==='armor'){
-      const m = i.name.match(/[+](\d)/);
-      if(m) bonus += parseInt(m[1]);
-    }
-    if(/shield/i.test(i.name)&&i.type==='armor'){
-      bonus += 2; // shield base
-    }
+// Returns the character's effective AC, accounting for equipped armor/shield from the Character screen.
+// Falls back to char.ac (manually set) or 10+DEX if nothing is equipped.
+function getCharAC(char){
+  const dex = parseInt(getMod(char.abilities&&char.abilities.DEX?char.abilities.DEX:10))||0;
+  const slots = (char.equippedSlots) ? Object.values(char.equippedSlots) : [];
+  let armorAC = 0, hasArmor = false, shieldBonus = 0;
+
+  slots.forEach(function(item){
+    if(!item || item.type!=='armor') return;
+    var magicM = item.name.match(/\+(\d)/);
+    var magic = magicM ? parseInt(magicM[1]) : 0;
+    var n = item.name.toLowerCase();
+    if(/shield/i.test(item.name)){ shieldBonus = 2 + magic; return; }
+    // Heavy armor — no DEX
+    if(n.indexOf('plate mail')>=0||( n.indexOf('plate')>=0 && n.indexOf('half')<0 )){ armorAC=18+magic; hasArmor=true; }
+    else if(n.indexOf('splint')>=0){ armorAC=17+magic; hasArmor=true; }
+    else if(n.indexOf('ring mail')>=0){ armorAC=14+magic; hasArmor=true; }
+    else if(n.indexOf('chain mail')>=0||n.indexOf('chainmail')>=0){ armorAC=16+magic; hasArmor=true; }
+    // Medium armor — DEX max 2
+    else if(n.indexOf('half plate')>=0||n.indexOf('half-plate')>=0){ armorAC=15+Math.min(dex,2)+magic; hasArmor=true; }
+    else if(n.indexOf('breastplate')>=0){ armorAC=14+Math.min(dex,2)+magic; hasArmor=true; }
+    else if(n.indexOf('scale mail')>=0){ armorAC=14+Math.min(dex,2)+magic; hasArmor=true; }
+    else if(n.indexOf('hide')>=0){ armorAC=12+Math.min(dex,2)+magic; hasArmor=true; }
+    else if(n.indexOf('chain shirt')>=0){ armorAC=13+Math.min(dex,2)+magic; hasArmor=true; }
+    // Light armor — full DEX
+    else if(n.indexOf('studded leather')>=0){ armorAC=12+dex+magic; hasArmor=true; }
+    else if(n.indexOf('leather')>=0){ armorAC=11+dex+magic; hasArmor=true; }
+    else if(n.indexOf('padded')>=0){ armorAC=11+dex+magic; hasArmor=true; }
+    // Generic magic armor
+    else if(magic){ armorAC=10+dex+magic; hasArmor=true; }
   });
-  return bonus;
+
+  var baseAC = char.ac || (10 + dex);
+  if(!hasArmor) return baseAC + shieldBonus;
+  return armorAC + shieldBonus;
 }
+
+// Legacy — kept for any old call sites, now delegates to getCharAC
+function getCharLootAC(char){ return 0; }
 const QUICK_ITEMS=[
   {name:'Healing Potion',type:'potion',rarity:'common',qty:1,weight:0.5,value:50,attune:'none',desc:'Regain 2d4+2 HP.'},
   {name:'Greater Healing Potion',type:'potion',rarity:'uncommon',qty:1,weight:0.5,value:100,attune:'none',desc:'Regain 4d4+4 HP.'},
@@ -2699,10 +2724,10 @@ function renderCombatTab(char,cls,elId,editable){
   const con=parseInt(getMod(char.abilities.CON))||0;
   const pct=Math.max(0,Math.round((char.currentHP/char.maxHP)*100));
   const hpC=pct>60?'var(--green)':pct>25?'var(--gold)':'var(--red)';
-  const lootAcBonus = getCharLootAC(char);
-  const equipAC = getEquipSlotAC ? getEquipSlotAC(char) : null;
-  const displayAC = equipAC !== null && equipAC !== (char.ac||(10+dex)) ? equipAC : (char.ac || (10+dex)) + lootAcBonus;
-  const hasAcBoost = displayAC !== (char.ac||(10+dex));
+  const lootAcBonus = 0; // legacy — AC now handled by getCharAC
+  const displayAC = getCharAC(char);
+  const baseAC = char.ac || (10+dex);
+  const hasAcBoost = displayAC !== baseAC;
   let html=`
     <div class="combat-stats" style="--cc:${cls.color};--cc-dim:${cls.color}22">
       <div class="cs-box"><div class="cs-val">${displayAC}</div><div class="cs-label">AC${hasAcBoost?(' <span style=\'font-size:9px;color:var(--gold)\'>✦</span>'):''}</div></div>
@@ -8347,6 +8372,34 @@ function renderDiceCharPanel(){
         </select>
       </div>
 
+      ${(()=>{
+        const ac = getCharAC(char);
+        const baseAC = char.ac||(10+abMods.DEX);
+        const acBoosted = ac !== baseAC;
+        const initMod = abMods.DEX;
+        const initSign = initMod>=0?'+':'';
+        const pct = Math.max(0,Math.round((char.currentHP/char.maxHP)*100));
+        const hpC = pct>60?'var(--green)':pct>25?'var(--gold)':'var(--red)';
+        return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:10px">
+          <div style="background:var(--surface);border:1px solid ${acBoosted?cc:'var(--border)'};border-radius:8px;padding:6px 4px;text-align:center">
+            <div style="font-family:'Cinzel',serif;font-size:8px;color:var(--muted);letter-spacing:0.5px">AC${acBoosted?'<span style="color:var(--gold)"> ✦</span>':''}</div>
+            <div style="font-family:'Cinzel',serif;font-size:16px;color:${acBoosted?cc:'var(--text)'}">${ac}</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 4px;text-align:center">
+            <div style="font-family:'Cinzel',serif;font-size:8px;color:var(--muted);letter-spacing:0.5px">INIT</div>
+            <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--text)">${initSign}${initMod}</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 4px;text-align:center">
+            <div style="font-family:'Cinzel',serif;font-size:8px;color:var(--muted);letter-spacing:0.5px">HP</div>
+            <div style="font-family:'Cinzel',serif;font-size:16px;color:${hpC}">${char.currentHP}</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 4px;text-align:center">
+            <div style="font-family:'Cinzel',serif;font-size:8px;color:var(--muted);letter-spacing:0.5px">MAX</div>
+            <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--muted)">${char.maxHP}</div>
+          </div>
+        </div>`;
+      })()}
+
       ${activeEffects.length||customFx.length?`
       <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px">
         ${activeEffects.map(([k])=>{
@@ -11376,31 +11429,7 @@ function saveEquippedItems(charId, slots){
   saveChars(chars);
 }
 
-function getEquipSlotAC(char){
-  const slots = getEquippedItems(char);
-  const dex = parseInt(getMod(char.abilities&&char.abilities.DEX?char.abilities.DEX:10))||0;
-  let armorAC = 0, hasArmor = false, shieldBonus = 0;
-  Object.values(slots).forEach(function(item){
-    if(!item || item.type!=='armor') return;
-    var magicM = item.name.match(/[+](\d)/);
-    var magic = magicM ? parseInt(magicM[1]) : 0;
-    var n = item.name.toLowerCase();
-    if(/shield/i.test(item.name)){ shieldBonus = 2 + magic; return; }
-    if(n.indexOf('plate')>=0 && n.indexOf('half')<0){ armorAC=18+magic; hasArmor=true; }
-    else if(n.indexOf('splint')>=0){ armorAC=17+magic; hasArmor=true; }
-    else if(n.indexOf('half plate')>=0||n.indexOf('half-plate')>=0){ armorAC=15+Math.min(dex,2)+magic; hasArmor=true; }
-    else if(n.indexOf('chain mail')>=0||n.indexOf('chainmail')>=0){ armorAC=16+magic; hasArmor=true; }
-    else if(n.indexOf('scale mail')>=0||n.indexOf('breastplate')>=0){ armorAC=14+Math.min(dex,2)+magic; hasArmor=true; }
-    else if(n.indexOf('hide')>=0){ armorAC=12+Math.min(dex,2)+magic; hasArmor=true; }
-    else if(n.indexOf('chain shirt')>=0){ armorAC=13+Math.min(dex,2)+magic; hasArmor=true; }
-    else if(n.indexOf('studded leather')>=0){ armorAC=12+dex+magic; hasArmor=true; }
-    else if(n.indexOf('leather')>=0){ armorAC=11+dex+magic; hasArmor=true; }
-    else if(n.indexOf('padded')>=0){ armorAC=11+dex+magic; hasArmor=true; }
-    else if(magic){ armorAC=10+dex+magic; hasArmor=true; }
-  });
-  if(!hasArmor) return (char.ac||(10+dex)) + shieldBonus;
-  return armorAC + shieldBonus;
-}
+function getEquipSlotAC(char){ return getCharAC(char); }
 
 function getEquipSlotATK(char){
   const slots = getEquippedItems(char);
