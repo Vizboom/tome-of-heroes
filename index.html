@@ -139,6 +139,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   }
   #diceCharPanel {
     flex: 0 0 50%;
+    max-width: 50%;
     max-height: none;
     width: auto;
     overflow-y: auto;
@@ -150,6 +151,13 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
+  #diceCharPanel:empty {
+    flex: 0 0 0;
+    max-width: 0;
+    padding: 0;
+    border-right: none;
+    overflow: hidden;
+  }
   #diceCharPanel::-webkit-scrollbar { display: none; }
   #diceCharPanel .dice-char-body { display: block !important; max-height: none !important; overflow: visible !important; padding: 0; }
   #diceCharPanel.collapsed { flex: 0 0 50%; padding: 16px 20px; overflow-y: auto; }
@@ -157,10 +165,11 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   #diceCharPanel .dice-toggle-arrow { display: none !important; }
   #diceCharPanel > div:first-child { position: static; }
   #diceRollPanel {
-    flex: 1 1 50%;
+    flex: 1 1 0;
+    min-width: 0;
     overflow-y: auto;
     height: 100%;
-    padding: 14px 14px 20px;
+    padding: 14px 20px 20px;
   }
 
   /* Screens that are scroll-regions get extra padding on desktop */
@@ -933,6 +942,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .inv-tooltip-hint { font-size: 9px; color: var(--gold); font-family: 'Cinzel', serif; margin-top: 5px; letter-spacing: 0.5px; }
 
 
+.mode-row{display:flex;gap:8px;margin-bottom:14px;}
 .mode-btn{flex:1;padding:10px 4px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;cursor:pointer;transition:var(--trans);display:flex;flex-direction:column;align-items:center;gap:4px;}
 .mode-btn .mi{font-size:20px;}
 .mode-btn.adv-on{border-color:var(--green);background:rgba(39,174,96,0.12);color:var(--green);}
