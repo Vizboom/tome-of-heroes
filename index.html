@@ -1920,6 +1920,361 @@ const QUICK_ITEMS=[
   {name:'Scroll of Fireball',type:'scroll',rarity:'rare',qty:1,weight:0,value:500,attune:'none',desc:'Cast Fireball (8d6, DC 15).'},
 ];
 
+/* ══ D&D 5E ITEM DATABASE ══ */
+const DND_ITEMS = [
+  // ── WEAPONS ──────────────────────────────────────────────────────
+  {name:'Dagger',type:'weapon',rarity:'common',weight:1,value:2,attune:'none',desc:'Finesse, light, thrown (20/60 ft). 1d4 piercing.'},
+  {name:'Handaxe',type:'weapon',rarity:'common',weight:2,value:5,attune:'none',desc:'Light, thrown (20/60 ft). 1d6 slashing.'},
+  {name:'Shortsword',type:'weapon',rarity:'common',weight:2,value:10,attune:'none',desc:'Finesse, light. 1d6 piercing.'},
+  {name:'Longsword',type:'weapon',rarity:'common',weight:3,value:15,attune:'none',desc:'Versatile (1d10). 1d8 slashing.'},
+  {name:'Rapier',type:'weapon',rarity:'common',weight:2,value:25,attune:'none',desc:'Finesse. 1d8 piercing.'},
+  {name:'Greataxe',type:'weapon',rarity:'common',weight:7,value:30,attune:'none',desc:'Heavy, two-handed. 1d12 slashing.'},
+  {name:'Greatsword',type:'weapon',rarity:'common',weight:6,value:50,attune:'none',desc:'Heavy, two-handed. 2d6 slashing.'},
+  {name:'Battleaxe',type:'weapon',rarity:'common',weight:4,value:10,attune:'none',desc:'Versatile (1d10). 1d8 slashing.'},
+  {name:'Warhammer',type:'weapon',rarity:'common',weight:2,value:15,attune:'none',desc:'Versatile (1d10). 1d8 bludgeoning.'},
+  {name:'Maul',type:'weapon',rarity:'common',weight:10,value:10,attune:'none',desc:'Heavy, two-handed. 2d6 bludgeoning.'},
+  {name:'Flail',type:'weapon',rarity:'common',weight:2,value:10,attune:'none',desc:'1d8 bludgeoning.'},
+  {name:'Mace',type:'weapon',rarity:'common',weight:4,value:5,attune:'none',desc:'1d6 bludgeoning.'},
+  {name:'Morningstar',type:'weapon',rarity:'common',weight:4,value:15,attune:'none',desc:'1d8 piercing.'},
+  {name:'Spear',type:'weapon',rarity:'common',weight:3,value:1,attune:'none',desc:'Thrown (20/60 ft), versatile (1d8). 1d6 piercing.'},
+  {name:'Quarterstaff',type:'weapon',rarity:'common',weight:4,value:0.2,attune:'none',desc:'Versatile (1d8). 1d6 bludgeoning.'},
+  {name:'Glaive',type:'weapon',rarity:'common',weight:6,value:20,attune:'none',desc:'Heavy, reach, two-handed. 1d10 slashing.'},
+  {name:'Halberd',type:'weapon',rarity:'common',weight:6,value:20,attune:'none',desc:'Heavy, reach, two-handed. 1d10 slashing.'},
+  {name:'Pike',type:'weapon',rarity:'common',weight:18,value:5,attune:'none',desc:'Heavy, reach, two-handed. 1d10 piercing.'},
+  {name:'Lance',type:'weapon',rarity:'common',weight:6,value:10,attune:'none',desc:'Reach, special. 1d12 piercing.'},
+  {name:'Whip',type:'weapon',rarity:'common',weight:3,value:2,attune:'none',desc:'Finesse, reach. 1d4 slashing.'},
+  {name:'Shortbow',type:'weapon',rarity:'common',weight:2,value:25,attune:'none',desc:'Ammunition, two-handed (80/320 ft). 1d6 piercing.'},
+  {name:'Longbow',type:'weapon',rarity:'common',weight:2,value:50,attune:'none',desc:'Ammunition, heavy, two-handed (150/600 ft). 1d8 piercing.'},
+  {name:'Light Crossbow',type:'weapon',rarity:'common',weight:5,value:25,attune:'none',desc:'Ammunition, loading, two-handed (80/320 ft). 1d8 piercing.'},
+  {name:'Heavy Crossbow',type:'weapon',rarity:'common',weight:18,value:50,attune:'none',desc:'Ammunition, heavy, loading, two-handed (100/400 ft). 1d10 piercing.'},
+  {name:'Hand Crossbow',type:'weapon',rarity:'common',weight:3,value:75,attune:'none',desc:'Ammunition, light, loading (30/120 ft). 1d6 piercing.'},
+  {name:'Javelin',type:'weapon',rarity:'common',weight:2,value:0.5,attune:'none',desc:'Thrown (30/120 ft). 1d6 piercing.'},
+  {name:'Dart',type:'weapon',rarity:'common',weight:0.25,value:0.05,attune:'none',desc:'Finesse, thrown (20/60 ft). 1d4 piercing.'},
+  {name:'Sling',type:'weapon',rarity:'common',weight:0,value:0.1,attune:'none',desc:'Ammunition (30/120 ft). 1d4 bludgeoning.'},
+  {name:'Net',type:'weapon',rarity:'common',weight:3,value:1,attune:'none',desc:'Special, thrown (5/15 ft). Large or smaller creature is restrained.'},
+  {name:'Trident',type:'weapon',rarity:'common',weight:4,value:5,attune:'none',desc:'Thrown (20/60 ft), versatile (1d8). 1d6 piercing.'},
+  {name:'War Pick',type:'weapon',rarity:'common',weight:2,value:5,attune:'none',desc:'1d8 piercing.'},
+  {name:'Scimitar',type:'weapon',rarity:'common',weight:3,value:25,attune:'none',desc:'Finesse, light. 1d6 slashing.'},
+  // Magic weapons
+  {name:'Longsword +1',type:'weapon',rarity:'uncommon',weight:3,value:1000,attune:'none',desc:'+1 bonus to attack and damage rolls. 1d8 slashing (versatile 1d10).'},
+  {name:'Longsword +2',type:'weapon',rarity:'rare',weight:3,value:4000,attune:'none',desc:'+2 bonus to attack and damage rolls. 1d8 slashing (versatile 1d10).'},
+  {name:'Longsword +3',type:'weapon',rarity:'very-rare',weight:3,value:16000,attune:'none',desc:'+3 bonus to attack and damage rolls. 1d8 slashing (versatile 1d10).'},
+  {name:'Shortsword +1',type:'weapon',rarity:'uncommon',weight:2,value:1000,attune:'none',desc:'+1 bonus to attack and damage rolls. 1d6 piercing.'},
+  {name:'Shortsword +2',type:'weapon',rarity:'rare',weight:2,value:4000,attune:'none',desc:'+2 bonus to attack and damage rolls. 1d6 piercing.'},
+  {name:'Greataxe +1',type:'weapon',rarity:'uncommon',weight:7,value:1000,attune:'none',desc:'+1 bonus to attack and damage rolls. 1d12 slashing.'},
+  {name:'Dagger +1',type:'weapon',rarity:'uncommon',weight:1,value:1000,attune:'none',desc:'+1 bonus to attack and damage rolls. 1d4 piercing.'},
+  {name:'Dagger +2',type:'weapon',rarity:'rare',weight:1,value:4000,attune:'none',desc:'+2 bonus to attack and damage rolls. 1d4 piercing.'},
+  {name:'Rapier +1',type:'weapon',rarity:'uncommon',weight:2,value:1000,attune:'none',desc:'+1 bonus to attack and damage rolls. 1d8 piercing.'},
+  {name:'Rapier +2',type:'weapon',rarity:'rare',weight:2,value:4000,attune:'none',desc:'+2 bonus to attack and damage rolls. 1d8 piercing.'},
+  {name:'Flame Tongue',type:'weapon',rarity:'rare',weight:3,value:5000,attune:'required',desc:'Longsword. Command word ignites the blade (bonus action). While lit: +2d6 fire damage, sheds bright light 40 ft and dim light 40 ft beyond. Extinguished if sheathed.'},
+  {name:'Frost Brand',type:'weapon',rarity:'very-rare',weight:3,value:20000,attune:'required',desc:'Longsword. +1d6 cold damage. While attuned: resistance to fire damage; in freezing temperatures, sheds bright light 10 ft. Once per hour (when drawn), can extinguish all non-magical flames within 30 ft.'},
+  {name:'Vorpal Sword',type:'weapon',rarity:'legendary',weight:3,value:50000,attune:'required',desc:'You gain +3 to attack and damage. Ignores resistance to slashing damage. On a natural 20 against a creature with a head, the creature is decapitated (unless immune).'},
+  {name:'Sword of Life Stealing',type:'weapon',rarity:'rare',weight:3,value:8000,attune:'required',desc:'On a hit scoring a natural 20, the target takes an extra 10 necrotic damage (not constructs or undead), and you gain 10 temp HP.'},
+  {name:'Sword of Wounding',type:'weapon',rarity:'rare',weight:3,value:8000,attune:'required',desc:'Hit points lost to this weapon can only be regained by a short or long rest, not by spells or other means. Target must pass CON save DC 15 at start of each turn or lose 1d4 HP (cumulative).'},
+  {name:'Sword of Sharpness',type:'weapon',rarity:'very-rare',weight:3,value:20000,attune:'required',desc:'When you attack an object, max damage. On a natural 20 vs a creature: extra 14 slashing damage and roll damage twice. On a 20 on damage die: sever a limb.'},
+  {name:'Holy Avenger',type:'weapon',rarity:'legendary',weight:3,value:165000,attune:'required',desc:'Longsword, paladin only. +3 to attack/damage. +2d10 radiant vs undead/fiends. Aura within 10 ft: advantage on saving throws vs spells for you and allies.'},
+  {name:'Nine Lives Stealer',type:'weapon',rarity:'very-rare',weight:3,value:20000,attune:'required',desc:'Longsword. +2 to attack/damage. Has 1d8+1 charges. On a hit against a creature with fewer than 100 HP, the creature must make a DC 15 CON save or die (expends a charge). Once all charges are spent, the property no longer functions.'},
+  {name:'Berserker Axe',type:'weapon',rarity:'rare',weight:7,value:8000,attune:'required',desc:'+1 to attack/damage. While attuned: +1 to max HP per character level. Cursed: must attack nearest creature (friend or foe) when you enter rage.'},
+  {name:'Dwarven Thrower',type:'weapon',rarity:'very-rare',weight:2,value:20000,attune:'required',desc:'Warhammer for dwarves only. +3 to attack/damage. Returns immediately after being thrown. Thrown attack: +1d8 damage (or +2d8 vs giants).'},
+  {name:'Javelin of Lightning',type:'weapon',rarity:'uncommon',weight:2,value:1500,attune:'none',desc:'Before throwing, speak the command word. The javelin becomes a bolt of lightning, dealing 4d6 lightning damage to all creatures in a 5 ft wide, 120 ft line. Recharges at dawn.'},
+  {name:'Trident of Fish Command',type:'weapon',rarity:'uncommon',weight:4,value:800,attune:'required',desc:'Has 3 charges. While underwater, can expend 1 charge to cast Dominate Beast (DC 15) on a beast with an innate swimming speed. Regains 1d3 expended charges daily at dawn.'},
+  {name:'Mace of Disruption',type:'weapon',rarity:'rare',weight:4,value:6000,attune:'required',desc:'Against fiends and undead: extra 2d6 radiant damage; target must make DC 15 WIS save or be frightened of you until end of next turn. If target is reduced to 25 HP or fewer, it must succeed on a DC 15 WIS save or be destroyed.'},
+  {name:'Mace of Smiting',type:'weapon',rarity:'rare',weight:4,value:6000,attune:'none',desc:'+1 to attack/damage. +2d6 extra damage vs constructs. On a natural 20 vs a construct, the target must succeed on a DC 17 CON save or be destroyed.'},
+  {name:'Mace of Terror',type:'weapon',rarity:'rare',weight:4,value:6000,attune:'required',desc:'Has 3 charges. Action: expend 1-3 charges to force up to 3 creatures per charge within 30 ft to make a DC 15 WIS save or be frightened for 1 minute. Regains 1d3 charges at dawn.'},
+  {name:'Oathbow',type:'weapon',rarity:'very-rare',weight:2,value:20000,attune:'required',desc:'Longbow. Whisper command word when firing to swear an oath against the target. +3d6 piercing damage, ignores half and three-quarters cover, disadvantage vs other targets until oath ends.'},
+  {name:'Arrow of Slaying',type:'weapon',rarity:'very-rare',weight:0,value:600,attune:'none',desc:'Arrow made to slay a particular type of creature. Creature of that type hit must succeed on a DC 17 CON save or take 6d10 extra piercing damage. One use.'},
+  {name:'Vicious Weapon',type:'weapon',rarity:'rare',weight:3,value:3000,attune:'none',desc:'When you roll a 20 on an attack roll with this magic weapon, the target takes an extra 2d6 damage of the weapon\'s type.'},
+  {name:'Weapon of Warning',type:'weapon',rarity:'uncommon',weight:3,value:1500,attune:'required',desc:'You and your companions within 30 ft cannot be surprised while attuned. Gives immediate warning when it detects a threat.'},
+  {name:'Dancing Sword',type:'weapon',rarity:'very-rare',weight:3,value:20000,attune:'required',desc:'Longsword. Can fly, hover and attack on its own as a bonus action for up to 4 rounds then return. While it dances, it keeps your attunement bonus to attack/damage.'},
+  {name:'Defender',type:'weapon',rarity:'legendary',weight:3,value:50000,attune:'required',desc:'Longsword. +3 to attack and damage. Can transfer some or all of the +3 bonus to your AC each turn (bonus action).'},
+  {name:'Luck Blade',type:'weapon',rarity:'legendary',weight:3,value:60000,attune:'required',desc:'Longsword. +1 to attack/damage. +1 to saving throws. Has 1d4-1 charges of Wish. While carrying: once per day you can reroll one attack, ability check, or saving throw (must keep new result).'},
+  {name:'Sun Blade',type:'weapon',rarity:'rare',weight:3,value:12000,attune:'required',desc:'Longsword-shaped hilt emitting a blade of radiant energy (command word). +2 to attack/damage. Deals radiant damage. Extra 1d8 radiant vs undead. Sheds bright/dim light. Finesse.'},
+  {name:'Scimitar of Speed',type:'weapon',rarity:'very-rare',weight:3,value:20000,attune:'required',desc:'+2 to attack and damage rolls. Once per turn as a bonus action you can make one attack with this weapon.'},
+  // ── ARMOR ────────────────────────────────────────────────────────
+  {name:'Padded Armor',type:'armor',rarity:'common',weight:8,value:5,attune:'none',desc:'AC 11 + DEX modifier. Disadvantage on Stealth.'},
+  {name:'Leather Armor',type:'armor',rarity:'common',weight:10,value:10,attune:'none',desc:'AC 11 + DEX modifier.'},
+  {name:'Studded Leather Armor',type:'armor',rarity:'common',weight:13,value:45,attune:'none',desc:'AC 12 + DEX modifier.'},
+  {name:'Hide Armor',type:'armor',rarity:'common',weight:12,value:10,attune:'none',desc:'AC 12 + DEX modifier (max 2).'},
+  {name:'Chain Shirt',type:'armor',rarity:'common',weight:20,value:50,attune:'none',desc:'AC 13 + DEX modifier (max 2).'},
+  {name:'Scale Mail',type:'armor',rarity:'common',weight:45,value:50,attune:'none',desc:'AC 14 + DEX modifier (max 2). Disadvantage on Stealth.'},
+  {name:'Breastplate',type:'armor',rarity:'common',weight:20,value:400,attune:'none',desc:'AC 14 + DEX modifier (max 2).'},
+  {name:'Half Plate Armor',type:'armor',rarity:'common',weight:40,value:750,attune:'none',desc:'AC 15 + DEX modifier (max 2). Disadvantage on Stealth.'},
+  {name:'Ring Mail',type:'armor',rarity:'common',weight:40,value:30,attune:'none',desc:'AC 14. Disadvantage on Stealth.'},
+  {name:'Chain Mail',type:'armor',rarity:'common',weight:55,value:75,attune:'none',desc:'AC 16. STR 13 required. Disadvantage on Stealth.'},
+  {name:'Splint Armor',type:'armor',rarity:'common',weight:60,value:200,attune:'none',desc:'AC 17. STR 15 required. Disadvantage on Stealth.'},
+  {name:'Plate Armor',type:'armor',rarity:'common',weight:65,value:1500,attune:'none',desc:'AC 18. STR 15 required. Disadvantage on Stealth.'},
+  {name:'Shield',type:'armor',rarity:'common',weight:6,value:10,attune:'none',desc:'+2 AC. Must have a free hand to gain this benefit.'},
+  {name:'Shield +1',type:'armor',rarity:'uncommon',weight:6,value:1000,attune:'none',desc:'+3 AC total (+2 shield, +1 magic).'},
+  {name:'Shield +2',type:'armor',rarity:'rare',weight:6,value:4000,attune:'none',desc:'+4 AC total (+2 shield, +2 magic).'},
+  {name:'Shield +3',type:'armor',rarity:'very-rare',weight:6,value:16000,attune:'none',desc:'+5 AC total (+2 shield, +3 magic).'},
+  {name:'Leather Armor +1',type:'armor',rarity:'uncommon',weight:10,value:1000,attune:'none',desc:'AC 12 + DEX modifier + 1.'},
+  {name:'Studded Leather +1',type:'armor',rarity:'uncommon',weight:13,value:1000,attune:'none',desc:'AC 13 + DEX modifier + 1.'},
+  {name:'Chain Mail +1',type:'armor',rarity:'uncommon',weight:55,value:1000,attune:'none',desc:'AC 17. STR 13 required.'},
+  {name:'Chain Mail +2',type:'armor',rarity:'rare',weight:55,value:4000,attune:'none',desc:'AC 18. STR 13 required.'},
+  {name:'Plate Armor +1',type:'armor',rarity:'rare',weight:65,value:4000,attune:'none',desc:'AC 19. STR 15 required.'},
+  {name:'Plate Armor +2',type:'armor',rarity:'very-rare',weight:65,value:16000,attune:'none',desc:'AC 20. STR 15 required.'},
+  {name:'Plate Armor +3',type:'armor',rarity:'legendary',weight:65,value:64000,attune:'none',desc:'AC 21. STR 15 required.'},
+  {name:'Mithral Armor',type:'armor',rarity:'uncommon',weight:20,value:1000,attune:'none',desc:'Chain mail or plate. No STR requirement. No disadvantage on Stealth. Can be worn while sleeping.'},
+  {name:'Adamantine Armor',type:'armor',rarity:'uncommon',weight:65,value:500,attune:'none',desc:'Chain mail or plate. Any critical hit against you becomes a normal hit.'},
+  {name:'Armor of Resistance',type:'armor',rarity:'rare',weight:65,value:6000,attune:'required',desc:'You have resistance to one type of damage (chosen when found) while wearing this armor.'},
+  {name:'Armor of Invulnerability',type:'armor',rarity:'legendary',weight:65,value:50000,attune:'required',desc:'Plate armor. You have resistance to non-magical damage. Once per day (action) you can be immune to non-magical damage for 10 minutes.'},
+  {name:'Armor of Vulnerability',type:'armor',rarity:'rare',weight:65,value:0,attune:'required',desc:'Plate armor. Cursed. Resistance to one damage type but vulnerability to two others. Curse revealed once attuned.'},
+  {name:'Demon Armor',type:'armor',rarity:'very-rare',weight:65,value:20000,attune:'required',desc:'Plate armor. +1 to attack/damage with unarmed strikes; they deal 1d8 slashing. Cursed: cannot remove until Remove Curse cast.'},
+  {name:'Dragon Scale Mail',type:'armor',rarity:'very-rare',weight:45,value:20000,attune:'required',desc:'Scale mail made from dragon scales. +1 AC. Advantage on saves vs frightful presence/breath of dragons. Resistance to the damage type of the dragon.'},
+  {name:'Dwarven Plate',type:'armor',rarity:'very-rare',weight:65,value:20000,attune:'none',desc:'Plate armor. +2 AC. When an effect would push you or knock you prone, you can use reaction to not be moved.'},
+  {name:'Elven Chain',type:'armor',rarity:'rare',weight:20,value:4000,attune:'none',desc:'Chain shirt. +1 AC bonus. Proficient to wear even without armor proficiency. Can be worn under clothes.'},
+  {name:'Glamoured Studded Leather',type:'armor',rarity:'rare',weight:13,value:2000,attune:'none',desc:'Studded leather. +1 AC. Bonus action: can make it appear as normal clothing or other armor.'},
+  {name:'Plate of Etherealness',type:'armor',rarity:'legendary',weight:65,value:48000,attune:'required',desc:'Plate armor. Once per long rest (action), you can cast Etherealness. Lasts up to 10 minutes.'},
+  {name:'Sentinel Shield',type:'armor',rarity:'uncommon',weight:6,value:500,attune:'none',desc:'Shield. Advantage on Initiative rolls and Perception checks.'},
+  {name:'Shield of Missile Attraction',type:'armor',rarity:'rare',weight:6,value:0,attune:'required',desc:'Shield. Cursed. Resistance to ranged weapon attack damage. But you are a magnet for ranged attacks — enemies prefer to target you.'},
+  {name:'Spellguard Shield',type:'armor',rarity:'very-rare',weight:6,value:20000,attune:'required',desc:'Shield. Advantage on saves vs spells and magical effects. Spell attacks have disadvantage against you.'},
+  // ── POTIONS ──────────────────────────────────────────────────────
+  {name:'Potion of Healing',type:'potion',rarity:'common',weight:0.5,value:50,attune:'none',desc:'Regain 2d4+2 HP. Drinking or administering takes an action.'},
+  {name:'Potion of Greater Healing',type:'potion',rarity:'uncommon',weight:0.5,value:100,attune:'none',desc:'Regain 4d4+4 HP.'},
+  {name:'Potion of Superior Healing',type:'potion',rarity:'rare',weight:0.5,value:500,attune:'none',desc:'Regain 8d4+8 HP.'},
+  {name:'Potion of Supreme Healing',type:'potion',rarity:'very-rare',weight:0.5,value:5000,attune:'none',desc:'Regain 10d4+20 HP.'},
+  {name:'Potion of Animal Friendship',type:'potion',rarity:'uncommon',weight:0.5,value:200,attune:'none',desc:'Cast Animal Friendship for 1 hour (DC 13).'},
+  {name:'Potion of Clairvoyance',type:'potion',rarity:'rare',weight:0.5,value:960,attune:'none',desc:'Cast Clairvoyance (no concentration required).'},
+  {name:'Potion of Climbing',type:'potion',rarity:'common',weight:0.5,value:180,attune:'none',desc:'For 1 hour, gain climbing speed equal to your walking speed and advantage on Athletics checks to climb.'},
+  {name:'Potion of Diminution',type:'potion',rarity:'rare',weight:0.5,value:270,attune:'none',desc:'For 1d4 hours, you and everything you carry becomes Tiny (one-quarter size). Your attacks deal 1d4 less damage.'},
+  {name:'Potion of Flying',type:'potion',rarity:'very-rare',weight:0.5,value:500,attune:'none',desc:'For 1 hour, gain flying speed of 60 ft. If the effect ends while you are aloft, you fall.'},
+  {name:'Potion of Gaseous Form',type:'potion',rarity:'rare',weight:0.5,value:300,attune:'none',desc:'For 1 hour, you become a misty cloud. Resistance to non-magical damage. Cannot attack, speak, or interact with items.'},
+  {name:'Potion of Giant Strength',type:'potion',rarity:'uncommon',weight:0.5,value:200,attune:'none',desc:'For 1 hour, your STR becomes 21 (hill giant).'},
+  {name:'Potion of Fire Giant Strength',type:'potion',rarity:'rare',weight:0.5,value:1000,attune:'none',desc:'For 1 hour, your STR becomes 25.'},
+  {name:'Potion of Storm Giant Strength',type:'potion',rarity:'legendary',weight:0.5,value:50000,attune:'none',desc:'For 1 hour, your STR becomes 29.'},
+  {name:'Potion of Growth',type:'potion',rarity:'uncommon',weight:0.5,value:270,attune:'none',desc:'For 1d4 hours, become Large. Advantage on STR checks/saves. +1d4 damage on weapon attacks.'},
+  {name:'Potion of Heroism',type:'potion',rarity:'rare',weight:0.5,value:180,attune:'none',desc:'For 1 hour, gain 10 temporary HP and the effects of the Bless spell (no concentration required).'},
+  {name:'Potion of Invisibility',type:'potion',rarity:'very-rare',weight:0.5,value:180,attune:'none',desc:'For 1 hour, you become invisible. Ends if you attack or cast a spell.'},
+  {name:'Potion of Invulnerability',type:'potion',rarity:'rare',weight:0.5,value:3840,attune:'none',desc:'For 1 minute, you have resistance to all damage.'},
+  {name:'Potion of Mind Reading',type:'potion',rarity:'rare',weight:0.5,value:180,attune:'none',desc:'Cast Detect Thoughts for 1 minute (DC 13, no concentration required).'},
+  {name:'Potion of Poison',type:'potion',rarity:'common',weight:0.5,value:100,attune:'none',desc:'Deals 3d6 poison damage and is poisoned for 24 hours (CON save DC 10 for half, no poisoned condition).'},
+  {name:'Potion of Resistance',type:'potion',rarity:'uncommon',weight:0.5,value:300,attune:'none',desc:'For 1 hour, gain resistance to one damage type (determined when brewed).'},
+  {name:'Potion of Speed',type:'potion',rarity:'very-rare',weight:0.5,value:400,attune:'none',desc:'For 1 minute, the Haste spell is cast on you (no concentration).'},
+  {name:'Potion of Water Breathing',type:'potion',rarity:'uncommon',weight:0.5,value:180,attune:'none',desc:'For 1 hour, you can breathe underwater.'},
+  {name:'Oil of Etherealness',type:'potion',rarity:'rare',weight:0.5,value:1920,attune:'none',desc:'Takes 10 minutes to apply to self or another creature. Target gains Ethereal Plane effects for 1 hour.'},
+  {name:'Oil of Sharpness',type:'potion',rarity:'very-rare',weight:0.5,value:3200,attune:'none',desc:'Coat one slashing or piercing weapon. For 1 hour the weapon becomes +3 to attack and damage.'},
+  {name:'Oil of Slipperiness',type:'potion',rarity:'uncommon',weight:0.5,value:480,attune:'none',desc:'Apply to self. For 8 hours, Freedom of Movement. Can also coat floor (10×10 ft, Grease spell effect).'},
+  {name:'Philter of Love',type:'potion',rarity:'uncommon',weight:0.5,value:90,attune:'none',desc:'For 1 hour, the first creature the drinker sees is regarded as their true love. Charm effect.'},
+  {name:'Potion of Longevity',type:'potion',rarity:'very-rare',weight:0.5,value:9000,attune:'none',desc:'Reduces apparent age by 1d6+6 years (minimum 13). Each subsequent use has a 10% cumulative chance of instead aging you 1d6+6 years.'},
+  {name:'Potion of Vitality',type:'potion',rarity:'very-rare',weight:0.5,value:960,attune:'none',desc:'Removes exhaustion, cures diseases and poisons, and maximizes all Hit Dice rolls until your next long rest.'},
+  // ── WONDROUS ITEMS ───────────────────────────────────────────────
+  {name:'Amulet of Health',type:'wondrous',rarity:'rare',weight:0,value:8000,attune:'required',desc:'Your Constitution score is 19 while wearing. Has no effect if CON is already 19 or higher.'},
+  {name:'Amulet of Proof against Detection',type:'wondrous',rarity:'uncommon',weight:0,value:20000,attune:'required',desc:'You are hidden from divination magic. Cannot be targeted by divination spells. Cannot be perceived through magic crystal balls.'},
+  {name:'Amulet of the Planes',type:'wondrous',rarity:'very-rare',weight:0,value:160000,attune:'required',desc:'Action: cast Plane Shift. Must succeed on DC 15 INT check or travel to a random location.'},
+  {name:'Bag of Holding',type:'wondrous',rarity:'uncommon',weight:15,value:4000,attune:'none',desc:'Interior space is 2 ft wide × 4 ft deep with 500 lb capacity. Always weighs 15 lbs. Air supply for 10 min. Destroyed if overloaded or pierced from inside.'},
+  {name:'Bag of Tricks',type:'wondrous',rarity:'uncommon',weight:0.5,value:300,attune:'none',desc:'Holds 3 fuzzy balls. Throw a ball (20 ft) to conjure a random beast. It acts immediately, obeys your commands, disappears after 1 hour. Regains 1d3 balls at dawn.'},
+  {name:'Belt of Giant Strength',type:'wondrous',rarity:'rare',weight:1,value:4000,attune:'required',desc:'Hill Giant variant. Your Strength score becomes 21. No effect if your STR is already equal or higher.'},
+  {name:'Belt of Storm Giant Strength',type:'wondrous',rarity:'legendary',weight:1,value:200000,attune:'required',desc:'Your Strength score becomes 29. No effect if your STR is already equal or higher.'},
+  {name:'Boots of Elvenkind',type:'wondrous',rarity:'uncommon',weight:1,value:2500,attune:'none',desc:'Your steps make no sound, regardless of the surface. Advantage on Stealth checks to move silently.'},
+  {name:'Boots of Speed',type:'wondrous',rarity:'rare',weight:1,value:4000,attune:'required',desc:'Bonus action: your walking speed doubles and opportunity attacks have disadvantage. Lasts until you use another bonus action to stop, or until you remove the boots.'},
+  {name:'Boots of Striding and Springing',type:'wondrous',rarity:'uncommon',weight:1,value:5000,attune:'required',desc:'Walking speed becomes 30 ft (unless higher). Jump distance is tripled.'},
+  {name:'Boots of the Winterlands',type:'wondrous',rarity:'uncommon',weight:1,value:900,attune:'required',desc:'Resistance to cold damage. Ignore difficult terrain in snow/ice. Survive temperatures as low as −50°F.'},
+  {name:'Bracers of Archery',type:'wondrous',rarity:'uncommon',weight:1,value:1500,attune:'required',desc:'Proficiency with longbows and shortbows. +2 bonus to damage rolls with them.'},
+  {name:'Bracers of Defense',type:'wondrous',rarity:'rare',weight:1,value:6000,attune:'required',desc:'+2 bonus to AC while wearing, provided you are not wearing armor or using a shield.'},
+  {name:'Brooch of Shielding',type:'wondrous',rarity:'uncommon',weight:0,value:7500,attune:'required',desc:'Resistance to force damage. Immune to Magic Missile spell.'},
+  {name:'Broom of Flying',type:'wondrous',rarity:'uncommon',weight:3,value:8000,attune:'none',desc:'Speak command word: flying speed 50 ft (up to 400 lbs load; 30 ft speed at 401-600 lbs). Can be commanded to fly to you from up to 1 mile away.'},
+  {name:'Cape of the Mountebank',type:'wondrous',rarity:'rare',weight:1,value:3000,attune:'none',desc:'Once per day: cast Dimension Door (no concentration). After teleporting, puff of smoke.'},
+  {name:'Carpet of Flying',type:'wondrous',rarity:'very-rare',weight:0,value:10000,attune:'none',desc:'Fly up to 80 ft/round (4×6 ft, capacity 400 lb). Speak command word to activate.'},
+  {name:'Circlet of Blasting',type:'wondrous',rarity:'uncommon',weight:0,value:1500,attune:'none',desc:'Once per dawn: cast Scorching Ray as a 3rd level spell (+5 to hit, 3 rays).'},
+  {name:'Cloak of Displacement',type:'wondrous',rarity:'rare',weight:1,value:60000,attune:'required',desc:'Attackers have disadvantage on attack rolls against you. Deactivates for your turn if you take damage or are incapacitated.'},
+  {name:'Cloak of Elvenkind',type:'wondrous',rarity:'uncommon',weight:1,value:5000,attune:'required',desc:'Advantage on Stealth checks. Disadvantage on Perception checks against you.'},
+  {name:'Cloak of Protection',type:'wondrous',rarity:'uncommon',weight:1,value:3500,attune:'required',desc:'+1 bonus to AC and saving throws.'},
+  {name:'Cloak of the Bat',type:'wondrous',rarity:'rare',weight:1,value:5000,attune:'required',desc:'Advantage on Stealth checks in dim light or darkness. Hang from ceiling using hands and feet. While in dim light/darkness: cast Polymorph to turn into a bat (free action).'},
+  {name:'Cloak of the Manta Ray',type:'wondrous',rarity:'uncommon',weight:1,value:6000,attune:'none',desc:'Breathe underwater. Swimming speed 60 ft.'},
+  {name:'Crystal Ball',type:'wondrous',rarity:'very-rare',weight:7,value:50000,attune:'required',desc:'Cast Scrying (DC 17) once per day. Look into the ball to see the scryed location.'},
+  {name:'Cube of Force',type:'wondrous',rarity:'rare',weight:0.5,value:16000,attune:'required',desc:'Has 36 charges (regains 1d20 at dawn). Activate a face: create a 15 ft cube force field for 1 min or until no charges remain.'},
+  {name:'Daern\'s Instant Fortress',type:'wondrous',rarity:'rare',weight:0,value:75000,attune:'none',desc:'Command word: becomes a 20 ft square 30 ft tall adamantine tower. 100 HP, immune to most damage. Fits 16 Medium creatures per floor.'},
+  {name:'Deck of Illusions',type:'wondrous',rarity:'uncommon',weight:0,value:1200,attune:'none',desc:'Draw a card: creates an illusion of a creature or figure. Illusion lasts until dispelled.'},
+  {name:'Deck of Many Things',type:'wondrous',rarity:'legendary',weight:0,value:0,attune:'none',desc:'Draw a card from this magical deck, activating its powerful magical effect. Results range from treasure and power to disaster and doom.'},
+  {name:'Efreeti Bottle',type:'wondrous',rarity:'very-rare',weight:1,value:60000,attune:'none',desc:'When opened, a djinn or efreeti appears (50% each). May grant wishes (25%), fight you (25%), or serve for 101 days (50%).'},
+  {name:'Eyes of Charming',type:'wondrous',rarity:'uncommon',weight:0,value:3000,attune:'required',desc:'3 charges. Expend a charge: cast Charm Person (DC 13). Regains 1d3 at dawn.'},
+  {name:'Eyes of Minute Seeing',type:'wondrous',rarity:'uncommon',weight:0,value:2500,attune:'none',desc:'Advantage on Investigation checks involving small or detailed objects within 1 foot.'},
+  {name:'Eyes of the Eagle',type:'wondrous',rarity:'uncommon',weight:0,value:2500,attune:'required',desc:'Advantage on Perception checks. In clear conditions can see 1 mile clearly.'},
+  {name:'Figurine of Wondrous Power',type:'wondrous',rarity:'uncommon',weight:0,value:1000,attune:'none',desc:'A statuette of a creature that becomes a real creature for a time when a command word is spoken.'},
+  {name:'Folding Boat',type:'wondrous',rarity:'rare',weight:4,value:3000,attune:'none',desc:'A box. Command words: become a rowboat (10×4 ft), sailboat (24×8 ft), or box again.'},
+  {name:'Gauntlets of Ogre Power',type:'wondrous',rarity:'uncommon',weight:1,value:8000,attune:'required',desc:'Your Strength becomes 19. No effect if STR already 19 or higher.'},
+  {name:'Gem of Brightness',type:'wondrous',rarity:'uncommon',weight:0,value:5000,attune:'none',desc:'50 charges. Command: shed bright light (15/30 ft dim). Expend 1: shed intense light (30/60 ft dim, 1 min). Expend 5: send beam of light at target (DEX save DC 15 or blinded 1 min). Expend 10: brilliant flash in 30 ft cone (CON save DC 15 or blinded 1 min).'},
+  {name:'Gem of Seeing',type:'wondrous',rarity:'rare',weight:0,value:32000,attune:'required',desc:'3 charges. Expend 1: Truesight 120 ft for 10 min. Regains 1d3 at dawn.'},
+  {name:'Gloves of Missile Snaring',type:'wondrous',rarity:'uncommon',weight:0,value:3000,attune:'required',desc:'Reaction: when a ranged weapon attack hits you, reduce damage by 1d10 + DEX mod. You can catch the projectile if damage is reduced to 0.'},
+  {name:'Gloves of Swimming and Climbing',type:'wondrous',rarity:'uncommon',weight:0,value:2000,attune:'required',desc:'Swimming and climbing speed equal to walking speed. Advantage on Athletics checks for climbing and swimming.'},
+  {name:'Goggles of Night',type:'wondrous',rarity:'uncommon',weight:0,value:1500,attune:'none',desc:'Darkvision 60 ft. If you already have darkvision, the range increases by 60 ft.'},
+  {name:'Handy Haversack',type:'wondrous',rarity:'rare',weight:5,value:2000,attune:'none',desc:'Three exterior pockets each hold 20 lbs / 2 cu ft. Central compartment holds 80 lbs / 8 cu ft. Total weight always 5 lbs. Retrieving an item takes an action (not bonus action).'},
+  {name:'Hat of Disguise',type:'wondrous',rarity:'uncommon',weight:0,value:5000,attune:'required',desc:'Cast Disguise Self at will (concentration).'},
+  {name:'Headband of Intellect',type:'wondrous',rarity:'uncommon',weight:0,value:8000,attune:'required',desc:'Your Intelligence becomes 19. No effect if INT already 19 or higher.'},
+  {name:'Helm of Brilliance',type:'wondrous',rarity:'very-rare',weight:3,value:25000,attune:'required',desc:'Contains gems (diamonds, rubies, fire opals, opals). Expend gems to cast: Daylight (opal), Fireball (fire opal 10d6), prismatic beams (ruby, 2d6+diamond), Wall of Fire (ruby). Flammable creatures have disadvantage on attacks against wearer.'},
+  {name:'Helm of Comprehending Languages',type:'wondrous',rarity:'uncommon',weight:3,value:500,attune:'none',desc:'Cast Comprehend Languages at will.'},
+  {name:'Helm of Telepathy',type:'wondrous',rarity:'uncommon',weight:3,value:15000,attune:'required',desc:'Cast Detect Thoughts (DC 13) at will. While detecting thoughts: cast Suggestion on the creature (DC 13).'},
+  {name:'Helm of Teleportation',type:'wondrous',rarity:'rare',weight:3,value:64000,attune:'required',desc:'3 charges. Expend 1: cast Teleport. Regains 1d3 at dawn.'},
+  {name:'Immovable Rod',type:'wondrous',rarity:'uncommon',weight:2,value:5000,attune:'none',desc:'Click the button: the rod becomes fixed in space. Can hold up to 8,000 lbs. DC 30 STR to move.'},
+  {name:'Ioun Stone (Awareness)',type:'wondrous',rarity:'uncommon',weight:0,value:12000,attune:'required',desc:'You cannot be surprised.'},
+  {name:'Ioun Stone (Fortitude)',type:'wondrous',rarity:'very-rare',weight:0,value:25000,attune:'required',desc:'Your Constitution score increases by 2, up to a maximum of 20.'},
+  {name:'Ioun Stone (Mastery)',type:'wondrous',rarity:'legendary',weight:0,value:50000,attune:'required',desc:'+1 to proficiency bonus.'},
+  {name:'Ioun Stone (Regeneration)',type:'wondrous',rarity:'legendary',weight:0,value:50000,attune:'required',desc:'Regain 15 HP at the start of your turn if you have at least 1 HP.'},
+  {name:'Ioun Stone (Reserve)',type:'wondrous',rarity:'rare',weight:0,value:8000,attune:'required',desc:'Can store a spell of up to 3rd level. Cast the stored spell at will.'},
+  {name:'Iron Bands of Bilarro',type:'wondrous',rarity:'rare',weight:1,value:2500,attune:'none',desc:'Throw (ranged attack, 20/60 ft) at a Large or smaller creature. On hit: restrained, STR DC 20 to break free. 3 uses total.'},
+  {name:'Lantern of Revealing',type:'wondrous',rarity:'uncommon',weight:2,value:5000,attune:'none',desc:'Sheds bright light 30 ft, dim 30 ft. Invisible creatures/objects in bright light become visible.'},
+  {name:'Lyre of Building',type:'wondrous',rarity:'rare',weight:2,value:13000,attune:'required',desc:'3 charges. Expend 1 to play for 30 min: up to four workers can build structures at 10× speed. Or negate damage spells targeting buildings/structures (1 charge, reaction).'},
+  {name:'Manual of Bodily Health',type:'wondrous',rarity:'very-rare',weight:5,value:27500,attune:'none',desc:'Read over 48 hrs (6 days): CON score and max increase by 2. Book then loses its magic for 100 years.'},
+  {name:'Manual of Gainful Exercise',type:'wondrous',rarity:'very-rare',weight:5,value:27500,attune:'none',desc:'Read over 48 hrs (6 days): STR score and max increase by 2. Book then loses its magic for 100 years.'},
+  {name:'Manual of Quickness of Action',type:'wondrous',rarity:'very-rare',weight:5,value:27500,attune:'none',desc:'Read over 48 hrs (6 days): DEX score and max increase by 2. Book then loses its magic for 100 years.'},
+  {name:'Medallion of Thoughts',type:'wondrous',rarity:'uncommon',weight:0,value:3000,attune:'required',desc:'3 charges. Expend 1: cast Detect Thoughts (DC 13) for 1 hr. Regains 1d3 at dawn.'},
+  {name:'Mirror of Life Trapping',type:'wondrous',rarity:'very-rare',weight:50,value:18000,attune:'none',desc:'Activate: any creature within 30 ft must succeed on DC 15 CHA save or be trapped in one of the mirror\'s 12 extradimensional cells. Release one creature as an action.'},
+  {name:'Necklace of Adaptation',type:'wondrous',rarity:'uncommon',weight:0,value:1500,attune:'required',desc:'You can breathe normally in any environment. Advantage on saves vs gases and vapors.'},
+  {name:'Necklace of Fireballs',type:'wondrous',rarity:'rare',weight:0,value:5000,attune:'none',desc:'1d6+3 beads. Hurl one or more beads (60 ft): each detonates as Fireball (DEX save DC 15, 3d6 fire damage per bead).'},
+  {name:'Necklace of Prayer Beads',type:'wondrous',rarity:'rare',weight:0,value:9800,attune:'required',desc:'Beads grant: Bless, Curing, Favor, Smiting, Summons, or Wind Walking. 1d4+2 beads. Expend a bead to cast; regains use at dawn.'},
+  {name:'Nolzur\'s Marvelous Pigments',type:'wondrous',rarity:'very-rare',weight:1,value:5000,attune:'none',desc:'Paint a 2D image on a surface. It becomes real (up to 1,000 sq ft). Can create 3D objects (up to 10,000 cu ft). 4 pots in the set.'},
+  {name:'Orb of Dragonkind',type:'wondrous',rarity:'artifact',weight:3,value:0,attune:'required',desc:'Allows control of dragons of a specific type. Cast Legend Lore, True Seeing, Dominate Monster (dragons only). Roll on ego table each day while attuned.'},
+  {name:'Pearl of Power',type:'wondrous',rarity:'uncommon',weight:0,value:6000,attune:'required',desc:'Once per day: recover one expended spell slot of 3rd level or lower.'},
+  {name:'Periapt of Health',type:'wondrous',rarity:'uncommon',weight:0,value:5000,attune:'none',desc:'You are immune to contracting any disease. If you are already diseased when you wear it, the disease\'s effects are suppressed.'},
+  {name:'Periapt of Proof against Poison',type:'wondrous',rarity:'rare',weight:0,value:5000,attune:'none',desc:'Immune to poison damage and the poisoned condition.'},
+  {name:'Periapt of Wound Closure',type:'wondrous',rarity:'uncommon',weight:0,value:5000,attune:'required',desc:'Stabilise automatically when at 0 HP. Roll twice for Hit Dice during short rest healing; take the higher result.'},
+  {name:'Philosopher\'s Stone',type:'wondrous',rarity:'legendary',weight:3,value:0,attune:'none',desc:'Can transmute metals. Over 30 days, can create an elixir of life (restores all HP, cures diseases, reverses age to 13). Turns base metals to silver or gold.'},
+  {name:'Portable Hole',type:'wondrous',rarity:'rare',weight:0,value:8000,attune:'none',desc:'Unfold on surface: 6 ft diameter, 10 ft deep extradimensional hole. Fold up to close it. Air supply inside for 10 minutes.'},
+  {name:'Ring of Spell Storing',type:'ring',rarity:'rare',weight:0,value:24000,attune:'required',desc:'Stores up to 5 levels of spells (any combination). Anyone can store or cast stored spells using the original caster\'s spell save DC and attack bonus.'},
+  {name:'Robe of Eyes',type:'wondrous',rarity:'rare',weight:4,value:30000,attune:'required',desc:'See in darkness 120 ft. Advantage on Perception checks. See invisible and on Ethereal Plane. Cannot be blinded. Cannot close your eyes or avert your gaze (daylight and Light spells can be painful).'},
+  {name:'Robe of Scintillating Colors',type:'wondrous',rarity:'very-rare',weight:4,value:5000,attune:'required',desc:'While activated: dazzling patterns (advantage on Dexterity saves), Creatures within 30 ft must succeed on DC 15 WIS save or be blinded until end of their next turn.'},
+  {name:'Robe of Stars',type:'wondrous',rarity:'very-rare',weight:4,value:60000,attune:'required',desc:'+1 to saves. Has 6 stars (regains 1d6 at dawn). Expend 1-3 stars: cast Magic Missile (1/star). While wearing: travel to Astral Plane and return at will.'},
+  {name:'Robe of the Archmagi',type:'wondrous',rarity:'legendary',weight:4,value:50000,attune:'required',desc:'Sorcerer/warlock/wizard only. AC = 15 + DEX. Advantage on saves vs spells. Resistance to spell damage. Spell save DC +2, spell attack rolls +2.'},
+  {name:'Robe of Useful Items',type:'wondrous',rarity:'uncommon',weight:4,value:1500,attune:'none',desc:'Has 2d4+4 patches. Each patch can be removed (free action) and becomes a useful item: a rowboat, iron door, dagger, 10-ft pole, 50-ft rope, sack, lantern, etc.'},
+  {name:'Rod of Absorption',type:'rod',rarity:'very-rare',weight:2,value:50000,attune:'required',desc:'As a reaction, absorb a spell directed at you and store its energy (up to 50 spell levels). Expend energy to cast spells as if you had used a spell slot of the absorbed level.'},
+  {name:'Rod of Alertness',type:'rod',rarity:'very-rare',weight:2,value:40000,attune:'required',desc:'+1 to AC and saves. Advantage on Perception checks. Once per day (action): cast Detect Evil and Good, Detect Magic, Detect Poison and Disease, and See Invisibility for 10 min simultaneously.'},
+  {name:'Rod of Lordly Might',type:'rod',rarity:'legendary',weight:2,value:50000,attune:'required',desc:'Multi-function magical weapon. Six buttons transform it into a variety of weapons including a +3 flail, +3 spear, or ladder. Rare abilities include drain life force or paralyze.'},
+  {name:'Rod of Resurrection',type:'rod',rarity:'legendary',weight:2,value:100000,attune:'required',desc:'5 charges. Expend 1: cast Heal. Expend 5: cast True Resurrection. Regains 1 charge at dawn. If all charges spent and last charge used for Resurrection, destroyed.'},
+  {name:'Rod of Rulership',type:'rod',rarity:'rare',weight:2,value:32000,attune:'required',desc:'Once per day (action): up to 300 creatures within 120 ft must succeed DC 15 WIS save or obey your commands for 8 hours.'},
+  {name:'Rod of Security',type:'rod',rarity:'very-rare',weight:2,value:50000,attune:'none',desc:'200 charges. Expend 1: transport yourself and up to 199 others to a peaceful paradise for 200 days (1 day per person). Once all 200 charges are used, it crumbles.'},
+  {name:'Rope of Climbing',type:'wondrous',rarity:'uncommon',weight:3,value:2000,attune:'none',desc:'60-ft magical rope. Command word: coils, knots, unties, or fastens itself. Can support 3,000 lb. Climb speed 10 ft using just one hand.'},
+  {name:'Rope of Entanglement',type:'wondrous',rarity:'rare',weight:3,value:4000,attune:'none',desc:'Command word: rope attempts to bind a creature within 20 ft (DEX save DC 15 or restrained). The rope can be cut (AC 20, 20 HP).'},
+  {name:'Scarab of Protection',type:'wondrous',rarity:'legendary',weight:0,value:36000,attune:'required',desc:'Advantage on saves vs spells. Immunity to necromancy spells. 12 charges. Expend 1: when reduced to 0 HP or failing a save vs death, ignore that effect instead.'},
+  {name:'Sending Stones',type:'wondrous',rarity:'uncommon',weight:0,value:4000,attune:'none',desc:'A pair of stones. Cast Sending between them once per day each. Both stones go dark after 1 hour without a reply; reset at dawn.'},
+  {name:'Slippers of Spider Climbing',type:'wondrous',rarity:'uncommon',weight:0.5,value:5000,attune:'required',desc:'Climbing speed equal to walking speed. Hands free while climbing. Cannot move on smooth, slippery surfaces.'},
+  {name:'Sphere of Annihilation',type:'wondrous',rarity:'legendary',weight:0,value:30000,attune:'none',desc:'A 2-ft diameter floating sphere of pure darkness that destroys everything it touches. Unaffected by spells. Tense mental battle to control it.'},
+  {name:'Staff of Charming',type:'staff',rarity:'rare',weight:4,value:65600,attune:'required',desc:'10 charges. Expend charges to cast: Charm Person (1), Command (1), Comprehend Languages (1). Saves vs your spells have disadvantage (for 1 charge). Regains 1d8+2 at dawn.'},
+  {name:'Staff of Fire',type:'staff',rarity:'very-rare',weight:4,value:32000,attune:'required',desc:'10 charges. Cast Burning Hands (1), Fireball (3), or Wall of Fire (4). Regains 1d6+4 at dawn. Resistance to fire damage while attuned.'},
+  {name:'Staff of Frost',type:'staff',rarity:'very-rare',weight:4,value:32000,attune:'required',desc:'10 charges. Cast Cone of Cold (5), Fog Cloud (1), Ice Storm (4), or Wall of Ice (4). Regains 1d6+4 at dawn. Resistance to cold damage.'},
+  {name:'Staff of Healing',type:'staff',rarity:'rare',weight:4,value:16000,attune:'required',desc:'10 charges. Cast Cure Wounds (1-4 charges by level), Lesser Restoration (2), or Mass Cure Wounds (5). Regains 1d6+4 at dawn.'},
+  {name:'Staff of Power',type:'staff',rarity:'very-rare',weight:4,value:95500,attune:'required',desc:'20 charges. +2 to attack/saves/checks. Cast many spells including Globe of Invulnerability (6), Fireball (5d6, 2), Lightning Bolt (5d6, 2), many others. Retributive strike if broken.'},
+  {name:'Staff of Striking',type:'staff',rarity:'very-rare',weight:4,value:71960,attune:'required',desc:'10 charges. As a magic quarterstaff (+3 to attack/damage). Expend 1-3 charges on a hit: +1d6 force damage per charge. Regains 1d6+4 at dawn.'},
+  {name:'Staff of Swarming Insects',type:'staff',rarity:'rare',weight:4,value:16000,attune:'required',desc:'10 charges. Cast Giant Insect (4) or Insect Plague (5), or create an insect cloud (1 charge, DEX save DC 17 or blinded for 1 min). Regains 1d6+4 at dawn.'},
+  {name:'Staff of the Magi',type:'staff',rarity:'legendary',weight:4,value:168000,attune:'required',desc:'50 charges. +2 to spell attack rolls. Spellcaster only. Cast many spells 1-7 charges each. Counterspell and Dispel Magic absorb charges instead. Retributive strike if broken (40d6 force damage in 30 ft area).'},
+  {name:'Staff of the Python',type:'staff',rarity:'uncommon',weight:4,value:6500,attune:'required',desc:'Throw staff as an action (60 ft). Becomes a giant constrictor snake for up to 1 min. Bonus action: command it. Bonus action: revert. If slain: destroyed.'},
+  {name:'Staff of the Woodlands',type:'staff',rarity:'rare',weight:4,value:44000,attune:'required',desc:'Druid only. +2 to spell attack rolls. 10 charges. Cast Animal Friendship (1), Awaken (5), Barkskin (2), Locate Animals or Plants (2), Speak with Animals (1), Speak with Plants (3), Wall of Thorns (6). Regains 1d6+4 at dawn.'},
+  {name:'Staff of Thunder and Lightning',type:'staff',rarity:'very-rare',weight:4,value:50000,attune:'required',desc:'+2 to attack/damage as a magic quarterstaff. 5 properties (each once per dawn): Thunder (target makes CON save DC 17 or stunned), Lightning (bolt, 9d6 lightning, DC 17 DEX), Thunder-Clap (3d6 thunder to all within 60 ft), Lightning Strike (4d6 to one target), Thunderous Boom (shockwave).'},
+  {name:'Stone of Controlling Earth Elementals',type:'wondrous',rarity:'rare',weight:5,value:3750,attune:'none',desc:'Once per day at dusk: cast Conjure Elemental to summon a 9 HD earth elemental. Lasts 1 hour.'},
+  {name:'Stone of Good Luck',type:'wondrous',rarity:'uncommon',weight:0,value:4200,attune:'required',desc:'+1 bonus to ability checks and saving throws.'},
+  {name:'Tome of Clear Thought',type:'wondrous',rarity:'very-rare',weight:5,value:27500,attune:'none',desc:'Read over 48 hrs (6 days): INT score and max increase by 2. Loses magic for 100 years.'},
+  {name:'Tome of Leadership and Influence',type:'wondrous',rarity:'very-rare',weight:5,value:27500,attune:'none',desc:'Read over 48 hrs (6 days): CHA score and max increase by 2. Loses magic for 100 years.'},
+  {name:'Tome of Understanding',type:'wondrous',rarity:'very-rare',weight:5,value:27500,attune:'none',desc:'Read over 48 hrs (6 days): WIS score and max increase by 2. Loses magic for 100 years.'},
+  {name:'Wand of Enemy Detection',type:'wand',rarity:'rare',weight:1,value:8000,attune:'required',desc:'7 charges. Expend 1: for 1 min, sense the direction of any hostile creature within 60 ft (pulse in palm when creature is nearby). Regains 1d6+1 at dawn.'},
+  {name:'Wand of Fear',type:'wand',rarity:'rare',weight:1,value:16000,attune:'required',desc:'7 charges. Expend 1: 60 ft cone, creatures must make DC 15 WIS save or be frightened of you for 1 min. Regains 1d6+1 at dawn.'},
+  {name:'Wand of Fireballs',type:'wand',rarity:'rare',weight:1,value:32000,attune:'required',desc:'7 charges. Expend 1-7: cast Fireball (3d6 + 1d6/extra charge, DC 15). Regains 1d6+1 at dawn. 5% chance of destruction on last charge.'},
+  {name:'Wand of Lightning Bolts',type:'wand',rarity:'rare',weight:1,value:32000,attune:'required',desc:'7 charges. Expend 1-7: cast Lightning Bolt (3d6 + 1d6/extra charge, DC 15). Regains 1d6+1 at dawn.'},
+  {name:'Wand of Magic Detection',type:'wand',rarity:'uncommon',weight:1,value:1500,attune:'none',desc:'3 charges. Expend 1: cast Detect Magic. Regains 1d3 at dawn.'},
+  {name:'Wand of Magic Missiles',type:'wand',rarity:'uncommon',weight:1,value:9000,attune:'none',desc:'7 charges. Expend 1-7: cast Magic Missile (3 missiles + 1/extra charge). Regains 1d6+1 at dawn.'},
+  {name:'Wand of Paralysis',type:'wand',rarity:'rare',weight:1,value:16000,attune:'required',desc:'7 charges. Expend 1: 60 ft range, creature must make DC 15 CON save or be paralyzed for 1 min (repeat save end of turn). Regains 1d6+1 at dawn.'},
+  {name:'Wand of Polymorph',type:'wand',rarity:'very-rare',weight:1,value:32000,attune:'required',desc:'7 charges. Expend 1: cast Polymorph (DC 15). Regains 1d6+1 at dawn.'},
+  {name:'Wand of Secrets',type:'wand',rarity:'uncommon',weight:1,value:1500,attune:'none',desc:'3 charges. Expend 1 (action): if a secret door or trap is within 30 ft, the wand pulses and points toward it. Regains 1d3 at dawn.'},
+  {name:'Wand of the War Mage +1',type:'wand',rarity:'uncommon',weight:1,value:1000,attune:'required',desc:'+1 bonus to spell attack rolls. Ignore half cover.'},
+  {name:'Wand of the War Mage +2',type:'wand',rarity:'rare',weight:1,value:6000,attune:'required',desc:'+2 bonus to spell attack rolls. Ignore half cover.'},
+  {name:'Wand of the War Mage +3',type:'wand',rarity:'very-rare',weight:1,value:25000,attune:'required',desc:'+3 bonus to spell attack rolls. Ignore half cover.'},
+  {name:'Wand of Web',type:'wand',rarity:'uncommon',weight:1,value:8000,attune:'required',desc:'7 charges. Expend 1: cast Web (DC 15). Regains 1d6+1 at dawn.'},
+  {name:'Wand of Wonder',type:'wand',rarity:'rare',weight:1,value:12000,attune:'required',desc:'7 charges. Expend 1: roll 1d100 and apply a random wild effect (fireball, blue bolt, flowers, stinking cloud, lightning, etc). Regains 1d6+1 at dawn.'},
+  // ── RINGS ────────────────────────────────────────────────────────
+  {name:'Ring of Animal Influence',type:'ring',rarity:'rare',weight:0,value:2500,attune:'none',desc:'3 charges. Cast Animal Friendship (1), Fear (targeting beasts only, 2), or Speak with Animals (1). Regains 1d3 at dawn.'},
+  {name:'Ring of Djinni Summoning',type:'ring',rarity:'legendary',weight:0,value:32000,attune:'required',desc:'Once per day: summon a djinn that serves you for 1 hour then departs.'},
+  {name:'Ring of Evasion',type:'ring',rarity:'rare',weight:0,value:5000,attune:'required',desc:'3 charges. Reaction when you fail a DEX save: expend 1 charge and succeed instead. Regains 1d3 at dawn.'},
+  {name:'Ring of Feather Falling',type:'ring',rarity:'rare',weight:0,value:2000,attune:'required',desc:'You fall at 60 ft/round and take no falling damage.'},
+  {name:'Ring of Free Action',type:'ring',rarity:'rare',weight:0,value:40000,attune:'required',desc:'Difficult terrain costs no extra movement. Paralyzed and restrained conditions cannot reduce your speed to 0. Immune to slowing effects.'},
+  {name:'Ring of Invisibility',type:'ring',rarity:'legendary',weight:0,value:22400,attune:'required',desc:'Turn invisible at will (action). Remains invisible until you remove the ring, attack, or cast a spell.'},
+  {name:'Ring of Jumping',type:'ring',rarity:'uncommon',weight:0,value:2500,attune:'required',desc:'Bonus action: cast Jump on yourself.'},
+  {name:'Ring of Mind Shielding',type:'ring',rarity:'uncommon',weight:0,value:16000,attune:'required',desc:'Immune to magic that reads your mind or determines if lying. Telepathic communication only with permission.'},
+  {name:'Ring of Protection',type:'ring',rarity:'rare',weight:0,value:3500,attune:'required',desc:'+1 bonus to AC and saving throws.'},
+  {name:'Ring of Regeneration',type:'ring',rarity:'very-rare',weight:0,value:5000,attune:'required',desc:'Regain 1d6 HP every 10 minutes (only when below max HP). Regrowing severed body parts after 1d6+1 days.'},
+  {name:'Ring of Resistance',type:'ring',rarity:'rare',weight:0,value:6000,attune:'required',desc:'Resistance to one damage type (determined when found).'},
+  {name:'Ring of Shooting Stars',type:'ring',rarity:'very-rare',weight:0,value:50000,attune:'required',desc:'Spark — 2 charges (2d4 lightning, 5 ft around target). Ball Lightning — 2 charges (create up to 4 orbs, each 3d8 lightning). Shooting Stars — 1-3 charges (3d4 fire each).'},
+  {name:'Ring of Spell Turning',type:'ring',rarity:'legendary',weight:0,value:30000,attune:'required',desc:'Advantage on saves vs spells targeting only you. On a natural 20, the spell is reflected back at the caster (using original DCs).'},
+  {name:'Ring of Swimming',type:'ring',rarity:'uncommon',weight:0,value:3000,attune:'none',desc:'Swimming speed of 40 ft.'},
+  {name:'Ring of Telekinesis',type:'ring',rarity:'very-rare',weight:0,value:16000,attune:'required',desc:'Cast Telekinesis at will (concentration).'},
+  {name:'Ring of the Ram',type:'ring',rarity:'rare',weight:0,value:5000,attune:'required',desc:'3 charges. Expend 1-3 charges: ranged spell attack (+5 to hit, 60 ft). 2d10 force damage per charge; pushed 5 ft per charge. Regains 1d3 at dawn.'},
+  {name:'Ring of Three Wishes',type:'ring',rarity:'legendary',weight:0,value:50000,attune:'none',desc:'Has 3 charges. Expend 1: cast Wish. Once all charges are expended, it becomes a nonmagical ring.'},
+  {name:'Ring of Truth Telling',type:'ring',rarity:'uncommon',weight:0,value:12000,attune:'required',desc:'Know when a creature within 20 ft speaks a lie.'},
+  {name:'Ring of Warmth',type:'ring',rarity:'uncommon',weight:0,value:1000,attune:'required',desc:'Resistance to cold damage. Survive temperatures as low as −50°F without harm.'},
+  {name:'Ring of Water Walking',type:'ring',rarity:'uncommon',weight:0,value:1500,attune:'none',desc:'Stand on and walk across liquid surfaces as if they were solid ground.'},
+  {name:'Ring of X-ray Vision',type:'ring',rarity:'rare',weight:0,value:25000,attune:'required',desc:'Action: X-ray vision through up to 5 ft of stone, 1 ft of common metals, or unlimited other materials. 30 ft radius, DC 15 CON save each hour or gain 1 level exhaustion.'},
+  // ── SCROLLS ──────────────────────────────────────────────────────
+  {name:'Spell Scroll (Cantrip)',type:'scroll',rarity:'common',weight:0,value:25,attune:'none',desc:'Contains a cantrip. Any class that uses that spell list can cast it. Other classes need DC 10 Arcana check.'},
+  {name:'Spell Scroll (1st level)',type:'scroll',rarity:'common',weight:0,value:75,attune:'none',desc:'Contains a 1st-level spell. Cast using your spell save DC and attack bonus. Non-class users need Arcana check DC 13.'},
+  {name:'Spell Scroll (2nd level)',type:'scroll',rarity:'uncommon',weight:0,value:150,attune:'none',desc:'Contains a 2nd-level spell. Non-class users need Arcana DC 13.'},
+  {name:'Spell Scroll (3rd level)',type:'scroll',rarity:'uncommon',weight:0,value:300,attune:'none',desc:'Contains a 3rd-level spell. Non-class users need Arcana DC 15.'},
+  {name:'Spell Scroll (4th level)',type:'scroll',rarity:'rare',weight:0,value:500,attune:'none',desc:'Contains a 4th-level spell. Non-class users need Arcana DC 15.'},
+  {name:'Spell Scroll (5th level)',type:'scroll',rarity:'rare',weight:0,value:1000,attune:'none',desc:'Contains a 5th-level spell. Non-class users need Arcana DC 17.'},
+  {name:'Spell Scroll (6th level)',type:'scroll',rarity:'very-rare',weight:0,value:5000,attune:'none',desc:'Contains a 6th-level spell. Non-class users need Arcana DC 17.'},
+  {name:'Spell Scroll (7th level)',type:'scroll',rarity:'very-rare',weight:0,value:15000,attune:'none',desc:'Contains a 7th-level spell. Non-class users need Arcana DC 19.'},
+  {name:'Spell Scroll (8th level)',type:'scroll',rarity:'very-rare',weight:0,value:25000,attune:'none',desc:'Contains an 8th-level spell. Non-class users need Arcana DC 19.'},
+  {name:'Spell Scroll (9th level)',type:'scroll',rarity:'legendary',weight:0,value:50000,attune:'none',desc:'Contains a 9th-level spell. Non-class users need Arcana DC 19.'},
+  {name:'Scroll of Protection (Aberrations)',type:'scroll',rarity:'rare',weight:0,value:180,attune:'none',desc:'Read as an action: creates a 5 ft invisible barrier around you for 5 min. Aberrations cannot cross it (unless you move into them).'},
+  {name:'Scroll of Protection (Beasts)',type:'scroll',rarity:'rare',weight:0,value:180,attune:'none',desc:'Creates a 5 ft barrier against beasts for 5 min.'},
+  {name:'Scroll of Protection (Celestials)',type:'scroll',rarity:'rare',weight:0,value:180,attune:'none',desc:'Creates a 5 ft barrier against celestials for 5 min.'},
+  {name:'Scroll of Protection (Elementals)',type:'scroll',rarity:'rare',weight:0,value:180,attune:'none',desc:'Creates a 5 ft barrier against elementals for 5 min.'},
+  {name:'Scroll of Protection (Fey)',type:'scroll',rarity:'rare',weight:0,value:180,attune:'none',desc:'Creates a 5 ft barrier against fey for 5 min.'},
+  {name:'Scroll of Protection (Fiends)',type:'scroll',rarity:'rare',weight:0,value:180,attune:'none',desc:'Creates a 5 ft barrier against fiends for 5 min.'},
+  {name:'Scroll of Protection (Plants)',type:'scroll',rarity:'rare',weight:0,value:180,attune:'none',desc:'Creates a 5 ft barrier against plant creatures for 5 min.'},
+  {name:'Scroll of Protection (Undead)',type:'scroll',rarity:'rare',weight:0,value:180,attune:'none',desc:'Creates a 5 ft barrier against undead for 5 min.'},
+  // ── GEMS & TREASURE ──────────────────────────────────────────────
+  {name:'Diamond',type:'gem',rarity:'common',weight:0,value:5000,attune:'none',desc:'Precious gem. Component for Revivify (300 gp), Raise Dead (500 gp), Resurrection (1,000 gp), True Resurrection (25,000 gp).'},
+  {name:'Ruby',type:'gem',rarity:'common',weight:0,value:5000,attune:'none',desc:'Precious gem worth 5,000 gp.'},
+  {name:'Emerald',type:'gem',rarity:'common',weight:0,value:1000,attune:'none',desc:'Precious gem worth 1,000 gp.'},
+  {name:'Sapphire',type:'gem',rarity:'common',weight:0,value:1000,attune:'none',desc:'Precious gem worth 1,000 gp.'},
+  {name:'Topaz',type:'gem',rarity:'common',weight:0,value:500,attune:'none',desc:'Semi-precious gem worth 500 gp.'},
+  {name:'Pearl',type:'gem',rarity:'common',weight:0,value:100,attune:'none',desc:'Lustrous pearl worth 100 gp. Component for Identify.'},
+  {name:'Garnet',type:'gem',rarity:'common',weight:0,value:100,attune:'none',desc:'Semi-precious gem worth 100 gp.'},
+  {name:'Amethyst',type:'gem',rarity:'common',weight:0,value:100,attune:'none',desc:'Purple semi-precious gem worth 100 gp.'},
+  {name:'Jade',type:'gem',rarity:'common',weight:0,value:100,attune:'none',desc:'Green semi-precious stone worth 100 gp.'},
+  {name:'Onyx',type:'gem',rarity:'common',weight:0,value:50,attune:'none',desc:'Black semi-precious gem worth 50 gp.'},
+  {name:'Turquoise',type:'gem',rarity:'common',weight:0,value:10,attune:'none',desc:'Blue-green semi-precious stone worth 10 gp.'},
+  {name:'Obsidian',type:'gem',rarity:'common',weight:0,value:10,attune:'none',desc:'Volcanic glass worth 10 gp.'},
+  {name:'Malachite',type:'gem',rarity:'common',weight:0,value:10,attune:'none',desc:'Green banded stone worth 10 gp.'},
+  {name:'Gold Piece',type:'treasure',rarity:'common',weight:0.02,value:1,attune:'none',desc:'Standard gold currency.'},
+  {name:'Art Object (25 gp)',type:'treasure',rarity:'common',weight:0.5,value:25,attune:'none',desc:'A small decorative art object worth 25 gp.'},
+  {name:'Art Object (250 gp)',type:'treasure',rarity:'common',weight:1,value:250,attune:'none',desc:'A notable piece of art worth 250 gp.'},
+  {name:'Art Object (750 gp)',type:'treasure',rarity:'uncommon',weight:1,value:750,attune:'none',desc:'A fine piece of art worth 750 gp.'},
+  {name:'Art Object (2500 gp)',type:'treasure',rarity:'rare',weight:1,value:2500,attune:'none',desc:'An exquisite piece of art worth 2,500 gp.'},
+  {name:'Art Object (7500 gp)',type:'treasure',rarity:'very-rare',weight:1,value:7500,attune:'none',desc:'A masterwork piece of art worth 7,500 gp.'},
+  // ── TOOLS & EQUIPMENT ────────────────────────────────────────────
+  {name:'Thieves\' Tools',type:'tool',rarity:'common',weight:1,value:25,attune:'none',desc:'Lock picks, small metal file, small mirror on a metal handle, narrow-bladed scissors, tweezers. Required for picking locks or disarming traps.'},
+  {name:'Healer\'s Kit',type:'tool',rarity:'common',weight:3,value:5,attune:'none',desc:'10 uses. Stabilize a creature at 0 HP (no Medicine check required). Does not restore HP.'},
+  {name:'Herbalism Kit',type:'tool',rarity:'common',weight:3,value:5,attune:'none',desc:'Pouches, clippers, leather gloves, mortar and pestle. Craft antitoxin or healing potions.'},
+  {name:'Disguise Kit',type:'tool',rarity:'common',weight:3,value:25,attune:'none',desc:'Cosmetics, hair dye, small props. Craft a disguise for yourself or another.'},
+  {name:'Forgery Kit',type:'tool',rarity:'common',weight:5,value:15,attune:'none',desc:'Pens, inks, seals, wax, gold/silver leaf. Forge documents.'},
+  {name:'Poisoner\'s Kit',type:'tool',rarity:'common',weight:2,value:50,attune:'none',desc:'Vials, chemicals, antitoxins. Craft poisons, identify poisons, neutralize poisons.'},
+  {name:'Navigator\'s Tools',type:'tool',rarity:'common',weight:2,value:25,attune:'none',desc:'Charts, compass, calipers, ruler, parchment, ink, quill. Navigate by sea or land.'},
+  {name:'Alchemist\'s Supplies',type:'tool',rarity:'common',weight:8,value:50,attune:'none',desc:'Vials, mortar/pestle, chemicals, flame. Identify substances, craft alchemical items.'},
+  {name:'Cartographer\'s Tools',type:'tool',rarity:'common',weight:6,value:15,attune:'none',desc:'Pen, ink, parchment, compass, calipers, ruler. Craft maps.'},
+  {name:'Jeweler\'s Tools',type:'tool',rarity:'common',weight:2,value:25,attune:'none',desc:'Pliers, tweezers, files, magnifying glass. Appraise and craft jewelry.'},
+  {name:'Smith\'s Tools',type:'tool',rarity:'common',weight:8,value:20,attune:'none',desc:'Hammers, tongs, files. Craft and repair metal objects and weapons.'},
+  {name:'Tinker\'s Tools',type:'tool',rarity:'common',weight:10,value:50,attune:'none',desc:'Tiny bellows, wrenches, screwdrivers, clamps. Repair mechanical objects, craft clockwork toys.'},
+  {name:'Woodcarver\'s Tools',type:'tool',rarity:'common',weight:5,value:1,attune:'none',desc:'Knife, gouges, small saw. Craft wooden objects and ammunition.'},
+  {name:'Climber\'s Kit',type:'misc',rarity:'common',weight:12,value:25,attune:'none',desc:'Pitons, boot tips, gloves, harness. Advantage on checks to avoid falling.'},
+  {name:'Ball Bearings (bag of 1000)',type:'misc',rarity:'common',weight:2,value:1,attune:'none',desc:'Scatter on flat surface. Creature walking over must make DC 10 DEX save or fall prone.'},
+  {name:'Caltrops (bag of 20)',type:'misc',rarity:'common',weight:2,value:1,attune:'none',desc:'Scatter over 5 sq ft. Creature walking through must make DC 15 DEX save or stop and take 1 piercing damage. Speed halved until 1 HP regained.'},
+  {name:'Crowbar',type:'misc',rarity:'common',weight:5,value:2,attune:'none',desc:'Advantage on STR checks to pry open doors, chests, and other sealed containers.'},
+  {name:'Grappling Hook',type:'misc',rarity:'common',weight:4,value:2,attune:'none',desc:'Attach rope, throw to latch onto surfaces.'},
+  {name:'Lantern (bullseye)',type:'misc',rarity:'common',weight:2,value:10,attune:'none',desc:'Burns 6 hours per flask of oil. Bright light in 60 ft cone; dim light additional 60 ft.'},
+  {name:'Lantern (hooded)',type:'misc',rarity:'common',weight:2,value:5,attune:'none',desc:'Burns 6 hours per oil flask. Bright light 30 ft, dim 30 ft. Hood reduces to dim 5 ft.'},
+  {name:'Mirror (steel)',type:'misc',rarity:'common',weight:0.5,value:5,attune:'none',desc:'A polished steel mirror. Useful for signalling, looking around corners, or repelling medusas.'},
+  {name:'Spyglass',type:'misc',rarity:'common',weight:1,value:1000,attune:'none',desc:'Objects viewed through it appear twice as large as normal.'},
+  {name:'Hourglass',type:'misc',rarity:'common',weight:1,value:25,attune:'none',desc:'Measures one hour.'},
+  {name:'Manacles',type:'misc',rarity:'common',weight:6,value:2,attune:'none',desc:'DC 20 STR check to break, DEX (Thieves\' Tools) DC 15 to escape. Can be unlocked with included key.'},
+  {name:'Antitoxin',type:'misc',rarity:'common',weight:0,value:50,attune:'none',desc:'Advantage on CON saves against poison for 1 hour.'},
+  {name:'Holy Water (flask)',type:'misc',rarity:'common',weight:1,value:25,attune:'none',desc:'Throw (20 ft). Deals 2d6 radiant damage to fiends and undead on hit.'},
+  {name:'Acid (vial)',type:'misc',rarity:'common',weight:1,value:25,attune:'none',desc:'Throw (20 ft). 2d6 acid damage on hit; 1 acid damage on miss within 5 ft of target.'},
+  {name:'Alchemist\'s Fire (flask)',type:'misc',rarity:'common',weight:1,value:50,attune:'none',desc:'Throw (20 ft). Target takes 1d4 fire damage each turn until action is used to smother.'},
+  {name:'Sovereign Glue',type:'misc',rarity:'legendary',weight:0,value:4000,attune:'none',desc:'Bonds objects permanently. Dissolves only with Universal Solvent or Oil of Etherealness. 1 ounce bonds up to 1 sq ft. Dries in 1 minute.'},
+  {name:'Universal Solvent',type:'misc',rarity:'legendary',weight:0,value:4000,attune:'none',desc:'Dissolves Sovereign Glue and any other adhesive. One application dissolves 1 sq ft.'},
+  {name:'Alchemy Jug',type:'misc',rarity:'uncommon',weight:12,value:6000,attune:'none',desc:'Pours a limited amount of specific liquid per day: water (8 gallons), beer (4 gallons), vinegar, wine, oil (1 qt), salt water (2 gallons), aqua regia, mayonnaise, honey (1 lb), poison (a few drops).'},
+  {name:'Driftglobe',type:'wondrous',rarity:'uncommon',weight:1,value:750,attune:'none',desc:'Command: glows (bright 20 ft, dim 20 ft). Second command: hovers and follows you 60 ft. Third command: cast Daylight (once per day).'},
+  {name:'Eversmoking Bottle',type:'misc',rarity:'uncommon',weight:1,value:1000,attune:'none',desc:'Unstop: billows smoke (20 ft radius, heavily obscured). Expands 10 ft per turn up to 60 ft. Dissipates in 10 minutes (or strong wind).'},
+];
+
 /* ══ STORAGE ══ */
 /* ══ DATA ACCESS — in-memory _db, Supabase is source of truth ══ */
 
@@ -8783,10 +9138,220 @@ function assignFromPool(id){
   }
 }
 function renderAddTab(){
-  const camp = getActiveCamp();
   const chars = getFullParty();
-  const el=document.getElementById('ltab-add');el.innerHTML=`<div class="card"><div class="form-row two"><div class="field"><label>Item Name</label><input id="iName" placeholder="e.g. Longsword +1"></div><div class="field"><label>Type</label><select id="iType">${Object.entries(TYPE_ICONS).map(([k,v])=>`<option value="${k}">${v} ${k}</option>`).join('')}</select></div></div><div class="form-row three"><div class="field"><label>Rarity</label><select id="iRarity"><option value="common">Common</option><option value="uncommon">Uncommon</option><option value="rare" selected>Rare</option><option value="very-rare">Very Rare</option><option value="legendary">Legendary</option><option value="artifact">Artifact</option></select></div><div class="field"><label>Qty</label><input id="iQty" type="number" value="1" min="1"></div><div class="field"><label>Weight</label><input id="iWt" type="number" value="1" min="0" step="0.5"></div></div><div class="form-row two"><div class="field"><label>Value (gp)</label><input id="iVal" type="number" value="0" min="0"></div><div class="field"><label>Attunement</label><select id="iAttune"><option value="none">None</option><option value="required">Required</option><option value="attuned">Attuned</option></select></div></div><div class="field"><label>Description</label><textarea id="iDesc" placeholder="Properties, abilities…"></textarea></div><div class="field"><label>Assign To</label><select id="iOwner"><option value="pool">Party Pool</option>${chars.map(c=>`<option value="${c.id}">${classIcon(c.classIdx)} ${c.name}</option>`).join('')}</select></div><button class="btn btn-gold" onclick="addItem()">Add to Inventory ✦</button></div><div class="divider"><span>Quick Add</span></div><div class="quick-grid">${QUICK_ITEMS.map((q,qi)=>`<div class="quick-tile" onclick="quickAdd(${qi})"><span style="font-size:22px">${TYPE_ICONS[q.type]}</span><div><div style="font-family:'Cinzel',serif;font-size:11px">${q.name}</div><div style="font-size:10px;color:var(--muted)" class="rtext-${q.rarity}">${q.rarity} · ${q.value} gp</div></div></div>`).join('')}</div>`;
+  const el = document.getElementById('ltab-add');
+  el.innerHTML = `
+  <div class="card">
+    <div class="form-row two">
+      <div class="field">
+        <label>Item Name</label>
+        <input id="iName" placeholder="Search or type a name…" autocomplete="off"
+          oninput="dndItemSearch(this.value)"
+          onfocus="dndItemSearch(this.value)"
+          onblur="setTimeout(closeDndSuggest,150)"
+          onkeydown="dndSearchKey(event)">
+      </div>
+      <div class="field"><label>Type</label>
+        <select id="iType">${Object.entries(TYPE_ICONS).map(([k,v])=>`<option value="${k}">${v} ${k}</option>`).join('')}</select>
+      </div>
+    </div>
+    <div class="form-row three">
+      <div class="field"><label>Rarity</label>
+        <select id="iRarity">
+          <option value="common">Common</option><option value="uncommon">Uncommon</option>
+          <option value="rare" selected>Rare</option><option value="very-rare">Very Rare</option>
+          <option value="legendary">Legendary</option><option value="artifact">Artifact</option>
+        </select>
+      </div>
+      <div class="field"><label>Qty</label><input id="iQty" type="number" value="1" min="1"></div>
+      <div class="field"><label>Weight</label><input id="iWt" type="number" value="0" min="0" step="0.5"></div>
+    </div>
+    <div class="form-row two">
+      <div class="field"><label>Value (gp)</label><input id="iVal" type="number" value="0" min="0"></div>
+      <div class="field"><label>Attunement</label>
+        <select id="iAttune">
+          <option value="none">None</option><option value="required">Required</option><option value="attuned">Attuned</option>
+        </select>
+      </div>
+    </div>
+    <div class="field"><label>Description</label><textarea id="iDesc" placeholder="Properties, abilities…"></textarea></div>
+    <div class="field"><label>Assign To</label>
+      <select id="iOwner">
+        <option value="pool">Party Pool</option>
+        ${chars.map(c=>`<option value="${c.id}">${classIcon(c.classIdx)} ${c.name}</option>`).join('')}
+      </select>
+    </div>
+    <button class="btn btn-gold" onclick="addItem()">Add to Inventory ✦</button>
+  </div>
+  <div class="divider"><span>Quick Add</span></div>
+  <div class="quick-grid">${QUICK_ITEMS.map((q,qi)=>`
+    <div class="quick-tile" onclick="quickAdd(${qi})">
+      <span style="font-size:22px">${TYPE_ICONS[q.type]}</span>
+      <div><div style="font-family:'Cinzel',serif;font-size:11px">${q.name}</div>
+      <div style="font-size:10px;color:var(--muted)" class="rtext-${q.rarity}">${q.rarity} · ${q.value} gp</div></div>
+    </div>`).join('')}
+  </div>`;
 }
+
+let _dndSearchIdx = -1;
+let _dndSearchResults = [];
+
+// Ensure the global suggest box exists in the DOM (outside any overflow:hidden parent)
+function _ensureSuggestBox() {
+  let box = document.getElementById('dndSuggestBox');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'dndSuggestBox';
+    box.style.cssText = [
+      'display:none',
+      'position:fixed',
+      'z-index:9999',
+      'background:var(--bg2)',
+      'border:1px solid var(--gold)',
+      'border-radius:10px',
+      'max-height:260px',
+      'overflow-y:auto',
+      'box-shadow:0 8px 32px rgba(0,0,0,0.7)',
+      'min-width:260px',
+      'max-width:400px',
+    ].join(';');
+    document.body.appendChild(box);
+  }
+  return box;
+}
+
+function dndItemSearch(q) {
+  const input = document.getElementById('iName');
+  const box = _ensureSuggestBox();
+  q = (q || '').trim().toLowerCase();
+
+  if (!q) { closeDndSuggest(); return; }
+
+  // Search by name and type
+  _dndSearchResults = DND_ITEMS.filter(i =>
+    i.name.toLowerCase().includes(q) || i.type.toLowerCase().startsWith(q)
+  ).slice(0, 14);
+
+  if (!_dndSearchResults.length) { closeDndSuggest(); return; }
+  _dndSearchIdx = -1;
+
+  const RCOLORS = {common:'#aaa',uncommon:'#1eff00',rare:'#0070dd','very-rare':'#a335ee',legendary:'#ff8000',artifact:'#e6cc80'};
+
+  box.innerHTML = _dndSearchResults.map((item, i) => {
+    const rc = RCOLORS[item.rarity] || '#aaa';
+    const attTag = item.attune !== 'none' ? ' <span style="color:var(--purple);font-size:9px">✦ attune</span>' : '';
+    return `<div class="dnd-sr" data-idx="${i}"
+      style="display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border)"
+      onmousedown="dndSelectItem(${i})">
+      <span style="font-size:18px;width:22px;text-align:center;flex-shrink:0">${TYPE_ICONS[item.type]||'📦'}</span>
+      <div style="flex:1;min-width:0;overflow:hidden">
+        <div style="font-family:'Cinzel',serif;font-size:12px;color:${rc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.name}${attTag}</div>
+        <div style="font-size:10px;color:var(--muted)">${item.rarity} ${item.type}${item.value ? ' · ' + item.value + ' gp' : ''}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Inject hover style once
+  if (!document.getElementById('_dndSS')) {
+    const s = document.createElement('style');
+    s.id = '_dndSS';
+    s.textContent = '#dndSuggestBox .dnd-sr:hover,#dndSuggestBox .dnd-sr.active{background:var(--gold-dim)}#dndSuggestBox .dnd-sr:last-child{border-bottom:none;border-radius:0 0 10px 10px}';
+    document.head.appendChild(s);
+  }
+
+  // Position under the input using getBoundingClientRect
+  if (input) {
+    const r = input.getBoundingClientRect();
+    box.style.left  = r.left + 'px';
+    box.style.top   = (r.bottom + 2) + 'px';
+    box.style.width = Math.max(r.width, 260) + 'px';
+  }
+  box.style.display = 'block';
+}
+
+function closeDndSuggest() {
+  const box = document.getElementById('dndSuggestBox');
+  if (box) box.style.display = 'none';
+  _dndSearchResults = [];
+  _dndSearchIdx = -1;
+}
+
+function dndSearchKey(e) {
+  const box = document.getElementById('dndSuggestBox');
+  if (!box || box.style.display === 'none') return;
+  const rows = box.querySelectorAll('.dnd-sr');
+  if (!rows.length) return;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _dndSearchIdx = Math.min(_dndSearchIdx + 1, rows.length - 1);
+    rows.forEach((r, i) => r.classList.toggle('active', i === _dndSearchIdx));
+    rows[_dndSearchIdx] && rows[_dndSearchIdx].scrollIntoView({block:'nearest'});
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _dndSearchIdx = Math.max(_dndSearchIdx - 1, 0);
+    rows.forEach((r, i) => r.classList.toggle('active', i === _dndSearchIdx));
+    rows[_dndSearchIdx] && rows[_dndSearchIdx].scrollIntoView({block:'nearest'});
+  } else if (e.key === 'Enter') {
+    if (_dndSearchIdx >= 0) {
+      e.preventDefault();
+      dndSelectItem(_dndSearchIdx);
+    }
+  } else if (e.key === 'Escape') {
+    closeDndSuggest();
+  }
+}
+
+function dndSelectItem(idx) {
+  const item = _dndSearchResults[idx];
+  if (!item) return;
+
+  const nameEl   = document.getElementById('iName');
+  const typeEl   = document.getElementById('iType');
+  const rarityEl = document.getElementById('iRarity');
+  const wtEl     = document.getElementById('iWt');
+  const valEl    = document.getElementById('iVal');
+  const attuneEl = document.getElementById('iAttune');
+  const descEl   = document.getElementById('iDesc');
+
+  if (nameEl)   nameEl.value   = item.name;
+  if (descEl)   descEl.value   = item.desc  || '';
+  if (wtEl)     wtEl.value     = item.weight != null ? item.weight : 0;
+  if (valEl)    valEl.value    = item.value  != null ? item.value  : 0;
+
+  // Set <select> values — must match option values exactly
+  if (typeEl) {
+    const opt = Array.from(typeEl.options).find(o => o.value === item.type);
+    if (opt) typeEl.value = item.type;
+  }
+  if (rarityEl) {
+    const opt = Array.from(rarityEl.options).find(o => o.value === item.rarity);
+    if (opt) rarityEl.value = item.rarity;
+  }
+  if (attuneEl) {
+    const opt = Array.from(attuneEl.options).find(o => o.value === item.attune);
+    if (opt) attuneEl.value = item.attune || 'none';
+  }
+
+  closeDndSuggest();
+  if (nameEl) nameEl.focus();
+
+  // Gold flash on the card
+  const card = document.querySelector('#ltab-add .card');
+  if (card) {
+    card.style.transition = 'box-shadow 0.2s';
+    card.style.boxShadow = '0 0 0 2px var(--gold)';
+    setTimeout(() => { if(card) card.style.boxShadow = ''; }, 600);
+  }
+}
+
+// Close suggest box when clicking anywhere outside it
+document.addEventListener('mousedown', function(e) {
+  const box = document.getElementById('dndSuggestBox');
+  if (box && !box.contains(e.target) && e.target.id !== 'iName') {
+    closeDndSuggest();
+  }
+});
 function addItem(){const name=(document.getElementById('iName')?.value||'').trim();if(!name){toast('Enter item name','var(--red)');return;}const item={id:'i'+Date.now(),name,type:document.getElementById('iType').value,rarity:document.getElementById('iRarity').value,qty:Math.max(1,parseInt(document.getElementById('iQty').value)||1),weight:parseFloat(document.getElementById('iWt').value)||0,value:parseFloat(document.getElementById('iVal').value)||0,attune:document.getElementById('iAttune').value,desc:(document.getElementById('iDesc').value||'').trim(),owner:document.getElementById('iOwner').value};const items=getItems();items.push(item);saveItems(items);document.getElementById('iName').value='';document.getElementById('iDesc').value='';document.getElementById('iQty').value='1';toast('✦ '+name+' added!');renderInventory();renderPool();}
 function quickAdd(qi){const q=QUICK_ITEMS[qi];const ownerEl=document.querySelector('#ltab-add #iOwner');const owner=ownerEl?.value||'pool';const item={...q,id:'i'+Date.now()+qi,owner};const items=getItems();items.push(item);saveItems(items);toast('✦ '+q.name+' added!');renderInventory();renderPool();}
 function renderPool(){const items=getItems().filter(i=>i.owner==='pool');const el=document.getElementById('ltab-pool');const totVal=items.reduce((s,i)=>s+(parseFloat(i.value)||0)*i.qty,0);let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px"><div class="inv-sum-card"><div class="isc-label">UNASSIGNED</div><div class="isc-val">${items.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val">${fmtGP(totVal)} <span style="font-size:9px;color:var(--muted)">gp</span></div></div></div>`;if(!items.length)html+=`<div class="empty-state"><div class="es-icon">🪙</div><p>Pool is empty!</p></div>`;else html+=`<div class="card">`+items.map(item=>`<div class="pool-row"><span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${item.name}${item.qty>1?(' ×'+item.qty):''}</div><div style="font-size:10px"><span class="rtext-${item.rarity}">${item.rarity}</span>${item.value>0?' · '+item.value+' gp':''}</div></div><button class="pool-assign-btn" onclick="assignFromPool('${item.id}')">Assign →</button><button class="icon-btn" style="color:var(--red)" onclick="removeItem('${item.id}')">✕</button></div>`).join('')+`</div>`;el.innerHTML=html;}
