@@ -1900,36 +1900,61 @@ function getCharLootWeapons(char){
 function getCharAC(char){
   const dex = parseInt(getMod(char.abilities&&char.abilities.DEX?char.abilities.DEX:10))||0;
   const slots = (char.equippedSlots) ? Object.values(char.equippedSlots) : [];
-  let armorAC = 0, hasArmor = false, shieldBonus = 0;
+  let armorAC = 0, hasArmor = false, shieldBonus = 0, bonusAC = 0;
 
   slots.forEach(function(item){
-    if(!item || item.type!=='armor') return;
-    var magicM = item.name.match(/\+(\d)/);
-    var magic = magicM ? parseInt(magicM[1]) : 0;
-    var n = item.name.toLowerCase();
-    if(/shield/i.test(item.name)){ shieldBonus = 2 + magic; return; }
-    // Heavy armor — no DEX
-    if(n.indexOf('plate mail')>=0||( n.indexOf('plate')>=0 && n.indexOf('half')<0 )){ armorAC=18+magic; hasArmor=true; }
-    else if(n.indexOf('splint')>=0){ armorAC=17+magic; hasArmor=true; }
-    else if(n.indexOf('ring mail')>=0){ armorAC=14+magic; hasArmor=true; }
-    else if(n.indexOf('chain mail')>=0||n.indexOf('chainmail')>=0){ armorAC=16+magic; hasArmor=true; }
-    // Medium armor — DEX max 2
-    else if(n.indexOf('half plate')>=0||n.indexOf('half-plate')>=0){ armorAC=15+Math.min(dex,2)+magic; hasArmor=true; }
-    else if(n.indexOf('breastplate')>=0){ armorAC=14+Math.min(dex,2)+magic; hasArmor=true; }
-    else if(n.indexOf('scale mail')>=0){ armorAC=14+Math.min(dex,2)+magic; hasArmor=true; }
-    else if(n.indexOf('hide')>=0){ armorAC=12+Math.min(dex,2)+magic; hasArmor=true; }
-    else if(n.indexOf('chain shirt')>=0){ armorAC=13+Math.min(dex,2)+magic; hasArmor=true; }
-    // Light armor — full DEX
-    else if(n.indexOf('studded leather')>=0){ armorAC=12+dex+magic; hasArmor=true; }
-    else if(n.indexOf('leather')>=0){ armorAC=11+dex+magic; hasArmor=true; }
-    else if(n.indexOf('padded')>=0){ armorAC=11+dex+magic; hasArmor=true; }
-    // Generic magic armor
-    else if(magic){ armorAC=10+dex+magic; hasArmor=true; }
+    if(!item) return;
+
+    // ── Armor-type items ────────────────────────────────────────────
+    if(item.type === 'armor'){
+      var magicM = item.name.match(/\+(\d)/);
+      var magic = magicM ? parseInt(magicM[1]) : 0;
+      var n = item.name.toLowerCase();
+      if(/shield/i.test(item.name)){ shieldBonus = 2 + magic; return; }
+      // Heavy armor — no DEX
+      if(n.indexOf('plate mail')>=0||(n.indexOf('plate')>=0&&n.indexOf('half')<0)){ armorAC=18+magic; hasArmor=true; }
+      else if(n.indexOf('splint')>=0){ armorAC=17+magic; hasArmor=true; }
+      else if(n.indexOf('ring mail')>=0){ armorAC=14+magic; hasArmor=true; }
+      else if(n.indexOf('chain mail')>=0||n.indexOf('chainmail')>=0){ armorAC=16+magic; hasArmor=true; }
+      // Medium armor — DEX max 2
+      else if(n.indexOf('half plate')>=0||n.indexOf('half-plate')>=0){ armorAC=15+Math.min(dex,2)+magic; hasArmor=true; }
+      else if(n.indexOf('breastplate')>=0){ armorAC=14+Math.min(dex,2)+magic; hasArmor=true; }
+      else if(n.indexOf('scale mail')>=0){ armorAC=14+Math.min(dex,2)+magic; hasArmor=true; }
+      else if(n.indexOf('hide')>=0){ armorAC=12+Math.min(dex,2)+magic; hasArmor=true; }
+      else if(n.indexOf('chain shirt')>=0){ armorAC=13+Math.min(dex,2)+magic; hasArmor=true; }
+      // Light armor — full DEX
+      else if(n.indexOf('studded leather')>=0){ armorAC=12+dex+magic; hasArmor=true; }
+      else if(n.indexOf('leather')>=0){ armorAC=11+dex+magic; hasArmor=true; }
+      else if(n.indexOf('padded')>=0){ armorAC=11+dex+magic; hasArmor=true; }
+      // Generic magic armor bonus
+      else if(magic){ armorAC=10+dex+magic; hasArmor=true; }
+      return;
+    }
+
+    // ── Non-armor items — scan name for AC bonus ────────────────────
+    // Covers: Ring of Protection, Cloak of Protection, Bracers of Defense,
+    // Ioun Stone (Insight), any custom item named with "+N AC" or "+N to AC"
+    var combined = item.name + ' ' + (item.desc||'');
+    // Match patterns like: "+1 AC", "+2 to AC", "+1 bonus to AC", "AC of 15+DEX"
+    var acMatch = combined.match(/\+\s*(\d)\s*(?:bonus\s+)?(?:to\s+)?(?:ac\b|armor class)/i);
+    if(acMatch){
+      bonusAC += parseInt(acMatch[1]);
+      return;
+    }
+    // Bracers of Defense: "15 + DEX" style — handled separately as a set-AC item
+    // Check name directly for well-known items
+    var nm = item.name.toLowerCase();
+    if(nm.indexOf('bracers of defense')>=0)                    { bonusAC += 2; return; }
+    if(nm.indexOf('ring of protection')>=0)                    { bonusAC += 1; return; }
+    if(nm.indexOf('cloak of protection')>=0)                   { bonusAC += 1; return; }
+    if(nm.indexOf('ioun stone') >= 0 && /protection/i.test(item.name)){ bonusAC += 1; return; }
+    if(nm.indexOf('amulet of protection')>=0)                  { bonusAC += 1; return; }
+    if(nm.indexOf('spellguard shield')>=0)                     { bonusAC += 2; return; } // handled as armor elsewhere but safety net
   });
 
   var baseAC = char.ac || (10 + dex);
-  if(!hasArmor) return baseAC + shieldBonus;
-  return armorAC + shieldBonus;
+  var finalBase = hasArmor ? armorAC : baseAC;
+  return finalBase + shieldBonus + bonusAC;
 }
 
 // Legacy — kept for any old call sites, now delegates to getCharAC
