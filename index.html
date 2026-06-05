@@ -53,14 +53,22 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .nav-item{font-size:7px;}
 
 /* ── Mobile: dice screen is ONE unified scroll container ── */
-#scr-dice.active {
-  display: block !important;
-  padding: 0 !important;
-  overflow-y: auto !important;
-  overflow-x: hidden;
-  height: 100%;
-  -webkit-overflow-scrolling: touch;
+@media (max-width: 767px) {
+  #scr-dice.active {
+    display: block !important;
+    padding: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden;
+    height: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+  #diceRollPanel {
+    width: 100%;
+    padding: 14px 14px 80px;
+  }
 }
+
+/* ── Dice panel base styles (all sizes) ── */
 #diceCharPanel {
   width: 100%;
   background: var(--bg2);
@@ -76,10 +84,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   padding: 12px 16px 16px;
 }
 #diceCharPanel.collapsed .dice-char-body { display: none !important; }
-#diceRollPanel {
-  width: 100%;
-  padding: 14px 14px 80px;
-}
 /* Toggle strip arrow: up when expanded (tap to hide), down when collapsed (tap to show) */
 #diceCharPanel .dice-toggle-arrow::before { content: '▲  Hide'; font-size:10px; letter-spacing:1px; }
 #diceCharPanel.collapsed .dice-toggle-arrow::before { content: '▼  Show Character'; font-size:10px; letter-spacing:1px; }
