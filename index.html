@@ -10970,7 +10970,7 @@ function renderInvBag(char, cls){
       +' ondragstart="onItemDragStart(event,\''+item.id+'\')" ondragend="onItemDragEnd(event)"'
       +' onmouseenter="showItemTooltip(event,\''+item.id+'\')" onmouseleave="hideItemTooltip()"'
       +' onclick="handleItemClick(\''+item.id+'\')"'
-      +' style="border-color:'+rc+'44;'+(isEq?'opacity:0.52':''')+'">'
+      +' style="border-color:'+rc+'44;'+(isEq?'opacity:0.52':'')+'">'
       +(isEq?'<div class="it-equipped-dot"></div>':'')
       +(magicM?'<div class="it-bonus">+'+magicM[1]+'</div>':'')
       +'<div class="it-icon">'+(TYPE_ICONS[item.type]||'📦')+'</div>'
