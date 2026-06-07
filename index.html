@@ -1025,6 +1025,27 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <div class="build-step active" id="bstep1">
       <div class="divider"><span>Choose Your Path</span></div>
       <div class="class-grid" id="classGrid"></div>
+      <div class="field" style="margin-top:4px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="bMulticlassToggle" onchange="toggleMulticlassPanel(this.checked)" style="width:16px;height:16px;accent-color:var(--gold)">
+          <span>Multiclass <span style="color:var(--muted);font-weight:normal;font-size:11px">(add a secondary class)</span></span>
+        </label>
+      </div>
+      <div id="bMulticlassPanel" style="display:none;margin-bottom:4px">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px">
+          <div style="font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;color:var(--gold);margin-bottom:10px">SECONDARY CLASS</div>
+          <div class="class-grid" id="multiclassGrid" style="margin-bottom:10px"></div>
+          <div class="field">
+            <label>Levels in secondary class</label>
+            <input id="bMulticlassLevel" type="number" value="1" min="1" max="19" placeholder="e.g. 2">
+            <div style="font-size:10px;color:var(--muted);margin-top:4px">Your primary class will be whichever has more levels. Total must not exceed 20.</div>
+          </div>
+          <div id="bMulticlassSubclassField" style="display:none" class="field">
+            <label>Secondary Subclass <span style="font-size:10px;color:var(--muted);font-weight:normal">(optional)</span></label>
+            <select id="bMulticlassSubclass"><option value="">Select…</option></select>
+          </div>
+        </div>
+      </div>
       <div class="field"><label>Character Name</label><input id="bName" placeholder="Enter name…" maxlength="30"></div>
       <div class="field"><label>Race</label>
         <select id="bRace"><option value="">Select Race…</option>
@@ -2576,7 +2597,11 @@ function _renderRosterInner(){
       <div style="flex:1;min-width:0">
         <div class="char-name">${c.name||'Unknown'}${isDefault?(' <span style="font-size:10px;color:var(--gold);font-family:\'Cinzel\',serif;letter-spacing:1px">★</span>'):''}</div>
         <div class="char-sub">${c.race||''} · ${c.background||''}${c.subclass?(' · <span style="color:var(--purple);font-size:11px">'+c.subclass.replace(/ \(.*?\)/,'')+'</span>'):''}</div>
-        <div class="char-tags"><span class="ctag">${cls.name}</span><span class="ctag">Lvl ${c.level||1}</span><span class="ctag">${c.currentHP||0}/${c.maxHP||0} HP</span></div>
+        <div class="char-tags">${
+          c.multiclasses && c.multiclasses.length > 1
+            ? c.multiclasses.map(mc=>`<span class="ctag">${CLASSES[mc.classIdx]?.name||'?'} ${mc.level}</span>`).join('')
+            : `<span class="ctag">${cls.name}</span>`
+        }<span class="ctag">Lvl ${c.level||1}</span><span class="ctag">${c.currentHP||0}/${c.maxHP||0} HP</span></div>
       </div>
       <div class="char-card-actions">
         ${!isPlayerMode()?('<button class="icon-btn" title="'+(isDefault?'Default dice char':'Set as default')+'" onclick="setDefaultChar('+c.id+');event.stopPropagation()" style="color:'+(isDefault?'var(--gold)':'var(--muted)')+';font-size:16px;opacity:'+(isDefault?1:0.5)+'">★</button>'):''}
@@ -2642,8 +2667,20 @@ function deleteChar(id){
 
 /* ══ BUILD ══ */
 let B={cls:null,scores:{STR:10,DEX:10,CON:10,INT:10,WIS:10,CHA:10},profs:new Set()};
-function showBuild(){B={cls:null,scores:{STR:10,DEX:10,CON:10,INT:10,WIS:10,CHA:10},profs:new Set()};nav('build');buildStep1();}
-function buildStep1(){document.querySelectorAll('.build-step').forEach(s=>s.classList.remove('active'));document.getElementById('bstep1').classList.add('active');renderClassGrid();updateStepDots(1);}
+function showBuild(){B={cls:null,scores:{STR:10,DEX:10,CON:10,INT:10,WIS:10,CHA:10},profs:new Set(),multiCls:null,multiLevel:1};nav('build');buildStep1();}
+function buildStep1(){
+  document.querySelectorAll('.build-step').forEach(s=>s.classList.remove('active'));
+  document.getElementById('bstep1').classList.add('active');
+  renderClassGrid();
+  renderMulticlassGrid();
+  updateStepDots(1);
+  // Reset multiclass UI
+  const tog = document.getElementById('bMulticlassToggle');
+  const panel = document.getElementById('bMulticlassPanel');
+  if(tog) tog.checked = false;
+  if(panel) panel.style.display = 'none';
+  B.multiCls = null; B.multiLevel = 1;
+}
 function buildStep2(){
   if(B.cls===null){toast('Choose a class!','var(--red)');return;}
   if(!document.getElementById('bName').value.trim()||!document.getElementById('bRace').value||!document.getElementById('bBg').value){toast('Fill in all fields!','var(--red)');return;}
@@ -2675,6 +2712,9 @@ function selectClass(i){
     sel.innerHTML='<option value="">None</option>';
   }
   if(document.getElementById('bstep2').classList.contains('active')){renderAbilityGrid();renderBuildSkills();}
+  renderMulticlassGrid();
+  // Clear secondary class if it's the same as the new primary
+  if(B.multiCls === i){ B.multiCls = null; renderMulticlassGrid(); }
 }
 function renderAbilityGrid(){
   if(B.cls===null)return;const cls=CLASSES[B.cls];
@@ -2692,6 +2732,40 @@ function renderBuildSkills(){
     </div>`).join('');
 }
 function toggleBuildProf(sk){if(B.profs.has(sk))B.profs.delete(sk);else B.profs.add(sk);renderBuildSkills();}
+
+function toggleMulticlassPanel(on){
+  document.getElementById('bMulticlassPanel').style.display = on ? '' : 'none';
+  if(!on){ B.multiCls = null; B.multiLevel = 1; renderMulticlassGrid(); }
+}
+
+function renderMulticlassGrid(){
+  const el = document.getElementById('multiclassGrid');
+  if(!el) return;
+  el.innerHTML = CLASSES.map((c,i) => {
+    const isMain = B.cls === i;
+    return `<div class="class-tile ${B.multiCls===i?'sel':''} theme-${c.theme} ${isMain?'opacity: 0.4':''}"`
+      + (isMain ? ' title="Same as primary class"' : ` onclick="selectMulticlass(${i})"`)
+      + ` style="${B.multiCls===i?('--cc:'+c.color+';--cc-dim:'+c.color+'22'):''}${isMain?';opacity:0.35;pointer-events:none':''}">`
+      + `<div class="class-tile-icon">${c.icon}</div>`
+      + `<div class="class-tile-name">${c.name}</div></div>`;
+  }).join('');
+}
+
+function selectMulticlass(i){
+  B.multiCls = i;
+  const cls = CLASSES[i];
+  renderMulticlassGrid();
+  // Populate secondary subclass dropdown
+  const field = document.getElementById('bMulticlassSubclassField');
+  const sel   = document.getElementById('bMulticlassSubclass');
+  if(cls.subclasses && cls.subclasses.length){
+    sel.innerHTML = '<option value="">Select Subclass…</option>' + cls.subclasses.map(s=>`<option>${s}</option>`).join('');
+    field.style.display = '';
+  } else {
+    field.style.display = 'none';
+    sel.innerHTML = '<option value="">None</option>';
+  }
+}
 function saveCharacter(){
   if(B.cls===null){toast('No class selected!','var(--red)');return;}
   const name=document.getElementById('bName').value.trim();
@@ -2700,13 +2774,43 @@ function saveCharacter(){
   if(!name){toast('Enter a character name!','var(--red)');return;}
   if(!race){toast('Select a race!','var(--red)');return;}
   if(!bg){toast('Select a background!','var(--red)');return;}
-  const level=Math.max(1,Math.min(20,parseInt(document.getElementById('bLevel').value)||1));
+  const totalLevel=Math.max(1,Math.min(20,parseInt(document.getElementById('bLevel').value)||1));
   const subclass=document.getElementById('bSubclass')?.value||'';
-  const cls=CLASSES[B.cls];
   const dex=parseInt(getMod(B.scores.DEX))||0;
-  const maxHP=getMaxHP(cls,level,B.scores.CON);
+
+  // Multiclass handling
+  const multiToggle = document.getElementById('bMulticlassToggle');
+  const isMulti = multiToggle?.checked && B.multiCls !== null && B.multiCls !== B.cls;
+  let multiclasses = [];
+  let primaryClassIdx = B.cls;
+  let primaryLevel = totalLevel;
+
+  if(isMulti){
+    const rawSecLevel = Math.max(1, parseInt(document.getElementById('bMulticlassLevel').value)||1);
+    const secLevel = Math.min(rawSecLevel, totalLevel - 1); // at least 1 primary level
+    const priLevel = totalLevel - secLevel;
+    const secSubclass = document.getElementById('bMulticlassSubclass')?.value||'';
+
+    multiclasses = [
+      {classIdx: B.cls, level: priLevel, subclass},
+      {classIdx: B.multiCls, level: secLevel, subclass: secSubclass}
+    ];
+
+    // Primary class = the one with more levels; tie goes to originally chosen
+    if(secLevel > priLevel){
+      primaryClassIdx = B.multiCls;
+      primaryLevel = secLevel;
+    } else {
+      primaryLevel = priLevel;
+    }
+  }
+
+  const cls=CLASSES[primaryClassIdx];
+  const maxHP=getMaxHP(cls,primaryLevel,B.scores.CON);
+
   const char={
-    id:Date.now(),name,race,background:bg,level,classIdx:B.cls,subclass,
+    id:Date.now(),name,race,background:bg,level:totalLevel,classIdx:primaryClassIdx,subclass: isMulti ? (primaryClassIdx===B.cls?subclass:(document.getElementById('bMulticlassSubclass')?.value||'')) : subclass,
+    multiclasses: isMulti ? multiclasses : [],
     abilities:{...B.scores},proficiencies:[...B.profs],
     ac:10+dex,
     maxHP,currentHP:maxHP,statuses:[],shareCode:genCode(),created:Date.now(),
@@ -2756,10 +2860,13 @@ function openSheet(id){
 }
 
 function renderSheetHero(char,cls,elId){
+  const multiStr = char.multiclasses && char.multiclasses.length > 1
+    ? char.multiclasses.map(mc => `${CLASSES[mc.classIdx]?.name||'?'} ${mc.level}`).join(' / ')
+    : null;
   document.getElementById(elId).innerHTML=`
     <div class="sheet-avatar-lg" style="--cc:${cls.color};--cc-dim:${cls.color}22">${cls.icon}</div>
     <div class="sheet-charname">${char.name}</div>
-    <div class="sheet-meta">Level ${char.level} ${char.race} ${cls.name}</div>
+    <div class="sheet-meta">Level ${char.level} ${char.race} ${multiStr || cls.name}</div>
     ${char.subclass?('<div style="font-family:\'Cinzel\',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-top:2px">'+char.subclass.replace(/ \(.*?\)/,'')+'</div>'):''}
     <div class="sheet-badges">
       <span class="sheet-badge">${char.background}</span>
@@ -11810,7 +11917,7 @@ function renderInvBag(char, cls){
       +' ondragstart="onItemDragStart(event,\''+item.id+'\')" ondragend="onItemDragEnd(event)"'
       +' onmouseenter="showItemTooltip(event,\''+item.id+'\')" onmouseleave="hideItemTooltip()"'
       +' onclick="handleItemClick(\''+item.id+'\')"'
-      +' style="border-color:'+rc+'44;'+(isEq?'opacity:0.52':'')+'">'
+      +' style="border-color:'+rc+'44;'+(isEq?'box-shadow:inset 0 0 0 2px var(--green)':'')+'">'
       +(isEq?'<div class="it-equipped-dot"></div>':'')
       +(magicM?'<div class="it-bonus">+'+magicM[1]+'</div>':'')
       +'<div class="it-icon">'+(TYPE_ICONS[item.type]||'📦')+'</div>'
