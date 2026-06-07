@@ -2689,16 +2689,22 @@ function renderBuildSkills(){
 }
 function toggleBuildProf(sk){if(B.profs.has(sk))B.profs.delete(sk);else B.profs.add(sk);renderBuildSkills();}
 function saveCharacter(){
+  if(B.cls===null){toast('No class selected!','var(--red)');return;}
   const name=document.getElementById('bName').value.trim();
   const race=document.getElementById('bRace').value;
   const bg=document.getElementById('bBg').value;
+  if(!name){toast('Enter a character name!','var(--red)');return;}
+  if(!race){toast('Select a race!','var(--red)');return;}
+  if(!bg){toast('Select a background!','var(--red)');return;}
   const level=Math.max(1,Math.min(20,parseInt(document.getElementById('bLevel').value)||1));
   const subclass=document.getElementById('bSubclass')?.value||'';
   const cls=CLASSES[B.cls];
+  const dex=parseInt(getMod(B.scores.DEX))||0;
   const maxHP=getMaxHP(cls,level,B.scores.CON);
   const char={
     id:Date.now(),name,race,background:bg,level,classIdx:B.cls,subclass,
     abilities:{...B.scores},proficiencies:[...B.profs],
+    ac:10+dex,
     maxHP,currentHP:maxHP,statuses:[],shareCode:genCode(),created:Date.now(),
     age:document.getElementById('bAge').value,height:document.getElementById('bHeight').value,
     weight:document.getElementById('bWeight').value,eyes:document.getElementById('bEyes').value,
