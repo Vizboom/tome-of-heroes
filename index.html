@@ -1319,7 +1319,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     </button>
 
     <div style="margin-top:24px;width:100%;max-width:280px">
-      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;text-align:left">CLAUDE API KEY <span style="color:var(--muted);font-style:italic;font-family:'Crimson Pro',serif;letter-spacing:0">(for 🤖 AI imports)</span></div>
+      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;text-align:left">CLAUDE API KEY <span style="color:var(--muted);font-style:italic;font-family:'Crimson Pro',serif;letter-spacing:0">(DM sets once — shared with all players)</span></div>
       <input id="claudeApiKeyInput" type="password" placeholder="sk-ant-api03-…"
         style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace"
         oninput="saveClaudeApiKey(this.value)" value="">
@@ -1686,8 +1686,12 @@ async function pullAll(campId){
       if(loot){ _db.items[campId]=loot.data||[]; _db.wealth[campId]=loot.wealth||{}; }
     }
     try {
-      const { data: s } = await supa.from('settings').select('value').eq('key','claude_api_key').single();
-      if(s?.value) localStorage.setItem('toh_claude_key', s.value);
+      const gid = getGroupId();
+      if(gid){
+        const rowKey = 'claude_key_' + gid;
+        const { data: s } = await supa.from('settings').select('value').eq('key', rowKey).single();
+        if(s?.value) localStorage.setItem('toh_claude_key', s.value);
+      }
     } catch(e){}
     syncIndicator('live');
     return true;
@@ -1857,7 +1861,7 @@ const CONDITIONS=[
   {id:'blessed',n:'Blessed',i:'✨',c:'#d4ac0d',force:'advantage',d:'Add 1d4 to attack rolls and saving throws.'},
   {id:'bardic',n:'Bardic Insp.',i:'🎶',c:'#8e44ad',bonus:'+d6',d:'Add a d6 to one attack, ability check, or save.'},
   {id:'guidance',n:'Guidance',i:'🌟',c:'#2980b9',bonus:'+d4',d:'Add 1d4 to one ability check.'},
-  {id:'raging',n:'Raging',i:'🔥',c:'#c0392b',bonus:'+2',d:'Strength attacks +2. Resistance to physical damage.'},
+  {id:'raging',n:'Raging',i:'🔥',c:'#c0392b',bonus:'+2',damageOnly:true,d:'Strength attacks deal +2 damage. Resistance to bludgeoning, piercing, and slashing damage.'},
   {id:'hexed',n:'Hex',i:'🔮',c:'#6c3483',bonus:'+d6',d:'Warlock Hex: +1d6 necrotic on attacks vs target.'},
   {id:'hunters_mark',n:"Hunter's Mark",i:'🏹',c:'#27ae60',bonus:'+d6',d:"+1d6 on attacks vs marked target."},
   {id:'hasted',n:'Hasted',i:'⚡',c:'#d4ac0d',d:'+2 AC, advantage on DEX saves, extra action.'},
@@ -2505,7 +2509,7 @@ function nav(id){
     if(id==='party'){partyTab('initiative');}
     if(id==='modegate'){
       const keyInput = document.getElementById('claudeApiKeyInput');
-      if(keyInput) keyInput.value = getClaudeApiKey();
+      if(keyInput) getClaudeApiKey().then(k=>{ keyInput.value = k||''; });
       _showGate();
     }
     if(id==='loot'){lootTab('inventory');}
@@ -3885,25 +3889,37 @@ function applyDesktopSplit(){}
 async function saveClaudeApiKey(val){
   const trimmed = val.trim();
   localStorage.setItem('toh_claude_key', trimmed);
-  // Sync to Supabase so all group members get it
+  // Remove old unscoped Supabase entry if it exists (migration)
+  if(_online){
+    try { await supa.from('settings').delete().eq('key','claude_api_key'); } catch(e){}
+  }
+  // Sync to Supabase using group-scoped key so other groups can't read it
   if(trimmed && _online){
     try {
-      await supa.from('settings').upsert({ key:'claude_api_key', value:trimmed }, { onConflict:'key' });
+      const gid = getGroupId() || await ensureGroupId();
+      if(gid){
+        const rowKey = 'claude_key_' + gid;
+        await supa.from('settings').upsert({ key: rowKey, value: trimmed }, { onConflict: 'key' });
+      }
     } catch(e){ console.warn('Could not save API key to Supabase:', e); }
   }
 }
 
 async function getClaudeApiKey(){
-  // Check local first (fast path)
+  // Fast path — already cached locally
   const local = localStorage.getItem('toh_claude_key');
   if(local) return local;
-  // Fall back to Supabase (players who never set it locally)
+  // Fetch from Supabase using group-scoped key
   if(_online){
     try {
-      const { data } = await supa.from('settings').select('value').eq('key','claude_api_key').single();
-      if(data?.value){
-        localStorage.setItem('toh_claude_key', data.value); // cache locally
-        return data.value;
+      const gid = getGroupId();
+      if(gid){
+        const rowKey = 'claude_key_' + gid;
+        const { data } = await supa.from('settings').select('value').eq('key', rowKey).single();
+        if(data?.value){
+          localStorage.setItem('toh_claude_key', data.value);
+          return data.value;
+        }
       }
     } catch(e){}
   }
@@ -3913,7 +3929,7 @@ async function getClaudeApiKey(){
 // Helper for all Claude API calls — adds required headers
 async function callClaude(body){
   const key = await getClaudeApiKey();
-  if(!key) throw new Error('No API key set — tap ⚙ → enter your Claude API key');
+  if(!key) throw new Error('No API key configured — ask your DM to enter the Claude API key in ⚙ Settings');
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -8786,10 +8802,11 @@ function doRollLabelled(label, mod){
     kept=em==='advantage'?Math.max(r1,r2):Math.min(r1,r2);
     dropped=em==='advantage'?Math.min(r1,r2):Math.max(r1,r2);
   } else { kept=r1; }
-  let bonusTotal=0, bonusBreak=[];
+  let bonusTotal=0, bonusBreak=[], damageNotes=[];
   for(const id of diceState.activeConds){
     const c=CONDITIONS.find(x=>x.id===id);
     if(!c?.bonus) continue;
+    if(c.damageOnly){ damageNotes.push(`${c.n}: ${c.bonus} dmg`); continue; }
     if(c.bonus.startsWith('+d')){const sides=parseInt(c.bonus.slice(2));const rolled=Math.ceil(Math.random()*sides);bonusTotal+=rolled;bonusBreak.push(`${c.n}:+${rolled}`);}
     else if(c.bonus.startsWith('+')){const v=parseInt(c.bonus.slice(1))||0;bonusTotal+=v;bonusBreak.push(`${c.n}:+${v}`);}
   }
@@ -8831,10 +8848,10 @@ function toggleCond(id){if(diceState.activeConds.has(id))diceState.activeConds.d
 function renderCondGrid(){const el=document.getElementById('condGrid');if(!el)return;el.innerHTML=CONDITIONS.map(c=>`<div class="cond-chip ${diceState.activeConds.has(c.id)?'con-active':''}" style="--chip-c:${c.c}" onclick="toggleCond('${c.id}')"><span class="ci" style="font-size:18px">${c.i}</span><span class="cn">${c.n}</span></div>`).join('');}
 function renderActiveConds(){const el=document.getElementById('activeConds');if(!el)return;if(!diceState.activeConds.size){el.innerHTML='';return;}el.innerHTML=[...diceState.activeConds].map(id=>{const c=CONDITIONS.find(x=>x.id===id);if(!c)return'';return`<span class="cond-tag" style="--chip-c:${c.c}">${c.i} ${c.n}<span class="cond-rm" onclick="toggleCond('${c.id}')">✕</span></span>`;}).join('');}
 function renderCondEffects(){const el=document.getElementById('condEffects');const div=document.getElementById('condEffectsDivider');if(!el||!div)return;if(!diceState.activeConds.size){el.innerHTML='';div.style.display='none';return;}div.style.display='flex';el.innerHTML=[...diceState.activeConds].map(id=>{const c=CONDITIONS.find(x=>x.id===id);if(!c)return'';const fl=c.force?('<span style="color:'+c.force==='advantage'?'var(--green)':'var(--red)'+';">'+c.force==='advantage'?'↑ Advantage':'↓ Disadvantage'+'</span> · '):'';const bl=c.bonus?('<span style="color:var(--gold)">Bonus: '+c.bonus+'</span> · '):'';return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 13px;margin-bottom:7px;"><div style="font-family:'Cinzel',serif;font-size:10px;color:${c.c};letter-spacing:0.5px;margin-bottom:4px">${c.i} ${c.n}</div><div style="font-size:12px;color:var(--muted);font-style:italic;margin-bottom:4px">${c.d}</div><div style="font-size:10px">${fl}${bl}</div></div>`;}).join('');}
-function doRoll(){const _pendingLabel=(document.getElementById('rollDesc')?.textContent||'').replace(/\s*\(.*\)$/,'').trim()||null;if(document.getElementById('rollDesc'))document.getElementById('rollDesc').textContent='rolling 1d20';const mod=parseInt(document.getElementById('dMod')?.value)||0;const em=getEffMode();const d=diceState.die;const r1=Math.ceil(Math.random()*d);let r2=null,kept,dropped;if(em!=='normal'){r2=Math.ceil(Math.random()*d);kept=em==='advantage'?Math.max(r1,r2):Math.min(r1,r2);dropped=em==='advantage'?Math.min(r1,r2):Math.max(r1,r2);}else{kept=r1;}let bonusTotal=0,bonusBreak=[];for(const id of diceState.activeConds){const c=CONDITIONS.find(x=>x.id===id);if(!c?.bonus)continue;if(c.bonus.startsWith('+d')){const sides=parseInt(c.bonus.slice(2));const rolled=Math.ceil(Math.random()*sides);bonusTotal+=rolled;bonusBreak.push(`${c.n}:+${rolled}`);}else if(c.bonus.startsWith('+')){const v=parseInt(c.bonus.slice(1))||0;bonusTotal+=v;bonusBreak.push(`${c.n}:+${v}`);}}
+function doRoll(){const _pendingLabel=(document.getElementById('rollDesc')?.textContent||'').replace(/\s*\(.*\)$/,'').trim()||null;if(document.getElementById('rollDesc'))document.getElementById('rollDesc').textContent='rolling 1d20';const mod=parseInt(document.getElementById('dMod')?.value)||0;const em=getEffMode();const d=diceState.die;const r1=Math.ceil(Math.random()*d);let r2=null,kept,dropped;if(em!=='normal'){r2=Math.ceil(Math.random()*d);kept=em==='advantage'?Math.max(r1,r2):Math.min(r1,r2);dropped=em==='advantage'?Math.min(r1,r2):Math.max(r1,r2);}else{kept=r1;}let bonusTotal=0,bonusBreak=[],dmgNotes=[];for(const id of diceState.activeConds){const c=CONDITIONS.find(x=>x.id===id);if(!c?.bonus)continue;if(c.damageOnly){dmgNotes.push(`${c.n}:${c.bonus} dmg`);continue;}if(c.bonus.startsWith('+d')){const sides=parseInt(c.bonus.slice(2));const rolled=Math.ceil(Math.random()*sides);bonusTotal+=rolled;bonusBreak.push(`${c.n}:+${rolled}`);}else if(c.bonus.startsWith('+')){const v=parseInt(c.bonus.slice(1))||0;bonusTotal+=v;bonusBreak.push(`${c.n}:+${v}`);}}
 const total=kept+mod+bonusTotal;const isCrit=d===20&&kept===20;const isFail=d===20&&kept===1;document.querySelectorAll('.die-btn.sel').forEach(b=>{b.classList.add('rolling');setTimeout(()=>b.classList.remove('rolling'),400);});
 let diceHTML='';if(r2!==null){const f1=em==='advantage'?(r1>=r2?'kept':'dropped'):(r1<=r2?'kept':'dropped');const f2=f1==='kept'?'dropped':'kept';const c1=f1==='kept'&&isCrit?'crit':f1==='kept'&&isFail?'fail':f1;const c2=f2==='kept'&&isCrit?'crit':f2==='kept'&&isFail?'fail':f2;diceHTML=`<div class="die-face ${c1}"><span style="font-size:9px">d${d}</span><span class="dv">${r1}</span></div><span style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted)">${em==='advantage'?'keep↑':'keep↓'}</span><div class="die-face ${c2}"><span style="font-size:9px">d${d}</span><span class="dv">${r2}</span></div>`;}else{const cls=isCrit?'crit':isFail?'fail':'kept';diceHTML=`<div class="die-face ${cls}"><span style="font-size:9px">d${d}</span><span class="dv">${kept}</span></div>`;}
-const numColor=isCrit?'var(--green)':isFail?'var(--red)':'var(--gold)';let breakdown=`d${d}: ${kept}`;if(mod!==0)breakdown+=(mod>0?' + '+mod:' − '+Math.abs(mod));if(bonusBreak.length)breakdown+=' + '+bonusBreak.join(', ');if(em!=='normal')breakdown+=` (${em})`;const verdict=isCrit?`<span style="background:rgba(39,174,96,0.15);color:var(--green);border:1px solid var(--green);border-radius:12px;padding:4px 14px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px">✦ CRITICAL HIT ✦</span>`:isFail?('<span style="background:rgba(192,57,43,0.15);color:var(--red);border:1px solid var(--red);border-radius:12px;padding:4px 14px;font-family:\'Cinzel\',serif;font-size:11px;letter-spacing:1px">💀 CRITICAL FAIL</span>'):'';
+const numColor=isCrit?'var(--green)':isFail?'var(--red)':'var(--gold)';let breakdown=`d${d}: ${kept}`;if(mod!==0)breakdown+=(mod>0?' + '+mod:' − '+Math.abs(mod));if(bonusBreak.length)breakdown+=' + '+bonusBreak.join(', ');if(em!=='normal')breakdown+=` (${em})`;if(dmgNotes.length)breakdown+=` · ${dmgNotes.join(', ')}`;const verdict=isCrit?`<span style="background:rgba(39,174,96,0.15);color:var(--green);border:1px solid var(--green);border-radius:12px;padding:4px 14px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px">✦ CRITICAL HIT ✦</span>`:isFail?('<span style="background:rgba(192,57,43,0.15);color:var(--red);border:1px solid var(--red);border-radius:12px;padding:4px 14px;font-family:\'Cinzel\',serif;font-size:11px;letter-spacing:1px">💀 CRITICAL FAIL</span>'):'';
 const el=document.getElementById('rollResult');el.style.display='block';el.innerHTML=`<div class="result-box fadein">${_pendingLabel?('<div style="font-family:\'Cinzel\',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;text-align:center">'+_pendingLabel+'</div>'):''}<div class="result-dice">${diceHTML}</div><div class="result-total" style="color:${numColor}">${total}</div><div class="result-break">${breakdown}</div>${verdict?('<div class="verdict">'+verdict+'</div>'):''}</div>`;
 // Scroll dice screen so roll button + result are in view
 const scrollEl2 = document.getElementById('diceRollPanel') || document.getElementById('scr-dice');
