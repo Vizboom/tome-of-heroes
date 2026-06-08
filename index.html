@@ -2637,12 +2637,12 @@ function _renderRosterInner(){
   if(!el) return;
   if(!chars.length){
     const activeCamp = getActiveCamp();
-    const hasCampFilter = !isPlayerMode() && activeCamp && activeCamp.charIds && activeCamp.charIds.length;
+    const hasCampFilter = activeCamp && activeCamp.charIds && activeCamp.charIds.length;
     el.innerHTML=`<div class="empty-state fadein"><div class="es-icon">📜</div><p>${
       hasCampFilter?('No characters assigned to <strong>'+activeCamp.name+'</strong>.<br>Assign characters in the Campaign tab.'):
       'Your tome is empty.<br>Forge your first hero below.'
     }</p></div>`;
-    if(!isPlayerMode() && !hasCampFilter)renderInstallBanner();
+    if(!hasCampFilter)renderInstallBanner();
     return;
   }
   el.innerHTML=chars.map(c=>{
@@ -2660,10 +2660,10 @@ function _renderRosterInner(){
         }<span class="ctag">Lvl ${c.level||1}</span><span class="ctag">${c.currentHP||0}/${c.maxHP||0} HP</span></div>
       </div>
       <div class="char-card-actions">
-        ${!isPlayerMode()?('<button class="icon-btn" title="'+(isDefault?'Default dice char':'Set as default')+'" onclick="setDefaultChar('+c.id+');event.stopPropagation()" style="color:'+(isDefault?'var(--gold)':'var(--muted)')+';font-size:16px;opacity:'+(isDefault?1:0.5)+'">★</button>'):''}
-        ${!isPlayerMode()?('<button class="icon-btn" title="Grant Level Up" onclick="grantLevelUp('+c.id+');event.stopPropagation()" style="color:var(--gold);font-size:14px">⬆</button>'):''}
-        ${!isPlayerMode()?('<button class="icon-btn" onclick="openShareFor('+c.id+');event.stopPropagation()" title="Share">🔗</button>'):''}
-        ${!isPlayerMode()?('<button class="icon-btn" style="color:var(--red)" onclick="deleteChar('+c.id+');event.stopPropagation()">✕</button>'):''}
+        ${'<button class="icon-btn" title="'+(isDefault?'Default dice char':'Set as default')+'" onclick="setDefaultChar('+c.id+');event.stopPropagation()" style="color:'+(isDefault?'var(--gold)':'var(--muted)')+';font-size:16px;opacity:'+(isDefault?1:0.5)+'">★</button>'}
+        ${'<button class="icon-btn" title="Grant Level Up" onclick="grantLevelUp('+c.id+');event.stopPropagation()" style="color:var(--gold);font-size:14px">⬆</button>'}
+        ${'<button class="icon-btn" onclick="openShareFor('+c.id+');event.stopPropagation()" title="Share">🔗</button>'}
+        ${'<button class="icon-btn" style="color:var(--red)" onclick="deleteChar('+c.id+');event.stopPropagation()">✕</button>'}
       </div>
     </div>`;
   }).join('');
@@ -3483,7 +3483,7 @@ function openPartySheet(id){
     <div class="sheet-badges"><span class="sheet-badge">${char.background}</span></div>`;
   // Show Level Up tab only for DM and char below max level
   const lvlBtn = document.getElementById('pstab-levelup-btn');
-  if(lvlBtn) lvlBtn.style.display = (!isPlayerMode() && char.level < 20) ? '' : 'none';
+  if(lvlBtn) lvlBtn.style.display = (char.level < 20) ? '' : 'none';
   partySheetTab('combat');
 }
 
@@ -3576,7 +3576,7 @@ function renderPartyOverview(){
     ${partyName
       ? `<div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold);flex:1">${partyName}</div>`
       : `<div style="font-family:'Cinzel',serif;font-size:13px;color:var(--muted);font-style:italic;flex:1">Unnamed Party</div>`}
-    ${!isPlayerMode()?('<button onclick="editPartyName()" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;padding:3px 8px;cursor:pointer">✏ Name</button>'):''}
+    ${'<button onclick="editPartyName()" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;padding:3px 8px;cursor:pointer">✏ Name</button>'}
   </div>
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px">
     <div class="inv-sum-card"><div class="isc-label">MEMBERS</div><div class="isc-val">${party.length}</div></div>
@@ -3688,7 +3688,7 @@ function renderShareTab(){
   if(!char){el.innerHTML=`<div class="empty-state"><div class="es-icon">🔗</div><p>Create a character first.</p></div>`;return;}
   shareForCharId=char.id;
 
-  if(isDMMode()){
+  if(true){
     // DM mode: show all party members with individual share cards
     const gid = getGroupId();
 const groupSection = gid ? (' <div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:12px;padding:14px;margin-bottom:16px;text-align:center"> <div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:6px">GROUP CODE — SHARE WITH ALL PLAYERS</div> <div style="font-family:\'Cinzel\',serif;font-size:32px;color:var(--gold);letter-spacing:6px;margin-bottom:8px">'+gid+'</div> <button class="btn btn-gold" style="margin:0;padding:6px 18px;font-size:11px" onclick="copyText(\''+gid+'\');toast(\'Group code copied!\')">Copy Group Code</button> </div>') : '';
@@ -4353,7 +4353,7 @@ function renderProgressTab(char, cls){
   const el = document.getElementById('stab-progress');
   if(!el) return;
   try {
-  const isDM = !isPlayerMode();
+  const isDM = true;
   const pb = getPB(char.level);
   const asiLevels = getASILevels(cls.name);
   const feats = char.feats || [];
@@ -8632,7 +8632,7 @@ function renderPartyHistory(){
             <div style="font-size:12px;line-height:1.5">${e.text}</div>
             <div style="font-size:10px;color:var(--muted);margin-top:2px">${timeStr}</div>
           </div>
-          ${!isPlayerMode()?('<button onclick="deletePartyEvent(\''+e.id+'\')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:0 4px;opacity:0.5;flex-shrink:0">✕</button>'):''}
+          ${'<button onclick="deletePartyEvent(\''+e.id+'\')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:0 4px;opacity:0.5;flex-shrink:0">✕</button>'}
         </div>`;
       });
     });
@@ -8659,7 +8659,7 @@ function getActiveDiceChar(){
     if(c) return c;
   }
   // Player mode: use their character
-  if(isPlayerMode()){
+  if(false){
     const id = getPlayerCharId();
     return getChars().find(c=>String(c.id)===String(id))||null;
   }
