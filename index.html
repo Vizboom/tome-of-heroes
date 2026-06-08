@@ -2417,11 +2417,18 @@ function getChars(){
   return Array.from(seen.values());
 }
 function saveChars(chars){
-  // Update in-memory cache immediately for snappy UI
+  // Find which chars were removed so we can delete them from Supabase
+  const newIds = new Set(chars.map(c=>String(c.id)));
+  const removed = _db.chars.filter(c=>!c._shared && !newIds.has(String(c.id)));
+
+  // Update in-memory cache immediately
   _db.chars = chars;
-  // Persist each char to Supabase
-  const campId = getActiveCampId();
+
+  // Persist saves for remaining chars
   chars.forEach(char => dbSaveChar(char));
+
+  // Delete removed chars from Supabase
+  removed.forEach(c => dbDeleteChar(c.id));
 }
 function saveChar(char){
   const i = _db.chars.findIndex(c=>String(c.id)===String(char.id));
