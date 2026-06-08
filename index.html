@@ -2409,7 +2409,13 @@ const S={
 };
 
 // ── Characters ──
-function getChars(){ return _db.chars||[]; }
+function getChars(){
+  const all = _db.chars||[];
+  // Deduplicate by id — last write wins
+  const seen = new Map();
+  all.forEach(c=>seen.set(String(c.id), c));
+  return Array.from(seen.values());
+}
 function saveChars(chars){
   // Update in-memory cache immediately for snappy UI
   _db.chars = chars;
@@ -2477,33 +2483,39 @@ function getVisibleChars(){
   const activeCamp = getActiveCamp();
   const campaigns = getCampaigns();
 
+  let result;
+
   // No campaigns at all — show everything
-  if(!campaigns.length) return all;
-
-  // No active campaign set — show all chars so nothing is hidden
-  if(!activeCamp) return all;
-
-  // Shared campaign: show the DM's fetched chars + player's own selected character
-  if(activeCamp._shared){
+  if(!campaigns.length){
+    result = all;
+  } else if(!activeCamp){
+    // No active campaign set — show all chars so nothing is hidden
+    result = all;
+  } else if(activeCamp._shared){
+    // Shared campaign: DM's fetched chars + player's own selected character
     const campId = activeCamp.id;
     const playerCharId = getPlayerCampChar(campId);
-    return all.filter(c=>{
+    result = all.filter(c=>{
       if(c._shared && c._sharedCampId===campId) return true;
       if(playerCharId && String(c.id)===String(playerCharId) && !c._shared) return true;
       if(c._playerInCamp===campId && !c._shared) return true;
       return false;
     });
+  } else {
+    const allAssigned = new Set();
+    campaigns.forEach(c=>(c.charIds||[]).forEach(id=>allAssigned.add(String(id))));
+    result = all.filter(c=>{
+      const sid = String(c.id);
+      const isInActiveCamp = (activeCamp?.charIds||[]).some(x=>String(x)===sid);
+      const isUnassigned = !allAssigned.has(sid);
+      return isInActiveCamp || isUnassigned;
+    });
   }
 
-  const allAssigned = new Set();
-  campaigns.forEach(c=>(c.charIds||[]).forEach(id=>allAssigned.add(String(id))));
-
-  return all.filter(c=>{
-    const sid = String(c.id);
-    const isInActiveCamp = (activeCamp?.charIds||[]).some(x=>String(x)===sid);
-    const isUnassigned = !allAssigned.has(sid);
-    return isInActiveCamp || isUnassigned;
-  });
+  // Deduplicate by id — last occurrence wins (most recently updated)
+  const seen = new Map();
+  result.forEach(c=>seen.set(String(c.id), c));
+  return Array.from(seen.values());
 }
 function getCharCampaign(charId){
   return getCampaigns().find(c=>(c.charIds||[]).some(x=>String(x)===String(charId)))||null;
@@ -2586,35 +2598,21 @@ function nav(id){
 function goBack(){const m=SCREEN_META[currentScreen];if(m?.back)nav(m.back);}
 
 /* ══ ROSTER ══ */
+let _rosterPulling = false;
 function renderRoster(){
-  // Only pull if we have no chars AND no shared campaigns loaded yet
-  const hasShared = _db.campaigns.some(c=>c._shared);
-  if(!_db.chars.length && !hasShared && getGroupId()){
-    pullAll(getActiveCampId()).then(()=>_renderRosterInner());
+  // Pull if we have no chars yet — but only once at a time
+  if(!_db.chars.length && getGroupId() && !_rosterPulling){
+    _rosterPulling = true;
+    pullAll(getActiveCampId()).then(()=>{ _rosterPulling=false; _renderRosterInner(); });
     return;
   }
   _renderRosterInner();
 }
 function _renderRosterInner(){
   try {
-  let chars=getVisibleChars();
-  const activeCamp = getActiveCamp();
-  console.log('[roster] activeCamp:', activeCamp?.name, '_shared:', activeCamp?._shared, 'charIds:', activeCamp?.charIds);
-  console.log('[roster] _db.chars:', _db.chars.length, 'total, shared:', _db.chars.filter(c=>c._shared).length, _db.chars.filter(c=>c._shared).map(c=>c.name+'(campId:'+c._sharedCampId+')').join(', '));
-  if(activeCamp?._shared){
-    const campId = activeCamp.id;
-    chars = getChars().filter(c=>c._shared && c._sharedCampId===campId);
-    console.log('[roster] shared filter by _sharedCampId='+campId+':', chars.length, chars.map(c=>c.name).join(', '));
-    if(activeCamp.charIds?.length){
-      const byId = getChars().filter(c=>activeCamp.charIds.some(x=>String(x)===String(c.id)));
-      const seen = new Set(chars.map(c=>String(c.id)));
-      byId.forEach(c=>{ if(!seen.has(String(c.id))) chars.push(c); });
-      console.log('[roster] after charIds merge:', chars.length);
-    }
-  } else if(activeCamp?.charIds?.length){
-    const campCharIds = activeCamp.charIds.map(String);
-    chars = chars.filter(c=>campCharIds.includes(String(c.id)));
-  }
+  // Use getVisibleChars() as the single source of truth — it already handles all cases and deduplicates
+  let chars = getVisibleChars();
+
   // Guard against characters with invalid classIdx
   chars = chars.filter(c => c && Number.isInteger(c.classIdx) && CLASSES[c.classIdx]);
   const el=document.getElementById('rosterList');
@@ -3505,17 +3503,17 @@ function getFullParty(){
   const camp = getActiveCamp();
   if(!camp) return [];
 
+  let result = [];
+
   // For shared campaigns: show DM's chars + this player's own character
   if(camp._shared){
     const campId = camp.id;
     const sharedChars = allChars.filter(c=>c._shared && c._sharedCampId===campId);
-    // Include chars from charIds
     if(camp.charIds?.length){
       const fromIds = allChars.filter(c=>camp.charIds.some(x=>String(x)===String(c.id)));
       const seen = new Set(sharedChars.map(c=>String(c.id)));
       fromIds.forEach(c=>{ if(!seen.has(String(c.id))){ sharedChars.push(c); seen.add(String(c.id)); } });
     }
-    // Include the player's own selected character for this campaign
     const playerCharId = getPlayerCampChar(campId);
     if(playerCharId){
       const playerChar = allChars.find(c=>String(c.id)===String(playerCharId) && !c._shared);
@@ -3523,18 +3521,18 @@ function getFullParty(){
         sharedChars.push(playerChar);
       }
     }
-    // Also pick up any local char flagged _playerInCamp for this camp
     allChars.filter(c=>c._playerInCamp===campId && !c._shared).forEach(c=>{
       if(!sharedChars.some(x=>String(x.id)===String(c.id))) sharedChars.push(c);
     });
-    return sharedChars;
+    result = sharedChars;
+  } else if(camp.charIds?.length){
+    result = allChars.filter(c=>camp.charIds.some(x=>String(x)===String(c.id)));
   }
 
-  // Own campaign: filter to assigned chars
-  if(camp.charIds?.length){
-    return allChars.filter(c=>camp.charIds.some(x=>String(x)===String(c.id)));
-  }
-  return [];
+  // Deduplicate by id
+  const seen = new Map();
+  result.forEach(c=>seen.set(String(c.id), c));
+  return Array.from(seen.values());
 }
 
 function renderPartyOverview(){
@@ -4031,9 +4029,13 @@ async function _getSharedCamps(){
 }
 async function _saveSharedCamp(entry){
   const arr = await _getSharedCamps();
-  if(!arr.find(e=>e.campId===entry.campId)) arr.push(entry);
+  if(!arr.find(e=>String(e.campId)===String(entry.campId))) arr.push(entry);
+  const key = _sharedCampsKey();
   const val = JSON.stringify(arr);
-  try { await supa.from('settings').upsert({key:_sharedCampsKey(), value:val},{onConflict:'key'}); } catch(e){}
+  try {
+    await supa.from('settings').delete().eq('key', key);
+    await supa.from('settings').insert({key, value: val});
+  } catch(e){ console.warn('_saveSharedCamp failed:', e.message); }
 }
 async function _loadSharedCamps(){
   const shared = await _getSharedCamps();
@@ -4057,31 +4059,42 @@ async function _loadSharedCamps(){
 }
 async function leaveSharedCampaign(campId){
   if(!confirm('Leave this shared campaign? You can rejoin with the code.')) return;
+
+  const sid = String(campId);
+
+  // Remove from persisted shared camps list
   const arr = await _getSharedCamps();
-  const filtered = arr.filter(e=>e.campId!==campId);
-  try { await supa.from('settings').upsert({key:_sharedCampsKey(), value:JSON.stringify(filtered)},{onConflict:'key'}); } catch(e){}
+  const filtered = arr.filter(e=>String(e.campId)!==sid);
+  const key = _sharedCampsKey();
+  const val = JSON.stringify(filtered);
+  try {
+    // Delete first, then insert — avoids onConflict issues
+    await supa.from('settings').delete().eq('key', key);
+    if(filtered.length) await supa.from('settings').insert({key, value: val});
+  } catch(e){ console.warn('leaveSharedCampaign: settings save failed', e.message); }
 
   // Remove the campaign from memory
-  _db.campaigns = _db.campaigns.filter(c=>c.id!==campId);
+  _db.campaigns = _db.campaigns.filter(c=>String(c.id)!==sid);
 
-  // Remove chars that were fetched from this shared campaign (DM's chars)
-  const ownCampIds = new Set(_db.campaigns.map(c=>c.id));
-  _db.chars = _db.chars.filter(c=>!c._shared || ownCampIds.has(c._sharedCampId));
+  // Remove DM's chars that came from this shared campaign
+  _db.chars = _db.chars.filter(c=>!c._shared || String(c._sharedCampId)!==sid);
 
-  // Clear _playerInCamp flag from own chars that were tagged to this campaign
-  _db.chars.forEach(c=>{ if(c._playerInCamp===campId) delete c._playerInCamp; });
+  // Clear _playerInCamp flag from own chars tagged to this campaign
+  _db.chars.forEach(c=>{ if(String(c._playerInCamp)===sid) delete c._playerInCamp; });
 
   // Clear stored player character selection for this campaign
   S.set(_playerCharKey(campId), null);
 
-  // Clear dice/loot default if it was pointing at a DM char from this campaign
+  // Clear dice/loot default if it now points at a missing character
   const diceChar = S.get('toh_dice_char');
   if(diceChar && !_db.chars.find(c=>String(c.id)===String(diceChar))){
     S.set('toh_dice_char', null);
+    lootOwner = 'pool';
+    charScreenId = null;
   }
 
-  // Switch active campaign away from the left one
-  if(getActiveCampId()===campId) setActiveCampId(_db.campaigns[0]?.id||null);
+  // Switch active campaign away if we just left the active one
+  if(String(getActiveCampId())===sid) setActiveCampId(_db.campaigns[0]?.id||null);
 
   renderCampList();
   renderRoster();
@@ -8442,10 +8455,16 @@ function _bootContinue(mode, nav_bar){
   if(!getActiveCampId() && _db.campaigns.length) setActiveCampId(_db.campaigns[0].id);
   if(nav_bar) nav_bar.style.display='flex';
   _applyUserBadge();
-  // Ensure codes exist then load shared camps and render
-  ensureCampJoinCodes().then(()=>_loadSharedCamps()).then(()=>renderCampList());
+  // Navigate immediately so the app feels instant
   nav('roster');
   setTimeout(applyDesktopSplit, 0);
+  // Then load shared camps in background and re-render when done
+  ensureCampJoinCodes()
+    .then(()=>_loadSharedCamps())
+    .then(()=>{
+      renderCampList();
+      renderRoster();
+    });
 }
 
 /* ── LOGIN SCREEN FUNCTIONS ── */
