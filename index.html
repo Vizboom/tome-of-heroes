@@ -1612,12 +1612,16 @@ async function dbSaveChar(char){
   const i = _db.chars.findIndex(c=>String(c.id)===String(char.id));
   if(i>=0) _db.chars[i]=char; else _db.chars.push(char);
 
-  // If this char is in a shared campaign, also write a cross-group readable copy
-  // keyed with a share_code that encodes the campaign ID — no extra columns needed
+  // If this char is in a shared campaign, also write to settings table
+  // (settings has no RLS — readable by all users, same as join codes)
   if(char._playerInCamp && char.shareCode){
-    const crossId = 'camp_'+String(char._playerInCamp)+'_'+char.shareCode;
-    const crossRow = { id: crossId, group_id: gid, share_code: crossId, data: char };
-    await supa.from('characters').upsert(crossRow, {onConflict:'id'}).catch(()=>{});
+    const settingsKey = 'player_char_'+String(char._playerInCamp)+'_'+char.shareCode;
+    try {
+      await supa.from('settings').upsert(
+        { key: settingsKey, value: JSON.stringify(char) },
+        { onConflict: 'key' }
+      );
+    } catch(e){ console.warn('cross-group char write failed:', e.message); }
   }
 }
 
@@ -4023,18 +4027,21 @@ async function _fetchCampChars(ownerGid, campId, campData){
     } catch(e){ console.warn('[fetchCampChars] strategy3 threw:', e.message); }
   }
 
-  // Strategy 4: fetch cross-group player chars written with share_code = 'camp_{campId}_{shareCode}'
-  // These are copies written by players in other groups who joined this campaign
+  // Strategy 4: fetch cross-group player chars stored in settings table
+  // Key pattern: 'player_char_{campId}_{shareCode}' — no RLS, readable by all
   try {
-    const prefix = 'camp_'+String(campId)+'_';
-    const { data: sharedRows } = await supa.from('characters').select('data')
-      .like('share_code', prefix+'%');
-    if(sharedRows?.length){
-      const playerChars = sharedRows.map(r=>r.data||r).filter(c=>c && c.id);
+    const prefix = 'player_char_'+String(campId)+'_';
+    const { data: settingsRows, error: sErr } = await supa.from('settings')
+      .select('key,value')
+      .like('key', prefix+'%');
+    if(!sErr && settingsRows?.length){
+      const playerChars = settingsRows.map(r=>{
+        try { return JSON.parse(r.value); } catch{ return null; }
+      }).filter(c=>c && c.id);
       playerChars.forEach(c=>{
         if(!allChars.some(x=>String(x.id)===String(c.id))) allChars.push(c);
       });
-      console.log('[fetchCampChars] strategy4 player chars:', playerChars.length);
+      console.log('[fetchCampChars] strategy4 (settings) player chars:', playerChars.length);
     }
   } catch(e){ console.warn('[fetchCampChars] strategy4 threw:', e.message); }
 
@@ -4250,6 +4257,11 @@ async function leaveSharedCampaign(campId){
 
   // Clear _playerInCamp flag from own chars tagged to this campaign
   _db.chars.forEach(c=>{ if(String(c._playerInCamp)===sid) delete c._playerInCamp; });
+
+  // Remove cross-group character entries from settings table
+  try {
+    await supa.from('settings').delete().like('key', 'player_char_'+sid+'_%');
+  } catch(e){ console.warn('cleanup cross-group chars failed:', e.message); }
 
   // Clear stored player character selection for this campaign
   S.set(_playerCharKey(campId), null);
