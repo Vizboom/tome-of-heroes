@@ -1672,9 +1672,13 @@ async function dbGetWealth(campId){
 }
 
 async function dbSaveItems(campId, items, wealth){
-  const gid = getGroupId()||await ensureGroupId(); if(!gid||!campId) return;
+  if(!campId) return;
   _db.items[campId] = items;
   if(wealth!==undefined) _db.wealth[campId] = wealth;
+  // For shared campaigns use the DM's group_id so loot lands on the right row
+  const camp = getCampaigns().find(c=>String(c.id)===String(campId));
+  const gid = (camp?._shared && camp?._ownerGid) ? camp._ownerGid : (getGroupId()||await ensureGroupId());
+  if(!gid) return;
   const row = { id: campId, group_id: gid, campaign_id: campId, data: items, wealth: _db.wealth[campId]||{} };
   const { error } = await supa.from('loot').upsert(row, {onConflict:'id'});
   if(error) console.warn('saveItems error:', error.message);
@@ -2585,10 +2589,15 @@ function nav(id){
       _showGate();
     }
     if(id==='loot'){
-      // Sync loot owner to default char if one is set and valid
       const _defId = S.get('toh_dice_char');
       if(_defId && getFullParty().find(c=>String(c.id)===String(_defId))) lootOwner = _defId;
-      lootTab('inventory');
+      const _lootCampId = getActiveCampId();
+      // Fetch fresh loot if not yet loaded (important for shared campaign players)
+      if(_lootCampId && !_db.items[_lootCampId]){
+        dbGetItems(_lootCampId).then(()=>lootTab('inventory'));
+      } else {
+        lootTab('inventory');
+      }
     }
     if(id==='dice') renderDiceScreen();
     if(id==='character'){
@@ -4064,6 +4073,8 @@ async function _loadSharedCamps(){
       const ci = _db.chars.findIndex(x=>String(x.id)===String(c.id));
       if(ci >= 0) _db.chars[ci] = c; else _db.chars.push(c);
     });
+    // Fetch loot for this campaign (readable by campaign_id regardless of group)
+    await dbGetItems(e.campId);
   }
 }
 async function leaveSharedCampaign(campId){
@@ -10382,11 +10393,17 @@ function deleteCampaign(id) {
 function switchCampaign(id) {
   setActiveCampId(id);
   lootOwner = 'pool';
-  // Clear dice char so it re-resolves to this campaign's characters
   S.set('toh_dice_char', null);
-  // Reset combatants so initiative resets to this campaign's party
   combatants = [];
   const camp = getCampaigns().find(c => c.id === id);
+  // Re-subscribe realtime for the new campaign (especially loot)
+  subscribeRealtime(id);
+  // Fetch fresh loot for this campaign
+  dbGetItems(id).then(()=>{
+    if(document.getElementById('ltab-inventory')?.classList.contains('active')) renderInventory();
+    if(document.getElementById('ltab-pool')?.classList.contains('active')) renderPool();
+    if(document.getElementById('ltab-wealth')?.classList.contains('active')) renderWealth();
+  });
   toast('✦ Switched to: '+(camp?.name||'campaign'));
   renderCampList();
   renderCampaignSwitchBanner();
