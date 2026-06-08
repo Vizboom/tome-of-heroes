@@ -1716,6 +1716,8 @@ async function pullAll(campId){
         }
       }
       _db.campaigns = [...validCamps, ...sharedCamps];
+      // Normalise all charIds to strings and deduplicate — fixes historic mixed-type corruption
+      _db.campaigns.forEach(c=>{ if(c.charIds) c.charIds=[...new Set(c.charIds.map(String))]; });
     } else if(!campr.error && campr.data && campr.data.length === 0 && _db.campaigns.filter(c=>!c._shared).length > 0){
       console.log('pullAll: Supabase returned 0 own campaigns — keeping existing');
     }
@@ -8227,12 +8229,14 @@ function toggleCampCharAndRefresh(campId, charId, el){
   if(ci<0) return;
   if(!camps[ci].charIds) camps[ci].charIds=[];
   const cid = String(charId);
-  const idx = camps[ci].charIds.findIndex(x=>String(x)===cid);
+  // Normalise all ids to strings and deduplicate
+  camps[ci].charIds = [...new Set(camps[ci].charIds.map(String))];
+  const idx = camps[ci].charIds.indexOf(cid);
   if(idx>=0){ camps[ci].charIds.splice(idx,1); }
   else {
     const otherCamp = camps.find(c=>c.id!==campId&&(c.charIds||[]).some(x=>String(x)===cid));
     if(otherCamp){ toast(`${getChars().find(c=>String(c.id)===cid)?.name||'Character'} is already in "${otherCamp.name}"`, 'var(--red)'); return; }
-    camps[ci].charIds.push(charId);
+    camps[ci].charIds.push(cid);
   }
   saveCampaign(camps[ci]);
   const campNow = getCampaigns();
@@ -10025,6 +10029,68 @@ function showNewCampForm() {
 
 
 
+/* ══ CAMPAIGN BACKUP EXPORT / RESTORE ══ */
+function exportCampaignBackup(campId){
+  const camp = getCampaigns().find(c=>String(c.id)===String(campId));
+  if(!camp){ toast('Campaign not found','var(--red)'); return; }
+
+  // Gather all characters assigned to this campaign
+  const charIds = new Set((camp.charIds||[]).map(String));
+  const chars = getChars().filter(c=>charIds.has(String(c.id)));
+
+  // Gather loot & wealth for this campaign
+  const items = _db.items[campId] || [];
+  const wealth = _db.wealth[campId] || {};
+
+  const backup = {
+    _toh_backup: true,
+    _version: 1,
+    _exported: new Date().toISOString(),
+    campaign: camp,
+    chars,
+    items,
+    wealth,
+  };
+
+  const json = JSON.stringify(backup, null, 2);
+  const b64 = btoa(unescape(encodeURIComponent(json)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+
+  // Try to trigger a file download
+  try {
+    const blob = new Blob([json], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeName = camp.name.replace(/[^a-z0-9]/gi,'_').toLowerCase();
+    a.href = url;
+    a.download = 'toh_backup_' + safeName + '_' + new Date().toISOString().slice(0,10) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('✦ Backup downloaded','var(--gold)');
+  } catch(e){
+    // Fallback: show copy modal with base64 code
+    _showBackupCodeModal(b64, camp.name);
+  }
+}
+
+function _showBackupCodeModal(b64, campName){
+  const existing = document.getElementById('backupModal');
+  if(existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.className = 'modal-backdrop';
+  modal.id = 'backupModal';
+  modal.innerHTML = `<div class="modal-box" style="max-width:420px">
+    <div style="font-family:'Cinzel',serif;font-size:14px;color:var(--gold);margin-bottom:6px">Backup Code — ${campName}</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:10px">Copy this code and save it somewhere safe. Paste it into Import → Code to restore.</div>
+    <textarea readonly onclick="this.select()" style="width:100%;min-height:100px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--muted);padding:8px;font-size:9px;word-break:break-all;resize:vertical;box-sizing:border-box">${b64}</textarea>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button onclick="navigator.clipboard.writeText('${b64}').then(()=>toast('Copied!','var(--gold)'))" style="flex:1;padding:8px;background:var(--gold);border:none;border-radius:8px;color:#1a1209;font-family:'Cinzel',serif;font-size:10px;cursor:pointer;letter-spacing:1px">📋 Copy Code</button>
+      <button onclick="document.getElementById('backupModal').remove()" style="padding:8px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer">Close</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
 function importCampaign() {
   const raw = (document.getElementById('campImportCode')?.value||'').trim();
   if (!raw) { toast('Paste an import code first', 'var(--red)'); return; }
@@ -10397,6 +10463,10 @@ function renderCampDetailHeader() {
         ${isActive?`<span class="camp-badge active" style="flex-shrink:0">● Active</span>`:
           `<button onclick="switchCampaign('${camp.id}')" style="padding:5px 12px;background:var(--green);border:none;border-radius:8px;color:white;font-family:'Cinzel',serif;font-size:9px;cursor:pointer;letter-spacing:1px;flex-shrink:0">Set Active</button>`}
       </div>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <button onclick="exportCampaignBackup('${camp.id}')" style="flex:1;padding:7px 10px;background:var(--surface);border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;cursor:pointer">⬇ Export Backup</button>
+        ${!camp._shared?`<button onclick="showCampImportForm()" style="flex:1;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;cursor:pointer">⬆ Import / Restore</button>`:''}
+      </div>
       ${camp.description?('<p style="font-size:13px;color:var(--muted);font-style:italic;margin-bottom:10px;line-height:1.5">'+camp.description+'</p>'):''}
       <div class="stat-strip-sm">
         <div class="stat-pill-sm"><strong>SESSIONS</strong>${(camp.sessions||[]).length}</div>
@@ -10460,7 +10530,9 @@ function toggleCampChar(campId, charId) {
   if (ci < 0) return;
   if (!camps[ci].charIds) camps[ci].charIds = [];
   const cid = String(charId);
-  const idx = camps[ci].charIds.findIndex(x => String(x) === cid);
+  // Normalise all ids to strings and deduplicate
+  camps[ci].charIds = [...new Set(camps[ci].charIds.map(String))];
+  const idx = camps[ci].charIds.indexOf(cid);
   if (idx >= 0) {
     // Removing from this campaign — allowed
     camps[ci].charIds.splice(idx, 1);
@@ -10472,7 +10544,7 @@ function toggleCampChar(campId, charId) {
       toast(`${char?.name||'Character'} is already in "${otherCamp.name}"`, 'var(--red)');
       return;
     }
-    camps[ci].charIds.push(charId);
+    camps[ci].charIds.push(cid);
   }
   saveCampaign(camps[ci]);
   renderCampDetailHeader();
