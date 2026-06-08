@@ -2871,20 +2871,38 @@ function saveCharacter(){
 
   const cls=CLASSES[primaryClassIdx];
   const maxHP=getMaxHP(cls,primaryLevel,B.scores.CON);
+  const conMod=Math.floor((B.scores.CON-10)/2);
+  const speed = cls.name==='Barbarian'||cls.name==='Monk'?35:30;
 
   const char={
-    id:Date.now(),name,race,background:bg,level:totalLevel,classIdx:primaryClassIdx,subclass: isMulti ? (primaryClassIdx===B.cls?subclass:(document.getElementById('bMulticlassSubclass')?.value||'')) : subclass,
+    id:Date.now(),
+    name, race, background:bg,
+    level:totalLevel, classIdx:primaryClassIdx,
+    subclass: isMulti ? (primaryClassIdx===B.cls?subclass:(document.getElementById('bMulticlassSubclass')?.value||'')) : subclass,
     multiclasses: isMulti ? multiclasses : [],
-    abilities:{...B.scores},proficiencies:[...B.profs],
+    abilities:{...B.scores},
+    savingThrowProfs:[...(cls.saves||[])],
+    proficiencies:[...B.profs],
+    feats:[],
+    otherProfs:'',
+    equippedSlots:{},
     ac:10+dex,
-    maxHP,currentHP:maxHP,statuses:[],shareCode:genCode(),created:Date.now(),
-    age:document.getElementById('bAge').value,height:document.getElementById('bHeight').value,
-    weight:document.getElementById('bWeight').value,eyes:document.getElementById('bEyes').value,
+    maxHP, currentHP:maxHP,
+    speed,
+    statuses:[],
+    shareCode:genCode(), created:Date.now(),
+    age:document.getElementById('bAge').value,
+    height:document.getElementById('bHeight').value,
+    weight:document.getElementById('bWeight').value,
+    eyes:document.getElementById('bEyes').value,
     hair:document.getElementById('bHair').value,
-    traits:document.getElementById('bTraits').value,ideals:document.getElementById('bIdeals').value,
-    bonds:document.getElementById('bBonds').value,flaws:document.getElementById('bFlaws').value,
-    backstory:document.getElementById('bBackstory').value,allies:document.getElementById('bAllies').value,
-    attacks:[],spells:[],equipment:[],
+    traits:document.getElementById('bTraits').value,
+    ideals:document.getElementById('bIdeals').value,
+    bonds:document.getElementById('bBonds').value,
+    flaws:document.getElementById('bFlaws').value,
+    backstory:document.getElementById('bBackstory').value,
+    allies:document.getElementById('bAllies').value,
+    attacks:[], spells:[], equipment:[],
   };
   const chars=getChars();chars.push(char);saveChars(chars);
   toast('✦ '+name+' forged!');setTimeout(()=>nav('roster'),800);
@@ -8165,6 +8183,10 @@ function _finishCharImport(char, source){
   char.attacks = char.attacks||[];
   char.equipment = char.equipment||[];
   char.feats = char.feats||[];
+  char.otherProfs = char.otherProfs||'';
+  char.equippedSlots = char.equippedSlots||{};
+  char.multiclasses = char.multiclasses||[];
+  char.speed = char.speed||30;
   char.effects = char.effects||{};
   char.customEffects = char.customEffects||[];
   char.xp = char.xp||0;
@@ -8173,6 +8195,8 @@ function _finishCharImport(char, source){
     if(char.classIdx<0) char.classIdx=0;
   }
   if(char.classIdx===undefined) char.classIdx=0;
+  const cls = CLASSES[char.classIdx]||CLASSES[0];
+  char.savingThrowProfs = char.savingThrowProfs||(cls.saves||[]);
   const chars = getChars();
   chars.push(char);
   saveChars(chars);
@@ -8514,7 +8538,29 @@ async function doLogout(){
   _showGate();
 }
 
-function importChar(){const raw=(document.getElementById('importCodeIn')?.value||'').trim();if(!raw){toast('Paste a code first','var(--red)');return;}let char=decodeChar(raw);if(!char||!char.name||char.classIdx===undefined){toast('Invalid code','var(--red)');return;}char.id=Date.now();char.shareCode=genCode();char.currentHP=char.currentHP||char.maxHP;char.statuses=char.statuses||[];char.spells=char.spells||[];char.attacks=char.attacks||[];char.equipment=char.equipment||[];const chars=getChars();chars.push(char);saveChars(chars);toast('✦ '+char.name+' imported!');renderRoster();}
+function importChar(){
+  const raw=(document.getElementById('importCodeIn')?.value||'').trim();
+  if(!raw){toast('Paste a code first','var(--red)');return;}
+  let char=decodeChar(raw);
+  if(!char||!char.name||char.classIdx===undefined){toast('Invalid code','var(--red)');return;}
+  const cls = CLASSES[char.classIdx]||CLASSES[0];
+  // Backfill any fields added after this char was originally created
+  char.id=Date.now();
+  char.shareCode=genCode();
+  char.currentHP=char.currentHP||char.maxHP;
+  char.statuses=char.statuses||[];
+  char.spells=char.spells||[];
+  char.attacks=char.attacks||[];
+  char.equipment=char.equipment||[];
+  char.feats=char.feats||[];
+  char.otherProfs=char.otherProfs||'';
+  char.equippedSlots=char.equippedSlots||{};
+  char.savingThrowProfs=char.savingThrowProfs||(cls.saves||[]);
+  char.speed=char.speed||30;
+  char.multiclasses=char.multiclasses||[];
+  const chars=getChars();chars.push(char);saveChars(chars);
+  toast('✦ '+char.name+' imported!');renderRoster();
+}
 function joinParty(){const code=(document.getElementById('partyJoinIn')?.value||'').trim().toUpperCase();if(!code){toast('Paste a party code','var(--red)');return;}S.set('toh_joined_party',code);toast('Joined party: '+code);}
 function renderPartyManage(){
   const party=getFullParty();const el=document.getElementById('ptab-manage');
