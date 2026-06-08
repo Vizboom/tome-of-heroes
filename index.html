@@ -10505,13 +10505,21 @@ function renderCampDetailHeader() {
   // For own campaigns: get from full char list
   let allChars;
   if(camp._shared){
-    allChars = getChars().filter(c=>c._sharedCampId===camp.id);
-    // Also include any charIds-matched chars not yet tagged
+    // DM's fetched chars for this campaign
+    const sharedChars = getChars().filter(c=>c._sharedCampId===camp.id);
+    const seen = new Set(sharedChars.map(c=>String(c.id)));
+    // Also any charIds-matched chars not yet tagged
     const extraIds = new Set((camp.charIds||[]).map(String));
     getChars().forEach(c=>{
-      if(extraIds.has(String(c.id)) && !allChars.find(x=>String(x.id)===String(c.id)))
-        allChars.push(c);
+      if(extraIds.has(String(c.id)) && !seen.has(String(c.id))){
+        sharedChars.push(c); seen.add(String(c.id));
+      }
     });
+    // Include the player's own locally-created characters so they can select one
+    getChars().filter(c=>!c._shared && !seen.has(String(c.id))).forEach(c=>{
+      sharedChars.push(c); seen.add(String(c.id));
+    });
+    allChars = sharedChars;
   } else {
     allChars = getChars();
   }
@@ -10552,10 +10560,22 @@ function renderCampDetailHeader() {
             campaigns.forEach(c=>(c.charIds||[]).forEach(id=>globalAssigned.add(String(id))));
 
             if(camp._shared){
-              // Shared campaign: show all loaded chars, no ghost pills, no add/remove controls
+              // Shared campaign: DM's chars shown as read-only, own chars selectable
+              const campId = camp.id;
+              const playerCharId = String(getPlayerCampChar(campId)||'');
               if(!allChars.length) return '<span style="font-size:12px;color:var(--muted);font-style:italic">No characters loaded yet</span>';
               return allChars.map(c=>{
                 const cc = classColor(c.classIdx);
+                const isOwn = !c._shared;
+                const isSelected = isOwn && String(c.id)===playerCharId;
+                if(isOwn){
+                  // Player's own char — tappable to select as campaign character
+                  return `<div onclick="confirmPlayerChar('${campId}',${c.id})" style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:2px solid ${isSelected?'var(--gold)':cc};background:${isSelected?'var(--gold-dim)':cc+'22'};cursor:pointer" title="Set as my character">
+                    <span style="font-size:14px">${classIcon(c.classIdx)}</span>
+                    <span style="font-family:'Cinzel',serif;font-size:10px;color:${isSelected?'var(--gold)':cc}">${c.name}${isSelected?' ★':''}</span>
+                  </div>`;
+                }
+                // DM's char — read only
                 return `<div style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid ${cc};background:${cc}22">
                   <span style="font-size:14px">${classIcon(c.classIdx)}</span>
                   <span style="font-family:'Cinzel',serif;font-size:10px;color:${cc}">${c.name}</span>
