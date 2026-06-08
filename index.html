@@ -1292,19 +1292,37 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <div class="empty-state"><div class="es-icon">🧙</div><p>No character selected.<br>Select a character from the Roster first.</p></div>
     </div>
     <div id="charScreenMain" style="display:none">
-      <div class="char-main-layout">
-        <div class="char-left-pane">
-          <div class="paperdoll-section">
-            <div class="paperdoll-section-label">EQUIPMENT SLOTS</div>
-            <div id="paperdollGrid" class="paperdoll-grid"></div>
-          </div>
-          <div class="inv-bag-section">
-            <div class="inv-bag-label">INVENTORY BAG <span id="invBagCount"></span></div>
-            <div id="invBagGrid" class="inv-bag-grid"></div>
-          </div>
-        </div>
-        <div class="char-right-pane" id="charStatsPane"></div>
+      <div class="tab-bar" style="position:sticky;top:0;z-index:10;background:var(--bg)">
+        <button class="tab-btn active" onclick="charTab('equip')">⚔ Equip</button>
+        <button class="tab-btn" onclick="charTab('stats')">📊 Stats</button>
+        <button class="tab-btn" onclick="charTab('progress')">⬆ Level</button>
+        <button class="tab-btn" onclick="charTab('spells')">✨ Spells</button>
+        <button class="tab-btn" onclick="charTab('profs')">📜 Profs</button>
       </div>
+      <!-- Equip tab (existing paperdoll + inventory) -->
+      <div class="tab-pane active" id="cstab-equip">
+        <div class="char-main-layout">
+          <div class="char-left-pane">
+            <div class="paperdoll-section">
+              <div class="paperdoll-section-label">EQUIPMENT SLOTS</div>
+              <div id="paperdollGrid" class="paperdoll-grid"></div>
+            </div>
+            <div class="inv-bag-section">
+              <div class="inv-bag-label">INVENTORY BAG <span id="invBagCount"></span></div>
+              <div id="invBagGrid" class="inv-bag-grid"></div>
+            </div>
+          </div>
+          <div class="char-right-pane" id="charStatsPane"></div>
+        </div>
+      </div>
+      <!-- Stats tab -->
+      <div class="tab-pane" id="cstab-stats" style="padding:16px"></div>
+      <!-- Progress / Level Up tab -->
+      <div class="tab-pane" id="cstab-progress" style="padding:16px"></div>
+      <!-- Spells tab -->
+      <div class="tab-pane" id="cstab-spells" style="padding:16px"></div>
+      <!-- Proficiencies & Feats tab -->
+      <div class="tab-pane" id="cstab-profs" style="padding:16px"></div>
     </div>
   </div>
   <!-- Drag ghost -->
@@ -2462,11 +2480,23 @@ function getVisibleChars(){
   // No campaigns at all — show everything
   if(!campaigns.length) return all;
 
-  const allAssigned = new Set();
-  campaigns.forEach(c=>(c.charIds||[]).forEach(id=>allAssigned.add(String(id))));
-
   // No active campaign set — show all chars so nothing is hidden
   if(!activeCamp) return all;
+
+  // Shared campaign: show the DM's fetched chars + player's own selected character
+  if(activeCamp._shared){
+    const campId = activeCamp.id;
+    const playerCharId = getPlayerCampChar(campId);
+    return all.filter(c=>{
+      if(c._shared && c._sharedCampId===campId) return true;
+      if(playerCharId && String(c.id)===String(playerCharId) && !c._shared) return true;
+      if(c._playerInCamp===campId && !c._shared) return true;
+      return false;
+    });
+  }
+
+  const allAssigned = new Set();
+  campaigns.forEach(c=>(c.charIds||[]).forEach(id=>allAssigned.add(String(id))));
 
   return all.filter(c=>{
     const sid = String(c.id);
@@ -2533,9 +2563,19 @@ function nav(id){
       if(keyInput) getClaudeApiKey().then(k=>{ keyInput.value = k||''; });
       _showGate();
     }
-    if(id==='loot'){lootTab('inventory');}
-    if(id==='dice')renderDiceScreen();
-    if(id==='character')renderCharacterScreen();
+    if(id==='loot'){
+      // Sync loot owner to default char if one is set and valid
+      const _defId = S.get('toh_dice_char');
+      if(_defId && getFullParty().find(c=>String(c.id)===String(_defId))) lootOwner = _defId;
+      lootTab('inventory');
+    }
+    if(id==='dice') renderDiceScreen();
+    if(id==='character'){
+      // Sync character screen to default char if one is set and valid
+      const _defId = S.get('toh_dice_char');
+      if(_defId && getFullParty().find(c=>String(c.id)===String(_defId))) charScreenId = _defId;
+      renderCharacterScreen();
+    }
   } catch(err) {
     console.error('nav render error for', id, ':', err);
   }
@@ -2620,7 +2660,15 @@ function _renderRosterInner(){
 }
 function setDefaultChar(id){
   S.set('toh_dice_char', id);
+  // Sync character tab
+  charScreenId = id;
+  // Sync loot tab to this character
+  lootOwner = id;
   renderRoster();
+  // Refresh other tabs if currently visible
+  if(document.getElementById('scr-character')?.classList.contains('active')) renderCharacterScreen();
+  if(document.getElementById('scr-dice')?.classList.contains('active')) renderDiceCharPanel();
+  if(document.getElementById('ltab-inventory')?.classList.contains('active')) renderInventory();
   toast('★ Default character set','var(--gold)');
 }
 
@@ -3457,17 +3505,28 @@ function getFullParty(){
   const camp = getActiveCamp();
   if(!camp) return [];
 
-  // For shared campaigns: show all chars that were fetched for this campaign
+  // For shared campaigns: show DM's chars + this player's own character
   if(camp._shared){
     const campId = camp.id;
     const sharedChars = allChars.filter(c=>c._shared && c._sharedCampId===campId);
-    // Also include any chars that match charIds if present
+    // Include chars from charIds
     if(camp.charIds?.length){
       const fromIds = allChars.filter(c=>camp.charIds.some(x=>String(x)===String(c.id)));
-      // Merge both lists deduped
       const seen = new Set(sharedChars.map(c=>String(c.id)));
       fromIds.forEach(c=>{ if(!seen.has(String(c.id))){ sharedChars.push(c); seen.add(String(c.id)); } });
     }
+    // Include the player's own selected character for this campaign
+    const playerCharId = getPlayerCampChar(campId);
+    if(playerCharId){
+      const playerChar = allChars.find(c=>String(c.id)===String(playerCharId) && !c._shared);
+      if(playerChar && !sharedChars.some(c=>String(c.id)===String(playerCharId))){
+        sharedChars.push(playerChar);
+      }
+    }
+    // Also pick up any local char flagged _playerInCamp for this camp
+    allChars.filter(c=>c._playerInCamp===campId && !c._shared).forEach(c=>{
+      if(!sharedChars.some(x=>String(x.id)===String(c.id))) sharedChars.push(c);
+    });
     return sharedChars;
   }
 
@@ -3903,10 +3962,66 @@ async function joinSharedCampaign(){
   hideCampForm();
   renderCampList();
   renderRoster();
+
+  // Prompt player to pick their own character if they have any
+  const myChars = _db.chars.filter(c=>!c._shared);
+  if(myChars.length){
+    _promptPlayerCharSelect(matchCampId, campData.name, myChars);
+  }
 }
 
 // Shared campaigns stored as settings row for this user
 function _sharedCampsKey(){ return 'shared_camps_'+getGroupId(); }
+
+/* ── Player character selection for shared campaigns ── */
+function _playerCharKey(campId){ return 'player_char_'+getGroupId()+'_'+campId; }
+function getPlayerCampChar(campId){ const v=localStorage.getItem(_playerCharKey(campId)); return v?parseInt(v):null; }
+function setPlayerCampChar(campId, charId){ localStorage.setItem(_playerCharKey(campId), charId); }
+
+function _promptPlayerCharSelect(campId, campName, myChars){
+  const existing = document.getElementById('playerCharModal');
+  if(existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.className = 'modal-backdrop';
+  modal.id = 'playerCharModal';
+  modal.innerHTML = `<div class="modal-box" style="max-width:380px">
+    <div style="font-family:'Cinzel',serif;font-size:14px;color:var(--gold);margin-bottom:6px">Which character are you playing?</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">In <strong>${campName}</strong> — pick the character you're playing so it appears in Dice, Party and Loot.</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+      ${myChars.map(c=>{
+        const cls = CLASSES[c.classIdx]||CLASSES[0];
+        return `<div onclick="confirmPlayerChar('${campId}',${c.id})" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;cursor:pointer" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="width:36px;height:36px;border-radius:50%;background:${cls.color}22;border:2px solid ${cls.color};display:flex;align-items:center;justify-content:center;font-size:18px">${cls.icon}</div>
+          <div>
+            <div style="font-family:'Cinzel',serif;font-size:12px;color:var(--text)">${c.name}</div>
+            <div style="font-size:10px;color:var(--muted)">Level ${c.level} ${c.race} ${cls.name}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <button onclick="document.getElementById('playerCharModal').remove()" style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:12px">Skip — I'll set this later</button>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+function confirmPlayerChar(campId, charId){
+  document.getElementById('playerCharModal')?.remove();
+  setPlayerCampChar(campId, charId);
+  // Flag this char as associated with the shared camp so it appears in party views
+  const chars = getChars();
+  const char = chars.find(c=>String(c.id)===String(charId));
+  if(char){
+    char._playerInCamp = campId;
+    saveChars(chars);
+    // Also set as default dice/loot/character screen char
+    S.set('toh_dice_char', charId);
+    charScreenId = charId;
+    lootOwner = charId;
+  }
+  toast('✦ Playing as '+( char?.name||'character'),'var(--gold)');
+  renderRoster();
+  renderCampList();
+}
 async function _getSharedCamps(){
   try {
     const { data } = await supa.from('settings').select('value').eq('key', _sharedCampsKey());
@@ -3945,12 +4060,31 @@ async function leaveSharedCampaign(campId){
   const arr = await _getSharedCamps();
   const filtered = arr.filter(e=>e.campId!==campId);
   try { await supa.from('settings').upsert({key:_sharedCampsKey(), value:JSON.stringify(filtered)},{onConflict:'key'}); } catch(e){}
+
+  // Remove the campaign from memory
   _db.campaigns = _db.campaigns.filter(c=>c.id!==campId);
-  // Remove chars that were only in this shared campaign
+
+  // Remove chars that were fetched from this shared campaign (DM's chars)
   const ownCampIds = new Set(_db.campaigns.map(c=>c.id));
   _db.chars = _db.chars.filter(c=>!c._shared || ownCampIds.has(c._sharedCampId));
+
+  // Clear _playerInCamp flag from own chars that were tagged to this campaign
+  _db.chars.forEach(c=>{ if(c._playerInCamp===campId) delete c._playerInCamp; });
+
+  // Clear stored player character selection for this campaign
+  S.set(_playerCharKey(campId), null);
+
+  // Clear dice/loot default if it was pointing at a DM char from this campaign
+  const diceChar = S.get('toh_dice_char');
+  if(diceChar && !_db.chars.find(c=>String(c.id)===String(diceChar))){
+    S.set('toh_dice_char', null);
+  }
+
+  // Switch active campaign away from the left one
   if(getActiveCampId()===campId) setActiveCampId(_db.campaigns[0]?.id||null);
+
   renderCampList();
+  renderRoster();
   toast('Left shared campaign','var(--muted)');
 }
 
@@ -11719,6 +11853,440 @@ function getCurrentCharItems(){
 }
 
 /* ── Render entry point ── */
+function charTab(t){
+  _charTab = t;
+  document.querySelectorAll('#scr-character .tab-btn').forEach((b,i)=>b.classList.toggle('active',['equip','stats','progress','spells','profs'][i]===t));
+  document.querySelectorAll('#scr-character .tab-pane').forEach(p=>p.classList.remove('active'));
+  document.getElementById('cstab-'+t)?.classList.add('active');
+  const chars = getVisibleChars();
+  const char = chars.find(c=>c.id===charScreenId)||chars[0];
+  if(!char) return;
+  const cls = CLASSES[char.classIdx];
+  if(t==='equip'){   renderPaperdoll(char,cls); renderInvBag(char,cls); renderCharStats(char,cls); initDragAndDrop(); }
+  if(t==='stats')    renderCharStatsTab(char, cls);
+  if(t==='progress') renderCharProgressTab(char, cls);
+  if(t==='spells')   renderSpellsTab(char, cls, 'cstab-spells', true);
+  if(t==='profs')    renderCharProfsTab(char, cls);
+}
+
+let _charTab = 'equip';
+
+/* ══ CHAR SCREEN — STATS TAB ══ */
+function renderCharStatsTab(char, cls){
+  const el = document.getElementById('cstab-stats');
+  if(!el) return;
+  const cc = cls.color;
+  const pb = getPB(char.level);
+  const ABILITY_LIST = ['STR','DEX','CON','INT','WIS','CHA'];
+  const ABILITY_FULL = {STR:'Strength',DEX:'Dexterity',CON:'Constitution',INT:'Intelligence',WIS:'Wisdom',CHA:'Charisma'};
+
+  let h = `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:10px">ABILITY SCORES</div>`;
+  h += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px">`;
+  ABILITY_LIST.forEach(ab=>{
+    const score = char.abilities?.[ab]||10;
+    const mod = Math.floor((score-10)/2);
+    const sign = mod>=0?'+':'';
+    h += `<div style="background:var(--surface2);border:1px solid ${cls.primary?.includes(ab)?cc:'var(--border)'};border-radius:10px;padding:10px 6px;text-align:center">
+      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);margin-bottom:4px">${ab}</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:2px">${ABILITY_FULL[ab]}</div>
+      <input type="number" min="1" max="30" value="${score}" onchange="csUpdateAbility('${char.id}','${ab}',+this.value)"
+        style="width:52px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'Cinzel',serif;font-size:18px;font-weight:700;text-align:center;padding:4px 0">
+      <div style="font-family:'Cinzel',serif;font-size:14px;color:${cls.primary?.includes(ab)?cc:'var(--text)'};margin-top:4px">${sign}${mod}</div>
+    </div>`;
+  });
+  h += `</div>`;
+
+  // Core stats editable
+  h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:10px">CORE STATS</div>`;
+  h += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px">`;
+  const dexMod = Math.floor(((char.abilities?.DEX||10)-10)/2);
+  const conMod = Math.floor(((char.abilities?.CON||10)-10)/2);
+  h += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px">
+    <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);margin-bottom:4px">ARMOUR CLASS</div>
+    <input type="number" min="1" max="30" value="${char.ac||10+dexMod}" onchange="csUpdateField('${char.id}','ac',+this.value)"
+      style="width:60px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'Cinzel',serif;font-size:20px;font-weight:700;text-align:center;padding:4px">
+  </div>`;
+  h += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px">
+    <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);margin-bottom:4px">MAX HP</div>
+    <input type="number" min="1" max="999" value="${char.maxHP||1}" onchange="csUpdateField('${char.id}','maxHP',+this.value)"
+      style="width:60px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'Cinzel',serif;font-size:20px;font-weight:700;text-align:center;padding:4px">
+  </div>`;
+  h += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px">
+    <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);margin-bottom:4px">SPEED (ft)</div>
+    <input type="number" min="0" max="200" step="5" value="${char.speed||30}" onchange="csUpdateField('${char.id}','speed',+this.value)"
+      style="width:60px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'Cinzel',serif;font-size:20px;font-weight:700;text-align:center;padding:4px">
+  </div>`;
+  h += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px">
+    <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);margin-bottom:4px">PROF BONUS</div>
+    <div style="font-family:'Cinzel',serif;font-size:20px;font-weight:700;color:${cc};text-align:center;margin-top:8px">+${pb}</div>
+  </div>`;
+  h += `</div>`;
+
+  // Saving throw proficiencies
+  h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">SAVING THROW PROFICIENCIES</div>`;
+  h += `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px">`;
+  ABILITY_LIST.forEach(ab=>{
+    const isProf = (char.savingThrowProfs||cls.saves||[]).includes(ab);
+    h += `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;background:var(--surface2);border:1px solid ${isProf?cc:'var(--border)'};border-radius:8px;padding:5px 10px">
+      <input type="checkbox" ${isProf?'checked':''} onchange="csToggleSaveProf('${char.id}','${ab}',this.checked)" style="accent-color:${cc}">
+      <span style="font-size:12px;color:${isProf?cc:'var(--muted)'}">${ab}</span>
+    </label>`;
+  });
+  h += `</div>`;
+
+  el.innerHTML = h;
+}
+
+/* ══ CHAR SCREEN — PROGRESS / LEVEL UP TAB ══ */
+function renderCharProgressTab(char, cls){
+  const el = document.getElementById('cstab-progress');
+  if(!el) return;
+  const cc = cls.color;
+  const level = char.level;
+  const multiclasses = char.multiclasses||[];
+  const isMulti = multiclasses.length > 1;
+
+  let h = '';
+
+  // ── Current class breakdown ──
+  h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:10px">CLASS & LEVEL</div>`;
+
+  if(isMulti){
+    // Multiclass display — editable levels per class
+    h += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px">`;
+    h += `<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Total level: <strong style="color:var(--gold)">${level}</strong></div>`;
+    multiclasses.forEach((mc, i)=>{
+      const mcCls = CLASSES[mc.classIdx];
+      if(!mcCls) return;
+      h += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="width:32px;height:32px;border-radius:50%;background:${mcCls.color}22;border:2px solid ${mcCls.color};display:flex;align-items:center;justify-content:center;font-size:16px">${mcCls.icon}</div>
+        <div style="flex:1">
+          <div style="font-family:'Cinzel',serif;font-size:11px;color:${mcCls.color}">${mcCls.name}</div>
+          <div style="font-size:10px;color:var(--muted)">${mc.subclass||'No subclass'}</div>
+        </div>
+        <input type="number" min="1" max="${level}" value="${mc.level}" onchange="csUpdateMcLevel('${char.id}',${i},+this.value)"
+          style="width:50px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'Cinzel',serif;font-size:16px;font-weight:700;text-align:center;padding:4px">
+        <button onclick="csRemoveMulticlass('${char.id}',${i})" style="background:none;border:none;color:var(--red);font-size:16px;cursor:pointer" title="Remove class">✕</button>
+      </div>`;
+      // Subclass selector for this mc class
+      const subs = mcCls.subclasses||[];
+      if(subs.length){
+        h += `<div style="margin-left:42px;margin-bottom:10px">
+          <select onchange="csUpdateMcSubclass('${char.id}',${i},this.value)"
+            style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:4px 8px;font-size:11px">
+            <option value="">— No subclass —</option>
+            ${subs.map(s=>`<option value="${s}" ${mc.subclass===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>`;
+      }
+    });
+    h += `<button onclick="csAddMulticlass('${char.id}')" style="width:100%;padding:8px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--muted);cursor:pointer;margin-top:4px">+ Add Another Class</button>`;
+    h += `</div>`;
+  } else {
+    // Single class display
+    h += `<div style="background:var(--surface2);border:2px solid ${cc};border-radius:12px;padding:14px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+      <div style="width:44px;height:44px;border-radius:50%;background:${cc}22;border:2px solid ${cc};display:flex;align-items:center;justify-content:center;font-size:24px">${cls.icon}</div>
+      <div style="flex:1">
+        <div style="font-family:'Cinzel',serif;font-size:14px;color:${cc}">${cls.name}</div>
+        <div style="font-size:11px;color:var(--muted)">${char.subclass||'No subclass chosen'}</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:9px;color:var(--muted);font-family:'Cinzel',serif">LEVEL</div>
+        <div style="font-family:'Cinzel',serif;font-size:24px;font-weight:700;color:${cc}">${level}</div>
+      </div>
+    </div>`;
+    // Subclass selector
+    const subs = cls.subclasses||[];
+    if(subs.length){
+      h += `<div style="margin-bottom:14px">
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">SUBCLASS</div>
+        <select onchange="csUpdateField('${char.id}','subclass',this.value)"
+          style="width:100%;background:var(--surface);border:1px solid ${cc};border-radius:8px;color:var(--text);padding:8px 12px;font-size:12px">
+          <option value="">— Choose Subclass —</option>
+          ${subs.map(s=>`<option value="${s}" ${char.subclass===s?'selected':''}>${s.replace(/ \(.*?\)/,'')}</option>`).join('')}
+        </select>
+      </div>`;
+    }
+    h += `<button onclick="csAddMulticlass('${char.id}')" style="width:100%;padding:8px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--muted);cursor:pointer;margin-bottom:16px">+ Add Multiclass</button>`;
+  }
+
+  // ── Level controls ──
+  h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:10px">TOTAL LEVEL</div>`;
+  h += `<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px">
+    <button onclick="csAdjustLevel('${char.id}',-1)" style="width:36px;height:36px;border-radius:50%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:20px;cursor:pointer">−</button>
+    <div style="flex:1;text-align:center">
+      <div style="font-family:'Cinzel',serif;font-size:32px;font-weight:700;color:${cc}">${level}</div>
+      <div style="font-size:10px;color:var(--muted)">Prof Bonus +${getPB(level)}</div>
+    </div>
+    <button onclick="csAdjustLevel('${char.id}',1)" style="width:36px;height:36px;border-radius:50%;background:${cc};border:none;color:#fff;font-size:20px;cursor:pointer;${level>=20?'opacity:0.4;cursor:not-allowed':''}">+</button>
+  </div>`;
+
+  // ── Features at current level ──
+  const ld = (LEVEL_FEATURES[cls.name]||{})[level]||{};
+  const allFeatures = [];
+  const subFeatures = char.subclass ? (SUBCLASS_FEATURES[char.subclass]||{})[level]||[] : [];
+  if(ld.features) allFeatures.push(...ld.features);
+  if(subFeatures.length) allFeatures.push(...subFeatures);
+
+  if(ld.asi){
+    h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">ABILITY SCORE IMPROVEMENT</div>`;
+    h += `<div style="background:${cc}11;border:1px solid ${cc};border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--text)">
+      At level ${level}, choose: increase one ability by 2, two abilities by 1, or take a Feat.
+      <br><small style="color:var(--muted)">Edit your ability scores in the Stats tab.</small>
+    </div>`;
+  }
+
+  if(allFeatures.length){
+    h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">FEATURES AT LEVEL ${level}</div>`;
+    allFeatures.forEach(f=>{
+      const name = typeof f==='object'?(f.n||f.name):f;
+      const desc = typeof f==='object'?(f.d||f.desc):'';
+      h += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:6px">
+        <div style="font-family:'Cinzel',serif;font-size:11px;color:${cc};margin-bottom:${desc?'4px':'0'}">${name}</div>
+        ${desc?`<div style="font-size:11px;color:var(--muted);line-height:1.5">${desc}</div>`:''}
+      </div>`;
+    });
+  }
+
+  // ── HP calculator ──
+  h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:14px;margin-bottom:8px">HP ROLL FOR LEVEL ${level}</div>`;
+  const conMod2 = Math.floor(((char.abilities?.CON||10)-10)/2);
+  const avg = Math.floor(cls.hit/2)+1+conMod2;
+  h += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;align-items:center;gap:12px">
+    <div style="flex:1;font-size:12px;color:var(--muted)">d${cls.hit} + CON (${conMod2>=0?'+':''}${conMod2}) = avg <strong style="color:${cc}">${avg}</strong></div>
+    <button onclick="csTakeAvgHP('${char.id}',${avg})" style="padding:6px 12px;background:${cc};border:none;border-radius:8px;color:#fff;font-size:11px;cursor:pointer">Take Avg (+${avg})</button>
+    <button onclick="csRollHP('${char.id}',${cls.hit},${conMod2})" style="padding:6px 12px;background:var(--surface);border:1px solid ${cc};border-radius:8px;color:${cc};font-size:11px;cursor:pointer">Roll d${cls.hit}</button>
+  </div>`;
+
+  el.innerHTML = h;
+}
+
+/* ══ CHAR SCREEN — PROFICIENCIES & FEATS TAB ══ */
+function renderCharProfsTab(char, cls){
+  const el = document.getElementById('cstab-profs');
+  if(!el) return;
+  const cc = cls.color;
+  const pb = getPB(char.level);
+  const ALL_SKILLS = [
+    {n:'Acrobatics',a:'DEX'},{n:'Animal Handling',a:'WIS'},{n:'Arcana',a:'INT'},
+    {n:'Athletics',a:'STR'},{n:'Deception',a:'CHA'},{n:'History',a:'INT'},
+    {n:'Insight',a:'WIS'},{n:'Intimidation',a:'CHA'},{n:'Investigation',a:'INT'},
+    {n:'Medicine',a:'WIS'},{n:'Nature',a:'INT'},{n:'Perception',a:'WIS'},
+    {n:'Performance',a:'CHA'},{n:'Persuasion',a:'CHA'},{n:'Religion',a:'INT'},
+    {n:'Sleight of Hand',a:'DEX'},{n:'Stealth',a:'DEX'},{n:'Survival',a:'WIS'}
+  ];
+  const profs = char.proficiencies||[];
+  const feats = char.feats||[];
+  const ABILITY_MODS = {};
+  ['STR','DEX','CON','INT','WIS','CHA'].forEach(ab=>{ ABILITY_MODS[ab]=Math.floor(((char.abilities?.[ab]||10)-10)/2); });
+
+  let h = `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">SKILL PROFICIENCIES</div>`;
+  h += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:18px">`;
+  ALL_SKILLS.forEach(sk=>{
+    const isProf = profs.some(p=>p.toLowerCase()===sk.n.toLowerCase());
+    const mod = ABILITY_MODS[sk.a] + (isProf?pb:0);
+    const sign = mod>=0?'+':'';
+    h += `<label style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:var(--surface2);border:1px solid ${isProf?cc:'var(--border)'};border-radius:8px;cursor:pointer">
+      <input type="checkbox" ${isProf?'checked':''} onchange="csToggleSkillProf('${char.id}','${sk.n}',this.checked)" style="accent-color:${cc};width:14px;height:14px;flex-shrink:0">
+      <span style="font-size:11px;flex:1;color:var(--text)">${sk.n}</span>
+      <span style="font-family:'Cinzel',serif;font-size:11px;color:${isProf?cc:'var(--muted)'};">${sign}${mod}</span>
+    </label>`;
+  });
+  h += `</div>`;
+
+  // Feats
+  h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">FEATS</div>`;
+  feats.forEach((feat, i)=>{
+    const featData = FEATS_DB?.find(f=>f.name===feat)||{name:feat,desc:''};
+    h += `<div style="background:var(--surface2);border:1px solid ${cc};border-radius:10px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:flex-start;gap:8px">
+      <div style="flex:1">
+        <div style="font-family:'Cinzel',serif;font-size:11px;color:${cc}">${featData.name}</div>
+        ${featData.desc?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${featData.desc}</div>`:''}
+      </div>
+      <button onclick="csRemoveFeat('${char.id}',${i})" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;flex-shrink:0">✕</button>
+    </div>`;
+  });
+  // Add feat
+  h += `<div style="display:flex;gap:8px;margin-bottom:18px">
+    <select id="csFeatPicker" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:11px">
+      <option value="">— Add a feat —</option>
+      ${(FEATS_DB||FEATS_5E||[]).map(f=>`<option value="${f.name||f}">${f.name||f}</option>`).join('')}
+    </select>
+    <button onclick="csAddFeat('${char.id}')" style="padding:6px 14px;background:${cc};border:none;border-radius:8px;color:#fff;font-size:12px;cursor:pointer">Add</button>
+  </div>`;
+
+  // Language / tool / weapon proficiencies (free text)
+  h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">OTHER PROFICIENCIES</div>`;
+  h += `<textarea onchange="csUpdateField('${char.id}','otherProfs',this.value)"
+    placeholder="Languages, tools, weapons, armour…"
+    style="width:100%;min-height:80px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:12px;resize:vertical;box-sizing:border-box">${char.otherProfs||''}</textarea>`;
+
+  el.innerHTML = h;
+}
+
+/* ══ CHAR SCREEN — HELPER SAVE FUNCTIONS ══ */
+function _csSaveChar(id, updater){
+  const chars = getChars();
+  const i = chars.findIndex(c=>String(c.id)===String(id));
+  if(i<0) return;
+  updater(chars[i]);
+  saveChars(chars);
+}
+function csUpdateAbility(id, ab, val){
+  _csSaveChar(id, c=>{ if(!c.abilities) c.abilities={}; c.abilities[ab]=Math.max(1,Math.min(30,val)); });
+  const chars = getVisibleChars();
+  const char = chars.find(c=>String(c.id)===String(id));
+  if(char) renderCharStatsTab(char, CLASSES[char.classIdx]);
+}
+function csUpdateField(id, field, val){
+  _csSaveChar(id, c=>{ c[field]=val; });
+  renderCharacterScreen();
+}
+function csToggleSaveProf(id, ab, on){
+  _csSaveChar(id, c=>{
+    if(!c.savingThrowProfs) c.savingThrowProfs = [...(CLASSES[c.classIdx]?.saves||[])];
+    if(on && !c.savingThrowProfs.includes(ab)) c.savingThrowProfs.push(ab);
+    else if(!on) c.savingThrowProfs = c.savingThrowProfs.filter(x=>x!==ab);
+  });
+}
+function csToggleSkillProf(id, skill, on){
+  _csSaveChar(id, c=>{
+    if(!c.proficiencies) c.proficiencies=[];
+    if(on && !c.proficiencies.some(p=>p.toLowerCase()===skill.toLowerCase())) c.proficiencies.push(skill);
+    else if(!on) c.proficiencies = c.proficiencies.filter(p=>p.toLowerCase()!==skill.toLowerCase());
+  });
+  const chars = getVisibleChars();
+  const char = chars.find(c=>String(c.id)===String(id));
+  if(char) renderCharProfsTab(char, CLASSES[char.classIdx]);
+}
+function csAddFeat(id){
+  const sel = document.getElementById('csFeatPicker');
+  if(!sel||!sel.value) return;
+  _csSaveChar(id, c=>{ if(!c.feats) c.feats=[]; if(!c.feats.includes(sel.value)) c.feats.push(sel.value); });
+  const chars = getVisibleChars();
+  const char = chars.find(c=>String(c.id)===String(id));
+  if(char) renderCharProfsTab(char, CLASSES[char.classIdx]);
+}
+function csRemoveFeat(id, idx){
+  _csSaveChar(id, c=>{ if(c.feats) c.feats.splice(idx,1); });
+  const chars = getVisibleChars();
+  const char = chars.find(c=>String(c.id)===String(id));
+  if(char) renderCharProfsTab(char, CLASSES[char.classIdx]);
+}
+function csAdjustLevel(id, delta){
+  _csSaveChar(id, c=>{
+    const newLevel = Math.max(1, Math.min(20, (c.level||1)+delta));
+    c.level = newLevel;
+    // Sync multiclass total if applicable
+    if(c.multiclasses && c.multiclasses.length>1){
+      const primary = c.multiclasses[0];
+      const secondary = c.multiclasses.slice(1);
+      const secTotal = secondary.reduce((s,mc)=>s+(mc.level||1),0);
+      primary.level = Math.max(1, newLevel - secTotal);
+    }
+  });
+  const chars = getVisibleChars();
+  const char = chars.find(c=>String(c.id)===String(id));
+  if(char) renderCharProgressTab(char, CLASSES[char.classIdx]);
+}
+function csTakeAvgHP(id, avg){
+  _csSaveChar(id, c=>{ c.maxHP=(c.maxHP||1)+avg; c.currentHP=Math.min(c.currentHP||1, c.maxHP); });
+  toast('+'+(avg)+' HP added!','var(--green)');
+  const chars = getVisibleChars();
+  const char = chars.find(c=>String(c.id)===String(id));
+  if(char) renderCharProgressTab(char, CLASSES[char.classIdx]);
+}
+function csRollHP(id, die, conMod){
+  const roll = Math.ceil(Math.random()*die);
+  const total = roll + conMod;
+  _csSaveChar(id, c=>{ c.maxHP=(c.maxHP||1)+total; c.currentHP=Math.min(c.currentHP||1, c.maxHP); });
+  toast('Rolled '+roll+' + '+conMod+' CON = +'+total+' HP','var(--gold)');
+  const chars = getVisibleChars();
+  const char = chars.find(c=>String(c.id)===String(id));
+  if(char) renderCharProgressTab(char, CLASSES[char.classIdx]);
+}
+function csUpdateMcLevel(id, idx, val){
+  _csSaveChar(id, c=>{
+    if(!c.multiclasses||!c.multiclasses[idx]) return;
+    c.multiclasses[idx].level = Math.max(1, val);
+    c.level = c.multiclasses.reduce((s,mc)=>s+(mc.level||1),0);
+    // Update primary classIdx to whichever has the most levels
+    let maxLv=0, maxIdx=c.multiclasses[0].classIdx;
+    c.multiclasses.forEach(mc=>{ if(mc.level>maxLv){maxLv=mc.level;maxIdx=mc.classIdx;} });
+    c.classIdx = maxIdx;
+  });
+  const chars = getVisibleChars();
+  const char = chars.find(c=>String(c.id)===String(id));
+  if(char) renderCharProgressTab(char, CLASSES[char.classIdx]);
+}
+function csUpdateMcSubclass(id, idx, val){
+  _csSaveChar(id, c=>{ if(c.multiclasses&&c.multiclasses[idx]) c.multiclasses[idx].subclass=val; });
+  const chars = getVisibleChars();
+  const char = chars.find(c=>String(c.id)===String(id));
+  if(char) renderCharProgressTab(char, CLASSES[char.classIdx]);
+}
+function csRemoveMulticlass(id, idx){
+  _csSaveChar(id, c=>{
+    if(!c.multiclasses||c.multiclasses.length<=1) return;
+    const removed = c.multiclasses.splice(idx,1)[0];
+    c.level = c.multiclasses.reduce((s,mc)=>s+(mc.level||1),0);
+    if(c.multiclasses.length===1){
+      c.classIdx = c.multiclasses[0].classIdx;
+      c.subclass  = c.multiclasses[0].subclass||'';
+      c.multiclasses = [];
+    } else {
+      let maxLv=0, maxIdx=c.classIdx;
+      c.multiclasses.forEach(mc=>{ if(mc.level>maxLv){maxLv=mc.level;maxIdx=mc.classIdx;} });
+      c.classIdx = maxIdx;
+    }
+  });
+  const chars = getVisibleChars();
+  const char = chars.find(c=>String(c.id)===String(id));
+  if(char){ renderCharacterScreen(); charTab('progress'); }
+}
+function csAddMulticlass(id){
+  // Show a quick modal to pick the new class
+  const modal = document.createElement('div');
+  modal.className = 'modal-backdrop';
+  modal.innerHTML = `<div class="modal-box" style="max-width:360px">
+    <div style="font-family:'Cinzel',serif;font-size:14px;color:var(--gold);margin-bottom:14px">Add Multiclass</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Choose a class to add:</div>
+    <div class="class-grid" style="margin-bottom:14px">${CLASSES.map((cl,i)=>`
+      <div class="class-tile theme-${cl.theme}" onclick="csConfirmAddMc('${id}',${i})" style="cursor:pointer">
+        <div class="class-tile-icon">${cl.icon}</div>
+        <div class="class-tile-name">${cl.name}</div>
+      </div>`).join('')}</div>
+    <button onclick="this.closest('.modal-backdrop').remove()" style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer">Cancel</button>
+  </div>`;
+  modal.id = 'csMcModal';
+  document.body.appendChild(modal);
+}
+function csConfirmAddMc(id, classIdx){
+  document.getElementById('csMcModal')?.remove();
+  _csSaveChar(id, c=>{
+    if(!c.multiclasses||c.multiclasses.length===0){
+      // Convert from single to multi
+      c.multiclasses = [
+        {classIdx:c.classIdx, level:c.level, subclass:c.subclass||''},
+        {classIdx:classIdx, level:1, subclass:''}
+      ];
+      c.level = c.multiclasses.reduce((s,mc)=>s+(mc.level||1),0);
+    } else {
+      // Already multi — add another
+      c.multiclasses.push({classIdx:classIdx, level:1, subclass:''});
+      c.level = c.multiclasses.reduce((s,mc)=>s+(mc.level||1),0);
+    }
+    // Primary = highest level class
+    let maxLv=0, maxIdx=c.classIdx;
+    c.multiclasses.forEach(mc=>{ if(mc.level>maxLv){maxLv=mc.level;maxIdx=mc.classIdx;} });
+    c.classIdx = maxIdx;
+  });
+  const chars = getVisibleChars();
+  const char = chars.find(c=>String(c.id)===String(id));
+  if(char){ renderCharacterScreen(); charTab('progress'); }
+  toast('Multiclass added!','var(--gold)');
+}
+
 function renderCharacterScreen(){
   const chars = getVisibleChars();
   if(!charScreenId && chars.length>0) charScreenId = chars[0].id;
@@ -11733,15 +12301,22 @@ function renderCharacterScreen(){
   charScreenId = char.id;
   const cls = CLASSES[char.classIdx];
 
+  // Character selector pills
   heroEl.innerHTML='<div class="char-select-bar">'+chars.map(function(c){
     const cc=classColor(c.classIdx);
     return '<div class="char-select-pill '+(c.id===charScreenId?'active':'')+'" style="--cc:'+cc+';--cc-dim:'+cc+'22" onclick="selectCharScreen('+c.id+')"><span class="csp-icon">'+classIcon(c.classIdx)+'</span>'+c.name+'</div>';
   }).join('')+'</div>';
 
-  renderPaperdoll(char, cls);
-  renderInvBag(char, cls);
-  renderCharStats(char, cls);
-  initDragAndDrop();
+  // Re-activate the current tab
+  charTab(_charTab);
+
+  // Always render equip tab content (paperdoll etc)
+  if(_charTab === 'equip'){
+    renderPaperdoll(char, cls);
+    renderInvBag(char, cls);
+    renderCharStats(char, cls);
+    initDragAndDrop();
+  }
 }
 
 function selectCharScreen(id){ charScreenId=id; renderCharacterScreen(); }
