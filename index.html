@@ -8640,25 +8640,75 @@ function renderDiceCharPanel(){
         const charAtks = char.attacks||[];
         const lootWpns = getCharLootWeapons(char);
         const allAtks = [...charAtks, ...lootWpns];
-        if(!allAtks.length) return '';
-        return `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">ATTACKS</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px">
-          ${charAtks.map(atk=>{
-            const bonus = parseInt((atk.bonus||atk.atk||'+0').replace(/[^-+\d]/g,''))||0;
-            return `<div onclick="quickRoll('${atk.name} Attack',${bonus})" style="background:var(--surface);border:1px solid var(--red);border-radius:8px;padding:5px 10px;cursor:pointer;transition:var(--trans)">
-              <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--red)">${atk.name}</div>
-              <div style="font-size:10px;color:var(--muted)">${atk.bonus||atk.atk||'+0'} · ${atk.damage||atk.dmg||'—'}</div>
-            </div>`;
-          }).join('')}
-          ${lootWpns.map(atk=>{
-            const bonus = parseInt((atk.bonus||'+0').replace(/[^-+\d]/g,''))||0;
-            const rarityColor = atk.rarity==='uncommon'?'var(--gold)':atk.rarity==='rare'?'var(--purple)':atk.rarity==='very-rare'?'#e74c3c':'var(--red)';
-            return `<div onclick="quickRoll('${atk.name} Attack',${bonus})" style="background:var(--surface);border:1px solid ${rarityColor};border-radius:8px;padding:5px 10px;cursor:pointer;transition:var(--trans)">
-              <div style="font-family:'Cinzel',serif;font-size:10px;color:${rarityColor}">${atk.name}</div>
-              <div style="font-size:10px;color:var(--muted)">${atk.bonus} · ${atk.damage}</div>
-            </div>`;
-          }).join('')}
-        </div>`;
+        // equipped mainhand
+        const mhItem = (getEquippedItems(char)['mainhand']||null);
+        const hasMH = mhItem && !mhItem._2hBlocked;
+        if(!allAtks.length && !hasMH) return '';
+
+        function makeInfoBtn(uid, descTxt) {
+          if(!descTxt) return '';
+          const safe = descTxt.slice(0,120).replace(/"/g,'&quot;').replace(/'/g,'&#39;') + (descTxt.length>120?'…':'');
+          return '<div style="margin-top:3px;border-top:1px solid var(--border);padding-top:3px">'
+            + '<button onclick="var e=document.getElementById(\'' + uid + '\');e.style.display=e.style.display===\'none\'?\'\':\'none\'" style="background:none;border:none;color:var(--muted);font-size:9px;cursor:pointer;padding:0;letter-spacing:0.5px">&#9657; INFO</button>'
+            + '<div id="' + uid + '" style="display:none;font-size:10px;color:var(--muted);margin-top:3px;line-height:1.4">' + safe + '</div>'
+            + '</div>';
+        }
+
+        let html = '<div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">ATTACKS</div><div style="display:flex;flex-wrap:wrap;gap:4px">';
+
+        // Equipped mainhand pill
+        if(hasMH){
+          const pb2=getPB(char.level);
+          const str2=parseInt(getMod(char.abilities?.STR||10))||0;
+          const dex2=parseInt(getMod(char.abilities?.DEX||10))||0;
+          const magicM2=mhItem.name.match(/[+](\d)/);
+          const magic2=magicM2?parseInt(magicM2[1]):0;
+          const isRanged2=/bow|crossbow|dart|sling/i.test(mhItem.name);
+          const isFinesse2=/rapier|shortsword|dagger|whip/i.test(mhItem.name);
+          const mod2=(isFinesse2||isRanged2)?Math.max(str2,dex2):str2;
+          const atkBonus2=mod2+pb2+magic2;
+          const atkStr2=(atkBonus2>=0?'+':'')+atkBonus2;
+          const is2H=isTwoHandedWeapon(mhItem);
+          const dmgMatch=mhItem.desc&&mhItem.desc.match(/(\d+d\d+)/);
+          const dmgDie=dmgMatch?dmgMatch[1]:'?d?';
+          const dmgStr2=dmgDie+(magic2>0?'+'+magic2:'')+(mod2!==0?(mod2>0?' +'+mod2:' '+mod2):'');
+          const rarC2=mhItem.rarity==='uncommon'?'var(--gold)':mhItem.rarity==='rare'?'var(--purple)':mhItem.rarity==='very-rare'?'#e74c3c':'var(--red)';
+          const uid2='dp_eq_'+char.id;
+          html+='<div style="background:var(--surface);border:2px solid '+rarC2+';border-radius:8px;padding:5px 10px;min-width:100px;position:relative">';
+          if(is2H) html+='<div style="position:absolute;top:2px;right:4px;font-size:8px;color:var(--muted)">2H</div>';
+          html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+mhItem.name+' Attack" data-b="'+atkBonus2+'" style="cursor:pointer">';
+          html+='<div style="font-family:\'Cinzel\',serif;font-size:10px;color:'+rarC2+'">⚔ '+mhItem.name+'</div>';
+          html+='<div style="font-size:10px;color:var(--muted)">'+atkStr2+' · '+dmgStr2+'</div></div>';
+          html+=makeInfoBtn(uid2, mhItem.desc||'');
+          html+='</div>';
+        }
+
+        // Character sheet attacks
+        charAtks.forEach(function(atk){
+          const bonus=parseInt((atk.bonus||atk.atk||'+0').replace(/[^-+\d]/g,''))||0;
+          const uid='dp_ca_'+char.id+'_'+(atk.name||'').replace(/\W/g,'');
+          html+='<div style="background:var(--surface);border:1px solid var(--red);border-radius:8px;padding:5px 10px;cursor:pointer">';
+          html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+atk.name+' Attack" data-b="'+bonus+'" style="font-family:\'Cinzel\',serif;font-size:10px;color:var(--red)">'+atk.name+'</div>';
+          html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+atk.name+' Attack" data-b="'+bonus+'" style="font-size:10px;color:var(--muted)">'+(atk.bonus||atk.atk||'+0')+' · '+(atk.damage||atk.dmg||'—')+'</div>';
+          html+=makeInfoBtn(uid, atk.type||atk.notes||'');
+          html+='</div>';
+        });
+
+        // Loot weapon pills
+        lootWpns.forEach(function(atk){
+          const bonus=parseInt((atk.bonus||'+0').replace(/[^-+\d]/g,''))||0;
+          const rarityColor=atk.rarity==='uncommon'?'var(--gold)':atk.rarity==='rare'?'var(--purple)':atk.rarity==='very-rare'?'#e74c3c':'var(--red)';
+          const uid='dp_lw_'+char.id+'_'+(atk.name||'').replace(/\W/g,'');
+          html+='<div style="background:var(--surface);border:1px solid '+rarityColor+';border-radius:8px;padding:5px 10px">';
+          html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+atk.name+' Attack" data-b="'+bonus+'" style="cursor:pointer">';
+          html+='<div style="font-family:\'Cinzel\',serif;font-size:10px;color:'+rarityColor+'">'+atk.name+'</div>';
+          html+='<div style="font-size:10px;color:var(--muted)">'+atk.bonus+' · '+atk.damage+'</div></div>';
+          html+=makeInfoBtn(uid, atk.desc||'');
+          html+='</div>';
+        });
+
+        html+='</div>';
+        return html;
       })()}
       ${(()=>{
         const resources = cls.resources||[];
@@ -8924,13 +8974,14 @@ function doRollLabelled(label, mod){
   if(resultEl){
     const tc = isCrit?'var(--green)':isFail?'var(--red)':'var(--text)';
     resultEl.style.display='block';
-    resultEl.innerHTML=`<div class="roll-result-box" style="--rc:${tc}">
-      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--muted);margin-bottom:4px">${label}</div>
-      <div class="roll-total" style="color:${tc}">${total}</div>
-      <div style="font-size:12px;color:var(--muted)">${em!=='normal'?`[${r1},${r2}]→`:``}${kept}${mod!==0?(mod>0?' +'+mod:' '+mod):''} ${bonusBreak.length?'+ bonuses':''}</div>
-      ${isCrit?('<div style="color:var(--green);font-family:\'Cinzel\',serif;font-size:12px;letter-spacing:1px">CRITICAL!</div>'):''}
-      ${isFail?('<div style="color:var(--red);font-family:\'Cinzel\',serif;font-size:12px;letter-spacing:1px">FUMBLE</div>'):''}
-    </div>`;
+    var _html = "<div class=\"roll-result-box\" style=\"--rc:" + tc + "\">";
+    _html += "<div style=\"font-family:'Cinzel',serif;font-size:11px;color:var(--muted);margin-bottom:4px\">" + label + "</div>";
+    _html += "<div class=\"roll-total\" style=\"color:" + tc + "\">" + total + "</div>";
+    _html += "<div style=\"font-size:12px;color:var(--muted)\">" + (em!=='normal' ? "["+r1+","+r2+"]\u2192" : "") + kept + (mod!==0 ? (mod>0?" +"+mod:" "+mod) : "") + (bonusBreak.length ? " + bonuses" : "") + "</div>";
+    if(isCrit) _html += "<div style=\"color:var(--green);font-family:'Cinzel',serif;font-size:12px;letter-spacing:1px\">CRITICAL!</div>";
+    if(isFail) _html += "<div style=\"color:var(--red);font-family:'Cinzel',serif;font-size:12px;letter-spacing:1px\">FUMBLE</div>";
+    _html += "</div>";
+    resultEl.innerHTML = _html;
     // Scroll the dice screen to show the result just below the roll button
     const scrollEl = document.getElementById('diceRollPanel') || document.getElementById('scr-dice');
     if(scrollEl) scrollEl.scrollTop = 0;
@@ -11593,8 +11644,8 @@ const EQUIP_SLOTS = [
   { id:'chest',    label:'Chest',     icon:'🛡', col:1, row:3, accepts:['armor','wondrous']        },
   { id:'gloves',   label:'Gloves',    icon:'🤲', col:1, row:4, accepts:['armor','wondrous','misc'] },
   { id:'boots',    label:'Boots',     icon:'👢', col:1, row:5, accepts:['armor','wondrous','misc'] },
-  { id:'mainhand', label:'Main Hand', icon:'⚔',  col:3, row:1, accepts:['weapon','misc']           },
-  { id:'offhand',  label:'Off Hand',  icon:'🛡', col:3, row:2, accepts:['armor','weapon','misc']   },
+  { id:'mainhand', label:'Main Hand', icon:'⚔',  col:3, row:1, accepts:['weapon','misc'], twoHandedBlocks:'offhand' },
+  { id:'offhand',  label:'Off Hand',  icon:'🛡', col:3, row:2, accepts:['armor','weapon','misc'], blockedBy2H:true },
   { id:'ring1',    label:'Ring (L)',  icon:'💍', col:3, row:3, accepts:['ring','wondrous','misc']  },
   { id:'ring2',    label:'Ring (R)',  icon:'💍', col:3, row:4, accepts:['ring','wondrous','misc']  },
   { id:'trinket',  label:'Trinket',   icon:'✨', col:3, row:5, accepts:['wondrous','misc','gem']   },
@@ -11604,6 +11655,19 @@ const RARITY_COLORS = {
   common:'#aaa', uncommon:'#1eff00', rare:'#0070dd',
   'very-rare':'#a335ee', legendary:'#ff8000', artifact:'#e6cc80',
 };
+
+
+/* ── Two-handed weapon helpers ── */
+function isTwoHandedWeapon(item){
+  if(!item || item.type !== 'weapon') return false;
+  if(/two.hand|2h\b|greatsword|greataxe|maul|halberd|glaive|pike|heavy crossbow|longbow|shortbow|light crossbow|war bow/i.test(item.name)) return true;
+  if(item.desc && /two.hand/i.test(item.desc)) return true;
+  return false;
+}
+function isOffhandBlocked(char){
+  var mh = (getEquippedItems(char)||{})['mainhand'];
+  return mh && isTwoHandedWeapon(mh);
+}
 
 function getEquippedItems(char){ return char.equippedSlots || {}; }
 
@@ -11949,7 +12013,7 @@ function renderCharStats(char, cls){
   const atkBonus = getEquipSlotATK(char) || ((str+pb>=0?'+':'')+(str+pb));
   const initMod = getMod(char.abilities&&char.abilities.DEX?char.abilities.DEX:10);
   const mainHandItem = slots['mainhand'];
-  const equipped = EQUIP_SLOTS.filter(function(s){return !!slots[s.id];});
+  const equipped = EQUIP_SLOTS.filter(function(s){return slots[s.id] && !slots[s.id]._2hBlocked;});
 
   let html = '<div class="char-stat-section">'
     +'<div class="char-stat-section-label">COMBAT STATS</div>'
@@ -12110,6 +12174,13 @@ function _doEquipItem(slotId, itemId){
   const slots=Object.assign({},getEquippedItems(char));
   Object.keys(slots).forEach(function(k){if(slots[k]&&String(slots[k].id)===String(itemId)) delete slots[k];});
   slots[slotId]=item;
+  // 2H weapon in mainhand locks offhand
+  if(slotId==='mainhand' && isTwoHandedWeapon(item)){
+    slots['offhand'] = {_2hBlocked:true, _lockedBy: item.name};
+  } else if(slotId==='mainhand'){
+    // Clear 2H lock if replacing with 1H
+    if(slots['offhand'] && slots['offhand']._2hBlocked) delete slots['offhand'];
+  }
   saveEquippedItems(charScreenId,slots);
   toast(item.name+' equipped!','var(--green)');
   _refreshCharScreen();
@@ -12122,6 +12193,10 @@ function unequipSlot(slotId){
   const slots=Object.assign({},getEquippedItems(char));
   const item=slots[slotId];
   delete slots[slotId];
+  // If removing 2H mainhand, free the offhand too
+  if(slotId==='mainhand' && slots['offhand'] && slots['offhand']._2hBlocked){
+    delete slots['offhand'];
+  }
   saveEquippedItems(charScreenId,slots);
   if(item) toast(item.name+' unequipped','var(--muted)');
   _refreshCharScreen();
@@ -12142,6 +12217,9 @@ function handleSlotClick(slotId){
   const char=getVisibleChars().find(function(c){return c.id===charScreenId;});
   if(!char) return;
   const slots=getEquippedItems(char);
+  if(slots[slotId] && slots[slotId]._2hBlocked){
+    toast('Unequip the two-handed weapon first','var(--muted)'); return;
+  }
   if(slots[slotId]) unequipSlot(slotId); else openSlotPicker(slotId);
 }
 
