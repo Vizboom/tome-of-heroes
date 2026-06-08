@@ -316,8 +316,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .modegate-sub{font-size:14px;color:var(--muted);font-style:italic;margin-bottom:32px;line-height:1.6;}
 .modegate-btn{width:100%;max-width:320px;padding:16px;border-radius:12px;font-family:'Cinzel',serif;font-size:12px;letter-spacing:2px;cursor:pointer;transition:var(--trans);border:none;margin-bottom:12px;display:flex;align-items:center;gap:12px;}
 .modegate-btn:active{transform:scale(0.97);}
-.modegate-btn-dm{background:var(--gold);color:#0d0a1a;}
-.modegate-btn-player{background:var(--surface2);border:1px solid var(--purple);color:var(--purple);}
+
+
 .modegate-btn .mb-icon{font-size:28px;flex-shrink:0;}
 .modegate-btn .mb-text{text-align:left;}
 .modegate-btn .mb-label{font-size:12px;letter-spacing:2px;display:block;}
@@ -330,7 +330,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 
 /* Player mode indicator badge */
 .player-mode-badge{background:rgba(123,94,167,0.15);border:1px solid var(--purple);border-radius:20px;padding:4px 12px;font-family:'Cinzel',serif;font-size:9px;color:var(--purple);letter-spacing:1px;display:inline-flex;align-items:center;gap:4px;}
-.dm-mode-badge{background:var(--gold-dim);border:1px solid var(--gold);border-radius:20px;padding:4px 12px;font-family:'Cinzel',serif;font-size:9px;color:var(--gold);letter-spacing:1px;display:inline-flex;align-items:center;gap:4px;}
+.user-badge{background:var(--gold-dim);border:1px solid var(--gold);border-radius:20px;padding:4px 12px;font-family:'Cinzel',serif;font-size:9px;color:var(--gold);letter-spacing:1px;display:inline-flex;align-items:center;gap:4px;}
 
 /* Player locked screen */
 .locked-overlay{text-align:center;padding:50px 20px;}
@@ -1349,7 +1349,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Same username on any device loads your data.<br>New username = fresh account.</div>
     </div>
 
-    <button class="modegate-btn modegate-btn-dm" style="width:100%;max-width:320px;margin-top:16px" onclick="userLogin()">
+    <button class="modegate-btn" style="width:100%;max-width:320px;margin-top:16px" onclick="userLogin()">
       <span class="mb-icon">📖</span>
       <span class="mb-text">
         <span class="mb-label">Enter Tome of Heroes</span>
@@ -1358,7 +1358,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     </button>
 
     <div style="margin-top:24px;width:100%;max-width:280px">
-      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;text-align:left">CLAUDE API KEY <span style="color:var(--muted);font-style:italic;font-family:'Crimson Pro',serif;letter-spacing:0">(DM sets once — shared with all players)</span></div>
+      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;text-align:left">CLAUDE API KEY <span style="color:var(--muted);font-style:italic;font-family:'Crimson Pro',serif;letter-spacing:0">(set once — shared across the campaign)</span></div>
       <input id="claudeApiKeyInput" type="password" placeholder="sk-ant-api03-…"
         style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace"
         oninput="saveClaudeApiKey(this.value)" value="">
@@ -1405,7 +1405,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <div class="divider"><span>New Campaign</span></div>
       <div class="field"><label>Campaign Name</label><input id="cName" placeholder="e.g. The Lost Mines of Phandelver"></div>
       <div class="field"><label>Setting / World</label><input id="cSetting" placeholder="e.g. Forgotten Realms"></div>
-      <div class="field"><label>DM Name</label><input id="cDM" placeholder="Dungeon Master's name"></div>
+      
       <div class="field"><label>Description</label><textarea id="cDesc" placeholder="What's this campaign about?"></textarea></div>
       <button class="btn btn-gold" onclick="createCampaign()">Create Campaign</button>
       <button class="btn btn-outline" onclick="hideCampForm()">← Cancel</button>
@@ -3797,7 +3797,7 @@ function getPlayerCampId(){ return S.get('toh_player_camp_id'); }
 
 /* ── MODEGATE: group code connects everyone to shared data ── */
 
-/* ══ UNIFIED LOGIN — no DM/Player split ══ */
+/* ══ UNIFIED LOGIN ══ */
 
 // isPlayerMode / isDMMode — always false now, kept for legacy call compatibility
 function isPlayerMode(){ return false; }
@@ -3820,11 +3820,11 @@ function _showGate(){
 async function userLogin(){
   const username = (document.getElementById('usernameInput')?.value||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,'');
   if(!username || username.length < 2){ toast('Enter a username (at least 2 characters)','var(--red)'); return; }
-  const btn = document.querySelector('#scr-modegate .modegate-btn-dm');
+  const btn = document.querySelector('#scr-modegate .modegate-btn');
   if(btn){ btn.style.opacity='0.6'; btn.style.pointerEvents='none'; }
   toast('Loading…','var(--purple)');
   setGroupId(username);
-  localStorage.setItem('toh_dm_username', username);
+  localStorage.setItem('toh_username', username);
   await pullAll(null);
   if(!getActiveCampId() && _db.campaigns.length) setActiveCampId(_db.campaigns[0].id);
   await ensureCampJoinCodes();
@@ -3843,7 +3843,7 @@ function _applyUserBadge(){
   const topbar = document.querySelector('.topbar');
   const ex = document.getElementById('modeBadge'); if(ex) ex.remove();
   const badge = document.createElement('div');
-  badge.id = 'modeBadge'; badge.className = 'dm-mode-badge';
+  badge.id = 'modeBadge'; badge.className = 'user-badge';
   const username = getGroupId()||'';
   badge.innerHTML = '📖 '+username;
   badge.style.cssText = 'flex-shrink:0;cursor:pointer;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;';
@@ -4149,13 +4149,13 @@ function showJoinCampForm(){
 }
 
 function resetMode(){
-  ['toh_mode','toh_player_char_id','toh_player_camp_id','toh_player_join_code','toh_dm_username'].forEach(k=>localStorage.removeItem(k));
+  ['toh_mode','toh_player_char_id','toh_player_camp_id','toh_player_join_code','toh_username'].forEach(k=>localStorage.removeItem(k));
   bootApp();
 }
 
 // Legacy stubs
 function showModeGateChoice(){}
-function showDMGate(){}
+
 function showPlayerJoinGate(){}
 function enterAsDM(){ userLogin(); }
 function switchToDM(){}
@@ -8528,7 +8528,7 @@ async function doLogout(){
   try { await supa.auth.signOut(); _supaUser = null; } catch(e){}
   // Keep device_id and last username so login screen pre-fills
   const deviceId = localStorage.getItem('toh_device_id');
-  const lastUsername = localStorage.getItem('toh_group_id') || localStorage.getItem('toh_dm_username');
+  const lastUsername = localStorage.getItem('toh_group_id') || localStorage.getItem('toh_username');
   Object.keys(localStorage).filter(k=>k.startsWith('toh_')||k.startsWith('sb-')||k.includes('supabase')||k.includes('auth-token')).forEach(k=>localStorage.removeItem(k));
   if(deviceId) localStorage.setItem('toh_device_id', deviceId);
   if(lastUsername) localStorage.setItem('toh_last_username', lastUsername);
@@ -10397,7 +10397,7 @@ function createCampaign() {
     id: genCampId(),
     name,
     setting: document.getElementById('cSetting')?.value||'',
-    dm: document.getElementById('cDM')?.value||'',
+    
     description: document.getElementById('cDesc')?.value||'',
     created: Date.now(),
     lastPlayed: Date.now(),
@@ -10534,7 +10534,7 @@ function renderCampDetailHeader() {
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
         <div>
           <div style="font-family:'Cinzel',serif;font-size:18px;color:var(--gold)">${camp.name}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px">${camp.setting||'Custom Setting'}${camp.dm?' · DM: '+camp.dm:''}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">${camp.setting||'Custom Setting'}</div>
         </div>
         ${isActive?`<span class="camp-badge active" style="flex-shrink:0">● Active</span>`:
           `<button onclick="switchCampaign('${camp.id}')" style="padding:5px 12px;background:var(--green);border:none;border-radius:8px;color:white;font-family:'Cinzel',serif;font-size:9px;cursor:pointer;letter-spacing:1px;flex-shrink:0">Set Active</button>`}
