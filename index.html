@@ -10452,7 +10452,12 @@ function renderCampDetailHeader() {
   } else {
     allChars = getChars();
   }
-  const realCharIds = camp.charIds || [];
+  const realCharIds = [...new Set((camp.charIds||[]).map(String))];
+  // Also clean up the stored charIds if they had duplicates
+  if(camp.charIds && camp.charIds.length !== realCharIds.length){
+    camp.charIds = realCharIds;
+    saveCampaign(camp);
+  }
   el.innerHTML = `
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:13px;padding:14px;margin-bottom:14px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
@@ -10496,8 +10501,9 @@ function renderCampDetailHeader() {
             }
 
             // Own campaign: existing logic with ghost pills and add/remove
-            const assignedChars = allChars.filter(c=>assignedIds.has(String(c.id)));
-            const unassignedChars = allChars.filter(c=>!globalAssigned.has(String(c.id)));
+            const seenPills = new Set();
+            const assignedChars = allChars.filter(c=>{ const s=String(c.id); if(assignedIds.has(s)&&!seenPills.has(s)){seenPills.add(s);return true;}return false; });
+            const unassignedChars = allChars.filter(c=>{ const s=String(c.id); if(!globalAssigned.has(s)&&!seenPills.has(s)){seenPills.add(s);return true;}return false; });
             const loadedIds = new Set(assignedChars.map(c=>String(c.id)));
             const ghostIds = [...assignedIds].filter(id=>!loadedIds.has(id));
             const eligible = [...assignedChars, ...unassignedChars];
