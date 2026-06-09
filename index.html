@@ -4117,15 +4117,21 @@ async function userLogin(){
   const btn = document.querySelector('#scr-modegate .modegate-btn');
   const _reenable = ()=>{ if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; } };
   if(btn){ btn.style.opacity='0.6'; btn.style.pointerEvents='none'; }
-  toast('Loading…','var(--purple)');
+  const statusDiv = document.createElement('div');
+  statusDiv.style.cssText = 'position:fixed;bottom:60px;left:0;right:0;text-align:center;font-size:11px;color:var(--muted);z-index:9999;padding:4px';
+  document.body.appendChild(statusDiv);
+  const _status = msg => { statusDiv.textContent = msg; console.log('[login]', msg); };
+
+  _status('Setting up…');
   setGroupId(username);
   localStorage.setItem('toh_username', username);
 
   try {
-    await pullAll(null).catch(e=>console.warn('pullAll error in login:', e));
+    _status('Loading data…');
+    await pullAll(null).catch(e=>{ console.warn('pullAll error:', e); _status('Data load failed — continuing'); });
+    _status('Loading settings…');
     await _loadUserSettings().catch(e=>console.warn('_loadUserSettings error:', e));
 
-    // Restore active camp from DB settings
     const savedCamp = _userSettings['active_camp'];
     if(savedCamp && _db.campaigns.some(c=>c.id===savedCamp)){
       _activeCampId = savedCamp;
@@ -4134,15 +4140,19 @@ async function userLogin(){
       setActiveCampId(_activeCampId);
     }
 
+    _status('Checking campaign codes…');
     await ensureCampJoinCodes().catch(e=>console.warn('ensureCampJoinCodes error:', e));
+    _status('Loading shared campaigns…');
     await _loadSharedCamps().catch(e=>console.warn('_loadSharedCamps error:', e));
   } catch(e){
     console.error('userLogin error:', e);
+    _status('Error: ' + e.message);
   } finally {
     _reenable();
+    setTimeout(()=>statusDiv.remove(), 3000);
   }
 
-  // Always enter the app — even if network calls failed
+  _status('Entering app…');
   if(!_db.campaigns.length){
     _enterApp();
     setTimeout(()=>_promptFirstCampaign(), 400);
