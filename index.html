@@ -10373,6 +10373,15 @@ async function ensureCampJoinCodes(){
 /* ── Campaign list view ── */
 let editingCampId = null;
 
+function hideCampForm() {
+  document.getElementById('campListView').style.display = 'block';
+  document.getElementById('campNewForm').style.display = 'none';
+  document.getElementById('campImportForm').style.display = 'none';
+  document.getElementById('campDetailView').style.display = 'none';
+  const jf = document.getElementById('campJoinForm'); if(jf) jf.style.display='none';
+  renderCampList();
+}
+
 function renderCampList() {
   document.getElementById('campListView').style.display = 'block';
   document.getElementById('campNewForm').style.display = 'none';
