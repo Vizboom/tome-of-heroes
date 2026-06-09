@@ -2657,9 +2657,10 @@ function saveCampaign(camp){
   if(!camp || !camp.id) return;
   const i = _db.campaigns.findIndex(c=>c.id===camp.id);
   if(i>=0) _db.campaigns[i]=camp; else _db.campaigns.push(camp);
-  dbSaveCampaign(camp);
-  // Re-publish all chars assigned to this campaign so other users see them.
-  // dbSaveChar now uses campaign joinCode so it works for any campaign.
+  // Only write the campaign row to Supabase for own campaigns — not joined ones
+  // (joined campaigns are owned by another group_id; we can't/shouldn't overwrite them)
+  if(!camp._ownerGid) dbSaveCampaign(camp);
+  // Re-publish all locally-owned chars assigned to this campaign
   if(camp.joinCode && (camp.charIds||[]).length){
     const ownChars = _db.chars.filter(c=>!c._sharedCampId);
     (camp.charIds||[]).forEach(cid=>{
@@ -3203,6 +3204,9 @@ function _pfAssign(campId, charId, el){
   const idx = _db.campaigns[ci].charIds.indexOf(cid);
   if(idx>=0){ _db.campaigns[ci].charIds.splice(idx,1); }
   else { _db.campaigns[ci].charIds.push(cid); }
+  // Tag char with campaign so dbSaveChar publishes under the right joinCode
+  const pfChar = _db.chars.find(c=>String(c.id)===cid);
+  if(pfChar && !pfChar._playerInCamp){ pfChar._playerInCamp = campId; }
   saveCampaign(_db.campaigns[ci]);
   const inCamp = _db.campaigns[ci].charIds.includes(cid);
   el.style.border = `1px solid ${inCamp?'var(--gold)':'var(--border)'}`;
@@ -4391,20 +4395,26 @@ function confirmPlayerChar(campId, charId){
   const chars = getChars();
   const char = chars.find(c=>String(c.id)===String(charId));
   if(char){
+    // Tag the char with this campaign so dbSaveChar publishes under the right joinCode
     char._playerInCamp = campId;
-    // Add to charIds if not already there
+    const i = _db.chars.findIndex(c=>String(c.id)===String(charId));
+    if(i>=0) _db.chars[i]=char; else _db.chars.push(char);
+
+    // Add charId to campaign's charIds list if not already there
     const ci = _db.campaigns.findIndex(c=>String(c.id)===String(campId));
     if(ci>=0){
       if(!_db.campaigns[ci].charIds) _db.campaigns[ci].charIds=[];
       const sid=String(charId);
       if(!_db.campaigns[ci].charIds.includes(sid)) _db.campaigns[ci].charIds.push(sid);
-      saveCampaign(_db.campaigns[ci]);
-    } else {
-      // Campaign not in local DB yet (just joined) — still save char cross-group
-      const i = _db.chars.findIndex(c=>String(c.id)===String(charId));
-      if(i>=0) _db.chars[i]=char; else _db.chars.push(char);
-      dbSaveChar(char);
+      // For own campaigns also save the campaign row; for joined campaigns skip
+      // (we can't write to the DM's campaign row — just publish the char)
+      if(!_db.campaigns[ci]._ownerGid) dbSaveCampaign(_db.campaigns[ci]);
     }
+
+    // Always publish the char to the settings table under the campaign's joinCode
+    // This is what makes it visible cross-group to the DM and other players
+    dbSaveChar(char);
+
     setUserSetting('dice_char', charId).catch(()=>{});
     _userSettings['dice_char'] = String(charId);
     charScreenId = charId;
@@ -10684,8 +10694,8 @@ function toggleCampChar(campId, charId) {
   const ci = camps.findIndex(c => String(c.id) === String(campId));
   if (ci < 0) return;
 
-  // Shared campaigns: use confirmPlayerChar instead of modifying charIds
-  if(camps[ci]._shared){
+  // Joined campaigns (_ownerGid set): player is selecting their character to publish cross-group
+  if(camps[ci]._ownerGid){
     confirmPlayerChar(campId, charId);
     renderCampDetailHeader();
     return;
@@ -10693,15 +10703,12 @@ function toggleCampChar(campId, charId) {
 
   if (!camps[ci].charIds) camps[ci].charIds = [];
   const cid = String(charId);
-  // Normalise all ids to strings and deduplicate
   camps[ci].charIds = [...new Set(camps[ci].charIds.map(String))];
   const idx = camps[ci].charIds.indexOf(cid);
   if (idx >= 0) {
-    // Removing from this campaign — allowed
     camps[ci].charIds.splice(idx, 1);
   } else {
-    // Only block if char is already in another NON-shared own campaign
-    const otherCamp = camps.find(c => !c._shared && String(c.id) !== String(campId) && (c.charIds||[]).some(x=>String(x)===cid));
+    const otherCamp = camps.find(c => !c._ownerGid && String(c.id) !== String(campId) && (c.charIds||[]).some(x=>String(x)===cid));
     if(otherCamp){
       const char = getChars().find(c=>String(c.id)===cid);
       toast(`${char?.name||'Character'} is already in "${otherCamp.name}"`, 'var(--red)');
