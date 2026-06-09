@@ -1642,14 +1642,22 @@ async function dbGetChars(){
 async function dbSaveChar(char){
   const gid = getGroupId()||await ensureGroupId(); if(!gid) return;
   const rowId = gid + '_' + String(char.id);
-  const row = { id: rowId, group_id: gid, share_code: char.shareCode||null, data: char };
+
+  // When a player is in a shared campaign, set share_code to 'camp_{campId}_{shareCode}'
+  // so the DM's realtime subscription (which filters on this prefix) picks it up immediately.
+  // This is the primary cross-group discovery mechanism.
+  const shareCode = (char._playerInCamp && char.shareCode)
+    ? 'camp_' + String(char._playerInCamp) + '_' + char.shareCode
+    : (char.shareCode || null);
+
+  const row = { id: rowId, group_id: gid, share_code: shareCode, data: char };
   const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
   if(error) console.warn('saveChar error:', error.message);
   const i = _db.chars.findIndex(c=>String(c.id)===String(char.id));
   if(i>=0) _db.chars[i]=char; else _db.chars.push(char);
 
-  // If this char is in a shared campaign, also write to settings table
-  // (settings has no RLS — readable by all users, same as join codes)
+  // Also mirror to settings table as a fallback for DMs who joined before this player
+  // (their _fetchCampChars strategy 4 scans this on pull)
   if(char._playerInCamp && char.shareCode){
     const settingsKey = 'player_char_'+String(char._playerInCamp)+'_'+char.shareCode;
     try {
@@ -1775,6 +1783,27 @@ async function pullAll(campId){
     if(campId){
       const { data: loot } = await supa.from('loot').select('*').eq('campaign_id', campId).single();
       if(loot){ _db.items[campId]=loot.data||[]; _db.wealth[campId]=loot.wealth||{}; }
+    }
+
+    // Pull player chars from other groups that have joined any of this user's campaigns
+    // These are stored in characters table with share_code = 'camp_{campId}_{shareCode}'
+    const ownCampIds = _db.campaigns.filter(c=>!c._shared).map(c=>String(c.id));
+    if(ownCampIds.length){
+      try {
+        for(const cid of ownCampIds){
+          const scPrefix = 'camp_'+cid+'_';
+          const { data: playerRows } = await supa.from('characters').select('data').like('share_code', scPrefix+'%');
+          if(playerRows?.length){
+            playerRows.forEach(r=>{
+              const c = r.data; if(!c || !c.id) return;
+              c._shared = true; c._sharedCampId = cid;
+              const idx = _db.chars.findIndex(x=>String(x.id)===String(c.id));
+              if(idx>=0) _db.chars[idx]=c; else _db.chars.push(c);
+            });
+            console.log('[pullAll] loaded', playerRows.length, 'player chars for campaign', cid);
+          }
+        }
+      } catch(e){ console.warn('[pullAll] player chars pull error:', e.message); }
     }
     try {
       const gid = getGroupId();
@@ -4065,7 +4094,12 @@ function _promptFirstCampaign(){
 function _enterApp(){
   document.querySelector('.bottomnav').style.display='flex';
   _applyUserBadge();
-  nav('roster');
+  // Land on Campaign screen when no active campaign — user picks/creates one first
+  if(!getActiveCampId() || !getCampaigns().length){
+    nav('campaign');
+  } else {
+    nav('roster');
+  }
 }
 
 function _applyUserBadge(){
@@ -4155,6 +4189,22 @@ async function _fetchCampChars(ownerGid, campId, campData){
       console.log('[fetchCampChars] strategy4 (settings) player chars:', playerChars.length);
     }
   } catch(e){ console.warn('[fetchCampChars] strategy4 threw:', e.message); }
+
+  // Strategy 5: query characters table directly by share_code prefix 'camp_{campId}_'
+  // This catches the new format written by dbSaveChar when char._playerInCamp is set
+  try {
+    const scPrefix = 'camp_'+String(campId)+'_';
+    const { data: scRows, error: scErr } = await supa.from('characters')
+      .select('data')
+      .like('share_code', scPrefix+'%');
+    if(!scErr && scRows?.length){
+      const scChars = scRows.map(r=>r.data).filter(c=>c && c.id);
+      scChars.forEach(c=>{
+        if(!allChars.some(x=>String(x.id)===String(c.id))) allChars.push(c);
+      });
+      console.log('[fetchCampChars] strategy5 (share_code prefix) player chars:', scChars.length);
+    }
+  } catch(e){ console.warn('[fetchCampChars] strategy5 threw:', e.message); }
 
   console.log('[fetchCampChars] final result:', allChars.length, 'chars:', allChars.map(c=>c.name+'(id:'+c.id+')').join(', '));
 
@@ -4301,8 +4351,13 @@ function confirmPlayerChar(campId, charId){
   const char = chars.find(c=>String(c.id)===String(charId));
   if(char){
     char._playerInCamp = campId;
-    saveChars(chars);
-    // Also set as default dice/loot/character screen char
+    // Update in-memory store
+    const i = _db.chars.findIndex(c=>String(c.id)===String(charId));
+    if(i>=0) _db.chars[i]=char; else _db.chars.push(char);
+    // Save directly — this triggers the cross-group share_code write in dbSaveChar
+    // so the DM's realtime subscription sees it immediately
+    dbSaveChar(char);
+    // Set as default dice/loot/character screen char
     setUserSetting('dice_char', charId).catch(()=>{});
     _userSettings['dice_char'] = String(charId);
     charScreenId = charId;
@@ -8807,20 +8862,29 @@ function _bootContinue(mode, nav_bar){
     _showGate();
     return;
   }
-  // Already logged in — go straight into the app
+  // Already logged in — restore active campaign
   if(!getActiveCampId() && _db.campaigns.length) setActiveCampId(_db.campaigns[0].id);
   if(nav_bar) nav_bar.style.display='flex';
   _applyUserBadge();
-  // Navigate immediately so the app feels instant
-  nav('roster');
+  // Land on Campaign if no active campaign, otherwise Roster
+  if(!getActiveCampId() || !_db.campaigns.length){
+    nav('campaign');
+  } else {
+    nav('roster');
+  }
   setTimeout(applyDesktopSplit, 0);
   // Then load shared camps in background and re-render when done
   ensureCampJoinCodes()
     .then(()=>_loadSharedCamps())
     .then(()=>{
-      renderCampList();
-      renderRoster();
-      // Show campaign prompt if the user still has no campaigns
+      // If we now have campaigns and are sitting on campaign screen with no selection,
+      // set the first campaign as active but stay on campaign screen so user can confirm
+      if(_db.campaigns.length && !getActiveCampId()){
+        setActiveCampId(_db.campaigns[0].id);
+      }
+      if(currentScreen === 'campaign') renderCampList();
+      else { renderCampList(); renderRoster(); }
+      // Show campaign prompt if the user still has no campaigns after loading
       if(!_db.campaigns.length){
         setTimeout(()=>_promptFirstCampaign(), 600);
       }
