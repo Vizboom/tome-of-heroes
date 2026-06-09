@@ -2011,8 +2011,9 @@ function subscribeRealtime(campId){
           if(document.getElementById('ptab-overview')?.classList.contains('active')) renderPartyOverview();
           if(document.getElementById('scr-character')?.classList.contains('active')) renderCharacterScreen();
         }).subscribe();
-    _realtimeSubs.push(sharedCharSub);
-  }
+      _realtimeSubs.push(sharedCharSub);
+    }  // end if(joinCode)
+  }  // end if(campId)
 }
 </script>
 
