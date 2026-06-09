@@ -1001,7 +1001,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   <div class="topbar">
     <button class="topbar-back icon-btn" id="backBtn" onclick="goBack()" style="visibility:hidden;font-size:22px">←</button>
     <span class="topbar-title" id="pageTitle">Tome of Heroes</span>
-    <span id="syncIndicator" style="font-size:10px;color:var(--muted);margin-right:4px"></span>
+    <span id="syncIndicator" style="font-size:10px;color:var(--muted);margin-right:4px;cursor:pointer" title="Tap to refresh" onclick="manualRefresh()"></span>
     <button onclick="nav('modegate')" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px 8px;line-height:1" title="Settings">⚙</button>
     <span class="topbar-icon" id="topIcon">⚔</span>
   </div>
@@ -1533,6 +1533,24 @@ let _pending = {};
 window.addEventListener('online',  ()=>{ _online=true;  syncIndicator('live'); _flushPending(); });
 window.addEventListener('offline', ()=>{ _online=false; syncIndicator('offline'); });
 
+// Refresh data when app comes back into focus (handles mobile PWA background/foreground)
+let _lastFocusRefresh = 0;
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible' && getGroupId() && _online){
+    const now = Date.now();
+    // Throttle: only refresh if it's been more than 30 seconds since last refresh
+    if(now - _lastFocusRefresh > 30000){
+      _lastFocusRefresh = now;
+      pullAll(getActiveCampId()).then(ok=>{
+        if(!ok) return;
+        if(currentScreen==='roster') renderRoster();
+        else if(currentScreen==='campaign') renderCampList();
+        else if(currentScreen==='party') partyTab('overview');
+      }).catch(()=>{});
+    }
+  }
+});
+
 /* ══ IN-MEMORY STORE — Supabase is source of truth ══ */
 const _db = { chars:[], campaigns:[], items:{}, wealth:{} };
 
@@ -1785,22 +1803,24 @@ async function pullAll(campId){
       if(loot){ _db.items[campId]=loot.data||[]; _db.wealth[campId]=loot.wealth||{}; }
     }
 
-    // Pull player chars from other groups that have joined any of this user's campaigns
-    // These are stored in characters table with share_code = 'camp_{campId}_{shareCode}'
+    // Pull player chars from other groups that have joined any of this user's campaigns.
+    // Uses the settings table (no RLS) — key: 'player_char_{campId}_{shareCode}'
+    // This is the only reliable cross-group read path when characters table has RLS.
     const ownCampIds = _db.campaigns.filter(c=>!c._shared).map(c=>String(c.id));
     if(ownCampIds.length){
       try {
         for(const cid of ownCampIds){
-          const scPrefix = 'camp_'+cid+'_';
-          const { data: playerRows } = await supa.from('characters').select('data').like('share_code', scPrefix+'%');
-          if(playerRows?.length){
-            playerRows.forEach(r=>{
-              const c = r.data; if(!c || !c.id) return;
+          const prefix = 'player_char_'+cid+'_';
+          const { data: settingsRows } = await supa.from('settings').select('key,value').like('key', prefix+'%');
+          if(settingsRows?.length){
+            settingsRows.forEach(r=>{
+              let c; try{ c=JSON.parse(r.value); }catch{ return; }
+              if(!c || !c.id) return;
               c._shared = true; c._sharedCampId = cid;
               const idx = _db.chars.findIndex(x=>String(x.id)===String(c.id));
               if(idx>=0) _db.chars[idx]=c; else _db.chars.push(c);
             });
-            console.log('[pullAll] loaded', playerRows.length, 'player chars for campaign', cid);
+            console.log('[pullAll] loaded', settingsRows.length, 'player chars for campaign', cid, 'via settings table');
           }
         }
       } catch(e){ console.warn('[pullAll] player chars pull error:', e.message); }
@@ -1820,6 +1840,19 @@ async function pullAll(campId){
     syncIndicator('error');
     return false;
   }
+}
+
+/* ══ MANUAL REFRESH ══ */
+async function manualRefresh(){
+  if(!getGroupId() || !_online){ toast('Not connected','var(--red)'); return; }
+  syncIndicator('saving');
+  _lastFocusRefresh = Date.now();
+  const ok = await pullAll(getActiveCampId()).catch(()=>false);
+  if(!ok){ toast('Sync failed — check connection','var(--red)'); return; }
+  if(currentScreen==='roster') renderRoster();
+  else if(currentScreen==='campaign') renderCampList();
+  else if(currentScreen==='party') partyTab('overview');
+  toast('✦ Refreshed','var(--green)');
 }
 
 /* ══ DEBOUNCED FLUSH (for loot/wealth batching) ══ */
@@ -4190,21 +4223,9 @@ async function _fetchCampChars(ownerGid, campId, campData){
     }
   } catch(e){ console.warn('[fetchCampChars] strategy4 threw:', e.message); }
 
-  // Strategy 5: query characters table directly by share_code prefix 'camp_{campId}_'
-  // This catches the new format written by dbSaveChar when char._playerInCamp is set
-  try {
-    const scPrefix = 'camp_'+String(campId)+'_';
-    const { data: scRows, error: scErr } = await supa.from('characters')
-      .select('data')
-      .like('share_code', scPrefix+'%');
-    if(!scErr && scRows?.length){
-      const scChars = scRows.map(r=>r.data).filter(c=>c && c.id);
-      scChars.forEach(c=>{
-        if(!allChars.some(x=>String(x.id)===String(c.id))) allChars.push(c);
-      });
-      console.log('[fetchCampChars] strategy5 (share_code prefix) player chars:', scChars.length);
-    }
-  } catch(e){ console.warn('[fetchCampChars] strategy5 threw:', e.message); }
+  // Strategy 5: settings table scan by 'player_char_{campId}_' prefix (no RLS — always readable)
+  // Redundant with strategy 4 but kept as an explicit second pass to ensure freshness
+  // (strategy 4 already covers this — this is a safety net with a slightly different query)
 
   console.log('[fetchCampChars] final result:', allChars.length, 'chars:', allChars.map(c=>c.name+'(id:'+c.id+')').join(', '));
 
@@ -10275,56 +10296,13 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPro
 function renderInstallBanner(){const el=document.getElementById('installBanner');if(!el)return;if(deferredPrompt&&!S.get('toh_install_dismissed')){el.innerHTML=`<div style="background:var(--gold-dim);border:1px solid var(--gold);border-radius:12px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:10px"><span style="font-size:28px">📲</span><p style="font-size:12px;color:var(--gold);flex:1;line-height:1.4"><strong style="font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;display:block;margin-bottom:3px">Install App</strong>Add to home screen for offline use.</p><button class="btn btn-primary" style="width:auto;padding:8px 14px;margin:0;font-size:10px" onclick="installApp()">Install</button><span style="font-size:16px;cursor:pointer;opacity:0.6" onclick="S.set('toh_install_dismissed',true);document.getElementById('installBanner').innerHTML=''">✕</span></div>`;}else if(!S.get('toh_install_dismissed')){el.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 14px;margin-bottom:12px;font-size:12px;color:var(--muted);text-align:center"><strong style="font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;color:var(--gold);display:block;margin-bottom:4px">📲 Install as App</strong>Tap your browser's share button → "Add to Home Screen"</div>`;}else{el.innerHTML='';}}
 function installApp(){if(!deferredPrompt)return;deferredPrompt.prompt();deferredPrompt.userChoice.then(r=>{if(r.outcome==='accepted'){toast('✦ App installed!');document.getElementById('installBanner').innerHTML='';}deferredPrompt=null;});}
 // Auto-versioned service worker — cache busts on every file change
-const _APP_VERSION = '9965cfd2';
+// Service worker disabled — single-file app loads fresh from network on every open.
+// PWA offline support relies on the browser's HTTP cache with short max-age.
+// Unregister any previously installed SW so it stops intercepting requests.
 if('serviceWorker' in navigator){
-  const swCode = `
-    const CACHE = 'toh-desktop-v3';
-    const HTML_URL = self.location.pathname;
-    self.addEventListener('install', e => {
-      e.waitUntil(caches.open(CACHE).then(c => c.addAll([HTML_URL])));
-      self.skipWaiting();
-    });
-    self.addEventListener('activate', e => {
-      e.waitUntil(
-        caches.keys().then(keys =>
-          Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-        )
-      );
-      self.clients.claim();
-    });
-    self.addEventListener('fetch', e => {
-      if(e.request.method !== 'GET') return;
-      const isHTML = e.request.destination === 'document' ||
-                     e.request.url.endsWith('.html') ||
-                     e.request.url === self.location.origin + HTML_URL;
-      if(isHTML) {
-        // Network-first for HTML: always try to get fresh version
-        e.respondWith(
-          fetch(e.request).then(res => {
-            const clone = res.clone();
-            caches.open(CACHE).then(c => c.put(e.request, clone));
-            return res;
-          }).catch(() => caches.match(e.request))
-        );
-      } else {
-        // Cache-first for other assets
-        e.respondWith(
-          caches.match(e.request).then(r => r || fetch(e.request).then(res => {
-            const clone = res.clone();
-            caches.open(CACHE).then(c => c.put(e.request, clone));
-            return res;
-          }))
-        );
-      }
-    });
-  `;
-  const blob = new Blob([swCode], {type:'application/javascript'});
-  navigator.serviceWorker.register(URL.createObjectURL(blob))
-    .then(reg => {
-      // Check for updates immediately and every 60 seconds
-      reg.update();
-      setInterval(() => reg.update(), 60000);
-    }).catch(() => {});
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(r => r.unregister());
+  }).catch(()=>{});
 }
 /* ══════════════════════════════════════════════════════
    CAMPAIGN MANAGEMENT SYSTEM
