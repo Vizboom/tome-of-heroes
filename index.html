@@ -1570,14 +1570,50 @@ async function getSupaUser(){
 }
 
 /* ══ GROUP ID ══ */
+// Username IS the group_id — stored only in localStorage as the session credential.
+// All app state (active camp, player char selections, etc.) lives in Supabase or _db.
 function getGroupId(){ return localStorage.getItem('toh_group_id')||null; }
 function setGroupId(id){ if(id) localStorage.setItem('toh_group_id', id); }
 
-// Stable per-device ID for player campaign list storage
+// Stable per-device ID (used for SW cache-busting only)
 function getDeviceId(){
   let id = localStorage.getItem('toh_device_id');
   if(!id){ id = 'dev_'+Math.random().toString(36).slice(2,10).toUpperCase(); localStorage.setItem('toh_device_id', id); }
   return id;
+}
+
+// ── Per-user settings stored in Supabase settings table ──
+// Key pattern: "{gid}__{settingName}"
+async function dbGetUserSetting(name){
+  const gid = getGroupId(); if(!gid) return null;
+  try {
+    const { data } = await supa.from('settings').select('value').eq('key', gid+'__'+name).single();
+    return data?.value ?? null;
+  } catch(e){ return null; }
+}
+async function dbSetUserSetting(name, value){
+  const gid = getGroupId(); if(!gid) return;
+  try {
+    await supa.from('settings').upsert({ key: gid+'__'+name, value: String(value) }, { onConflict: 'key' });
+  } catch(e){ console.warn('dbSetUserSetting error:', e.message); }
+}
+async function dbDelUserSetting(name){
+  const gid = getGroupId(); if(!gid) return;
+  try { await supa.from('settings').delete().eq('key', gid+'__'+name); } catch(e){}
+}
+
+// In-memory cache for user settings so we don't hammer Supabase on every read
+const _userSettings = {};
+async function getUserSetting(name){
+  if(name in _userSettings) return _userSettings[name];
+  const v = await dbGetUserSetting(name);
+  _userSettings[name] = v;
+  return v;
+}
+async function setUserSetting(name, value){
+  _userSettings[name] = value != null ? String(value) : null;
+  if(value != null) await dbSetUserSetting(name, value);
+  else await dbDelUserSetting(name);
 }
 
 async function ensureGroupId(){
@@ -1745,7 +1781,7 @@ async function pullAll(campId){
       if(gid){
         const rowKey = 'claude_key_' + gid;
         const { data: s } = await supa.from('settings').select('value').eq('key', rowKey).single();
-        if(s?.value) localStorage.setItem('toh_claude_key', s.value);
+        if(s?.value) _userSettings['claude_key'] = s.value;
       }
     } catch(e){}
     syncIndicator('live');
@@ -2515,12 +2551,8 @@ function saveWealth(wealth){
 const getParty=()=>getFullParty();
 const saveParty=()=>{}; // no-op — party is derived from campaign charIds
 
-// ── Party ID ──
-const getPartyId=()=>{
-  let id=S.get('toh_pid');
-  if(!id){id='PARTY-'+Math.random().toString(36).slice(2,8).toUpperCase();S.set('toh_pid',id);}
-  return id;
-};
+// ── Party ID (derived from group_id) ──
+const getPartyId=()=>{ const gid=getGroupId(); return gid?'PARTY-'+gid:'PARTY-LOCAL'; };
 
 // ── Visible chars (campaign scoped) ──
 function getVisibleChars(){
@@ -2621,7 +2653,7 @@ function nav(id){
       _showGate();
     }
     if(id==='loot'){
-      const _defId = S.get('toh_dice_char');
+      const _defId = _userSettings['dice_char'];
       if(_defId && getFullParty().find(c=>String(c.id)===String(_defId))) lootOwner = _defId;
       const _lootCampId = getActiveCampId();
       // Fetch fresh loot if not yet loaded (important for shared campaign players)
@@ -2634,7 +2666,7 @@ function nav(id){
     if(id==='dice') renderDiceScreen();
     if(id==='character'){
       // Sync character screen to default char if one is set and valid
-      const _defId = S.get('toh_dice_char');
+      const _defId = _userSettings['dice_char'];
       if(_defId && getFullParty().find(c=>String(c.id)===String(_defId))) charScreenId = _defId;
       renderCharacterScreen();
     }
@@ -2679,7 +2711,7 @@ function _renderRosterInner(){
   }
   el.innerHTML=chars.map(c=>{
     const cls=CLASSES[c.classIdx];const cc=classColor(c.classIdx);
-    const isDefault = String(S.get('toh_dice_char'))===String(c.id);
+    const isDefault = String(_userSettings['dice_char'])===String(c.id);
     return`<div class="char-card theme-${classTheme(c.classIdx)} fadein" onclick="openSheet(${c.id})">
       <div class="char-avatar">${cls.icon}</div>
       <div style="flex:1;min-width:0">
@@ -2707,7 +2739,8 @@ function _renderRosterInner(){
   }
 }
 function setDefaultChar(id){
-  S.set('toh_dice_char', id);
+  setUserSetting('dice_char', id).catch(()=>{});
+  _userSettings['dice_char'] = String(id);
   // Sync character tab
   charScreenId = id;
   // Sync loot tab to this character
@@ -2749,13 +2782,15 @@ function deleteChar(id){
   if(w[id] || w[sid]){ delete w[id]; delete w[sid]; saveWealth(w); }
 
   // 6. Clear dice char selection if it was this character
-  if(String(S.get('toh_dice_char'))===sid) S.set('toh_dice_char', null);
+  if(String(_userSettings['dice_char'])===sid){ setUserSetting('dice_char', null).catch(()=>{}); _userSettings['dice_char']=null; }
 
   // 7. Clear player char if it was this character
-  if(String(S.get('toh_player_char_id'))===sid){
-    S.set('toh_player_char_id', null);
-    S.set('toh_player_camp_id', null);
-  }
+  const camps2 = getCampaigns();
+  camps2.forEach(c => {
+    if(String(getPlayerCampChar(c.id))===sid){
+      setPlayerCampChar(c.id, null);
+    }
+  });
 
   renderRoster();
   toast('Removed','var(--red)');
@@ -2939,9 +2974,24 @@ function saveCharacter(){
   const chars=getChars();chars.push(char);saveChars(chars);
   toast('✦ '+name+' forged!');
 
-  // Show campaign assignment popup immediately
+  // Auto-join the active campaign immediately
+  const activeCamp = getActiveCamp();
+  if(activeCamp && !activeCamp._shared){
+    const allCamps = getCampaigns();
+    const ci = allCamps.findIndex(c=>c.id===activeCamp.id);
+    if(ci>=0){
+      if(!allCamps[ci].charIds) allCamps[ci].charIds=[];
+      const sid = String(char.id);
+      if(!allCamps[ci].charIds.includes(sid)) allCamps[ci].charIds.push(sid);
+      saveCampaign(allCamps[ci]);
+    }
+  } else if(activeCamp && activeCamp._shared){
+    confirmPlayerChar(activeCamp.id, char.id);
+  }
+
+  // Show campaign assignment popup if there are multiple campaigns
   const camps = getCampaigns();
-  if(camps.length){
+  if(camps.length > 1){
     _showPostForgeAssign(char, camps);
   } else {
     setTimeout(()=>nav('roster'),600);
@@ -3910,8 +3960,9 @@ function shareSubTab(t,btn){
 ══════════════════════════════════════════════════════ */
 
 // isPlayerMode/isDMMode redefined in unified login block
-function getPlayerCharId(){ return S.get('toh_player_char_id'); }
-function getPlayerCampId(){ return S.get('toh_player_camp_id'); }
+// Legacy stubs — no longer use localStorage
+function getPlayerCharId(){ return _userSettings['dice_char'] || null; }
+function getPlayerCampId(){ return _activeCampId || null; }
 
 /* ── MODEGATE: group code connects everyone to shared data ── */
 
@@ -3929,8 +3980,8 @@ function _showGate(){
   document.getElementById('backBtn').style.visibility='hidden';
   document.querySelector('.bottomnav').style.display='none';
   const ex=document.getElementById('modeBadge'); if(ex) ex.remove();
-  // Pre-fill saved username (from active session or last logout)
-  const saved = localStorage.getItem('toh_group_id') || localStorage.getItem('toh_last_username');
+  // Pre-fill saved username hint from last logout
+  const saved = localStorage.getItem('toh_last_username');
   if(saved){ const inp=document.getElementById('usernameInput'); if(inp) inp.value=saved; }
   setTimeout(()=>document.getElementById('usernameInput')?.focus(), 50);
 }
@@ -3943,12 +3994,72 @@ async function userLogin(){
   toast('Loading…','var(--purple)');
   setGroupId(username);
   localStorage.setItem('toh_username', username);
+
+  // Pull all data first
   await pullAll(null);
-  if(!getActiveCampId() && _db.campaigns.length) setActiveCampId(_db.campaigns[0].id);
+
+  // Load DB-backed user settings into cache
+  await _loadUserSettings();
+
+  // Restore active camp from DB settings
+  const savedCamp = _userSettings['active_camp'];
+  if(savedCamp && _db.campaigns.some(c=>c.id===savedCamp)){
+    _activeCampId = savedCamp;
+  } else if(!_activeCampId && _db.campaigns.length){
+    _activeCampId = _db.campaigns[0].id;
+    setActiveCampId(_activeCampId);
+  }
+
   await ensureCampJoinCodes();
   await _loadSharedCamps();
   if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
-  _enterApp();
+
+  // If user has no campaigns at all, show the campaign join/create prompt immediately
+  if(!_db.campaigns.length){
+    _enterApp();
+    setTimeout(()=>_promptFirstCampaign(), 400);
+  } else {
+    _enterApp();
+  }
+}
+
+// Load all user settings from Supabase into cache on login
+async function _loadUserSettings(){
+  const gid = getGroupId(); if(!gid) return;
+  try {
+    const { data } = await supa.from('settings').select('key,value').like('key', gid+'__%');
+    if(data) data.forEach(row=>{
+      const name = row.key.replace(gid+'__','');
+      _userSettings[name] = row.value;
+    });
+  } catch(e){ console.warn('_loadUserSettings error:', e.message); }
+}
+
+// Prompt shown to new users (or any user with no campaigns) after login
+function _promptFirstCampaign(){
+  const existing = document.getElementById('firstCampModal');
+  if(existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.id = 'firstCampModal';
+  modal.className = 'modal-backdrop';
+  modal.innerHTML = `<div class="modal-box" style="max-width:380px;text-align:center">
+    <div style="font-size:48px;margin-bottom:12px">📖</div>
+    <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold);margin-bottom:8px">Welcome, ${getGroupId()}!</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:24px;line-height:1.6">
+      You don't have any campaigns yet.<br>Create your own or join a friend's.
+    </div>
+    <button onclick="document.getElementById('firstCampModal').remove();nav('campaign');setTimeout(showNewCampForm,100)" class="modegate-btn" style="width:100%;margin-bottom:10px;background:var(--gold);color:#0d0a1a">
+      <span class="mb-icon">✦</span>
+      <span class="mb-text"><span class="mb-label">Create Campaign</span><span class="mb-desc" style="color:#0d0a1a99">Start a new adventure</span></span>
+    </button>
+    <button onclick="document.getElementById('firstCampModal').remove();nav('campaign');setTimeout(showJoinCampForm,100)" class="modegate-btn" style="width:100%;background:var(--surface2);border:1px solid var(--border)">
+      <span class="mb-icon">🔗</span>
+      <span class="mb-text"><span class="mb-label">Join Campaign</span><span class="mb-desc">Enter a share code</span></span>
+    </button>
+    <button onclick="document.getElementById('firstCampModal').remove()" style="margin-top:12px;background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;font-family:'Cinzel',serif;letter-spacing:1px">Skip for now</button>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e=>{if(e.target===modal){modal.remove();}});
 }
 
 function _enterApp(){
@@ -4144,9 +4255,17 @@ async function joinSharedCampaign(){
 function _sharedCampsKey(){ return 'shared_camps_'+getGroupId(); }
 
 /* ── Player character selection for shared campaigns ── */
-function _playerCharKey(campId){ return 'player_char_'+getGroupId()+'_'+campId; }
-function getPlayerCampChar(campId){ const v=localStorage.getItem(_playerCharKey(campId)); return v?parseInt(v):null; }
-function setPlayerCampChar(campId, charId){ localStorage.setItem(_playerCharKey(campId), charId); }
+// Stored in Supabase settings under "{gid}__player_char_{campId}"
+function _playerCharKey(campId){ return 'player_char_'+campId; }
+function getPlayerCampChar(campId){
+  // Prefer cached value
+  const cached = _userSettings[_playerCharKey(campId)];
+  if(cached != null) return parseInt(cached)||null;
+  return null;
+}
+function setPlayerCampChar(campId, charId){
+  setUserSetting(_playerCharKey(campId), charId).catch(()=>{});
+}
 
 function _promptPlayerCharSelect(campId, campName, myChars){
   const existing = document.getElementById('playerCharModal');
@@ -4184,7 +4303,8 @@ function confirmPlayerChar(campId, charId){
     char._playerInCamp = campId;
     saveChars(chars);
     // Also set as default dice/loot/character screen char
-    S.set('toh_dice_char', charId);
+    setUserSetting('dice_char', charId).catch(()=>{});
+    _userSettings['dice_char'] = String(charId);
     charScreenId = charId;
     lootOwner = charId;
   }
@@ -4264,12 +4384,12 @@ async function leaveSharedCampaign(campId){
   } catch(e){ console.warn('cleanup cross-group chars failed:', e.message); }
 
   // Clear stored player character selection for this campaign
-  S.set(_playerCharKey(campId), null);
+  setPlayerCampChar(campId, null);
 
   // Clear dice/loot default if it now points at a missing character
-  const diceChar = S.get('toh_dice_char');
+  const diceChar = _userSettings['dice_char'];
   if(diceChar && !_db.chars.find(c=>String(c.id)===String(diceChar))){
-    S.set('toh_dice_char', null);
+    setUserSetting('dice_char', null).catch(()=>{}); _userSettings['dice_char']=null;
     lootOwner = 'pool';
     charScreenId = null;
   }
@@ -4293,6 +4413,8 @@ function showJoinCampForm(){
 
 function resetMode(){
   ['toh_mode','toh_player_char_id','toh_player_camp_id','toh_player_join_code','toh_username'].forEach(k=>localStorage.removeItem(k));
+  _activeCampId = null;
+  Object.keys(_userSettings).forEach(k=>delete _userSettings[k]);
   bootApp();
 }
 
@@ -4323,28 +4445,27 @@ function applyDesktopSplit(){}
 
 async function saveClaudeApiKey(val){
   const trimmed = val.trim();
-  localStorage.setItem('toh_claude_key', trimmed);
-  // Remove old unscoped Supabase entry if it exists (migration)
-  if(_online){
-    try { await supa.from('settings').delete().eq('key','claude_api_key'); } catch(e){}
-  }
   // Sync to Supabase using group-scoped key so other groups can't read it
-  if(trimmed && _online){
+  if(_online){
     try {
       const gid = getGroupId() || await ensureGroupId();
       if(gid){
         const rowKey = 'claude_key_' + gid;
-        await supa.from('settings').upsert({ key: rowKey, value: trimmed }, { onConflict: 'key' });
+        if(trimmed){
+          await supa.from('settings').upsert({ key: rowKey, value: trimmed }, { onConflict: 'key' });
+        } else {
+          await supa.from('settings').delete().eq('key', rowKey);
+        }
+        _userSettings['claude_key'] = trimmed || null;
       }
     } catch(e){ console.warn('Could not save API key to Supabase:', e); }
   }
 }
 
 async function getClaudeApiKey(){
-  // Fast path — already cached locally
-  const local = localStorage.getItem('toh_claude_key');
-  if(local) return local;
-  // Fetch from Supabase using group-scoped key
+  // Try in-memory cache first
+  if(_userSettings['claude_key']) return _userSettings['claude_key'];
+  // Fetch from Supabase
   if(_online){
     try {
       const gid = getGroupId();
@@ -4352,7 +4473,7 @@ async function getClaudeApiKey(){
         const rowKey = 'claude_key_' + gid;
         const { data } = await supa.from('settings').select('value').eq('key', rowKey).single();
         if(data?.value){
-          localStorage.setItem('toh_claude_key', data.value);
+          _userSettings['claude_key'] = data.value;
           return data.value;
         }
       }
@@ -4410,6 +4531,8 @@ async function clearAllData(){
 
   // Clear in-memory store
   _db.chars=[]; _db.campaigns=[]; _db.items={}; _db.wealth={};
+  _activeCampId = null;
+  Object.keys(_userSettings).forEach(k=>delete _userSettings[k]);
 
   toast('All data deleted');
   setTimeout(()=>window.location.reload(), 800);
@@ -8346,6 +8469,22 @@ function _finishCharImport(char, source){
   document.getElementById('charImportModal')?.remove();
   toast(`✦ ${char.name} imported from ${source}!`);
   renderRoster();
+
+  // Auto-join the active campaign immediately
+  const activeCamp2 = getActiveCamp();
+  if(activeCamp2 && !activeCamp2._shared){
+    const allCamps2 = getCampaigns();
+    const ci2b = allCamps2.findIndex(c=>c.id===activeCamp2.id);
+    if(ci2b>=0){
+      if(!allCamps2[ci2b].charIds) allCamps2[ci2b].charIds=[];
+      const sid2 = String(char.id);
+      if(!allCamps2[ci2b].charIds.includes(sid2)) allCamps2[ci2b].charIds.push(sid2);
+      saveCampaign(allCamps2[ci2b]);
+    }
+  } else if(activeCamp2 && activeCamp2._shared){
+    confirmPlayerChar(activeCamp2.id, char.id);
+  }
+
   // Auto-log to party history
   const activeCamp = getActiveCamp();
   if(activeCamp){
@@ -8467,7 +8606,7 @@ async function diagCampaigns(){
     ? ok('Logged in: '+(user.email||'anonymous ('+user.id?.slice(0,8)+'…)'))
     : ok('No auth session — OK if RLS is disabled (using anon key)'));
   out.push('group_id: '+(getGroupId()||'NOT SET'));
-  out.push('mode: '+(localStorage.getItem('toh_mode')||'none'));
+  out.push('active_camp: '+(_activeCampId||'none'));
   out.push('');
 
   // 2. Test each table: read, write, group_id column
@@ -8565,14 +8704,13 @@ async function diagCampaigns(){
     out.push('');
   }
 
-  // 4. Local cache
-  out.push('── LOCAL CACHE ──');
-  const lc = JSON.parse(localStorage.getItem('toh_chars')||'[]');
-  const lcmp = JSON.parse(localStorage.getItem('toh_campaigns')||'[]');
-  out.push('characters: '+lc.length+' cached');
-  lc.forEach(c=>out.push('  • '+c.name+' (id='+c.id+')'));
-  out.push('campaigns: '+lcmp.length+' cached');
-  lcmp.forEach(c=>out.push('  • '+(c.name||c.id)+' charIds='+(c.charIds||[]).length));
+  // 4. Local state
+  out.push('── LOCAL STATE ──');
+  out.push('_db.chars: '+_db.chars.length+' in memory');
+  _db.chars.forEach(c=>out.push('  • '+c.name+' (id='+c.id+')'));
+  out.push('_db.campaigns: '+_db.campaigns.length+' in memory');
+  _db.campaigns.forEach(c=>out.push('  • '+(c.name||c.id)+' charIds='+(c.charIds||[]).length));
+  out.push('active_camp: '+(_activeCampId||'(none)'));
 
   // 5. Verdict
   out.push('');
@@ -8644,10 +8782,18 @@ async function forceSyncAll(){
 function bootApp(){
   const nav_bar = document.querySelector('.bottomnav');
   (async () => {
-    const campId = getActiveCampId();
     if(getGroupId()){
-      await pullAll(campId).catch(()=>{});
-      subscribeRealtime(campId);
+      await pullAll(null).catch(()=>{});
+      // Load DB-backed user settings into cache
+      await _loadUserSettings().catch(()=>{});
+      // Restore active camp
+      const savedCamp = _userSettings['active_camp'];
+      if(savedCamp && _db.campaigns.some(c=>c.id===savedCamp)){
+        _activeCampId = savedCamp;
+      } else if(!_activeCampId && _db.campaigns.length){
+        _activeCampId = _db.campaigns[0].id;
+      }
+      subscribeRealtime(_activeCampId);
     }
     _bootContinue(null, nav_bar);
   })().catch(()=>{
@@ -8674,6 +8820,10 @@ function _bootContinue(mode, nav_bar){
     .then(()=>{
       renderCampList();
       renderRoster();
+      // Show campaign prompt if the user still has no campaigns
+      if(!_db.campaigns.length){
+        setTimeout(()=>_promptFirstCampaign(), 600);
+      }
     });
 }
 
@@ -8690,7 +8840,7 @@ async function skipLogin(){
 
 async function doLogout(){
   try { await supa.auth.signOut(); _supaUser = null; } catch(e){}
-  // Keep device_id and last username so login screen pre-fills
+  // Keep device_id and save username as a hint for re-login
   const deviceId = localStorage.getItem('toh_device_id');
   const lastUsername = localStorage.getItem('toh_group_id') || localStorage.getItem('toh_username');
   Object.keys(localStorage).filter(k=>k.startsWith('toh_')||k.startsWith('sb-')||k.includes('supabase')||k.includes('auth-token')).forEach(k=>localStorage.removeItem(k));
@@ -8699,6 +8849,9 @@ async function doLogout(){
   _realtimeSubs.forEach(s=>supa.removeChannel(s));
   _realtimeSubs = [];
   _db.chars=[]; _db.campaigns=[];
+  _activeCampId = null;
+  // Clear in-memory user settings cache
+  Object.keys(_userSettings).forEach(k=>delete _userSettings[k]);
   _showGate();
 }
 
@@ -8723,6 +8876,12 @@ function importChar(){
   char.speed=char.speed||30;
   char.multiclasses=char.multiclasses||[];
   const chars=getChars();chars.push(char);saveChars(chars);
+  // Auto-join the active campaign
+  const ac=getActiveCamp();
+  if(ac && !ac._shared){
+    const allC=getCampaigns();const ci=allC.findIndex(c=>c.id===ac.id);
+    if(ci>=0){if(!allC[ci].charIds)allC[ci].charIds=[];const sid=String(char.id);if(!allC[ci].charIds.includes(sid))allC[ci].charIds.push(sid);saveCampaign(allC[ci]);}
+  } else if(ac && ac._shared){ confirmPlayerChar(ac.id, char.id); }
   toast('✦ '+char.name+' imported!');renderRoster();
 }
 function joinParty(){const code=(document.getElementById('partyJoinIn')?.value||'').trim().toUpperCase();if(!code){toast('Paste a party code','var(--red)');return;}S.set('toh_joined_party',code);toast('Joined party: '+code);}
@@ -8863,7 +9022,7 @@ function renderDiceScreen(){
 function getActiveDiceChar(){
   const party = getFullParty();
   // Check for manually selected character — must be in current campaign
-  const sel = S.get('toh_dice_char');
+  const sel = _userSettings['dice_char'];
   if(sel){
     const c = party.find(c=>String(c.id)===String(sel));
     if(c) return c;
@@ -9378,7 +9537,8 @@ function doRollLabelled(label, mod){
 
 function switchDiceChar(charId){
   // Store selected char for dice screen
-  S.set('toh_dice_char', charId);
+  _userSettings['dice_char'] = String(charId);
+  setUserSetting('dice_char', charId).catch(()=>{});
   renderDiceCharPanel();
 }
 
@@ -10107,15 +10267,16 @@ if('serviceWorker' in navigator){
 ══════════════════════════════════════════════════════ */
 
 /* ── Storage helpers ── */
-// getCampaigns defined in storage layer above
-const _saveCampaignsOLD = c => {
-  S.set('toh_campaigns', c);
-  if(typeof schedulePush!=='undefined'){
-    c.forEach(camp=>schedulePush('campaign',camp.id,camp));
-  }
+// getCampaigns/saveCampaigns defined in storage layer above — Supabase is source of truth
+// Active camp: in-memory + DB-backed (no localStorage)
+let _activeCampId = null;
+const getActiveCampId = () => _activeCampId;
+const setActiveCampId = id => {
+  _activeCampId = id || null;
+  // Persist asynchronously — don't block the call
+  if(id) setUserSetting('active_camp', id).catch(()=>{});
+  else dbDelUserSetting('active_camp').catch(()=>{});
 };
-const getActiveCampId = () => S.get('toh_active_camp') || null;
-const setActiveCampId = id => S.set('toh_active_camp', id);
 
 function getActiveCamp() {
   const id = getActiveCampId();
@@ -10603,7 +10764,8 @@ function deleteCampaign(id) {
 function switchCampaign(id) {
   setActiveCampId(id);
   lootOwner = 'pool';
-  S.set('toh_dice_char', null);
+  _userSettings['dice_char'] = null;
+  setUserSetting('dice_char', null).catch(()=>{});
   combatants = [];
   const camp = getCampaigns().find(c => c.id === id);
   // Re-subscribe realtime for the new campaign (especially loot)
