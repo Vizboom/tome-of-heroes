@@ -1405,7 +1405,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
             onkeydown="if(event.key==='Enter')joinSharedCampaign()">
         </div>
         <button class="btn btn-primary" onclick="joinSharedCampaign()">🔗 Join Campaign</button>
-        <button class="btn btn-outline" onclick="hideCampForm()" style="margin-top:8px">Cancel</button>
       </div>
     </div>
     <!-- New Campaign form -->
@@ -1416,7 +1415,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       
       <div class="field"><label>Description</label><textarea id="cDesc" placeholder="What's this campaign about?"></textarea></div>
       <button class="btn btn-gold" onclick="createCampaign()">Create Campaign</button>
-      <button class="btn btn-outline" onclick="hideCampForm()">← Cancel</button>
     </div>
     <!-- Import Campaign form -->
     <div id="campImportForm" style="display:none">
@@ -1450,7 +1448,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
         <button class="btn btn-primary" onclick="importCampaign()">Import from Code</button>
       </div>
 
-      <button class="btn btn-outline" onclick="hideCampForm()" style="margin-top:10px">← Cancel</button>
     </div>
     <!-- Campaign detail view -->
     <div id="campDetailView" style="display:none">
@@ -1467,7 +1464,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <div class="tab-pane" id="ctab-npcs"></div>
       <div class="tab-pane" id="ctab-arcs"></div>
       <div class="tab-pane" id="ctab-notes"></div>
-      <button class="btn btn-outline" onclick="showCampList()">← All Campaigns</button>
     </div>
   </div>
 
@@ -2810,7 +2806,7 @@ const SCREEN_META={
   playergate:{title:'Join Campaign',icon:'⚔',nav:null,back:'modegate'},
 };
 function nav(id){
-  // If navigating away from the campaign screen while in detail view, close the detail
+  // If navigating away from the campaign screen while in detail/sub-form view, close it cleanly
   if(currentScreen === 'campaign' && id !== 'campaign'){
     const detail = document.getElementById('campDetailView');
     const listView = document.getElementById('campListView');
@@ -2819,12 +2815,15 @@ function nav(id){
       // Clear rendered content so it adds no ghost scroll height
       const header = document.getElementById('campDetailHeader');
       if(header) header.innerHTML = '';
-      ['ctab-sessions','ctab-quests','ctab-npcs','ctab-arcs','ctab-notes'].forEach(id=>{
-        const el = document.getElementById(id); if(el) el.innerHTML='';
+      ['ctab-sessions','ctab-quests','ctab-npcs','ctab-arcs','ctab-notes'].forEach(tabId=>{
+        const el = document.getElementById(tabId); if(el) el.innerHTML='';
       });
     }
     if(listView) listView.style.display = 'block';
     editingCampId = null;
+    // Restore topbar back button to default (hidden) state
+    const backBtn = document.getElementById('backBtn');
+    if(backBtn){ backBtn.style.visibility='hidden'; backBtn.onclick=goBack; }
   }
   document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active');s.classList.remove('desk-secondary');});
   const scr = document.getElementById('scr-'+id);
@@ -4580,6 +4579,9 @@ function showJoinCampForm(){
   document.getElementById('campNewForm').style.display='none';
   document.getElementById('campImportForm').style.display='none';
   document.getElementById('campDetailView').style.display='none';
+  const backBtn = document.getElementById('backBtn');
+  if(backBtn){ backBtn.style.visibility='visible'; backBtn.onclick=()=>showCampList(); }
+  document.getElementById('pageTitle').textContent = 'Join Campaign';
   document.getElementById('campJoinForm').style.display='block';
 }
 
@@ -10522,6 +10524,9 @@ function showNewCampForm() {
   document.getElementById('campImportForm').style.display = 'none';
   document.getElementById('campDetailView').style.display = 'none';
   const jf = document.getElementById('campJoinForm'); if(jf) jf.style.display='none';
+  const backBtn = document.getElementById('backBtn');
+  if(backBtn){ backBtn.style.visibility='visible'; backBtn.onclick=()=>showCampList(); }
+  document.getElementById('pageTitle').textContent = 'New Campaign';
 }
 
 function showImportCampForm() {
@@ -10533,10 +10538,17 @@ function showImportCampForm() {
   document.getElementById('campImportPaneClaude').style.display = '';
   document.getElementById('campImportPaneCode').style.display = 'none';
   document.querySelectorAll('#campImportForm .tab-btn').forEach((b,i)=>b.classList.toggle('active',i===0));
+  const backBtn = document.getElementById('backBtn');
+  if(backBtn){ backBtn.style.visibility='visible'; backBtn.onclick=()=>showCampList(); }
+  document.getElementById('pageTitle').textContent = 'Import Campaign';
 }
 
 function showCampList() {
   editingCampId = null;
+  // Restore topbar to campaign-screen defaults (no back arrow, campaign title)
+  const backBtn = document.getElementById('backBtn');
+  if(backBtn){ backBtn.style.visibility='hidden'; backBtn.onclick=goBack; }
+  document.getElementById('pageTitle').textContent = 'Campaign';
   hideCampForm();
 }
 
@@ -10609,6 +10621,9 @@ function switchCampaign(id) {
 
 
 async function openCamp(id) {
+  const camp = getCampaigns().find(c=>c.id===id);
+  if(!camp){ console.warn('openCamp: campaign not found', id); return; }
+
   editingCampId = id;
   document.getElementById('campListView').style.display = 'none';
   document.getElementById('campNewForm').style.display = 'none';
@@ -10616,9 +10631,13 @@ async function openCamp(id) {
   const jf = document.getElementById('campJoinForm'); if(jf) jf.style.display='none';
   document.getElementById('campDetailView').style.display = 'block';
 
-  const camp = getCampaigns().find(c=>c.id===id);
-  if(camp?._ownerGid){
-    const alreadyLoaded = getChars().some(c=>c._sharedCampId===id);
+  // Wire topbar: show back arrow that returns to campaign list; set title to campaign name
+  document.getElementById('backBtn').style.visibility = 'visible';
+  document.getElementById('backBtn').onclick = () => showCampList();
+  document.getElementById('pageTitle').textContent = camp.name;
+
+  if(camp._ownerGid){
+    const alreadyLoaded = getChars().some(c=>String(c._sharedCampId)===String(id));
     if(!alreadyLoaded){
       const chars = await _fetchCampChars(camp._ownerGid, id, camp);
       chars.forEach(c=>{
@@ -10641,7 +10660,7 @@ function renderCampDetailHeader() {
   // For shared campaigns: get chars by _sharedCampId tag
   // For own campaigns: get from full char list
   let allChars;
-  if(camp._shared){
+  if(camp._ownerGid){
     // DM's fetched chars for this campaign
     const sharedChars = getChars().filter(c=>c._sharedCampId===camp.id);
     const seen = new Set(sharedChars.map(c=>String(c.id)));
@@ -10678,7 +10697,7 @@ function renderCampDetailHeader() {
       </div>
       <div style="display:flex;gap:6px;margin-bottom:8px">
         <button onclick="exportCampaignBackup('${camp.id}')" style="flex:1;padding:7px 10px;background:var(--surface);border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;cursor:pointer">⬇ Export Backup</button>
-        ${!camp._shared?`<button onclick="showCampImportForm()" style="flex:1;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;cursor:pointer">⬆ Import / Restore</button>`:''}
+        ${!camp._ownerGid?`<button onclick="showCampImportForm()" style="flex:1;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;cursor:pointer">⬆ Import / Restore</button>`:''}
       </div>
       ${camp.description?('<p style="font-size:13px;color:var(--muted);font-style:italic;margin-bottom:10px;line-height:1.5">'+camp.description+'</p>'):''}
       <div class="stat-strip-sm">
@@ -10696,7 +10715,7 @@ function renderCampDetailHeader() {
             const globalAssigned = new Set();
             campaigns.forEach(c=>(c.charIds||[]).forEach(id=>globalAssigned.add(String(id))));
 
-            if(camp._shared){
+            if(camp._ownerGid){
               // Shared campaign: DM's chars shown as read-only, own chars selectable
               const campId = camp.id;
               const playerCharId = String(getPlayerCampChar(campId)||'');
