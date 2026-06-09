@@ -364,18 +364,30 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .tab-btn.active{background:var(--purple);color:white;}
 .tab-pane{display:none;}
 .tab-pane.active{display:block;}
-/* Campaign detail: fill and scroll independently when active */
-#campDetailView {
-  display:flex; flex-direction:column; min-height:0;
+/* Campaign detail: flex column filling full height — tab-pane is the scrolling area */
+#campDetailView.detail-active {
+  flex-direction:column;
+  height:100%;
+  overflow:hidden;          /* parent does NOT scroll */
+  padding-bottom:0;
 }
 #scr-campaign.detail-open {
-  overflow:hidden !important;
+  overflow:hidden !important;  /* stop the outer scroll-region from scrolling */
 }
-#campDetailView.detail-active {
+/* The active tab-pane scrolls */
+#campDetailView.detail-active .tab-pane.active {
+  flex:1;
   overflow-y:auto !important;
   -webkit-overflow-scrolling:touch;
-  height:100%;
+  min-height:0;
   padding-bottom:20px;
+}
+/* Header and tab-row stay fixed at the top */
+#campDetailView.detail-active #campDetailHeader {
+  flex-shrink:0;
+}
+#campDetailView.detail-active #campTabRow {
+  flex-shrink:0;
 }
 
 .card{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;}
@@ -1921,7 +1933,15 @@ async function manualRefresh(){
   const ok = await pullAll(getActiveCampId()).catch(()=>false);
   if(!ok){ toast('Sync failed — check connection','var(--red)'); return; }
   if(currentScreen==='roster') renderRoster();
-  else if(currentScreen==='campaign') renderCampList();
+  else if(currentScreen==='campaign'){
+    // If inside a campaign detail, re-render the detail rather than closing it
+    if(editingCampId && document.getElementById('campDetailView')?.classList.contains('detail-active')){
+      renderCampDetailHeader();
+      campTab(_currentCampTab||'sessions');
+    } else {
+      renderCampList();
+    }
+  }
   else if(currentScreen==='party') partyTab('overview');
   toast('✦ Refreshed','var(--green)');
 }
@@ -10675,7 +10695,7 @@ async function openCamp(id) {
   document.getElementById('campImportForm').style.display = 'none';
   const jf = document.getElementById('campJoinForm'); if(jf) jf.style.display='none';
   const _dv = document.getElementById('campDetailView');
-  _dv.style.display = 'block';
+  _dv.style.display = 'flex';
   _dv.classList.add('detail-active');
   document.getElementById('scr-campaign').classList.add('detail-open');
 
@@ -10849,7 +10869,9 @@ function toggleCampChar(campId, charId) {
   renderRoster();
 }
 
+let _currentCampTab = 'sessions';
 function campTab(t) {
+  _currentCampTab = t;
   document.querySelectorAll('#campTabRow .tab-btn').forEach((b,i)=>b.classList.toggle('active',['sessions','quests','npcs','arcs','notes'][i]===t));
   document.querySelectorAll('#campDetailView .tab-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('ctab-'+t).classList.add('active');
