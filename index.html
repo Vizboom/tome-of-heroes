@@ -1660,20 +1660,18 @@ async function dbSaveChar(char){
   const gid = getGroupId()||await ensureGroupId(); if(!gid) return;
   const rowId = gid + '_' + String(char.id);
 
-  // Determine the campaign this character belongs to (either via _playerInCamp for
-  // shared campaigns, or by finding their charId in any campaign's charIds list)
-  const campId = char._playerInCamp || (()=>{
-    for(const c of _db.campaigns||[]){
-      if(!c._ownerGid && (c.charIds||[]).includes(String(char.id))) return c.id;
-    }
-    return null;
-  })();
+  // Find every campaign this character is assigned to and publish under its joinCode
+  const campaigns = _db.campaigns || [];
+  const charCamps = campaigns.filter(c => (c.charIds||[]).includes(String(char.id)));
+  // Also include _playerInCamp tag
+  if(char._playerInCamp){
+    const tagged = campaigns.find(c=>String(c.id)===String(char._playerInCamp));
+    if(tagged && !charCamps.includes(tagged)) charCamps.push(tagged);
+  }
 
-  // Set share_code to 'camp_{campId}_{shareCode}' so the campaign owner's realtime
-  // subscription picks it up. Works for both own and shared campaigns.
-  const shareCode = (campId && char.shareCode)
-    ? 'camp_' + String(campId) + '_' + char.shareCode
-    : (char.shareCode || null);
+  // Use the first campaign's joinCode as the share_code column for realtime subscriptions
+  const firstJoinCode = charCamps.find(c=>c.joinCode)?.joinCode || null;
+  const shareCode = firstJoinCode ? 'camp_' + firstJoinCode : (char.shareCode || null);
 
   const row = { id: rowId, group_id: gid, share_code: shareCode, data: char };
   const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
@@ -1681,16 +1679,18 @@ async function dbSaveChar(char){
   const i = _db.chars.findIndex(c=>String(c.id)===String(char.id));
   if(i>=0) _db.chars[i]=char; else _db.chars.push(char);
 
-  // Always publish to settings table when the char has a campaign assignment.
-  // settings table has no RLS — readable by any group_id.
-  // Key: 'player_char_{campId}_{shareCode}' — scanned by pullAll on every login.
-  if(campId && char.shareCode){
-    const settingsKey = 'player_char_'+String(campId)+'_'+char.shareCode;
+  // Publish to settings table under player_char_{joinCode}_{charId}
+  // One row per (campaign, character) pair — keyed by the campaign's joinCode.
+  // settings table has no RLS so any user can read it by joinCode.
+  for(const camp of charCamps){
+    if(!camp.joinCode) continue;
+    const settingsKey = 'player_char_' + camp.joinCode + '_' + String(char.id);
     try {
       await supa.from('settings').upsert(
         { key: settingsKey, value: JSON.stringify(char) },
         { onConflict: 'key' }
       );
+      console.log('[dbSaveChar] published char', char.name, 'under key', settingsKey);
     } catch(e){ console.warn('cross-group char write failed:', e.message); }
   }
 }
@@ -1819,27 +1819,45 @@ async function pullAll(campId){
     }
 
     // Pull chars published by other users for ALL campaigns this user participates in.
-    // Uses settings table (no RLS) — key: 'player_char_{campId}_{shareCode}'.
-    // Covers: own campaigns (DM seeing players' chars) AND joined campaigns (player seeing others).
-    const allCampIds = _db.campaigns.map(c=>String(c.id));
-    if(allCampIds.length){
+    // Key format: 'player_char_{joinCode}_{charId}' — joinCode is the campaign's public share code.
+    // Deduplication: if multiple rows exist for the same charId in a campaign, last-write-wins.
+    const allJoinCodes = _db.campaigns.filter(c=>c.joinCode).map(c=>({id:String(c.id), joinCode:c.joinCode}));
+    if(allJoinCodes.length){
       try {
-        for(const cid of allCampIds){
-          const prefix = 'player_char_'+cid+'_';
+        for(const {id: cid, joinCode} of allJoinCodes){
+          const prefix = 'player_char_' + joinCode + '_';
           const { data: settingsRows } = await supa.from('settings').select('key,value').like('key', prefix+'%');
-          if(settingsRows?.length){
-            settingsRows.forEach(r=>{
-              let c; try{ c=JSON.parse(r.value); }catch{ return; }
-              if(!c || !c.id) return;
-              // Mark as cross-group char for this campaign
-              const existing = _db.chars.find(x=>String(x.id)===String(c.id));
-              // Don't overwrite own chars (same group_id) with stale settings copy
-              if(existing && !existing._sharedCampId) return;
-              c._sharedCampId = cid;  // marks this char as cross-group
-              const idx = _db.chars.findIndex(x=>String(x.id)===String(c.id));
-              if(idx>=0) _db.chars[idx]=c; else _db.chars.push(c);
-            });
-            console.log('[pullAll] loaded', settingsRows.length, 'cross-group chars for campaign', cid);
+          if(!settingsRows?.length) continue;
+          // De-dup: if multiple rows for same charId, keep the most recently written one
+          const charMap = new Map();
+          settingsRows.forEach(r=>{
+            let c; try{ c=JSON.parse(r.value); }catch{ return; }
+            if(!c || !c.id) return;
+            const cid2 = String(c.id);
+            if(!charMap.has(cid2) || (c.created||0) > (charMap.get(cid2).created||0)){
+              charMap.set(cid2, c);
+            }
+          });
+          charMap.forEach((c, charId)=>{
+            // Never overwrite a locally-owned char with a cross-group copy
+            const existing = _db.chars.find(x=>String(x.id)===charId);
+            if(existing && !existing._sharedCampId) return;
+            c._sharedCampId = cid;
+            const idx = _db.chars.findIndex(x=>String(x.id)===charId);
+            if(idx>=0) _db.chars[idx]=c; else _db.chars.push(c);
+          });
+          if(charMap.size) console.log('[pullAll] loaded', charMap.size, 'cross-group chars for campaign', joinCode);
+          // Clean up duplicate settings rows (keep only the canonical keyed-by-charId rows)
+          const staleRows = settingsRows.filter(r=>{
+            const parts = r.key.split('_'); // player_char_{joinCode}_{charId}
+            // canonical key has exactly 4 parts; old-style keys may have more
+            return parts.length !== 4;
+          });
+          if(staleRows.length){
+            console.log('[pullAll] deleting', staleRows.length, 'stale settings rows');
+            for(const row of staleRows){
+              await supa.from('settings').delete().eq('key', row.key).catch(()=>{});
+            }
           }
         }
       } catch(e){ console.warn('[pullAll] player chars pull error:', e.message); }
@@ -1970,26 +1988,29 @@ function subscribeRealtime(campId){
       }).subscribe();
     _realtimeSubs.push(lootSub);
 
-    // Subscribe to cross-group player characters for this campaign
-    // Uses share_code prefix 'camp_{campId}_' written by players from other groups
-    const campPrefix = 'camp_'+campId+'_';
-    const sharedCharSub = supa.channel('shared-chars-'+campId)
-      .on('postgres_changes',{event:'*',schema:'public',table:'characters'}, async payload=>{
-        // Filter to rows belonging to this campaign by share_code prefix
-        const sc = payload.new?.share_code || payload.old?.share_code || '';
-        if(!sc.startsWith(campPrefix)) return;
-        if(payload.eventType==='DELETE'){
-          const oldData = payload.old?.data;
-          if(oldData?.id) _db.chars = _db.chars.filter(c=>String(c.id)!==String(oldData.id));
-        } else if(payload.new?.data){
-          const updated = payload.new.data;
-          const i = _db.chars.findIndex(c=>String(c.id)===String(updated.id));
-          if(i>=0) _db.chars[i]=updated; else _db.chars.push(updated);
-        }
-        if(document.getElementById('rosterList')?.closest('.screen.active')) renderRoster();
-        if(document.getElementById('ptab-overview')?.classList.contains('active')) renderPartyOverview();
-        if(document.getElementById('scr-character')?.classList.contains('active')) renderCharacterScreen();
-      }).subscribe();
+    // Subscribe to cross-group player characters for this campaign.
+    // share_code is set to 'camp_{joinCode}' when a char is assigned to a campaign.
+    const camp = getCampaigns().find(c=>String(c.id)===String(campId));
+    const joinCode = camp?.joinCode;
+    if(joinCode){
+      const campPrefix = 'camp_'+joinCode;
+      const sharedCharSub = supa.channel('shared-chars-'+joinCode)
+        .on('postgres_changes',{event:'*',schema:'public',table:'characters'}, async payload=>{
+          const sc = payload.new?.share_code || payload.old?.share_code || '';
+          if(sc !== campPrefix) return; // exact match on 'camp_{joinCode}'
+          if(payload.eventType==='DELETE'){
+            const oldData = payload.old?.data;
+            if(oldData?.id) _db.chars = _db.chars.filter(c=>String(c.id)!==String(oldData.id));
+          } else if(payload.new?.data){
+            const updated = payload.new.data;
+            updated._sharedCampId = campId;
+            const i = _db.chars.findIndex(c=>String(c.id)===String(updated.id));
+            if(i>=0) _db.chars[i]=updated; else _db.chars.push(updated);
+          }
+          if(document.getElementById('rosterList')?.closest('.screen.active')) renderRoster();
+          if(document.getElementById('ptab-overview')?.classList.contains('active')) renderPartyOverview();
+          if(document.getElementById('scr-character')?.classList.contains('active')) renderCharacterScreen();
+        }).subscribe();
     _realtimeSubs.push(sharedCharSub);
   }
 }
@@ -2637,21 +2658,13 @@ function saveCampaign(camp){
   const i = _db.campaigns.findIndex(c=>c.id===camp.id);
   if(i>=0) _db.campaigns[i]=camp; else _db.campaigns.push(camp);
   dbSaveCampaign(camp);
-  // Re-publish all chars assigned to this campaign to the settings table
-  // so other users (different group_id) can discover them via pullAll.
-  if(!camp._ownerGid && (camp.charIds||[]).length){  // only for own campaigns (not joined ones)
+  // Re-publish all chars assigned to this campaign so other users see them.
+  // dbSaveChar now uses campaign joinCode so it works for any campaign.
+  if(camp.joinCode && (camp.charIds||[]).length){
     const ownChars = _db.chars.filter(c=>!c._sharedCampId);
     (camp.charIds||[]).forEach(cid=>{
       const char = ownChars.find(c=>String(c.id)===String(cid));
-      if(char && char.shareCode){
-        // Tag the char with this campaign so dbSaveChar publishes to settings
-        if(!char._playerInCamp){
-          char._playerInCamp = camp.id;
-          const ci = _db.chars.findIndex(c=>String(c.id)===String(char.id));
-          if(ci>=0) _db.chars[ci] = char;
-        }
-        dbSaveChar(char);
-      }
+      if(char) dbSaveChar(char);
     });
   }
 }
@@ -4210,80 +4223,47 @@ async function _fetchCampRow(ownerGid, campId){
   } catch(e){ return null; }
 }
 
-// Fetch characters for a shared campaign
-// Returns all chars for the owner group (caller filters by _sharedCampId)
+// Fetch all characters for a campaign by its joinCode (primary) or by ownerGid (fallback).
+// Returns an array of character data objects (not Supabase rows).
 async function _fetchCampChars(ownerGid, campId, campData){
+  const joinCode = campData?.joinCode;
   const charIds = (campData?.charIds || []).map(String);
-  console.log('[fetchCampChars] ownerGid:', ownerGid, 'campId:', campId, 'charIds:', charIds);
+  console.log('[fetchCampChars] joinCode:', joinCode, 'ownerGid:', ownerGid, 'charIds:', charIds.length);
 
-  let allChars = [];
+  const seen = new Map(); // charId → char data
 
-  // Strategy 1: fetch by group_id (standard)
-  try {
-    const { data: rows, error } = await supa.from('characters').select('*').eq('group_id', ownerGid);
-    console.log('[fetchCampChars] strategy1 group_id query:', rows?.length||0, 'rows, error:', error?.message||'none');
-    if(!error && rows?.length){
-      allChars = rows.map(r=>r.data||r).filter(c=>c && c.id);
-    }
-  } catch(e){ console.warn('[fetchCampChars] strategy1 threw:', e.message); }
-
-  // Strategy 2: if we have charIds, fetch each character row by composite key
-  if(!allChars.length && charIds.length){
-    console.log('[fetchCampChars] strategy2: fetching by composite keys');
+  // Primary: settings table by joinCode — no RLS, works across group_ids
+  if(joinCode){
     try {
-      const compositeIds = charIds.map(id => ownerGid + '_' + id);
-      const { data: rows, error } = await supa.from('characters').select('*').in('id', compositeIds);
-      console.log('[fetchCampChars] strategy2:', rows?.length||0, 'rows, error:', error?.message||'none');
-      if(!error && rows?.length){
-        allChars = rows.map(r=>r.data||r).filter(c=>c && c.id);
-      }
-    } catch(e){ console.warn('[fetchCampChars] strategy2 threw:', e.message); }
-  }
-
-  // Strategy 3: scan all characters and match by charIds
-  if(!allChars.length && charIds.length){
-    console.log('[fetchCampChars] strategy3: broad scan filtered to charIds');
-    try {
-      const { data: rows, error } = await supa.from('characters').select('*');
-      console.log('[fetchCampChars] strategy3 broad scan:', rows?.length||0, 'rows, error:', error?.message||'none');
-      if(!error && rows?.length){
-        const all = rows.map(r=>r.data||r).filter(c=>c && c.id);
-        allChars = all.filter(c => charIds.includes(String(c.id)));
-        console.log('[fetchCampChars] strategy3 filtered:', allChars.length, 'of', all.length);
-      }
-    } catch(e){ console.warn('[fetchCampChars] strategy3 threw:', e.message); }
-  }
-
-  // Strategy 4: fetch cross-group player chars stored in settings table
-  // Key pattern: 'player_char_{campId}_{shareCode}' — no RLS, readable by all
-  try {
-    const prefix = 'player_char_'+String(campId)+'_';
-    const { data: settingsRows, error: sErr } = await supa.from('settings')
-      .select('key,value')
-      .like('key', prefix+'%');
-    if(!sErr && settingsRows?.length){
-      const playerChars = settingsRows.map(r=>{
-        try { return JSON.parse(r.value); } catch{ return null; }
-      }).filter(c=>c && c.id);
-      playerChars.forEach(c=>{
-        if(!allChars.some(x=>String(x.id)===String(c.id))) allChars.push(c);
+      const prefix = 'player_char_' + joinCode + '_';
+      const { data: rows, error } = await supa.from('settings').select('key,value').like('key', prefix+'%');
+      console.log('[fetchCampChars] settings scan:', rows?.length||0, 'rows, error:', error?.message||'none');
+      (rows||[]).forEach(r=>{
+        let c; try{ c=JSON.parse(r.value); }catch{ return; }
+        if(!c || !c.id) return;
+        const cid = String(c.id);
+        // If multiple rows for the same char, keep freshest
+        if(!seen.has(cid) || (c.created||0) > (seen.get(cid).created||0)) seen.set(cid, c);
       });
-      console.log('[fetchCampChars] strategy4 (settings) player chars:', playerChars.length);
-    }
-  } catch(e){ console.warn('[fetchCampChars] strategy4 threw:', e.message); }
-
-  // Strategy 5: settings table scan by 'player_char_{campId}_' prefix (no RLS — always readable)
-  // Redundant with strategy 4 but kept as an explicit second pass to ensure freshness
-  // (strategy 4 already covers this — this is a safety net with a slightly different query)
-
-  console.log('[fetchCampChars] final result:', allChars.length, 'chars:', allChars.map(c=>c.name+'(id:'+c.id+')').join(', '));
-
-  // If charIds defined, filter to only those
-  if(charIds.length && allChars.length){
-    const filtered = allChars.filter(c => charIds.includes(String(c.id)));
-    console.log('[fetchCampChars] charIds filter:', filtered.length, 'of', allChars.length);
-    return filtered.length ? filtered : allChars; // fallback to all if filter yields nothing
+    } catch(e){ console.warn('[fetchCampChars] settings scan threw:', e.message); }
   }
+
+  // Fallback: owner's characters table — catches chars not yet cross-published
+  if(ownerGid){
+    try {
+      const { data: rows, error } = await supa.from('characters').select('data,id').eq('group_id', ownerGid);
+      console.log('[fetchCampChars] chars table fallback:', rows?.length||0, 'rows, error:', error?.message||'none');
+      (rows||[]).forEach(r=>{
+        const c = r.data; if(!c || !c.id) return;
+        const cid = String(c.id);
+        // Only use this if it's in charIds and not already found via settings
+        if(!seen.has(cid) && (!charIds.length || charIds.includes(cid))) seen.set(cid, c);
+      });
+    } catch(e){ console.warn('[fetchCampChars] chars fallback threw:', e.message); }
+  }
+
+  const allChars = Array.from(seen.values());
+  console.log('[fetchCampChars] result:', allChars.length, 'chars:', allChars.map(c=>c.name||c.id).join(', '));
   return allChars;
 }
 
