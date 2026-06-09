@@ -364,6 +364,19 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .tab-btn.active{background:var(--purple);color:white;}
 .tab-pane{display:none;}
 .tab-pane.active{display:block;}
+/* Campaign detail: fill and scroll independently when active */
+#campDetailView {
+  display:flex; flex-direction:column; min-height:0;
+}
+#scr-campaign.detail-open {
+  overflow:hidden !important;
+}
+#campDetailView.detail-active {
+  overflow-y:auto !important;
+  -webkit-overflow-scrolling:touch;
+  height:100%;
+  padding-bottom:20px;
+}
 
 .card{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;}
 .field{margin-bottom:12px;}
@@ -2803,6 +2816,8 @@ function nav(id){
     const listView = document.getElementById('campListView');
     if(detail){
       detail.style.display = 'none';
+      detail.classList.remove('detail-active');
+      document.getElementById('scr-campaign')?.classList.remove('detail-open');
       // Clear rendered content so it adds no ghost scroll height
       const header = document.getElementById('campDetailHeader');
       if(header) header.innerHTML = '';
@@ -2838,8 +2853,12 @@ function nav(id){
       _showGate();
     }
     if(id==='loot'){
-      const _defId = _userSettings['dice_char'];
-      if(_defId && getFullParty().find(c=>String(c.id)===String(_defId))) lootOwner = _defId;
+      const campId2 = getActiveCampId();
+      const campChar2 = campId2 && _userSettings['active_char_'+campId2];
+      const _defId = campChar2 || _userSettings['dice_char'];
+      const allVisible = getVisibleChars();
+      if(_defId && allVisible.find(c=>String(c.id)===String(_defId))) lootOwner = _defId;
+      else if(lootOwner !== 'pool' && !allVisible.find(c=>String(c.id)===String(lootOwner))) lootOwner = 'pool';
       const _lootCampId = getActiveCampId();
       // Fetch fresh loot if not yet loaded (important for shared campaign players)
       if(_lootCampId && !_db.items[_lootCampId]){
@@ -2850,12 +2869,16 @@ function nav(id){
     }
     if(id==='dice') renderDiceScreen();
     if(id==='character'){
-      // Sync character screen to default char if one is set and valid
-      const _defId = _userSettings['dice_char'];
-      if(_defId && getFullParty().find(c=>String(c.id)===String(_defId))){
-        charScreenId = _defId; // may be string — renderCharacterScreen uses String() coercion
-      } else if(!charScreenId && getFullParty().length){
-        charScreenId = getFullParty()[0].id;
+      // Resolve active character: prefer per-campaign saved char, then global dice_char
+      const campId = getActiveCampId();
+      const campChar = campId && _userSettings['active_char_'+campId];
+      const defId = campChar || _userSettings['dice_char'];
+      const pool = getVisibleChars();
+      if(defId && pool.find(c=>String(c.id)===String(defId))){
+        charScreenId = defId;
+        _userSettings['dice_char'] = String(defId);
+      } else if(pool.length){
+        charScreenId = pool[0].id;
       }
       renderCharacterScreen();
     }
@@ -2932,6 +2955,12 @@ function setDefaultChar(id, silent){
   // Persist as the global active character
   setUserSetting('dice_char', id).catch(()=>{});
   _userSettings['dice_char'] = sid;
+  // Also persist per-campaign so we can restore on campaign switch
+  const campId = getActiveCampId();
+  if(campId){
+    setUserSetting('active_char_'+campId, id).catch(()=>{});
+    _userSettings['active_char_'+campId] = sid;
+  }
   // Sync character tab
   charScreenId = id;
   // Sync loot tab to this character
@@ -8933,6 +8962,11 @@ function bootApp(){
         _activeCampId = _db.campaigns[0].id;
       }
       subscribeRealtime(_activeCampId);
+      // Restore per-campaign active character into dice_char
+      if(_activeCampId){
+        const _campChar = _userSettings['active_char_'+_activeCampId];
+        if(_campChar) _userSettings['dice_char'] = _campChar;
+      }
       // Migrate all campaigns to current schema (background — does not block boot)
       migrateAllCampaigns().catch(e=>console.warn('[migrate] error:', e.message));
     }
@@ -9163,19 +9197,18 @@ function renderDiceScreen(){
 
 function getActiveDiceChar(){
   const party = getFullParty();
-  // Check for manually selected character — must be in current campaign
-  const sel = _userSettings['dice_char'];
+  const visible = getVisibleChars();
+  // Resolve: per-campaign stored char takes priority, then global dice_char
+  const campId = getActiveCampId();
+  const campChar = campId && _userSettings['active_char_'+campId];
+  const sel = campChar || _userSettings['dice_char'];
   if(sel){
-    const c = party.find(c=>String(c.id)===String(sel));
+    const c = party.find(c=>String(c.id)===String(sel))
+            || visible.find(c=>String(c.id)===String(sel));
     if(c) return c;
   }
-  // Player mode: use their character
-  if(false){
-    const id = getPlayerCharId();
-    return getChars().find(c=>String(c.id)===String(id))||null;
-  }
-  // DM mode: first character in active campaign party
-  return party[0]||null;
+  // Auto-pick: first in party, then first visible
+  return party[0] || visible[0] || null;
 }
 
 function renderDiceCharPanel(){
@@ -10449,7 +10482,10 @@ function renderCampList() {
   document.getElementById('campListView').style.display = 'block';
   document.getElementById('campNewForm').style.display = 'none';
   document.getElementById('campImportForm').style.display = 'none';
-  document.getElementById('campDetailView').style.display = 'none';
+  const _dvr = document.getElementById('campDetailView');
+  _dvr.style.display = 'none';
+  _dvr.classList.remove('detail-active');
+  document.getElementById('scr-campaign').classList.remove('detail-open');
 
 
   // If _db is empty and we have a group, pull from Supabase first
@@ -10592,11 +10628,26 @@ function deleteCampaign(id) {
 
 function switchCampaign(id) {
   setActiveCampId(id);
-  lootOwner = 'pool';
-  _userSettings['dice_char'] = null;
-  setUserSetting('dice_char', null).catch(()=>{});
   combatants = [];
   subscribeRealtime(id);
+
+  // Restore the character the user last used in this campaign
+  const savedChar = _userSettings['active_char_'+id];
+  const party = getChars(); // use all chars since full party may not be loaded yet
+  const matchedChar = savedChar && party.find(c=>String(c.id)===String(savedChar));
+  if(matchedChar){
+    _userSettings['dice_char'] = String(matchedChar.id);
+    charScreenId = matchedChar.id;
+    lootOwner = matchedChar.id;
+    setUserSetting('dice_char', matchedChar.id).catch(()=>{});
+  } else {
+    // No saved char for this campaign — clear selection so it auto-picks from party
+    _userSettings['dice_char'] = null;
+    charScreenId = null;
+    lootOwner = 'pool';
+    setUserSetting('dice_char', null).catch(()=>{});
+  }
+
   dbGetItems(id).then(()=>{
     if(document.getElementById('ltab-inventory')?.classList.contains('active')) renderInventory();
     if(document.getElementById('ltab-pool')?.classList.contains('active')) renderPool();
@@ -10607,6 +10658,9 @@ function switchCampaign(id) {
   renderCampList();
   renderCampaignSwitchBanner();
   renderRoster();
+  // Refresh active tabs with restored character
+  if(document.getElementById('scr-dice')?.classList.contains('active')) renderDiceCharPanel();
+  if(document.getElementById('scr-character')?.classList.contains('active')) renderCharacterScreen();
 }
 
 
@@ -10620,7 +10674,10 @@ async function openCamp(id) {
   document.getElementById('campNewForm').style.display = 'none';
   document.getElementById('campImportForm').style.display = 'none';
   const jf = document.getElementById('campJoinForm'); if(jf) jf.style.display='none';
-  document.getElementById('campDetailView').style.display = 'block';
+  const _dv = document.getElementById('campDetailView');
+  _dv.style.display = 'block';
+  _dv.classList.add('detail-active');
+  document.getElementById('scr-campaign').classList.add('detail-open');
 
   // Wire topbar: show back arrow that returns to campaign list; set title to campaign name
   document.getElementById('backBtn').style.visibility = 'visible';
