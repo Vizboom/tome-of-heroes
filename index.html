@@ -2814,11 +2814,17 @@ function nav(id){
   if(currentScreen === 'campaign' && id !== 'campaign'){
     const detail = document.getElementById('campDetailView');
     const listView = document.getElementById('campListView');
-    if(detail && detail.style.display !== 'none'){
+    if(detail){
       detail.style.display = 'none';
-      if(listView) listView.style.display = 'block';
-      editingCampId = null;
+      // Clear rendered content so it adds no ghost scroll height
+      const header = document.getElementById('campDetailHeader');
+      if(header) header.innerHTML = '';
+      ['ctab-sessions','ctab-quests','ctab-npcs','ctab-arcs','ctab-notes'].forEach(id=>{
+        const el = document.getElementById(id); if(el) el.innerHTML='';
+      });
     }
+    if(listView) listView.style.display = 'block';
+    editingCampId = null;
   }
   document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active');s.classList.remove('desk-secondary');});
   const scr = document.getElementById('scr-'+id);
@@ -2834,7 +2840,7 @@ function nav(id){
 
   try {
     if(id==='roster'){renderRoster();renderCampaignSwitchBanner();}
-    if(id==='campaign'){renderCampList();}
+    if(id==='campaign'){renderCampList();const _cs=document.getElementById('scr-campaign');if(_cs)_cs.scrollTop=0;}
     if(id==='party'){partyTab('initiative');}
     if(id==='modegate'){
       const keyInput = document.getElementById('claudeApiKeyInput');
@@ -2856,7 +2862,11 @@ function nav(id){
     if(id==='character'){
       // Sync character screen to default char if one is set and valid
       const _defId = _userSettings['dice_char'];
-      if(_defId && getFullParty().find(c=>String(c.id)===String(_defId))) charScreenId = _defId;
+      if(_defId && getFullParty().find(c=>String(c.id)===String(_defId))){
+        charScreenId = _defId; // may be string — renderCharacterScreen uses String() coercion
+      } else if(!charScreenId && getFullParty().length){
+        charScreenId = getFullParty()[0].id;
+      }
       renderCharacterScreen();
     }
   } catch(err) {
@@ -4228,12 +4238,7 @@ async function userLogin(){
   }
 
   _status('Entering app…');
-  if(!_db.campaigns.length){
-    _enterApp();
-    setTimeout(()=>_promptFirstCampaign(), 400);
-  } else {
-    _enterApp();
-  }
+  _enterApp();
 }
 
 // Load all user settings from Supabase into cache on login
@@ -4248,31 +4253,9 @@ async function _loadUserSettings(){
   } catch(e){ console.warn('_loadUserSettings error:', e.message); }
 }
 
-// Prompt shown to new users (or any user with no campaigns) after login
+// Navigate to campaign screen — no popup, just go straight there
 function _promptFirstCampaign(){
-  const existing = document.getElementById('firstCampModal');
-  if(existing) existing.remove();
-  const modal = document.createElement('div');
-  modal.id = 'firstCampModal';
-  modal.className = 'modal-backdrop';
-  modal.innerHTML = `<div class="modal-box" style="max-width:380px;text-align:center">
-    <div style="font-size:48px;margin-bottom:12px">📖</div>
-    <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold);margin-bottom:8px">Welcome, ${getGroupId()}!</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:24px;line-height:1.6">
-      You don't have any campaigns yet.<br>Create your own or join a friend's.
-    </div>
-    <button onclick="document.getElementById('firstCampModal').remove();nav('campaign');setTimeout(showNewCampForm,100)" class="modegate-btn" style="width:100%;margin-bottom:10px;background:var(--gold);color:#0d0a1a">
-      <span class="mb-icon">✦</span>
-      <span class="mb-text"><span class="mb-label">Create Campaign</span><span class="mb-desc" style="color:#0d0a1a99">Start a new adventure</span></span>
-    </button>
-    <button onclick="document.getElementById('firstCampModal').remove();nav('campaign');setTimeout(showJoinCampForm,100)" class="modegate-btn" style="width:100%;background:var(--surface2);border:1px solid var(--border)">
-      <span class="mb-icon">🔗</span>
-      <span class="mb-text"><span class="mb-label">Join Campaign</span><span class="mb-desc">Enter a share code</span></span>
-    </button>
-    <button onclick="document.getElementById('firstCampModal').remove()" style="margin-top:12px;background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;font-family:'Cinzel',serif;letter-spacing:1px">Skip for now</button>
-  </div>`;
-  document.body.appendChild(modal);
-  modal.addEventListener('click', e=>{if(e.target===modal){modal.remove();}});
+  nav('campaign');
 }
 
 function _enterApp(){
@@ -8994,10 +8977,7 @@ function _bootContinue(mode, nav_bar){
       }
       if(currentScreen === 'campaign') renderCampList();
       else { renderCampList(); renderRoster(); }
-      // Show campaign prompt if the user still has no campaigns after loading
-      if(!_db.campaigns.length){
-        setTimeout(()=>_promptFirstCampaign(), 600);
-      }
+      // If still no campaigns after loading, the campaign screen is already shown
     });
 }
 
@@ -12290,7 +12270,7 @@ function getItemEffect(item){
 }
 
 function getCurrentCharItems(){
-  const char = getVisibleChars().find(function(c){return c.id===charScreenId;});
+  const char = getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
   return char ? getCharLootItems(char) : [];
 }
 
@@ -12301,7 +12281,7 @@ function charTab(t){
   document.querySelectorAll('#scr-character .tab-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('cstab-'+t)?.classList.add('active');
   const chars = getVisibleChars();
-  const char = chars.find(c=>c.id===charScreenId)||chars[0];
+  const char = chars.find(c=>String(c.id)===String(charScreenId||''))||chars[0];
   if(!char) return;
   const cls = CLASSES[char.classIdx];
   if(t==='equip'){   renderPaperdoll(char,cls); renderInvBag(char,cls); renderCharStats(char,cls); initDragAndDrop(); }
@@ -12739,14 +12719,14 @@ function renderCharacterScreen(){
     heroEl.innerHTML=''; emptyEl.style.display=''; mainEl.style.display='none'; return;
   }
   emptyEl.style.display='none'; mainEl.style.display='';
-  let char = chars.find(function(c){return c.id===charScreenId;})||chars[0];
+  let char = chars.find(function(c){return String(c.id)===String(charScreenId||'');})||chars[0];
   charScreenId = char.id;
   const cls = CLASSES[char.classIdx];
 
   // Character selector pills
   heroEl.innerHTML='<div class="char-select-bar">'+chars.map(function(c){
     const cc=classColor(c.classIdx);
-    return '<div class="char-select-pill '+(c.id===charScreenId?'active':'')+'" style="--cc:'+cc+';--cc-dim:'+cc+'22" onclick="selectCharScreen('+c.id+')"><span class="csp-icon">'+classIcon(c.classIdx)+'</span>'+c.name+'</div>';
+    return '<div class="char-select-pill '+(String(c.id)===String(charScreenId)?'active':'')+'" style="--cc:'+cc+';--cc-dim:'+cc+'22" onclick="selectCharScreen('+c.id+')"><span class="csp-icon">'+classIcon(c.classIdx)+'</span>'+c.name+'</div>';
   }).join('')+'</div>';
 
   // Re-activate the current tab
@@ -13184,7 +13164,7 @@ function attachTouchDrag(tile, itemId){
 
 /* ── Equip/Unequip ── */
 function _doEquipItem(slotId, itemId){
-  const char=getVisibleChars().find(function(c){return c.id===charScreenId;});
+  const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
   if(!char) return;
   const item=getCurrentCharItems().find(function(i){return String(i.id)===String(itemId);});
   if(!item) return;
@@ -13205,7 +13185,7 @@ function _doEquipItem(slotId, itemId){
 }
 
 function unequipSlot(slotId){
-  const char=getVisibleChars().find(function(c){return c.id===charScreenId;});
+  const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
   if(!char) return;
   const slots=Object.assign({},getEquippedItems(char));
   const item=slots[slotId];
@@ -13223,7 +13203,7 @@ function unequipSlot(slotId){
 function equipItem(slotId, itemId){ _doEquipItem(slotId, itemId); closeSlotPicker(); }
 
 function _refreshCharScreen(){
-  const char=getVisibleChars().find(function(c){return c.id===charScreenId;});
+  const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
   if(!char) return;
   const cls=CLASSES[char.classIdx];
   renderPaperdoll(char,cls); renderInvBag(char,cls); renderCharStats(char,cls);
@@ -13231,7 +13211,7 @@ function _refreshCharScreen(){
 
 /* ── Slot click (when empty) ── */
 function handleSlotClick(slotId){
-  const char=getVisibleChars().find(function(c){return c.id===charScreenId;});
+  const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
   if(!char) return;
   const slots=getEquippedItems(char);
   if(slots[slotId] && slots[slotId]._2hBlocked){
@@ -13242,7 +13222,7 @@ function handleSlotClick(slotId){
 
 /* ── Item tile click ── */
 function handleItemClick(itemId){
-  const char=getVisibleChars().find(function(c){return c.id===charScreenId;});
+  const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
   if(!char) return;
   const item=getCurrentCharItems().find(function(i){return String(i.id)===String(itemId);});
   if(!item) return;
@@ -13292,7 +13272,7 @@ function handleItemClick(itemId){
 let _pickerSlotId=null;
 
 function openSlotPicker(slotId){
-  const char=getVisibleChars().find(function(c){return c.id===charScreenId;});
+  const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
   if(!char) return;
   const slot=EQUIP_SLOTS.find(function(s){return s.id===slotId;});
   if(!slot) return;
@@ -13338,7 +13318,7 @@ function closeSlotPicker(){
 function showItemTooltip(evt, itemId){
   const item=getCurrentCharItems().find(function(i){return String(i.id)===String(itemId);});
   if(!item) return;
-  const char=getVisibleChars().find(function(c){return c.id===charScreenId;});
+  const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
   const slots=char?getEquippedItems(char):{};
   const equippedIn=EQUIP_SLOTS.find(function(s){return slots[s.id]&&String(slots[s.id].id)===String(itemId);});
   const rc=RARITY_COLORS[item.rarity]||'#aaa';
