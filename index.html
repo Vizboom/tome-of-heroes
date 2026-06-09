@@ -46,7 +46,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .scroll-region::-webkit-scrollbar{width:3px;}
 .scroll-region::-webkit-scrollbar-thumb{background:var(--purple);border-radius:2px;}
 
-.bottomnav{height:var(--nav-h);background:var(--bg2);border-top:1px solid var(--border);display:flex;flex-shrink:0;z-index:50;}
+.bottomnav{height:var(--nav-h);background:var(--bg2);border-bottom:1px solid var(--border);display:flex;flex-shrink:0;z-index:50;}
 .nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);font-family:'Cinzel',serif;font-size:8px;letter-spacing:1px;transition:var(--trans);padding-bottom:4px;cursor:pointer;}
 .nav-item.active{color:var(--gold);}
 .nav-item .nav-icon{font-size:20px;line-height:1;}
@@ -118,7 +118,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     border-left: none; border-bottom: 2px solid transparent; height: 100%;
   }
   .nav-item .nav-icon { font-size: 16px; }
-  .nav-item.active { background: transparent; border-left-color: transparent; border-bottom-color: var(--gold); color: var(--gold); }
+  .nav-item.active { background: transparent; border-left-color: transparent; border-top-color: var(--gold); color: var(--gold); }
 
   /* Content area — single full-width column */
   #content-area { grid-area: content; overflow: hidden; display: flex; }
@@ -1005,6 +1005,14 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <button onclick="nav('modegate')" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px 8px;line-height:1" title="Settings">⚙</button>
     <span class="topbar-icon" id="topIcon">⚔</span>
   </div>
+  <div class="bottomnav">
+    <div class="nav-item active" id="nav-roster" onclick="nav('roster')"><span class="nav-icon">📜</span>ROSTER</div>
+    <div class="nav-item" id="nav-dice" onclick="nav('dice')"><span class="nav-icon">⬡</span>DICE</div>
+    <div class="nav-item" id="nav-character" onclick="nav('character')"><span class="nav-icon">🧙</span>CHARACTER</div>
+    <div class="nav-item" id="nav-party" onclick="nav('party')"><span class="nav-icon">🛡</span>PARTY</div>
+    <div class="nav-item" id="nav-loot" onclick="nav('loot')"><span class="nav-icon">💰</span>LOOT</div>
+    <div class="nav-item" id="nav-campaign" onclick="nav('campaign')"><span class="nav-icon">📖</span>CAMPAIGN</div>
+  </div>
   <div class="toast" id="toast"></div>
   <div id="content-area">
 
@@ -1464,15 +1472,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   </div>
 
   </div><!-- /content-area -->
-
-  <div class="bottomnav">
-    <div class="nav-item active" id="nav-roster" onclick="nav('roster')"><span class="nav-icon">📜</span>ROSTER</div>
-    <div class="nav-item" id="nav-dice" onclick="nav('dice')"><span class="nav-icon">⬡</span>DICE</div>
-    <div class="nav-item" id="nav-character" onclick="nav('character')"><span class="nav-icon">🧙</span>CHARACTER</div>
-    <div class="nav-item" id="nav-party" onclick="nav('party')"><span class="nav-icon">🛡</span>PARTY</div>
-    <div class="nav-item" id="nav-loot" onclick="nav('loot')"><span class="nav-icon">💰</span>LOOT</div>
-    <div class="nav-item" id="nav-campaign" onclick="nav('campaign')"><span class="nav-icon">📖</span>CAMPAIGN</div>
-  </div>
 </div>
 
 
