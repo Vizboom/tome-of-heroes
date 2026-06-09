@@ -1802,10 +1802,24 @@ async function pullAll(campId){
     // Merge own campaigns — keep joined campaigns (_ownerGid set) intact
     if(!campr.error && campr.data && campr.data.length > 0){
       const joinedCamps = _db.campaigns.filter(c=>c._ownerGid);
+      // Build a set of campaign IDs the user has joined (via share code from another group)
+      // These may have been accidentally written to Supabase by a previous forceSyncAll bug.
+      // We need to load the shared camps list to know which IDs are joined, not owned.
+      let joinedIds = new Set(joinedCamps.map(c=>String(c.id)));
+      try {
+        const sharedList = await _getSharedCamps();
+        sharedList.forEach(e=>joinedIds.add(String(e.campId)));
+      } catch(e){}
       const validOwn = [];
       for(const r of campr.data){
         const camp = r.data || r;
         if(camp && camp.id && camp.name){
+          // If this campaign ID is in our joined list, it was written here by mistake — delete it
+          if(joinedIds.has(String(camp.id))){
+            console.log('[pullAll] Removing incorrectly-owned joined campaign row:', camp.id, camp.name);
+            (async()=>{ await supa.from('campaigns').delete().eq('id', r.id).eq('group_id', gid); })().catch(()=>{});
+            continue;
+          }
           validOwn.push(camp);
         } else {
           console.warn('pullAll: removing invalid campaign row', r.id);
@@ -1932,6 +1946,8 @@ async function manualRefresh(){
   _lastFocusRefresh = Date.now();
   const ok = await pullAll(getActiveCampId()).catch(()=>false);
   if(!ok){ toast('Sync failed — check connection','var(--red)'); return; }
+  // Re-load shared campaigns so joined camps are always present after a refresh
+  await _loadSharedCamps().catch(()=>{});
   if(currentScreen==='roster') renderRoster();
   else if(currentScreen==='campaign') _refreshCampScreen();
   else if(currentScreen==='party') partyTab('overview');
@@ -8939,6 +8955,8 @@ async function forceSyncAll(){
   const errorLines = [];
 
   for(const char of chars){
+    // Never write cross-group chars (belong to another user's group)
+    if(char._sharedCampId) continue;
     const rowId = gid + '_' + String(char.id);
     const row = { id: rowId, group_id: gid, share_code: char.shareCode||null, data: char };
     const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
@@ -8950,6 +8968,8 @@ async function forceSyncAll(){
 
   for(const camp of camps){
     if(String(camp.id).startsWith('preset_')) continue;
+    // Never write joined campaigns (owned by another group) — only write own campaigns
+    if(camp._ownerGid) continue;
     const rowId = gid + '_' + camp.id;
     const row = { id: rowId, group_id: gid, name: camp.name||'Untitled', data: camp };
     const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
@@ -8966,7 +8986,11 @@ async function forceSyncAll(){
   } else {
     toast(`✓ Synced ${pushed} records to group ${gid}`, 'var(--green)');
     const ok = await pullAll(campId);
-    if(ok){ renderRoster(); _refreshCampScreen(); }
+    if(ok){
+      await _loadSharedCamps().catch(()=>{});
+      renderRoster();
+      _refreshCampScreen();
+    }
   }
 }
 
