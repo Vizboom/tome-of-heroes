@@ -1809,7 +1809,7 @@ async function pullAll(campId){
           validOwn.push(camp);
         } else {
           console.warn('pullAll: removing invalid campaign row', r.id);
-          supa.from('campaigns').delete().eq('id', r.id).eq('group_id', gid).then(()=>{});
+          (async()=>{ await supa.from('campaigns').delete().eq('id', r.id).eq('group_id', gid); })().catch(()=>{});
         }
       }
       // Joined camps take lower priority — own overwrites if same id
@@ -3039,7 +3039,7 @@ function deleteChar(id){
   // 8. Clean up any cross-group player_char_{joinCode}_{charId} settings rows
   getCampaigns().forEach(c => {
     if(c.joinCode){
-      supa.from('settings').delete().eq('key', 'player_char_'+c.joinCode+'_'+sid).catch(()=>{});
+      (async()=>{ await supa.from('settings').delete().eq('key', 'player_char_'+c.joinCode+'_'+sid); })().catch(()=>{});
     }
   });
 
@@ -10656,7 +10656,7 @@ function createCampaign() {
 function deleteCampaign(id) {
   if (!confirm('Delete this campaign? This cannot be undone.')) return;
   const camp = getCampaigns().find(c=>c.id===id);
-  if(camp?.joinCode) supa.from('settings').delete().eq('key','camp_'+camp.joinCode).then(()=>{});
+  if(camp?.joinCode) (async()=>{ await supa.from('settings').delete().eq('key','camp_'+camp.joinCode); })().catch(()=>{});
   dbDeleteCampaign(id);
   _db.campaigns = getCampaigns().filter(c => c.id !== id);
   if (getActiveCampId() === id) setActiveCampId(_db.campaigns[0]?.id || null);
