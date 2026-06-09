@@ -1554,7 +1554,7 @@ document.addEventListener('visibilitychange', ()=>{
       pullAll(getActiveCampId()).then(ok=>{
         if(!ok) return;
         if(currentScreen==='roster') renderRoster();
-        else if(currentScreen==='campaign') renderCampList();
+        else if(currentScreen==='campaign') _refreshCampScreen();
         else if(currentScreen==='party') partyTab('overview');
       }).catch(()=>{});
     }
@@ -1933,15 +1933,7 @@ async function manualRefresh(){
   const ok = await pullAll(getActiveCampId()).catch(()=>false);
   if(!ok){ toast('Sync failed — check connection','var(--red)'); return; }
   if(currentScreen==='roster') renderRoster();
-  else if(currentScreen==='campaign'){
-    // If inside a campaign detail, re-render the detail rather than closing it
-    if(editingCampId && document.getElementById('campDetailView')?.classList.contains('detail-active')){
-      renderCampDetailHeader();
-      campTab(_currentCampTab||'sessions');
-    } else {
-      renderCampList();
-    }
-  }
+  else if(currentScreen==='campaign') _refreshCampScreen();
   else if(currentScreen==='party') partyTab('overview');
   toast('✦ Refreshed','var(--green)');
 }
@@ -1991,7 +1983,7 @@ function subscribeRealtime(campId){
         const updated = payload.new.data;
         const i = _db.campaigns.findIndex(c=>c.id===updated.id);
         if(i>=0) _db.campaigns[i]=updated; else _db.campaigns.push(updated);
-        if(document.getElementById('campList')) renderCampList();
+        if(document.getElementById('campList')) _refreshCampScreen();
         if(document.getElementById('campDetailHeader') && editingCampId===updated.id) renderCampDetailHeader();
       }
     }).subscribe();
@@ -2671,7 +2663,8 @@ function saveChar(char){
 function getCampaigns(){ return _db.campaigns||[]; }
 function saveCampaigns(camps){
   _db.campaigns = (camps||[]).filter(c=>c&&c.id);
-  _db.campaigns.forEach(c => dbSaveCampaign(c));
+  // Only save own campaigns — never overwrite joined campaigns (owned by another group_id)
+  _db.campaigns.forEach(c => { if(!c._ownerGid) dbSaveCampaign(c); });
 }
 function saveCampaign(camp){
   if(!camp || !camp.id) return;
@@ -2710,9 +2703,15 @@ async function migrateAllCampaigns(){
     const unique = [...new Set(strIds)];
     if(unique.length !== strIds.length){ camp.charIds=unique; changed=true; }
     // Remove stale charIds (chars that no longer exist in _db)
-    const knownIds = new Set(_db.chars.filter(c=>!c._sharedCampId).map(c=>String(c.id)));
-    const cleaned = camp.charIds.filter(id => knownIds.has(id));
-    if(cleaned.length !== camp.charIds.length){ camp.charIds=cleaned; changed=true; }
+    // Only clean up for own chars — shared chars may not be loaded yet at migration time
+    const knownIds = new Set(_db.chars.map(c=>String(c.id)));
+    const cleaned = camp.charIds.filter(id => knownIds.has(id) || !_db.chars.some(c=>String(c.id)===id));
+    // Only strip if we have chars loaded AND the id is genuinely missing
+    const definiteMissing = camp.charIds.filter(id => {
+      const known = _db.chars.find(c=>String(c.id)===id);
+      return !known && _db.chars.filter(c=>!c._sharedCampId).length > 0;
+    });
+    if(definiteMissing.length){ camp.charIds=camp.charIds.filter(id=>!definiteMissing.includes(id)); changed=true; }
     // Ensure joinCode
     if(!camp.joinCode){ camp.joinCode=genCode(); changed=true; }
     // Ensure lastPlayed is a number
@@ -2998,18 +2997,19 @@ function deleteChar(id){
   if(!confirm('Remove this character?'))return;
   const sid = String(id);
 
-  // 1. Remove from characters
-  saveChars(getChars().filter(c=>c.id!==id));
+  // 1. Remove from in-memory store and Supabase (targeted — don't rewrite every char)
+  _db.chars = _db.chars.filter(c=>String(c.id)!==sid);
+  dbDeleteChar(id).catch(()=>{});
 
-  // 2. Remove from party
-  saveParty(getParty().filter(c=>c.id!==id));
+  // 2. Remove from party (no-op — party is derived from campaign charIds)
 
   // 3. Remove their items (move to pool rather than delete)
-  const items = getItems().map(i=>{
-    if(String(i.owner)===sid){ i.owner='pool'; }
-    return i;
-  });
-  saveItems(items);
+  const allItems = getItems();
+  const ownedItems = allItems.filter(i=>String(i.owner)===sid);
+  if(ownedItems.length){
+    ownedItems.forEach(i=>{ i.owner='pool'; });
+    saveItems(allItems);
+  }
 
   // 4. Remove from all campaign charIds (local + Supabase)
   const camps = getCampaigns();
@@ -3036,9 +3036,7 @@ function deleteChar(id){
     if(String(getPlayerCampChar(c.id))===sid) setPlayerCampChar(c.id, null);
   });
 
-  // 8. Delete character from Supabase (characters table + cross-group settings rows)
-  dbDeleteChar(id).catch(()=>{});
-  // Clean up any cross-group player_char_{joinCode}_{charId} settings rows
+  // 8. Clean up any cross-group player_char_{joinCode}_{charId} settings rows
   getCampaigns().forEach(c => {
     if(c.joinCode){
       supa.from('settings').delete().eq('key', 'player_char_'+c.joinCode+'_'+sid).catch(()=>{});
@@ -3980,7 +3978,7 @@ function getFullParty(){
 
   // Universal: same logic regardless of whether this is an own or joined campaign
   allChars.filter(c=>(camp.charIds||[]).some(x=>String(x)===String(c.id))).forEach(add);
-  allChars.filter(c=>c._sharedCampId===campId).forEach(add);
+  allChars.filter(c=>String(c._sharedCampId)===String(campId)).forEach(add);
   allChars.filter(c=>c._playerInCamp===campId).forEach(add);
 
   return result;
@@ -4276,6 +4274,11 @@ async function userLogin(){
     setTimeout(()=>statusDiv.remove(), 3000);
   }
 
+  // Restore per-campaign active character (same as bootApp)
+  if(_activeCampId){
+    const _campChar = _userSettings['active_char_'+_activeCampId];
+    if(_campChar) _userSettings['dice_char'] = _campChar;
+  }
   _status('Entering app…');
   _enterApp();
 }
@@ -8963,7 +8966,7 @@ async function forceSyncAll(){
   } else {
     toast(`✓ Synced ${pushed} records to group ${gid}`, 'var(--green)');
     const ok = await pullAll(campId);
-    if(ok){ renderRoster(); renderCampList(); }
+    if(ok){ renderRoster(); _refreshCampScreen(); }
   }
 }
 
@@ -9022,7 +9025,7 @@ function _bootContinue(mode, nav_bar){
       if(_db.campaigns.length && !getActiveCampId()){
         setActiveCampId(_db.campaigns[0].id);
       }
-      if(currentScreen === 'campaign') renderCampList();
+      if(currentScreen === 'campaign') _refreshCampScreen();
       else { renderCampList(); renderRoster(); }
       // If still no campaigns after loading, the campaign screen is already shown
     });
@@ -9485,9 +9488,9 @@ function renderDiceCharPanel(){
         if(!cls.spellcaster) return '';
         const slots = SPELL_SLOTS[char.level] || SPELL_SLOTS[20];
         if(!slots || !slots.length) return '';
-        const slotKey = 'slots_'+char.id;
-        let used = {};
-        try{ used = JSON.parse(localStorage.getItem(slotKey)||'{}'); }catch{}
+        const slotKey = 'slots_'+char.id; // kept for diceToggleSlot signature compatibility
+        // Read from char.spellSlotsUsed (Supabase) so dice panel stays in sync with character sheet
+        let used = char.spellSlotsUsed || {};
 
         // Spell attack bonus and save DC
         const aMap = {bard:'CHA',cleric:'WIS',druid:'WIS',paladin:'CHA',ranger:'WIS',sorcerer:'CHA',warlock:'CHA',wizard:'INT'};
@@ -9647,22 +9650,27 @@ function toggleDiceCharPanel(){
 function _getResState(charId){ try{ return JSON.parse(localStorage.getItem('toh_res_'+charId)||'{}'); }catch{ return {}; } }
 function _saveResState(charId, state){ localStorage.setItem('toh_res_'+charId, JSON.stringify(state)); renderDiceCharPanel(); }
 
-// Spell slot toggle from dice panel — syncs with character sheet
+// Spell slot toggle from dice panel — writes to char.spellSlotsUsed so it syncs with character sheet
 function diceToggleSlot(charId, lvl, idx, total){
-  const key = 'slots_'+charId;
-  let used = {};
-  try{ used = JSON.parse(localStorage.getItem(key)||'{}'); }catch{}
+  const chars = getChars();
+  const ci = chars.findIndex(c=>String(c.id)===String(charId));
+  if(ci<0) return;
+  const used = {...(chars[ci].spellSlotsUsed||{})};
   const usedN = used[lvl]||0;
   const remaining = total - usedN;
-  // clicking an available slot = use it; clicking a used slot = restore it
   if(idx < remaining){ used[lvl] = Math.min(total, usedN+1); }
   else { used[lvl] = Math.max(0, usedN-1); }
-  localStorage.setItem(key, JSON.stringify(used));
+  chars[ci].spellSlotsUsed = used;
+  saveChar(chars[ci]);
   renderDiceCharPanel();
 }
 
 function diceResetSlots(charId){
-  localStorage.removeItem('slots_'+charId);
+  const chars = getChars();
+  const ci = chars.findIndex(c=>String(c.id)===String(charId));
+  if(ci<0) return;
+  chars[ci].spellSlotsUsed = {};
+  saveChar(chars[ci]);
   renderDiceCharPanel();
 }
 
@@ -10490,12 +10498,23 @@ async function ensureCampJoinCodes(){
 let editingCampId = null;
 
 function hideCampForm() {
-  document.getElementById('campListView').style.display = 'block';
   document.getElementById('campNewForm').style.display = 'none';
   document.getElementById('campImportForm').style.display = 'none';
-  document.getElementById('campDetailView').style.display = 'none';
   const jf = document.getElementById('campJoinForm'); if(jf) jf.style.display='none';
+  // renderCampList handles showing campListView and hiding the detail
   renderCampList();
+}
+
+// Detail-aware campaign refresh: re-renders the detail if open, otherwise shows the list.
+// Use this everywhere instead of calling renderCampList() directly when on the campaign screen.
+function _refreshCampScreen(){
+  if(editingCampId && document.getElementById('campDetailView')?.classList.contains('detail-active')){
+    // Stay in the detail — just update what's visible
+    renderCampDetailHeader();
+    campTab(_currentCampTab||'sessions');
+  } else {
+    renderCampList();
+  }
 }
 
 function renderCampList() {
@@ -10675,7 +10694,7 @@ function switchCampaign(id) {
   });
   const camp = getCampaigns().find(c => c.id === id);
   toast('\u2756 Switched to: '+(camp?.name||'campaign'));
-  renderCampList();
+  _refreshCampScreen();
   renderCampaignSwitchBanner();
   renderRoster();
   // Refresh active tabs with restored character
