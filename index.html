@@ -10454,7 +10454,1581 @@ function showNewCampForm() {
   const jf = document.getElementById('campJoinForm'); if(jf) jf.style.display='none';
 }
 
+function showImportCampForm() {
+  document.getElementById('campListView').style.display = 'none';
+  document.getElementById('campNewForm').style.display = 'none';
+  document.getElementById('campImportForm').style.display = 'block';
+  document.getElementById('campDetailView').style.display = 'none';
+  const jf = document.getElementById('campJoinForm'); if(jf) jf.style.display='none';
+  document.getElementById('campImportPaneClaude').style.display = '';
+  document.getElementById('campImportPaneCode').style.display = 'none';
+  document.querySelectorAll('#campImportForm .tab-btn').forEach((b,i)=>b.classList.toggle('active',i===0));
+}
 
+function showCampList() {
+  editingCampId = null;
+  hideCampForm();
+}
+
+function campImportTab(tab, btn){
+  document.querySelectorAll('#campImportForm .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('campImportPaneClaude').style.display = tab==='claude' ? '' : 'none';
+  document.getElementById('campImportPaneCode').style.display   = tab==='code'   ? '' : 'none';
+}
+
+function createCampaign() {
+  const name = (document.getElementById('cName')?.value||'').trim();
+  if (!name) { toast('Enter a campaign name','var(--red)'); return; }
+  const camp = {
+    id: genCampId(),
+    name,
+    setting: document.getElementById('cSetting')?.value||'',
+    description: document.getElementById('cDesc')?.value||'',
+    created: Date.now(),
+    lastPlayed: Date.now(),
+    charIds: [],
+    sessions: [],
+    arcs: [],
+    npcs: [],
+    quests: [],
+    notes: [],
+    joinCode: genCode(),
+  };
+  const camps = getCampaigns();
+  camps.push(camp);
+  saveCampaigns(camps);
+  _registerCampJoinCode(camp);
+  if (!getActiveCampId()) setActiveCampId(camp.id);
+  hideCampForm();
+  toast('\u2756 '+name+' created!');
+  openCamp(camp.id);
+}
+
+function deleteCampaign(id) {
+  if (!confirm('Delete this campaign? This cannot be undone.')) return;
+  const camp = getCampaigns().find(c=>c.id===id);
+  if(camp?.joinCode) supa.from('settings').delete().eq('key','camp_'+camp.joinCode).then(()=>{});
+  dbDeleteCampaign(id);
+  _db.campaigns = getCampaigns().filter(c => c.id !== id);
+  if (getActiveCampId() === id) setActiveCampId(_db.campaigns[0]?.id || null);
+  renderCampList();
+  renderCampaignSwitchBanner();
+  toast('Campaign deleted','var(--red)');
+}
+
+function switchCampaign(id) {
+  setActiveCampId(id);
+  lootOwner = 'pool';
+  _userSettings['dice_char'] = null;
+  setUserSetting('dice_char', null).catch(()=>{});
+  combatants = [];
+  subscribeRealtime(id);
+  dbGetItems(id).then(()=>{
+    if(document.getElementById('ltab-inventory')?.classList.contains('active')) renderInventory();
+    if(document.getElementById('ltab-pool')?.classList.contains('active')) renderPool();
+    if(document.getElementById('ltab-wealth')?.classList.contains('active')) renderWealth();
+  });
+  const camp = getCampaigns().find(c => c.id === id);
+  toast('\u2756 Switched to: '+(camp?.name||'campaign'));
+  renderCampList();
+  renderCampaignSwitchBanner();
+  renderRoster();
+}
+
+
+
+async function openCamp(id) {
+  editingCampId = id;
+  document.getElementById('campListView').style.display = 'none';
+  document.getElementById('campNewForm').style.display = 'none';
+  document.getElementById('campImportForm').style.display = 'none';
+  const jf = document.getElementById('campJoinForm'); if(jf) jf.style.display='none';
+  document.getElementById('campDetailView').style.display = 'block';
+
+  const camp = getCampaigns().find(c=>c.id===id);
+  if(camp?._ownerGid){
+    const alreadyLoaded = getChars().some(c=>c._sharedCampId===id);
+    if(!alreadyLoaded){
+      const chars = await _fetchCampChars(camp._ownerGid, id, camp);
+      chars.forEach(c=>{
+        c._sharedCampId = id;
+        const ci = _db.chars.findIndex(x=>String(x.id)===String(c.id));
+        if(ci>=0) _db.chars[ci]=c; else _db.chars.push(c);
+      });
+    }
+  }
+
+  renderCampDetailHeader();
+  campTab('sessions');
+}
+
+function renderCampDetailHeader() {
+  const camp = getCampaigns().find(c => c.id === editingCampId);
+  if (!camp) return;
+  const isActive = getActiveCampId() === camp.id;
+  const el = document.getElementById('campDetailHeader');
+  // For shared campaigns: get chars by _sharedCampId tag
+  // For own campaigns: get from full char list
+  let allChars;
+  if(camp._shared){
+    // DM's fetched chars for this campaign
+    const sharedChars = getChars().filter(c=>c._sharedCampId===camp.id);
+    const seen = new Set(sharedChars.map(c=>String(c.id)));
+    // Also any charIds-matched chars not yet tagged
+    const extraIds = new Set((camp.charIds||[]).map(String));
+    getChars().forEach(c=>{
+      if(extraIds.has(String(c.id)) && !seen.has(String(c.id))){
+        sharedChars.push(c); seen.add(String(c.id));
+      }
+    });
+    // Include the player's own locally-created characters so they can select one
+    getChars().filter(c=>!c._shared && !seen.has(String(c.id))).forEach(c=>{
+      sharedChars.push(c); seen.add(String(c.id));
+    });
+    allChars = sharedChars;
+  } else {
+    allChars = getChars();
+  }
+  const realCharIds = [...new Set((camp.charIds||[]).map(String))];
+  // Also clean up the stored charIds if they had duplicates
+  if(camp.charIds && camp.charIds.length !== realCharIds.length){
+    camp.charIds = realCharIds;
+    saveCampaign(camp);
+  }
+  el.innerHTML = `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:13px;padding:14px;margin-bottom:14px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
+        <div>
+          <div style="font-family:'Cinzel',serif;font-size:18px;color:var(--gold)">${camp.name}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">${camp.setting||'Custom Setting'}</div>
+        </div>
+        ${isActive?`<span class="camp-badge active" style="flex-shrink:0">● Active</span>`:
+          `<button onclick="switchCampaign('${camp.id}')" style="padding:5px 12px;background:var(--green);border:none;border-radius:8px;color:white;font-family:'Cinzel',serif;font-size:9px;cursor:pointer;letter-spacing:1px;flex-shrink:0">Set Active</button>`}
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <button onclick="exportCampaignBackup('${camp.id}')" style="flex:1;padding:7px 10px;background:var(--surface);border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;cursor:pointer">⬇ Export Backup</button>
+        ${!camp._shared?`<button onclick="showCampImportForm()" style="flex:1;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;cursor:pointer">⬆ Import / Restore</button>`:''}
+      </div>
+      ${camp.description?('<p style="font-size:13px;color:var(--muted);font-style:italic;margin-bottom:10px;line-height:1.5">'+camp.description+'</p>'):''}
+      <div class="stat-strip-sm">
+        <div class="stat-pill-sm"><strong>SESSIONS</strong>${(camp.sessions||[]).length}</div>
+        <div class="stat-pill-sm"><strong>QUESTS</strong>${(camp.quests||[]).length}</div>
+        <div class="stat-pill-sm"><strong>NPCS</strong>${(camp.npcs||[]).length}</div>
+        <div class="stat-pill-sm"><strong>ARCS</strong>${(camp.arcs||[]).length}</div>
+      </div>
+      <div style="margin-top:10px">
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">PARTY CHARACTERS</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center">
+          ${(()=>{
+            const assignedIds = new Set(realCharIds.map(String));
+            const campaigns = getCampaigns();
+            const globalAssigned = new Set();
+            campaigns.forEach(c=>(c.charIds||[]).forEach(id=>globalAssigned.add(String(id))));
+
+            if(camp._shared){
+              // Shared campaign: DM's chars shown as read-only, own chars selectable
+              const campId = camp.id;
+              const playerCharId = String(getPlayerCampChar(campId)||'');
+              if(!allChars.length) return '<span style="font-size:12px;color:var(--muted);font-style:italic">No characters loaded yet</span>';
+              return allChars.map(c=>{
+                const cc = classColor(c.classIdx);
+                const isOwn = !c._shared;
+                const isSelected = isOwn && String(c.id)===playerCharId;
+                if(isOwn){
+                  // Player's own char — tappable to select as campaign character
+                  return `<div onclick="confirmPlayerChar('${campId}',${c.id})" style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:2px solid ${isSelected?'var(--gold)':cc};background:${isSelected?'var(--gold-dim)':cc+'22'};cursor:pointer" title="Set as my character">
+                    <span style="font-size:14px">${classIcon(c.classIdx)}</span>
+                    <span style="font-family:'Cinzel',serif;font-size:10px;color:${isSelected?'var(--gold)':cc}">${c.name}${isSelected?' ★':''}</span>
+                  </div>`;
+                }
+                // DM's char — read only
+                return `<div style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid ${cc};background:${cc}22">
+                  <span style="font-size:14px">${classIcon(c.classIdx)}</span>
+                  <span style="font-family:'Cinzel',serif;font-size:10px;color:${cc}">${c.name}</span>
+                </div>`;
+              }).join('');
+            }
+
+            // Own campaign: existing logic with ghost pills and add/remove
+            const seenPills = new Set();
+            const assignedChars = allChars.filter(c=>{ const s=String(c.id); if(assignedIds.has(s)&&!seenPills.has(s)){seenPills.add(s);return true;}return false; });
+            const unassignedChars = allChars.filter(c=>{ const s=String(c.id); if(!globalAssigned.has(s)&&!seenPills.has(s)){seenPills.add(s);return true;}return false; });
+            const loadedIds = new Set(assignedChars.map(c=>String(c.id)));
+            const ghostIds = [...assignedIds].filter(id=>!loadedIds.has(id));
+            const eligible = [...assignedChars, ...unassignedChars];
+            let html = '';
+            ghostIds.forEach(()=>{
+              html+=`<div style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid var(--gold);background:var(--gold-dim);opacity:0.6">
+                <span style="font-size:14px">⏳</span>
+                <span style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold)">Loading…</span>
+              </div>`;
+            });
+            if(!eligible.length && !ghostIds.length) return '<span style="font-size:12px;color:var(--muted);font-style:italic">No characters — create some in Roster</span>';
+            html += eligible.map(c=>{
+              const inCamp = assignedIds.has(String(c.id));
+              const cc = classColor(c.classIdx);
+              return `<div onclick="toggleCampChar('${camp.id}','${c.id}')" style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid ${inCamp?cc:'var(--border)'};background:${inCamp?cc+'22':'transparent'};cursor:pointer;transition:var(--trans)">
+                <span style="font-size:14px">${classIcon(c.classIdx)}</span>
+                <span style="font-family:'Cinzel',serif;font-size:10px;color:${inCamp?cc:'var(--muted)'}">${c.name}</span>
+              </div>`;
+            }).join('');
+            return html;
+          })()}
+        </div>
+      </div>
+    </div>`;
+}
+
+function toggleCampChar(campId, charId) {
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => String(c.id) === String(campId));
+  if (ci < 0) return;
+
+  // Shared campaigns: use confirmPlayerChar instead of modifying charIds
+  if(camps[ci]._shared){
+    confirmPlayerChar(campId, charId);
+    renderCampDetailHeader();
+    return;
+  }
+
+  if (!camps[ci].charIds) camps[ci].charIds = [];
+  const cid = String(charId);
+  // Normalise all ids to strings and deduplicate
+  camps[ci].charIds = [...new Set(camps[ci].charIds.map(String))];
+  const idx = camps[ci].charIds.indexOf(cid);
+  if (idx >= 0) {
+    // Removing from this campaign — allowed
+    camps[ci].charIds.splice(idx, 1);
+  } else {
+    // Only block if char is already in another NON-shared own campaign
+    const otherCamp = camps.find(c => !c._shared && String(c.id) !== String(campId) && (c.charIds||[]).some(x=>String(x)===cid));
+    if(otherCamp){
+      const char = getChars().find(c=>String(c.id)===cid);
+      toast(`${char?.name||'Character'} is already in "${otherCamp.name}"`, 'var(--red)');
+      return;
+    }
+    camps[ci].charIds.push(cid);
+  }
+  saveCampaign(camps[ci]);
+  renderCampDetailHeader();
+  renderRoster();
+}
+
+function campTab(t) {
+  document.querySelectorAll('#campTabRow .tab-btn').forEach((b,i)=>b.classList.toggle('active',['sessions','quests','npcs','arcs','notes'][i]===t));
+  document.querySelectorAll('#campDetailView .tab-pane').forEach(p=>p.classList.remove('active'));
+  document.getElementById('ctab-'+t).classList.add('active');
+  if (t==='sessions') renderSessions();
+  if (t==='quests')   renderQuests();
+  if (t==='npcs')     renderNPCs();
+  if (t==='arcs')     renderArcs();
+  if (t==='notes')    renderNotes();
+}
+
+/* ── Sessions ── */
+function renderSessions() {
+  const camp = getCampaigns().find(c => c.id === editingCampId);
+  if (!camp) return;
+  const el = document.getElementById('ctab-sessions');
+  const sessions = [...(camp.sessions||[])].reverse();
+
+  // Get campaign characters for presence pills
+  const allChars = getChars();
+  const campChars = getFullParty();
+
+  let html = `
+  <div class="tab-row" style="margin-bottom:12px">
+    <button class="tab-btn active" id="sessTabManual" onclick="sessImportTab('manual',this)">✏ Manual</button>
+    <button class="tab-btn" id="sessTabClaude" onclick="sessImportTab('claude',this)">🤖 Claude</button>
+    <button class="tab-btn" id="sessTabBulk" onclick="sessImportTab('bulk',this)">📋 Bulk</button>
+  </div>
+
+  <div id="sessFormManual"><div class="card" style="margin-bottom:14px">
+    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">Add Session</div>
+    <div class="form-row two">
+      <div class="field"><label>Session Title</label><input id="sTitle" placeholder="e.g. The Goblin Ambush"></div>
+      <div class="field"><label>Date</label><input id="sDate" type="date" value="${new Date().toISOString().split('T')[0]}"></div>
+    </div>
+    <div class="field"><label>Session Summary</label><textarea id="sSummary" placeholder="What happened this session?" style="min-height:80px"></textarea></div>
+    <div class="form-row two">
+      <div class="field"><label>XP Awarded</label><input id="sXP" type="number" value="0" min="0"></div>
+      <div class="field"><label>Gold Awarded</label>
+        <input id="sGold" type="number" value="0" min="0" oninput="updateGoldHint(this.value)">
+        <div id="goldHint" style="font-size:10px;color:var(--gold);margin-top:3px;min-height:14px"></div>
+      </div>
+    </div>
+    <div class="field"><label>Highlights (one per line)</label><textarea id="sHighlights" placeholder="Key moments, loot found, decisions made…"></textarea></div>
+    ${campChars.length ? `
+    <div class="field">
+      <label>Characters Present</label>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px" id="sPresenceGrid">
+        ${campChars.map(c => {
+          const cc = classColor(c.classIdx);
+          return `<div id="sp_${c.id}" onclick="toggleSessionPresence('${c.id}')"
+            style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:transparent;cursor:pointer;transition:var(--trans)">
+            <span style="font-size:13px">${classIcon(c.classIdx)}</span>
+            <span style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted)">${c.name}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : ''}
+    <button class="btn btn-primary" onclick="addSession()">Log Session</button>
+    <button class="btn btn-outline" onclick="showBulkImport()" style="border-color:var(--purple);color:var(--purple)">🤖 Bulk Import</button>
+  </div></div>
+
+  <div id="sessFormClaude" style="display:none"><div class="card" style="margin-bottom:14px">
+    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:8px">Import Session via Claude</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Paste raw session notes, a chat log, or any description. Claude will extract the title, summary, XP, gold, and key highlights.</p>
+    <div class="field"><label>Raw Session Notes</label>
+      <textarea id="claudeSessionNotes" placeholder="e.g. Session 7 - The party arrived at Barovia. They met Ireena at the church, fought 3 zombies (450 XP each), found 1800gp from the burgomaster's safe. Spike almost died. Key moment: Vizboom's familiar spotted Strahd watching from the castle..." style="min-height:120px;font-size:12px;line-height:1.6"></textarea>
+    </div>
+    <button class="btn btn-gold" onclick="doClaudeSessionImport()" id="claudeSessionBtn">🤖 Extract Session</button>
+    <div id="claudeSessionStatus" style="margin-top:8px;font-size:12px;text-align:center;min-height:16px"></div>
+    <div id="claudeSessionPreview" style="margin-top:8px"></div>
+  </div></div>
+
+  <div id="sessBulkImport" style="display:none"><div class="card" style="margin-bottom:14px">
+    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-bottom:8px">🤖 Smart Session Import</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Paste your notes after each session. Claude will log the session, then <strong style="color:var(--text)">update existing</strong> NPCs, quests &amp; arcs — or create new ones — based on what happened.</p>
+    <div style="background:var(--surface);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:var(--muted);line-height:2;font-family:monospace">
+      <span style="color:var(--gold)">## SESSION</span> &nbsp;what happened, XP &amp; gold<br>
+      <span style="color:var(--purple)">## QUESTS</span> &nbsp;status changes or new quests<br>
+      <span style="color:var(--teal)">## NPCS</span> &nbsp;&nbsp;&nbsp;relationship shifts or new NPCs<br>
+      <span style="color:var(--gold)">## ARCS</span> &nbsp;&nbsp;&nbsp;arc progress or new story arcs<br>
+      <span style="color:var(--blue)">## NOTES</span> &nbsp;&nbsp;anything else to remember
+    </div>
+    <details style="margin-bottom:10px">
+      <summary style="font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;color:var(--muted);cursor:pointer;user-select:none">▶ SHOW FORMAT TIPS</summary>
+      <div style="margin-top:8px;background:var(--surface);border-radius:8px;padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.8;font-family:monospace">
+        <span style="color:var(--text)">## SESSION</span><br>
+        We arrived in Krezk. Defeated the Abbot (1800 XP). Found 500gp.<br><br>
+        <span style="color:var(--text)">## QUESTS</span><br>
+        - Find the Holy Symbol → completed<br>
+        - Defeat the Abbot before he finishes his creation<br><br>
+        <span style="color:var(--text)">## NPCS</span><br>
+        - The Abbot → now hostile, revealed building a flesh golem<br>
+        - Vasilka → new, flesh golem, neutral<br><br>
+        <span style="color:var(--text)">## ARCS</span><br>
+        - The Curse of Strahd → Ireena is now in Krezk<br>
+        - The Abbot's Secret → new arc, active<br><br>
+        <span style="color:var(--gold)">Tip: Use exact NPC/quest names to guarantee a match. Fuzzy matching handles small differences automatically.</span>
+      </div>
+    </details>
+    <div class="field"><label>Your Notes</label>
+      <textarea id="bulkImportNotes" placeholder="## SESSION&#10;The party stormed the Amber Temple. 2400 XP total. Found a jade circlet worth 800gp.&#10;&#10;## QUESTS&#10;- Retrieve the Dark Gift → completed, Kasimir got what he wanted&#10;- Stop Strahd → still active, but we now know about the Fanes&#10;&#10;## NPCS&#10;- Kasimir → relationship: allied, fulfilled his life's mission&#10;- Neferon → new, amber golem guardian, hostile&#10;&#10;## ARCS&#10;- The Dark Powers → Kasimir used the gift, consequences unknown&#10;&#10;## NOTES&#10;The Fanes are the key to weakening Strahd — player theory confirmed by Kasimir." style="min-height:200px;font-size:12px;line-height:1.6;font-family:monospace"></textarea>
+    </div>
+    <button class="btn btn-gold" onclick="doBulkImport()" id="bulkImportBtn" style="background:var(--purple);border-color:var(--purple)">🤖 Parse &amp; Preview Changes</button>
+    <div id="bulkImportStatus" style="margin-top:8px;font-size:12px;text-align:center;min-height:16px"></div>
+    <div id="bulkImportPreview" style="margin-top:8px"></div>
+  </div></div>`;
+
+  if (!sessions.length) {
+    html += `<div class="empty-state"><div class="es-icon">📜</div><p>No sessions logged yet.<br>Start recording your adventure!</p></div>`;
+  } else {
+    let totalXP = 0, totalGold = 0;
+    camp.sessions.forEach(s => { totalXP += s.xpAwarded||0; totalGold += s.goldAwarded||0; });
+    html += `<div class="stat-strip-sm" style="margin-bottom:12px">
+      <div class="stat-pill-sm"><strong>TOTAL SESSIONS</strong>${camp.sessions.length}</div>
+      <div class="stat-pill-sm"><strong>TOTAL XP</strong>${totalXP.toLocaleString()}</div>
+      <div class="stat-pill-sm"><strong>TOTAL GOLD</strong>${totalGold.toLocaleString()} gp</div>
+    </div>`;
+    sessions.forEach((s, i) => {
+      const realIdx = camp.sessions.findIndex(x => x.id === s.id);
+      // Build presence pills for this session
+      const presentIds = (s.presentCharIds||[]).map(String);
+      const presentChars = campChars.filter(c => presentIds.includes(String(c.id)));
+      const absentChars  = campChars.filter(c => !presentIds.includes(String(c.id)));
+      const presencePills = campChars.length ? `
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;align-items:center">
+          <span style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-right:2px">PRESENT</span>
+          ${presentChars.length ? presentChars.map(c => {
+            const cc = classColor(c.classIdx);
+            return `<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:10px;border:1px solid ${cc};background:${cc}22;font-family:'Cinzel',serif;font-size:9px;color:${cc}">
+              ${classIcon(c.classIdx)} ${c.name}
+            </span>`;
+          }).join('') : `<span style="font-size:11px;color:var(--muted);font-style:italic">None recorded</span>`}
+          ${absentChars.length && presentChars.length ? absentChars.map(c =>
+            `<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:10px;border:1px solid var(--border);background:transparent;font-family:'Cinzel',serif;font-size:9px;color:var(--muted);opacity:0.5">
+              ${classIcon(c.classIdx)} ${c.name}
+            </span>`).join('') : ''}
+        </div>` : '';
+
+      html += `<div class="session-card" id="sc_${s.id}" onclick="toggleCard('sc_${s.id}')">
+        <div class="session-header">
+          <div class="session-num">${camp.sessions.length - i}</div>
+          <div style="flex:1">
+            <div class="session-title">${s.title||'Untitled Session'}</div>
+            <div class="session-date">${s.date||''} ${s.xpAwarded?'· '+s.xpAwarded+' XP':''} ${s.goldAwarded?'· '+s.goldAwarded+' gp':''}</div>
+            ${presencePills}
+          </div>
+          <span style="color:var(--muted);font-size:12px">▼</span>
+        </div>
+        <div class="session-body">
+          ${s.summary?('<p style="font-size:13px;line-height:1.6;margin-bottom:10px">'+s.summary.replace(/\n/g,'<br>')+'</p>'):''}
+          ${s.highlights&&s.highlights.length?`<div style="margin-bottom:8px">${s.highlights.map(h=>`<div style="display:flex;gap:6px;align-items:baseline;font-size:12px;margin-bottom:3px"><span style="color:var(--gold)">✦</span><span style="color:var(--muted)">${h}</span></div>`).join('')}</div>`:''}
+          ${campChars.length ? `
+          <div style="margin-top:8px;margin-bottom:8px">
+            <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:5px">EDIT ATTENDANCE</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px">
+              ${campChars.map(c => {
+                const cc = classColor(c.classIdx);
+                const present = presentIds.includes(String(c.id));
+                return `<div onclick="toggleSessionCharPresence('${s.id}','${c.id}');event.stopPropagation()"
+                  style="display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:10px;border:1px solid ${present?cc:'var(--border)'};background:${present?cc+'22':'transparent'};cursor:pointer;transition:var(--trans)">
+                  <span style="font-size:13px">${classIcon(c.classIdx)}</span>
+                  <span style="font-family:'Cinzel',serif;font-size:10px;color:${present?cc:'var(--muted)'}">${c.name}</span>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>` : ''}
+          <button class="icon-btn" style="color:var(--red);font-size:12px;margin-top:4px" onclick="deleteSession('${s.id}');event.stopPropagation()">✕ Delete Session</button>
+        </div>
+      </div>`;
+    });
+  }
+  el.innerHTML = html;
+}
+
+// Toggle presence in the Add Session form
+let _sessionPresence = new Set();
+function toggleSessionPresence(charId){
+  const sid = String(charId);
+  const el = document.getElementById('sp_'+charId);
+  const camp = getCampaigns().find(c=>c.id===editingCampId);
+  const cc = classColor(getChars().find(c=>String(c.id)===sid)?.classIdx||0);
+  if(_sessionPresence.has(sid)){
+    _sessionPresence.delete(sid);
+    if(el){ el.style.borderColor='var(--border)'; el.style.background='transparent'; el.querySelector('span:last-child').style.color='var(--muted)'; }
+  } else {
+    _sessionPresence.add(sid);
+    if(el){ el.style.borderColor=cc; el.style.background=cc+'22'; el.querySelector('span:last-child').style.color=cc; }
+  }
+}
+
+// Toggle presence on an existing session
+function toggleSessionCharPresence(sessionId, charId){
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c=>c.id===editingCampId);
+  if(ci<0) return;
+  const si = camps[ci].sessions.findIndex(s=>s.id===sessionId);
+  if(si<0) return;
+  if(!camps[ci].sessions[si].presentCharIds) camps[ci].sessions[si].presentCharIds=[];
+  const cid = String(charId);
+  const idx = camps[ci].sessions[si].presentCharIds.findIndex(x=>String(x)===cid);
+  if(idx>=0) camps[ci].sessions[si].presentCharIds.splice(idx,1);
+  else camps[ci].sessions[si].presentCharIds.push(charId);
+  saveCampaigns(camps);
+  renderSessions();
+}
+
+// Show live gold preview in session form
+function updateGoldHint(val){
+  const el = document.getElementById('goldHint');
+  if(!el) return;
+  const gp = parseInt(val)||0;
+  if(gp > 0){
+    const current = (getWealth()['party']||{}).gp||0;
+    el.textContent = `→ Party Treasury: ${current} + ${gp} = ${current+gp} gp`;
+  } else {
+    el.textContent = '';
+  }
+}
+
+function sessImportTab(tab, btn){
+  document.querySelectorAll('#ctab-sessions .tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('sessFormManual').style.display  = tab==='manual' ? '' : 'none';
+  document.getElementById('sessFormClaude').style.display  = tab==='claude' ? '' : 'none';
+  document.getElementById('sessBulkImport').style.display  = tab==='bulk'   ? '' : 'none';
+}
+
+function showBulkImport(){
+  const sf = document.getElementById('sessFormClaude');
+  const sb = document.getElementById('sessBulkImport');
+  if(!sf||!sb) return;
+  sf.style.display = 'none';
+  sb.style.display = sb.style.display==='none' ? '' : 'none';
+}
+
+/* ── Fuzzy name matcher for smart merge ── */
+function _fuzzyMatch(a, b) {
+  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const na = norm(a), nb = norm(b);
+  if(na === nb) return 1.0;
+  if(na.includes(nb) || nb.includes(na)) return 0.85;
+  // simple bigram similarity
+  const bigrams = s => { const bg=new Set(); for(let i=0;i<s.length-1;i++) bg.add(s[i]+s[i+1]); return bg; };
+  const ba=bigrams(na), bb=bigrams(nb);
+  let shared=0; ba.forEach(g=>{ if(bb.has(g)) shared++; });
+  return (2*shared)/(ba.size+bb.size||1);
+}
+
+function _findExisting(name, arr, key='name') {
+  if(!arr?.length) return null;
+  let best=null, bestScore=0;
+  arr.forEach(item => {
+    const score = _fuzzyMatch(name, item[key]||'');
+    if(score > bestScore){ bestScore=score; best=item; }
+  });
+  return bestScore >= 0.75 ? best : null;
+}
+
+/* ── Smart diff preview builder ── */
+function _buildMergePlan(parsed, camp) {
+  const plan = { session: null, quests:[], npcs:[], arcs:[], notes:[] };
+
+  // Session — always new
+  if(parsed.session) plan.session = { action:'new', data: parsed.session };
+
+  // Quests
+  (parsed.quests||[]).forEach(q => {
+    const existing = _findExisting(q.title, camp.quests||[], 'title');
+    if(existing) {
+      const changes = [];
+      if(q.status && q.status !== existing.status) changes.push({ field:'status', from: existing.status, to: q.status });
+      if(q.desc && q.desc !== existing.desc) changes.push({ field:'desc', from: existing.desc, to: q.desc });
+      if(q.priority && q.priority !== existing.priority) changes.push({ field:'priority', from: existing.priority, to: q.priority });
+      plan.quests.push({ action:'update', existing, incoming: q, changes });
+    } else {
+      plan.quests.push({ action:'new', incoming: q });
+    }
+  });
+
+  // NPCs
+  (parsed.npcs||[]).forEach(n => {
+    const existing = _findExisting(n.name, camp.npcs||[], 'name');
+    if(existing) {
+      const changes = [];
+      if(n.relationship && n.relationship !== existing.relationship) changes.push({ field:'relationship', from: existing.relationship, to: n.relationship });
+      if(n.role && n.role !== (existing.role||'')) changes.push({ field:'role', from: existing.role||'', to: n.role });
+      if(n.appendNote) changes.push({ field:'note', from:'', to: n.appendNote });
+      else if(n.desc && n.desc !== existing.desc) changes.push({ field:'desc', from: existing.desc||'', to: n.desc });
+      plan.npcs.push({ action:'update', existing, incoming: n, changes });
+    } else {
+      plan.npcs.push({ action:'new', incoming: n });
+    }
+  });
+
+  // Arcs
+  (parsed.arcs||[]).forEach(a => {
+    const existing = _findExisting(a.title, camp.arcs||[], 'title');
+    if(existing) {
+      const changes = [];
+      if(a.status && a.status !== existing.status) changes.push({ field:'status', from: existing.status, to: a.status });
+      if(a.appendNote) changes.push({ field:'note', from:'', to: a.appendNote });
+      else if(a.description && a.description !== (existing.description||'')) changes.push({ field:'description', from: existing.description||'', to: a.description });
+      plan.arcs.push({ action:'update', existing, incoming: a, changes });
+    } else {
+      plan.arcs.push({ action:'new', incoming: a });
+    }
+  });
+
+  // Notes — always new
+  (parsed.notes||[]).forEach(n => plan.notes.push({ action:'new', incoming: n }));
+
+  return plan;
+}
+
+function _relColor(r) {
+  return r==='hostile'?'var(--red)':r==='allied'?'var(--green)':r==='friendly'?'var(--gold)':'var(--muted)';
+}
+function _statusColor(s) {
+  return s==='completed'?'var(--gold)':s==='failed'?'var(--red)':s==='abandoned'?'var(--muted)':'var(--green)';
+}
+
+function _renderMergePreview(plan, sessionNum) {
+  let html = '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px">';
+
+  // ── SESSION ──
+  if(plan.session) {
+    const s = plan.session.data;
+    html += `<div style="background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="font-size:10px;background:var(--gold);color:var(--bg);font-family:'Cinzel',serif;padding:2px 7px;border-radius:8px;letter-spacing:0.5px">NEW</span>
+        <span style="font-family:'Cinzel',serif;font-size:12px;color:var(--gold)">📜 Session ${sessionNum}: ${s.title}</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">${s.summary||''}</div>
+      ${s.xpAwarded||s.goldAwarded?`<div style="font-size:10px;color:var(--muted);margin-top:5px">${s.xpAwarded?s.xpAwarded+' XP':''} ${s.goldAwarded?'· '+s.goldAwarded+' gp':''}</div>`:''}
+    </div>`;
+  }
+
+  // ── QUESTS ──
+  const newQ = plan.quests.filter(x=>x.action==='new');
+  const updQ = plan.quests.filter(x=>x.action==='update');
+  if(plan.quests.length) {
+    html += `<div style="background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--purple);margin-bottom:8px;letter-spacing:1px">📋 QUESTS</div>
+      <div style="display:flex;flex-direction:column;gap:6px">`;
+    updQ.forEach(item => {
+      html += `<div style="padding:6px 8px;background:rgba(123,94,167,0.08);border-radius:7px;border-left:3px solid var(--purple)">
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
+          <span style="font-size:9px;background:var(--purple);color:white;font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">UPDATE</span>
+          <span style="font-family:'Cinzel',serif;font-size:11px">${item.existing.title}</span>
+        </div>
+        ${item.changes.length ? item.changes.map(c=>`
+          <div style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px;margin-top:2px">
+            <span style="font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.5px;color:var(--muted2)">${c.field.toUpperCase()}</span>
+            <span style="color:var(--red);text-decoration:line-through">${c.from||'—'}</span>
+            <span style="color:var(--muted)">→</span>
+            <span style="color:${c.field==='status'?_statusColor(c.to):'var(--text)'}">${c.to}</span>
+          </div>`).join('') : '<div style="font-size:10px;color:var(--muted2);font-style:italic">No tracked changes detected</div>'}
+      </div>`;
+    });
+    newQ.forEach(item => {
+      html += `<div style="padding:6px 8px;background:rgba(39,174,96,0.06);border-radius:7px;border-left:3px solid var(--green)">
+        <div style="display:flex;align-items:center;gap:5px">
+          <span style="font-size:9px;background:var(--green);color:white;font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">NEW</span>
+          <span style="font-family:'Cinzel',serif;font-size:11px">${item.incoming.title}</span>
+          <span style="font-size:9px;color:${_statusColor(item.incoming.status||'active')};margin-left:auto">${item.incoming.status||'active'}</span>
+        </div>
+      </div>`;
+    });
+    html += '</div></div>';
+  }
+
+  // ── NPCS ──
+  const newN = plan.npcs.filter(x=>x.action==='new');
+  const updN = plan.npcs.filter(x=>x.action==='update');
+  if(plan.npcs.length) {
+    html += `<div style="background:var(--surface2);border:1px solid var(--teal);border-radius:10px;padding:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--teal);margin-bottom:8px;letter-spacing:1px">👥 NPCS</div>
+      <div style="display:flex;flex-direction:column;gap:6px">`;
+    updN.forEach(item => {
+      html += `<div style="padding:6px 8px;background:rgba(22,160,133,0.08);border-radius:7px;border-left:3px solid var(--teal)">
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
+          <span style="font-size:9px;background:var(--teal);color:white;font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">UPDATE</span>
+          <span style="font-family:'Cinzel',serif;font-size:11px">${item.existing.name}</span>
+        </div>
+        ${item.changes.length ? item.changes.map(c=>`
+          <div style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px;margin-top:2px">
+            <span style="font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.5px;color:var(--muted2)">${c.field.toUpperCase()}</span>
+            ${c.from?`<span style="color:var(--red);text-decoration:line-through">${c.from}</span><span style="color:var(--muted)">→</span>`:''}
+            <span style="color:${c.field==='relationship'?_relColor(c.to):'var(--text)'}">${c.to}</span>
+          </div>`).join('') : '<div style="font-size:10px;color:var(--muted2);font-style:italic">No tracked changes detected</div>'}
+      </div>`;
+    });
+    newN.forEach(item => {
+      html += `<div style="padding:6px 8px;background:rgba(39,174,96,0.06);border-radius:7px;border-left:3px solid var(--green)">
+        <div style="display:flex;align-items:center;gap:5px">
+          <span style="font-size:9px;background:var(--green);color:white;font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">NEW</span>
+          <span style="font-family:'Cinzel',serif;font-size:11px">${item.incoming.name}</span>
+          ${item.incoming.relationship?`<span style="font-size:9px;color:${_relColor(item.incoming.relationship)};margin-left:auto">${item.incoming.relationship}</span>`:''}
+        </div>
+      </div>`;
+    });
+    html += '</div></div>';
+  }
+
+  // ── ARCS ──
+  const newA = plan.arcs.filter(x=>x.action==='new');
+  const updA = plan.arcs.filter(x=>x.action==='update');
+  if(plan.arcs.length) {
+    html += `<div style="background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);margin-bottom:8px;letter-spacing:1px">⚔ STORY ARCS</div>
+      <div style="display:flex;flex-direction:column;gap:6px">`;
+    updA.forEach(item => {
+      html += `<div style="padding:6px 8px;background:rgba(201,162,39,0.08);border-radius:7px;border-left:3px solid var(--gold)">
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
+          <span style="font-size:9px;background:var(--gold);color:var(--bg);font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">UPDATE</span>
+          <span style="font-family:'Cinzel',serif;font-size:11px">${item.existing.title}</span>
+        </div>
+        ${item.changes.length ? item.changes.map(c=>`
+          <div style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px;margin-top:2px">
+            <span style="font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.5px;color:var(--muted2)">${c.field.toUpperCase()}</span>
+            ${c.from?`<span style="color:var(--red);text-decoration:line-through">${c.from}</span><span style="color:var(--muted)">→</span>`:''}
+            <span style="color:var(--text)">${c.to}</span>
+          </div>`).join('') : '<div style="font-size:10px;color:var(--muted2);font-style:italic">No tracked changes detected</div>'}
+      </div>`;
+    });
+    newA.forEach(item => {
+      html += `<div style="padding:6px 8px;background:rgba(39,174,96,0.06);border-radius:7px;border-left:3px solid var(--green)">
+        <div style="display:flex;align-items:center;gap:5px">
+          <span style="font-size:9px;background:var(--green);color:white;font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">NEW</span>
+          <span style="font-family:'Cinzel',serif;font-size:11px">${item.incoming.title}</span>
+          ${item.incoming.status?`<span style="font-size:9px;color:var(--muted);margin-left:auto">${item.incoming.status}</span>`:''}
+        </div>
+      </div>`;
+    });
+    html += '</div></div>';
+  }
+
+  // ── NOTES ──
+  if(plan.notes.length) {
+    html += `<div style="background:var(--surface2);border:1px solid var(--blue);border-radius:10px;padding:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--blue);margin-bottom:6px;letter-spacing:1px">📝 NOTES (${plan.notes.length} new)</div>
+      ${plan.notes.map(x=>`<div style="font-size:11px;color:var(--text);padding:2px 0;display:flex;align-items:center;gap:5px">
+        <span style="font-size:9px;background:var(--green);color:white;font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">NEW</span>
+        ${x.incoming.title||'Untitled Note'}
+      </div>`).join('')}
+    </div>`;
+  }
+
+  html += '</div>';
+  return html;
+}
+
+async function doBulkImport(){
+  const notes = (document.getElementById('bulkImportNotes')?.value||'').trim();
+  if(!notes){ toast('Paste your notes first','var(--red)'); return; }
+  const btn = document.getElementById('bulkImportBtn');
+  const statusEl = document.getElementById('bulkImportStatus');
+  const previewEl = document.getElementById('bulkImportPreview');
+  btn.disabled = true;
+  statusEl.innerHTML = '<span style="color:var(--purple)">🤖 Parsing & matching records…</span>';
+  previewEl.innerHTML = '';
+
+  const camp = getCampaigns().find(c=>c.id===editingCampId);
+  const sessionNum = (camp?.sessions?.length||0) + 1;
+
+  // Pass existing records as context so Claude can signal intent
+  const existingCtx = {
+    quests: (camp?.quests||[]).map(q=>({title:q.title,status:q.status})),
+    npcs:   (camp?.npcs||[]).map(n=>({name:n.name,relationship:n.relationship,role:n.role})),
+    arcs:   (camp?.arcs||[]).map(a=>({title:a.title,status:a.status})),
+  };
+
+  const systemPrompt = `You are a D&D campaign notes parser. The user will give you session notes under headings like ## SESSION, ## QUESTS, ## NPCS, ## NOTES, ## ARCS. Return ONLY valid JSON, no markdown, no backticks.
+
+You are also given the campaign's EXISTING records. For each NPC, quest, and arc you parse:
+- If it matches an existing record (even approximately), set "matchExisting": true and only include fields that are CHANGING.
+- If it is brand new, set "matchExisting": false and include all fields.
+- For NPCs you may include "appendNote": "string" to append a note without replacing the full description.
+- For quests/arcs you may include "appendNote": "string" to append a progress note.
+
+Return this structure:
+{
+  "session": null | { "title": "string", "date": "YYYY-MM-DD or empty", "summary": "2-4 sentence summary", "xpAwarded": 0, "goldAwarded": 0, "highlights": ["string"] },
+  "quests": [ { "title": "string", "matchExisting": bool, "status": "active|completed|failed|abandoned", "desc": "string or omit if unchanged", "priority": "main|side|personal or omit", "appendNote": "string or omit" } ],
+  "npcs":   [ { "name": "string", "matchExisting": bool, "relationship": "allied|friendly|neutral|hostile or omit if unchanged", "role": "string or omit", "desc": "string or omit", "appendNote": "string or omit" } ],
+  "arcs":   [ { "title": "string", "matchExisting": bool, "status": "active|upcoming|resolved or omit", "description": "string or omit", "appendNote": "string or omit" } ],
+  "notes":  [ { "title": "string", "body": "string" } ]
+}
+
+Existing records for context:
+${JSON.stringify(existingCtx, null, 2)}
+
+Rules:
+- Match by name similarity — partial matches count (e.g. "The Abbot" matches "Abbot")
+- Only include fields that are explicitly mentioned or clearly implied in the notes
+- For quest status: words like "completed", "done", "finished", "succeeded" → completed; "failed", "died", "lost" → failed
+- For NPC relationship: "turned hostile", "attacked us", "betrayed" → hostile; "saved us", "allied" → allied
+- Return ONLY the JSON`;
+
+  try {
+    const res = await callClaude({ model:'claude-sonnet-4-20250514', max_tokens:2500, system:systemPrompt,
+        messages:[{ role:'user', content: `Session ${sessionNum} notes:\n\n${notes}` }] });
+    const raw = (res.content?.find(b=>b.type==='text')?.text||'').replace(/^[\s\S]*?(?=\{)/,'').replace(/\}[\s\S]*$/,'}').trim();
+    let parsed;
+    try { parsed = JSON.parse(raw); }
+    catch(e) {
+      const clean = res.content?.find(b=>b.type==='text')?.text||'';
+      const m = clean.match(/\{[\s\S]*\}/);
+      if(m) parsed = JSON.parse(m[0]);
+      else throw new Error('Could not parse response as JSON');
+    }
+
+    // Build the merge plan by matching Claude's output against existing records
+    const plan = _buildMergePlan(parsed, camp);
+    window._pendingBulkImport = { parsed, plan };
+
+    const totalChanges = plan.quests.length + plan.npcs.length + plan.arcs.length + plan.notes.length + (plan.session?1:0);
+    if(totalChanges === 0 && !plan.session){
+      previewEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px">Nothing to import was detected in these notes.</div>';
+      statusEl.innerHTML = '';
+      btn.disabled = false;
+      return;
+    }
+
+    const updCount = [...plan.quests,...plan.npcs,...plan.arcs].filter(x=>x.action==='update').length;
+    const newCount = [...plan.quests,...plan.npcs,...plan.arcs,...plan.notes].filter(x=>x.action==='new').length;
+
+    previewEl.innerHTML = _renderMergePreview(plan, sessionNum) +
+      `<div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+        <button class="btn btn-gold" onclick="confirmBulkImport()" style="background:var(--purple);border-color:var(--purple);flex:1">
+          ✦ Apply ${updCount ? updCount+' update'+(updCount!==1?'s':'') : ''}${updCount&&newCount?' + ':''}${newCount ? newCount+' new' : ''}
+        </button>
+      </div>`;
+    statusEl.innerHTML = '';
+  } catch(e) {
+    statusEl.innerHTML = `<span style="color:var(--red)">⚠ ${e.message}</span>`;
+    console.error(e);
+  }
+  btn.disabled = false;
+}
+
+function confirmBulkImport(){
+  const p = window._pendingBulkImport;
+  if(!p?.plan) return;
+  const { plan } = p;
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c=>c.id===editingCampId);
+  if(ci<0) return;
+  const camp = camps[ci];
+  let stats = { newCount:0, updateCount:0 };
+
+  // ── Session (always new) ──
+  if(plan.session){
+    const s = plan.session.data;
+    if(!camp.sessions) camp.sessions=[];
+    const sessionNum = camp.sessions.length + 1;
+    const session = {
+      id: genItemId(), title: s.title||'Untitled Session',
+      date: s.date||new Date().toISOString().split('T')[0],
+      summary: s.summary||'', xpAwarded: s.xpAwarded||0,
+      goldAwarded: s.goldAwarded||0, highlights: s.highlights||[],
+      presentCharIds: [], goldAddedToLoot: false,
+    };
+    camp.sessions.push(session);
+    camp.lastPlayed = Date.now();
+    addPartyHistoryEvent(camp,'session',`Session ${sessionNum}: "${session.title}"`,'📜');
+    if(session.goldAwarded > 0){
+      const w = getWealth();
+      if(!w['party']) w['party']={gp:0,sp:0,ep:0,cp:0};
+      w['party'].gp = (w['party'].gp||0) + session.goldAwarded;
+      saveWealth(w);
+    }
+    stats.newCount++;
+  }
+
+  // ── Quests ──
+  if(!camp.quests) camp.quests=[];
+  plan.quests.forEach(item => {
+    if(item.action === 'update') {
+      const qi = camp.quests.findIndex(q=>q.id===item.existing.id);
+      if(qi<0) return;
+      item.changes.forEach(c => {
+        if(c.field==='status')   camp.quests[qi].status = c.to;
+        if(c.field==='desc')     camp.quests[qi].desc   = c.to;
+        if(c.field==='priority') camp.quests[qi].priority = c.to;
+      });
+      if(item.incoming.appendNote) {
+        const stamp = new Date().toLocaleDateString();
+        camp.quests[qi].desc = (camp.quests[qi].desc ? camp.quests[qi].desc+'\n\n' : '') + `[${stamp}] ${item.incoming.appendNote}`;
+      }
+      stats.updateCount++;
+    } else {
+      const q = item.incoming;
+      camp.quests.push({ id:genItemId(), title:q.title||'Untitled Quest', desc:q.desc||'', priority:q.priority||'side', status:q.status||'active', objectives:[] });
+      stats.newCount++;
+    }
+  });
+
+  // ── NPCs ──
+  if(!camp.npcs) camp.npcs=[];
+  plan.npcs.forEach(item => {
+    if(item.action === 'update') {
+      const ni = camp.npcs.findIndex(n=>n.id===item.existing.id);
+      if(ni<0) return;
+      item.changes.forEach(c => {
+        if(c.field==='relationship') camp.npcs[ni].relationship = c.to;
+        if(c.field==='role')         camp.npcs[ni].role = c.to;
+        if(c.field==='desc')         camp.npcs[ni].desc = c.to;
+        if(c.field==='note') {
+          const stamp = new Date().toLocaleDateString();
+          camp.npcs[ni].desc = (camp.npcs[ni].desc ? camp.npcs[ni].desc+'\n\n' : '') + `[${stamp}] ${c.to}`;
+        }
+      });
+      stats.updateCount++;
+    } else {
+      const n = item.incoming;
+      camp.npcs.push({ id:genItemId(), name:n.name||'Unknown', role:n.role||'', desc:n.desc||'', relationship:n.relationship||'neutral', alive:true });
+      stats.newCount++;
+    }
+  });
+
+  // ── Arcs ──
+  if(!camp.arcs) camp.arcs=[];
+  plan.arcs.forEach(item => {
+    if(item.action === 'update') {
+      const ai = camp.arcs.findIndex(a=>a.id===item.existing.id);
+      if(ai<0) return;
+      item.changes.forEach(c => {
+        if(c.field==='status')      camp.arcs[ai].status = c.to;
+        if(c.field==='description') camp.arcs[ai].description = c.to;
+        if(c.field==='note') {
+          const stamp = new Date().toLocaleDateString();
+          camp.arcs[ai].notes = (camp.arcs[ai].notes ? camp.arcs[ai].notes+'\n\n' : '') + `[${stamp}] ${c.to}`;
+        }
+      });
+      stats.updateCount++;
+    } else {
+      const a = item.incoming;
+      camp.arcs.push({ id:genItemId(), title:a.title||'Untitled Arc', description:a.description||'', status:a.status||'active', notes:'' });
+      stats.newCount++;
+    }
+  });
+
+  // ── Notes (always new) ──
+  if(!camp.notes) camp.notes=[];
+  plan.notes.forEach(item => {
+    const n = item.incoming;
+    camp.notes.push({ id:genItemId(), title:n.title||'Note', body:n.body||'', updated:Date.now() });
+    stats.newCount++;
+  });
+
+  saveCampaign(camp);
+  window._pendingBulkImport = null;
+  document.getElementById('bulkImportNotes').value = '';
+  document.getElementById('bulkImportPreview').innerHTML = '';
+  document.getElementById('sessBulkImport').style.display = 'none';
+
+  const parts = [];
+  if(stats.newCount)    parts.push(`${stats.newCount} added`);
+  if(stats.updateCount) parts.push(`${stats.updateCount} updated`);
+  toast(`✦ ${parts.join(', ')}!`, 'var(--purple)');
+  renderSessions();
+  renderCampDetailHeader();
+}
+
+async function doClaudeSessionImport(){
+  const notes = (document.getElementById('claudeSessionNotes')?.value||'').trim();
+  if(!notes){ toast('Paste session notes first','var(--red)'); return; }
+  const btn = document.getElementById('claudeSessionBtn');
+  const statusEl = document.getElementById('claudeSessionStatus');
+  const previewEl = document.getElementById('claudeSessionPreview');
+  btn.disabled = true;
+  statusEl.innerHTML = '<span style="color:var(--gold)">🤖 Extracting session…</span>';
+  previewEl.innerHTML = '';
+
+  const camp = getCampaigns().find(c=>c.id===editingCampId);
+  const sessionNum = (camp?.sessions?.length||0) + 1;
+
+  const systemPrompt = `You are a D&D session notes parser. Extract session details from raw notes and return ONLY valid JSON, no markdown, no backticks.
+
+Return this structure:
+{
+  "title": "short evocative session title (if not given, invent one based on content)",
+  "date": "YYYY-MM-DD or empty string",
+  "summary": "2-4 sentence prose summary of what happened",
+  "xpAwarded": number (total XP for the session, 0 if not mentioned),
+  "goldAwarded": number (total gp awarded, 0 if not mentioned),
+  "highlights": ["array of 3-6 key moments, decisions, or memorable quotes as short strings"]
+}
+
+Rules:
+- Parse XP from things like "450 XP each × 3 = 1350" or "800 XP" etc.
+- Parse gold from "1800gp", "1800 gold", "800 gold pieces" etc.
+- Highlights should be punchy 1-line summaries of key moments
+- Return ONLY the JSON.`;
+
+  try {
+    const res = await callClaude({ model:'claude-sonnet-4-20250514', max_tokens:800, system:systemPrompt,
+        messages:[{ role:'user', content: `Session ${sessionNum} notes:\n\n${notes}` }] });
+    const data = res;
+    const raw = (data.content?.find(b=>b.type==='text')?.text||'').replace(/^```[a-z]*\n?/,'').replace(/```$/,'').trim();
+    const s = JSON.parse(raw);
+    window._pendingClaudeSession = s;
+
+    previewEl.innerHTML = `
+      <div style="background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px;margin-bottom:8px">
+        <div style="font-family:'Cinzel',serif;font-size:13px;color:var(--gold);margin-bottom:4px">Session ${sessionNum}: ${s.title}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${s.date||'No date'} · ${s.xpAwarded?s.xpAwarded+' XP':''} ${s.goldAwarded?'· '+s.goldAwarded+'gp':''}</div>
+        <p style="font-size:12px;line-height:1.6;margin-bottom:8px">${s.summary}</p>
+        ${s.highlights?.length?'<div style="font-size:11px;color:var(--muted)">'+s.highlights.map(h=>`✦ ${h}`).join('<br>')+'</div>':''}
+      </div>
+      <button class="btn btn-gold" onclick="confirmClaudeSession()">✦ Log This Session</button>`;
+    statusEl.innerHTML = '';
+  } catch(e) {
+    statusEl.innerHTML = `<span style="color:var(--red)">⚠ ${e.message}</span>`;
+    console.error(e);
+  }
+  btn.disabled = false;
+}
+
+function confirmClaudeSession(){
+  const s = window._pendingClaudeSession;
+  if(!s) return;
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c=>c.id===editingCampId);
+  if(ci<0) return;
+  const session = {
+    id: genItemId(), title: s.title||'Untitled Session',
+    date: s.date||new Date().toISOString().split('T')[0],
+    summary: s.summary||'', xpAwarded: s.xpAwarded||0,
+    goldAwarded: s.goldAwarded||0, highlights: s.highlights||[],
+    presentCharIds: [..._sessionPresence], goldAddedToLoot: false,
+  };
+  _sessionPresence = new Set();
+  if(!camps[ci].sessions) camps[ci].sessions=[];
+  camps[ci].sessions.push(session);
+  camps[ci].lastPlayed = Date.now();
+  // Auto-log to party history
+  const sessionNum3 = camps[ci].sessions.length;
+  addPartyHistoryEvent(camps[ci],'session',
+    `Session ${sessionNum3}: "${session.title}"${session.xpAwarded?' · '+session.xpAwarded+' XP':''}${session.goldAwarded?' · '+session.goldAwarded+'gp':''}`,
+    '📜');
+  // Auto-add gold
+  if(session.goldAwarded > 0){
+    const w = getWealth();
+    if(!w['party']) w['party']={gp:0,sp:0,ep:0,cp:0};
+    w['party'].gp = (w['party'].gp||0) + session.goldAwarded;
+    saveWealth(w);
+    const ci2 = camps.findIndex(c=>c.id===editingCampId);
+    const si = camps[ci2].sessions.findIndex(x=>x.id===session.id);
+    if(si>=0) camps[ci2].sessions[si].goldAddedToLoot = true;
+  }
+  saveCampaigns(camps);
+  document.getElementById('claudeSessionNotes').value = '';
+  document.getElementById('claudeSessionPreview').innerHTML = '';
+  window._pendingClaudeSession = null;
+  toast('Session logged!');
+  renderSessions();
+  renderCampDetailHeader();
+}
+
+function addSession() {
+  const title = (document.getElementById('sTitle')?.value||'').trim();
+  if (!title) { toast('Enter a session title','var(--red)'); return; }
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  const highlightsRaw = document.getElementById('sHighlights')?.value||'';
+  const highlights = highlightsRaw.split('\n').map(h=>h.trim()).filter(Boolean);
+  const goldAwarded = parseInt(document.getElementById('sGold')?.value)||0;
+  const xpAwarded   = parseInt(document.getElementById('sXP')?.value)||0;
+  const session = {
+    id: genItemId(),
+    title,
+    date: document.getElementById('sDate')?.value||'',
+    summary: document.getElementById('sSummary')?.value||'',
+    xpAwarded,
+    goldAwarded,
+    highlights,
+    presentCharIds: [..._sessionPresence],
+    goldAddedToLoot: false, // track whether we've pushed to loot
+  };
+  _sessionPresence = new Set();
+  if (!camps[ci].sessions) camps[ci].sessions = [];
+  camps[ci].sessions.push(session);
+  camps[ci].lastPlayed = Date.now();
+  // Auto-log to party history
+  const sessionNum2 = camps[ci].sessions.length;
+  addPartyHistoryEvent(camps[ci],'session',
+    `Session ${sessionNum2}: "${session.title}"${session.xpAwarded?' · '+session.xpAwarded+' XP':''}${session.goldAwarded?' · '+session.goldAwarded+'gp':''}`,
+    '📜');
+  saveCampaigns(camps);
+
+  // Auto-add gold to party treasury
+  if (goldAwarded > 0) {
+    const w = getWealth();
+    if (!w['party']) w['party'] = {gp:0,sp:0,ep:0,cp:0};
+    w['party'].gp = (w['party'].gp||0) + goldAwarded;
+    saveWealth(w);
+    // Mark session so we can reverse on delete
+    const camps2 = getCampaigns();
+    const ci2 = camps2.findIndex(c => c.id === editingCampId);
+    const si = camps2[ci2].sessions.findIndex(s => s.id === session.id);
+    if (si >= 0) camps2[ci2].sessions[si].goldAddedToLoot = true;
+    saveCampaigns(camps2);
+    toast(`Session logged! +${goldAwarded}gp → Party Treasury`,'var(--gold)');
+  } else {
+    toast('Session logged!');
+  }
+
+  ['sTitle','sSummary','sHighlights'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
+  document.getElementById('sXP').value='0';
+  document.getElementById('sGold').value='0';
+  renderSessions();
+  renderCampDetailHeader();
+}
+
+function deleteSession(sid) {
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  // Reverse gold if it was added to loot
+  const session = camps[ci].sessions?.find(s => s.id === sid);
+  if (session && session.goldAddedToLoot && session.goldAwarded > 0) {
+    const w = getWealth();
+    if (w['party']) {
+      w['party'].gp = Math.max(0, (w['party'].gp||0) - session.goldAwarded);
+      saveWealth(w);
+    }
+  }
+  camps[ci].sessions = (camps[ci].sessions||[]).filter(s => s.id !== sid);
+  saveCampaigns(camps);
+  renderSessions();
+  renderCampDetailHeader();
+  toast('Session removed','var(--red)');
+}
+
+/* ── Quests ── */
+function renderQuests() {
+  const camp = getCampaigns().find(c => c.id === editingCampId);
+  if (!camp) return;
+  const el = document.getElementById('ctab-quests');
+  const quests = camp.quests||[];
+  const active = quests.filter(q=>q.status==='active');
+  const done = quests.filter(q=>q.status!=='active');
+  let html = `<div class="card" style="margin-bottom:14px">
+    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">Add Quest</div>
+    <div class="form-row two">
+      <div class="field"><label>Quest Title</label><input id="qTitle" placeholder="e.g. Find the Black Spider"></div>
+      <div class="field"><label>Priority</label><select id="qPriority"><option value="main">Main Quest</option><option value="side">Side Quest</option><option value="personal">Personal</option></select></div>
+    </div>
+    <div class="form-row two">
+      <div class="field"><label>Quest Giver</label><input id="qGiver" placeholder="NPC name…"></div>
+      <div class="field"><label>Reward</label><input id="qReward" placeholder="Gold, items, info…"></div>
+    </div>
+    <div class="field"><label>Description</label><textarea id="qDesc" placeholder="What does the party need to do?"></textarea></div>
+    <div class="field"><label>Objectives (one per line)</label><textarea id="qObj" placeholder="Find Gundren\nDiscover the forge\nDefeat the Black Spider"></textarea></div>
+    <button class="btn btn-primary" onclick="addQuest()">Add Quest</button>
+  </div>`;
+  if (!quests.length) { html += `<div class="empty-state"><div class="es-icon">⚔</div><p>No quests tracked yet.</p></div>`; }
+  else {
+    if (active.length) {
+      html += `<div class="section-label">Active Quests</div>`;
+      active.forEach(q => { html += renderQuestCard(q); });
+    }
+    if (done.length) {
+      html += `<div class="section-label">Completed / Inactive</div>`;
+      done.forEach(q => { html += renderQuestCard(q); });
+    }
+  }
+  el.innerHTML = html;
+}
+
+function renderQuestCard(q) {
+  const priClass = `quest-priority-${q.priority||'side'}`;
+  const statusClass = `qs-${q.status||'active'}`;
+  const objs = q.objectives||[];
+  return `<div class="quest-card ${priClass}" id="qc_${q.id}" onclick="toggleCard('qc_${q.id}')">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="flex:1">
+        <div class="quest-title">${q.title}</div>
+        ${q.giver?('<div style="font-size:11px;color:var(--muted);margin-top:2px">Given by: '+q.giver+'</div>'):''}
+      </div>
+      <span class="quest-status-badge ${statusClass}">${q.status||'active'}</span>
+      <span style="color:var(--muted);font-size:12px">▼</span>
+    </div>
+    <div class="session-body" style="display:none">
+      ${q.description?('<p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:8px;font-style:italic">'+q.description+'</p>'):''}
+      ${q.reward?('<div style="font-size:12px;color:var(--gold);margin-bottom:8px">Reward: '+q.reward+'</div>'):''}
+      ${objs.length?`<div style="margin-bottom:8px">${objs.map((o,oi)=>`<div class="obj-row">
+        <div class="obj-check ${o.done?'done':''}" onclick="toggleObj('${q.id}',${oi});event.stopPropagation()">${o.done?'✓':''}</div>
+        <span class="obj-text ${o.done?'done':''}">${typeof o==='string'?o:o.text}</span>
+      </div>`).join('')}</div>`:''}
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+        ${['active','completed','failed','abandoned'].map(s=>
+          `<button onclick="setQuestStatus('${q.id}','${s}');event.stopPropagation()" style="padding:4px 10px;border-radius:8px;font-family:'Cinzel',serif;font-size:9px;cursor:pointer;border:1px solid var(--border);background:${q.status===s?'var(--purple)':'var(--surface)'};color:${q.status===s?'white':'var(--muted)'}">${s}</button>`
+        ).join('')}
+        <button class="icon-btn" style="color:var(--red);font-size:12px;margin-left:auto" onclick="deleteQuest('${q.id}');event.stopPropagation()">✕</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function addQuest() {
+  const title = (document.getElementById('qTitle')?.value||'').trim();
+  if (!title) { toast('Enter quest title','var(--red)'); return; }
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  const objRaw = document.getElementById('qObj')?.value||'';
+  const objectives = objRaw.split('\n').map(o=>o.trim()).filter(Boolean).map(text=>({text,done:false}));
+  const quest = {
+    id: genItemId(),
+    title,
+    priority: document.getElementById('qPriority')?.value||'side',
+    giver: document.getElementById('qGiver')?.value||'',
+    reward: document.getElementById('qReward')?.value||'',
+    description: document.getElementById('qDesc')?.value||'',
+    objectives,
+    status: 'active',
+  };
+  if (!camps[ci].quests) camps[ci].quests = [];
+  camps[ci].quests.push(quest);
+  saveCampaigns(camps);
+  ['qTitle','qGiver','qReward','qDesc','qObj'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  toast('Quest added!');
+  renderQuests();
+  renderCampDetailHeader();
+}
+
+function setQuestStatus(qid, status) {
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  const qi = (camps[ci].quests||[]).findIndex(q => q.id === qid);
+  if (qi < 0) return;
+  camps[ci].quests[qi].status = status;
+  saveCampaigns(camps);
+  renderQuests();
+}
+
+function toggleObj(qid, oi) {
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  const qi = (camps[ci].quests||[]).findIndex(q => q.id === qid);
+  if (qi < 0) return;
+  const obj = camps[ci].quests[qi].objectives[oi];
+  if (typeof obj === 'string') camps[ci].quests[qi].objectives[oi] = { text: obj, done: true };
+  else obj.done = !obj.done;
+  saveCampaigns(camps);
+  renderQuests();
+}
+
+function deleteQuest(qid) {
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  camps[ci].quests = (camps[ci].quests||[]).filter(q => q.id !== qid);
+  saveCampaigns(camps);
+  renderQuests();
+  renderCampDetailHeader();
+  toast('Quest removed','var(--red)');
+}
+
+/* ── NPCs ── */
+function renderNPCs() {
+  const camp = getCampaigns().find(c => c.id === editingCampId);
+  if (!camp) return;
+  const el = document.getElementById('ctab-npcs');
+  const npcs = camp.npcs||[];
+  let html = `<div class="card" style="margin-bottom:14px">
+    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">Add NPC</div>
+    <div class="form-row two">
+      <div class="field"><label>Name</label><input id="nName" placeholder="e.g. Gundren Rockseeker"></div>
+      <div class="field"><label>Race / Type</label><input id="nRace" placeholder="Dwarf, Dragon…"></div>
+    </div>
+    <div class="form-row two">
+      <div class="field"><label>Role</label><input id="nRole" placeholder="Quest Giver, Villain…"></div>
+      <div class="field"><label>Location</label><input id="nLocation" placeholder="Last known location"></div>
+    </div>
+    <div class="field"><label>Relationship</label>
+      <select id="nRel"><option value="neutral">Neutral</option><option value="friendly">Friendly</option><option value="allied">Allied</option><option value="hostile">Hostile</option></select>
+    </div>
+    <div class="field"><label>Description & Notes</label><textarea id="nDesc" placeholder="Appearance, personality, secrets…"></textarea></div>
+    <button class="btn btn-primary" onclick="addNPC()">Add NPC</button>
+  </div>`;
+  if (!npcs.length) { html += `<div class="empty-state"><div class="es-icon">🧙</div><p>No NPCs tracked yet.</p></div>`; }
+  else {
+    const byRel = { allied:[], friendly:[], neutral:[], hostile:[] };
+    npcs.forEach(n => (byRel[n.relationship]||byRel.neutral).push(n));
+    const order = ['allied','friendly','neutral','hostile'];
+    const labels = { allied:'Allied', friendly:'Friendly', neutral:'Neutral', hostile:'Hostile' };
+    order.forEach(rel => {
+      if (!byRel[rel].length) return;
+      html += `<div class="section-label">${labels[rel]} NPCs</div>`;
+      byRel[rel].forEach(n => {
+        const initials = n.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+        html += `<div class="npc-card">
+          <div class="npc-avatar rel-${n.relationship||'neutral'}">${initials}</div>
+          <div style="flex:1;min-width:0">
+            <div class="npc-name">${n.name}${!n.alive?(' <span style="color:var(--red);font-size:10px">[Deceased]</span>'):''}</div>
+            <div class="npc-role">${n.race?n.race+' · ':''}${n.role||'Unknown'} ${n.location?'· '+n.location:''}</div>
+            ${n.desc?('<div style="font-size:12px;color:var(--muted);font-style:italic;line-height:1.4;margin-top:4px">'+n.desc+'</div>'):''}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">
+            <button class="icon-btn" style="font-size:12px" onclick="toggleNPCAlive('${n.id}')" title="${n.alive?'Mark Deceased':'Mark Alive'}">${n.alive?'💀':'❤️'}</button>
+            <button class="icon-btn" style="color:var(--red);font-size:12px" onclick="deleteNPC('${n.id}')">✕</button>
+          </div>
+        </div>`;
+      });
+    });
+  }
+  el.innerHTML = html;
+}
+
+function addNPC() {
+  const name = (document.getElementById('nName')?.value||'').trim();
+  if (!name) { toast('Enter NPC name','var(--red)'); return; }
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  const npc = {
+    id: genItemId(), name,
+    race: document.getElementById('nRace')?.value||'',
+    role: document.getElementById('nRole')?.value||'',
+    location: document.getElementById('nLocation')?.value||'',
+    relationship: document.getElementById('nRel')?.value||'neutral',
+    desc: document.getElementById('nDesc')?.value||'',
+    alive: true,
+  };
+  if (!camps[ci].npcs) camps[ci].npcs = [];
+  camps[ci].npcs.push(npc);
+  saveCampaigns(camps);
+  ['nName','nRace','nRole','nLocation','nDesc'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  toast('NPC added!');
+  renderNPCs();
+  renderCampDetailHeader();
+}
+
+function toggleNPCAlive(nid) {
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  const ni = (camps[ci].npcs||[]).findIndex(n => n.id === nid);
+  if (ni < 0) return;
+  camps[ci].npcs[ni].alive = !camps[ci].npcs[ni].alive;
+  saveCampaigns(camps);
+  renderNPCs();
+}
+
+function deleteNPC(nid) {
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  camps[ci].npcs = (camps[ci].npcs||[]).filter(n => n.id !== nid);
+  saveCampaigns(camps);
+  renderNPCs();
+  renderCampDetailHeader();
+  toast('NPC removed','var(--red)');
+}
+
+/* ── Story Arcs ── */
+function renderArcs() {
+  const camp = getCampaigns().find(c => c.id === editingCampId);
+  if (!camp) return;
+  const el = document.getElementById('ctab-arcs');
+  const arcs = camp.arcs||[];
+  let html = `<div class="card" style="margin-bottom:14px">
+    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">Add Story Arc</div>
+    <div class="field"><label>Arc Title</label><input id="aTitle" placeholder="e.g. The Black Spider Conspiracy"></div>
+    <div class="field"><label>Description</label><textarea id="aDesc" placeholder="Describe this story arc, its themes, goals…" style="min-height:72px"></textarea></div>
+    <div class="field"><label>Status</label>
+      <select id="aStatus"><option value="upcoming">Upcoming</option><option value="active">Active</option><option value="resolved">Resolved</option></select>
+    </div>
+    <button class="btn btn-primary" onclick="addArc()">Add Arc</button>
+  </div>`;
+  if (!arcs.length) { html += `<div class="empty-state"><div class="es-icon">📖</div><p>No story arcs yet.<br>Track the major narrative threads of your campaign.</p></div>`; }
+  else {
+    const order = ['active','upcoming','resolved'];
+    const labels = {active:'Active Arcs',upcoming:'Upcoming',resolved:'Resolved'};
+    order.forEach(status => {
+      const group = arcs.filter(a => a.status === status);
+      if (!group.length) return;
+      html += `<div class="section-label">${labels[status]}</div>`;
+      group.forEach(a => {
+        html += `<div class="arc-card" id="arc_${a.id}" onclick="toggleCard('arc_${a.id}')">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1">
+              <div style="font-family:'Cinzel',serif;font-size:13px;color:${a.status==='active'?'var(--gold)':a.status==='resolved'?'var(--green)':'var(--muted)'}">${a.title}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">${a.status}</div>
+            </div>
+            <span style="color:var(--muted);font-size:12px">▼</span>
+          </div>
+          <div class="session-body" style="display:none">
+            ${a.description?('<p style="font-size:13px;color:var(--muted);font-style:italic;line-height:1.5;margin-bottom:10px">'+a.description.replace(/\n/g,'<br>')+'</p>'):''}
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px">
+              ${['upcoming','active','resolved'].map(s=>`<button onclick="setArcStatus('${a.id}','${s}');event.stopPropagation()" style="padding:4px 10px;border-radius:8px;font-family:'Cinzel',serif;font-size:9px;cursor:pointer;border:1px solid var(--border);background:${a.status===s?'var(--purple)':'var(--surface)'};color:${a.status===s?'white':'var(--muted)'}">${s}</button>`).join('')}
+            </div>
+            <div class="field" style="margin-bottom:6px"><label>Add Notes</label>
+              <textarea id="arcNote_${a.id}" placeholder="Update arc notes…" style="min-height:52px">${a.notes||''}</textarea>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button onclick="saveArcNotes('${a.id}');event.stopPropagation()" style="padding:5px 12px;background:var(--purple);border:none;border-radius:8px;color:white;font-family:'Cinzel',serif;font-size:9px;cursor:pointer">Save Notes</button>
+              <button class="icon-btn" style="color:var(--red);font-size:12px" onclick="deleteArc('${a.id}');event.stopPropagation()">✕ Delete</button>
+            </div>
+          </div>
+        </div>`;
+      });
+    });
+  }
+  el.innerHTML = html;
+}
+
+function addArc() {
+  const title = (document.getElementById('aTitle')?.value||'').trim();
+  if (!title) { toast('Enter arc title','var(--red)'); return; }
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  const arc = { id: genItemId(), title, description: document.getElementById('aDesc')?.value||'', status: document.getElementById('aStatus')?.value||'active', notes:'' };
+  if (!camps[ci].arcs) camps[ci].arcs = [];
+  camps[ci].arcs.push(arc);
+  saveCampaigns(camps);
+  ['aTitle','aDesc'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  toast('Arc added!');
+  renderArcs();
+  renderCampDetailHeader();
+}
+
+function setArcStatus(aid, status) {
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  const ai = (camps[ci].arcs||[]).findIndex(a => a.id === aid);
+  if (ai < 0) return;
+  camps[ci].arcs[ai].status = status;
+  saveCampaigns(camps);
+  renderArcs();
+}
+
+function saveArcNotes(aid) {
+  const val = document.getElementById('arcNote_'+aid)?.value||'';
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  const ai = (camps[ci].arcs||[]).findIndex(a => a.id === aid);
+  if (ai < 0) return;
+  camps[ci].arcs[ai].notes = val;
+  saveCampaigns(camps);
+  toast('Notes saved!');
+}
+
+function deleteArc(aid) {
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  camps[ci].arcs = (camps[ci].arcs||[]).filter(a => a.id !== aid);
+  saveCampaigns(camps);
+  renderArcs();
+  renderCampDetailHeader();
+  toast('Arc removed','var(--red)');
+}
+
+/* ── Notes ── */
+function renderNotes() {
+  const camp = getCampaigns().find(c => c.id === editingCampId);
+  if (!camp) return;
+  const el = document.getElementById('ctab-notes');
+  const notes = camp.notes||[];
+  let html = `<button class="btn btn-gold" style="margin-bottom:14px" onclick="addNote()">+ New Note</button>`;
+  if (!notes.length) { html += `<div class="empty-state"><div class="es-icon">📝</div><p>No notes yet.<br>Jot down anything — world lore, player theories, DM secrets…</p></div>`; }
+  else {
+    html += notes.map((n,i) => `<div class="note-card">
+      <input class="note-title-input" value="${n.title||''}" placeholder="Note title…" onblur="saveNoteField(${i},'title',this.value)">
+      <div style="height:1px;background:var(--border);margin-bottom:6px"></div>
+      <textarea class="note-body-input" placeholder="Write anything…" onblur="saveNoteField(${i},'body',this.value)">${n.body||''}</textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+        <span style="font-size:10px;color:var(--muted2)">${n.updated?new Date(n.updated).toLocaleDateString():''}</span>
+        <button class="icon-btn" style="color:var(--red);font-size:12px" onclick="deleteNote(${i})">✕ Delete</button>
+      </div>
+    </div>`).join('');
+  }
+  el.innerHTML = html;
+}
+
+function addNote() {
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  if (!camps[ci].notes) camps[ci].notes = [];
+  camps[ci].notes.unshift({ id: genItemId(), title:'', body:'', updated: Date.now() });
+  saveCampaigns(camps);
+  renderNotes();
+}
+
+function saveNoteField(idx, field, val) {
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  if (!camps[ci].notes[idx]) return;
+  camps[ci].notes[idx][field] = val;
+  camps[ci].notes[idx].updated = Date.now();
+  saveCampaigns(camps);
+}
+
+function deleteNote(idx) {
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c => c.id === editingCampId);
+  if (ci < 0) return;
+  camps[ci].notes.splice(idx, 1);
+  saveCampaigns(camps);
+  renderNotes();
+  toast('Note deleted','var(--red)');
+}
+
+/* ── Shared toggle helper ── */
+function toggleCard(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle('expanded');
+  const body = el.querySelector('.session-body');
+  if (body) body.style.display = el.classList.contains('expanded') ? 'block' : 'none';
+}
+
+/* ── Campaign Switch Banner (shown on Roster screen) ── */
+function renderCampaignSwitchBanner() {
+  const el = document.getElementById('campSwitchBanner');
+  if (!el) return;
+  const camp = getActiveCamp();
+  if (!camp) {
+    el.innerHTML = `<div class="switch-camp-banner" onclick="nav('campaign')" style="cursor:pointer">
+      <span style="font-size:24px">📖</span>
+      <p><strong style="font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;display:block;margin-bottom:2px">No Active Campaign</strong>Create or select a campaign to start tracking.</p>
+      <span style="color:var(--gold);font-family:'Cinzel',serif;font-size:10px">→</span>
+    </div>`;
+    return;
+  }
+  const chars = getChars().filter(c=>(camp.charIds||[]).includes(c.id));
+  const activeQ = (camp.quests||[]).filter(q=>q.status==='active').length;
+  el.innerHTML = `<div class="switch-camp-banner" onclick="nav('campaign')" style="cursor:pointer">
+    <span style="font-size:24px">📖</span>
+    <div style="flex:1">
+      <strong style="font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;display:block;margin-bottom:2px;color:var(--gold)">${camp.name}</strong>
+      <span style="font-size:11px;color:var(--muted)">${(camp.sessions||[]).length} sessions · ${activeQ} active quest${activeQ!==1?'s':''} · ${chars.length} character${chars.length!==1?'s':''}</span>
+    </div>
+    <span style="color:var(--gold);font-family:'Cinzel',serif;font-size:10px">→</span>
+  </div>`;
+}
+
+// Seed preset campaigns AFTER all consts are defined
+function seedPresetCampaigns(){
+  // With server-first approach, only seed _db if empty (offline fallback)
+  if(!PRESET_CAMPAIGNS || !PRESET_CAMPAIGNS.length) return;
+  if(_db.campaigns.length > 0) return;
+  PRESET_CAMPAIGNS.forEach(p => {
+    const camp = JSON.parse(JSON.stringify(p));
+    camp.sessions=camp.sessions||[]; camp.quests=camp.quests||[];
+    camp.npcs=camp.npcs||[]; camp.arcs=camp.arcs||[];
+    camp.notes=camp.notes||[]; camp.charIds=camp.charIds||[];
+    if(!_db.campaigns.find(c=>c.id===camp.id)) _db.campaigns.push(camp);
+  });
+}
+
+async function forceReinstallPresets(){
+  if(!PRESET_CAMPAIGNS || !PRESET_CAMPAIGNS.length){
+    alert('Preset data not found. Try reloading the page.');
+    return;
+  }
+  if(!getGroupId()){
+    toast('Connect to a group first before restoring presets','var(--red)');
+    return;
+  }
+
+  toast('Restoring built-in campaigns…','var(--purple)');
+  const gid = getGroupId();
+  const errors = [];
+  let count = 0;
+
+  for(const p of PRESET_CAMPAIGNS){
+    const camp = JSON.parse(JSON.stringify(p));
+    camp.sessions=camp.sessions||[]; camp.quests=camp.quests||[];
+    camp.npcs=camp.npcs||[]; camp.arcs=camp.arcs||[];
+    camp.notes=camp.notes||[]; camp.charIds=camp.charIds||[];
+    // Preserve existing charIds
+    const existing = _db.campaigns.find(c=>c.id===camp.id);
+    if(existing?.charIds?.length) camp.charIds = existing.charIds;
+
+    // Save directly to Supabase with composite key
+    const rowId = gid + '_' + camp.id;
+    const row = { id: rowId, group_id: gid, name: camp.name||'', data: camp };
+    const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
+    if(error){
+      console.error('Preset save error for', camp.name, ':', error.message, error.code);
+      errors.push(`${camp.name}: ${error.message} (${error.code})`);
+    } else {
+      // Update _db cache
+      const i = _db.campaigns.findIndex(c=>c.id===camp.id);
+      if(i>=0) _db.campaigns[i]=camp; else _db.campaigns.push(camp);
+      count++;
+    }
+  }
+
+  if(errors.length){
+    alert(`${count} restored, ${errors.length} failed:\n\n${errors.join('\n')}\n\nCheck that your Supabase 'data' column is type 'jsonb' and your RLS policies are open.`);
+  } else {
+    if(!getActiveCampId() && _db.campaigns.length) setActiveCampId(_db.campaigns[0].id);
+    toast(`✦ ${count} built-in campaign${count!==1?'s':''} restored!`,'var(--gold)');
+  }
+  renderCampList();
+}
+
+/* ══════════════════════════════════════════════════════════════════
 
 /* ══ CAMPAIGN BACKUP EXPORT / RESTORE ══ */
 function exportCampaignBackup(campId){
