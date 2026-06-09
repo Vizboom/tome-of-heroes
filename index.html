@@ -1419,13 +1419,10 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <!-- Import Campaign form -->
     <div id="campImportForm" style="display:none">
       <div class="divider"><span>Import Campaign</span></div>
-
       <div class="tab-row" style="margin-bottom:12px">
         <button class="tab-btn active" onclick="campImportTab('claude',this)">🤖 Claude</button>
-
         <button class="tab-btn" onclick="campImportTab('code',this)">📋 Code</button>
       </div>
-
       <div id="campImportPaneClaude">
         <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Describe your campaign — setting, premise, current arc, players. Claude will generate a full campaign with quests, NPCs, and session notes.</p>
         <div class="field"><label>Campaign Description</label>
@@ -1435,11 +1432,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
         <div id="claudeCampStatus" style="margin-top:8px;font-size:12px;text-align:center;min-height:16px"></div>
         <div id="claudeCampPreview" style="margin-top:8px"></div>
       </div>
-
-      
-
-      </div>
-
       <div id="campImportPaneCode" style="display:none">
         <p style="font-size:13px;color:var(--muted);font-style:italic;margin-bottom:12px;line-height:1.5">Have a campaign export code? Paste it below.</p>
         <div class="field"><label>Campaign Export Code</label>
@@ -1447,7 +1439,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
         </div>
         <button class="btn btn-primary" onclick="importCampaign()">Import from Code</button>
       </div>
-
     </div>
     <!-- Campaign detail view -->
     <div id="campDetailView" style="display:none">
