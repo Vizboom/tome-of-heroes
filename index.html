@@ -3036,24 +3036,9 @@ function saveCharacter(){
   const chars=getChars();chars.push(char);saveChars(chars);
   toast('✦ '+name+' forged!');
 
-  // Auto-join the active campaign immediately
-  const activeCamp = getActiveCamp();
-  if(activeCamp && !activeCamp._shared){
-    const allCamps = getCampaigns();
-    const ci = allCamps.findIndex(c=>c.id===activeCamp.id);
-    if(ci>=0){
-      if(!allCamps[ci].charIds) allCamps[ci].charIds=[];
-      const sid = String(char.id);
-      if(!allCamps[ci].charIds.includes(sid)) allCamps[ci].charIds.push(sid);
-      saveCampaign(allCamps[ci]);
-    }
-  } else if(activeCamp && activeCamp._shared){
-    confirmPlayerChar(activeCamp.id, char.id);
-  }
-
-  // Show campaign assignment popup if there are multiple campaigns
+  // Show campaign assignment modal — handles both single and multi-campaign
   const camps = getCampaigns();
-  if(camps.length > 1){
+  if(camps.length){
     _showPostForgeAssign(char, camps);
   } else {
     setTimeout(()=>nav('roster'),600);
@@ -3064,10 +3049,38 @@ function _showPostForgeAssign(char, camps){
   nav('roster');
   const cls = CLASSES[char.classIdx]||CLASSES[0];
   const cc = classColor(char.classIdx);
+  const activeCampId = getActiveCampId();
+
+  // Auto-assign to the active campaign immediately on modal open
+  const activeCamp = camps.find(c=>!c._shared && String(c.id)===String(activeCampId));
+  if(activeCamp){
+    const ci = _db.campaigns.findIndex(c=>c.id===activeCamp.id);
+    if(ci>=0){
+      if(!_db.campaigns[ci].charIds) _db.campaigns[ci].charIds=[];
+      const sid = String(char.id);
+      if(!_db.campaigns[ci].charIds.includes(sid)){
+        _db.campaigns[ci].charIds.push(sid);
+        saveCampaign(_db.campaigns[ci]);
+      }
+    }
+  } else {
+    const sharedActiveCamp = camps.find(c=>c._shared && String(c.id)===String(activeCampId));
+    if(sharedActiveCamp) confirmPlayerChar(sharedActiveCamp.id, char.id);
+  }
+
+  // If only one campaign, no need for the modal — just go to roster
+  if(camps.length === 1){
+    renderRoster(); renderCampList(); return;
+  }
 
   const modal = document.createElement('div');
   modal.className = 'modal-backdrop';
   modal.id = 'postForgeModal';
+  const _pfClose = () => {
+    document.getElementById('postForgeModal')?.remove();
+    renderRoster();
+    renderCampList();
+  };
   modal.innerHTML = `<div class="modal-box" style="max-width:400px">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
       <div style="width:44px;height:44px;border-radius:50%;background:${cc}22;border:2px solid ${cc};display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${cls.icon}</div>
@@ -3076,29 +3089,33 @@ function _showPostForgeAssign(char, camps){
         <div style="font-size:11px;color:var(--muted)">Level ${char.level} ${char.race} ${cls.name}</div>
       </div>
     </div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Which campaign will ${char.name} join?</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Assign ${char.name} to a campaign — tap to toggle</div>
     <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px" id="pfCampList">
       ${camps.map(camp=>{
         const isShared = camp._shared;
-        const alreadySelected = isShared
+        const inCamp = isShared
           ? String(getPlayerCampChar(camp.id))===String(char.id)
           : (camp.charIds||[]).some(x=>String(x)===String(char.id));
         const icon = isShared ? '⚔' : '📖';
-        const sub = isShared ? 'Shared campaign' : `${(camp.sessions||[]).length} sessions`;
+        const sub = isShared ? 'Shared campaign' : `${(camp.charIds||[]).length} character${(camp.charIds||[]).length!==1?'s':''}`;
         return `<div onclick="_pfAssign('${camp.id}',${char.id},this)" data-campid="${camp.id}"
-          style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;border:1px solid ${alreadySelected?'var(--gold)':'var(--border)'};background:${alreadySelected?'var(--gold-dim)':'var(--surface2)'};cursor:pointer;transition:var(--trans)">
+          style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;border:1px solid ${inCamp?'var(--gold)':'var(--border)'};background:${inCamp?'var(--gold-dim)':'var(--surface2)'};cursor:pointer;transition:var(--trans)">
           <span style="font-size:18px">${icon}</span>
           <div style="flex:1">
-            <div style="font-family:'Cinzel',serif;font-size:12px;color:${alreadySelected?'var(--gold)':'var(--text)'}">${camp.name}</div>
+            <div style="font-family:'Cinzel',serif;font-size:12px;color:${inCamp?'var(--gold)':'var(--text)'}">${camp.name}</div>
             <div style="font-size:10px;color:var(--muted)">${sub}</div>
           </div>
-          <span style="font-size:16px;color:${alreadySelected?'var(--gold)':'var(--muted)'}">${alreadySelected?'✓':'+'}</span>
+          <span style="font-size:16px;color:${inCamp?'var(--gold)':'var(--muted)'}">${inCamp?'✓':'+'}</span>
         </div>`;
       }).join('')}
     </div>
-    <button onclick="document.getElementById('postForgeModal').remove();renderRoster();" style="width:100%;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;cursor:pointer">Skip for now</button>
+    <button onclick="_pfClose()" style="width:100%;padding:10px;background:var(--gold);border:none;border-radius:8px;color:#0d0a1a;font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;cursor:pointer;font-weight:bold">Done</button>
   </div>`;
+  // Make _pfClose accessible from inline onclick
+  modal._pfClose = _pfClose;
   document.body.appendChild(modal);
+  // Expose _pfClose globally for the inline button
+  window._pfClose = _pfClose;
 }
 
 function _pfAssign(campId, charId, el){
@@ -3107,7 +3124,6 @@ function _pfAssign(campId, charId, el){
   if(!camp) return;
 
   if(camp._shared){
-    // Shared campaign — set as player's character and write cross-group copy
     confirmPlayerChar(campId, charId);
     const selected = String(getPlayerCampChar(campId))===String(charId);
     el.style.border = `1px solid ${selected?'var(--gold)':'var(--border)'}`;
@@ -3116,22 +3132,25 @@ function _pfAssign(campId, charId, el){
     el.querySelector('span:last-child').textContent = selected?'✓':'+';
     el.querySelector('span:last-child').style.color = selected?'var(--gold)':'var(--muted)';
   } else {
-    // Own campaign — add/remove from charIds
-    const ci = camps.findIndex(c=>String(c.id)===String(campId));
-    if(!camps[ci].charIds) camps[ci].charIds=[];
-    camps[ci].charIds = [...new Set(camps[ci].charIds.map(String))];
+    const ci = _db.campaigns.findIndex(c=>String(c.id)===String(campId));
+    if(ci<0) return;
+    if(!_db.campaigns[ci].charIds) _db.campaigns[ci].charIds=[];
+    _db.campaigns[ci].charIds = [...new Set(_db.campaigns[ci].charIds.map(String))];
     const cid = String(charId);
-    const idx = camps[ci].charIds.indexOf(cid);
+    const idx = _db.campaigns[ci].charIds.indexOf(cid);
     if(idx>=0){
-      camps[ci].charIds.splice(idx,1);
+      _db.campaigns[ci].charIds.splice(idx,1);
     } else {
-      camps[ci].charIds.push(cid);
+      _db.campaigns[ci].charIds.push(cid);
     }
-    saveCampaign(camps[ci]);
-    const inCamp = camps[ci].charIds.includes(cid);
+    saveCampaign(_db.campaigns[ci]);
+    const inCamp = _db.campaigns[ci].charIds.includes(cid);
     el.style.border = `1px solid ${inCamp?'var(--gold)':'var(--border)'}`;
     el.style.background = inCamp?'var(--gold-dim)':'var(--surface2)';
     el.querySelector('div > div:first-child').style.color = inCamp?'var(--gold)':'var(--text)';
+    // Update sub-text with fresh count
+    const subEl = el.querySelector('div > div:last-child');
+    if(subEl){ const n=_db.campaigns[ci].charIds.length; subEl.textContent=n+' character'+(n!==1?'s':''); }
     el.querySelector('span:last-child').textContent = inCamp?'✓':'+';
     el.querySelector('span:last-child').style.color = inCamp?'var(--gold)':'var(--muted)';
   }
@@ -8544,22 +8563,6 @@ function _finishCharImport(char, source){
   saveChars(chars);
   document.getElementById('charImportModal')?.remove();
   toast(`✦ ${char.name} imported from ${source}!`);
-  renderRoster();
-
-  // Auto-join the active campaign immediately
-  const activeCamp2 = getActiveCamp();
-  if(activeCamp2 && !activeCamp2._shared){
-    const allCamps2 = getCampaigns();
-    const ci2b = allCamps2.findIndex(c=>c.id===activeCamp2.id);
-    if(ci2b>=0){
-      if(!allCamps2[ci2b].charIds) allCamps2[ci2b].charIds=[];
-      const sid2 = String(char.id);
-      if(!allCamps2[ci2b].charIds.includes(sid2)) allCamps2[ci2b].charIds.push(sid2);
-      saveCampaign(allCamps2[ci2b]);
-    }
-  } else if(activeCamp2 && activeCamp2._shared){
-    confirmPlayerChar(activeCamp2.id, char.id);
-  }
 
   // Auto-log to party history
   const activeCamp = getActiveCamp();
@@ -8612,12 +8615,28 @@ function showCampAssignPrompt(char){
             </div>`;
           }).join('')}
         </div>
-        <button onclick="document.getElementById('campAssignModal').remove();renderRoster();" style="width:100%;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--muted);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;cursor:pointer">Done</button>
+        <button onclick="document.getElementById('campAssignModal').remove();renderRoster();renderCampList();" style="width:100%;padding:12px;background:var(--gold);border:none;border-radius:10px;color:#0d0a1a;font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;cursor:pointer;font-weight:bold">Done</button>
       </div>`;
   };
+  // Auto-assign to active campaign on open
+  const activeCampNow = getActiveCamp();
+  if(activeCampNow && !activeCampNow._shared){
+    const ci = _db.campaigns.findIndex(c=>c.id===activeCampNow.id);
+    if(ci>=0){
+      if(!_db.campaigns[ci].charIds) _db.campaigns[ci].charIds=[];
+      const sid = String(char.id);
+      if(!_db.campaigns[ci].charIds.includes(sid)){
+        _db.campaigns[ci].charIds.push(sid);
+        saveCampaign(_db.campaigns[ci]);
+      }
+    }
+  } else if(activeCampNow && activeCampNow._shared){
+    confirmPlayerChar(activeCampNow.id, char.id);
+  }
+
   document.body.appendChild(modal);
-  renderOptions();
-  modal.addEventListener('click', e => { if(e.target===modal){ modal.remove(); renderRoster(); } });
+  renderOptions();  // renders with up-to-date charIds after auto-assign
+  modal.addEventListener('click', e => { if(e.target===modal){ modal.remove(); renderRoster(); renderCampList(); } });
 }
 
 function toggleCampCharAndRefresh(campId, charId, el){
@@ -8961,13 +8980,8 @@ function importChar(){
   char.speed=char.speed||30;
   char.multiclasses=char.multiclasses||[];
   const chars=getChars();chars.push(char);saveChars(chars);
-  // Auto-join the active campaign
-  const ac=getActiveCamp();
-  if(ac && !ac._shared){
-    const allC=getCampaigns();const ci=allC.findIndex(c=>c.id===ac.id);
-    if(ci>=0){if(!allC[ci].charIds)allC[ci].charIds=[];const sid=String(char.id);if(!allC[ci].charIds.includes(sid))allC[ci].charIds.push(sid);saveCampaign(allC[ci]);}
-  } else if(ac && ac._shared){ confirmPlayerChar(ac.id, char.id); }
-  toast('✦ '+char.name+' imported!');renderRoster();
+  toast('✦ '+char.name+' imported!');
+  showCampAssignPrompt(char);
 }
 function joinParty(){const code=(document.getElementById('partyJoinIn')?.value||'').trim().toUpperCase();if(!code){toast('Paste a party code','var(--red)');return;}S.set('toh_joined_party',code);toast('Joined party: '+code);}
 function renderPartyManage(){
