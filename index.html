@@ -1661,11 +1661,19 @@ async function dbSaveChar(char){
   const gid = getGroupId()||await ensureGroupId(); if(!gid) return;
   const rowId = gid + '_' + String(char.id);
 
-  // When a player is in a shared campaign, set share_code to 'camp_{campId}_{shareCode}'
-  // so the DM's realtime subscription (which filters on this prefix) picks it up immediately.
-  // This is the primary cross-group discovery mechanism.
-  const shareCode = (char._playerInCamp && char.shareCode)
-    ? 'camp_' + String(char._playerInCamp) + '_' + char.shareCode
+  // Determine the campaign this character belongs to (either via _playerInCamp for
+  // shared campaigns, or by finding their charId in any campaign's charIds list)
+  const campId = char._playerInCamp || (()=>{
+    for(const c of _db.campaigns||[]){
+      if(!c._ownerGid && (c.charIds||[]).includes(String(char.id))) return c.id;
+    }
+    return null;
+  })();
+
+  // Set share_code to 'camp_{campId}_{shareCode}' so the campaign owner's realtime
+  // subscription picks it up. Works for both own and shared campaigns.
+  const shareCode = (campId && char.shareCode)
+    ? 'camp_' + String(campId) + '_' + char.shareCode
     : (char.shareCode || null);
 
   const row = { id: rowId, group_id: gid, share_code: shareCode, data: char };
@@ -1674,10 +1682,11 @@ async function dbSaveChar(char){
   const i = _db.chars.findIndex(c=>String(c.id)===String(char.id));
   if(i>=0) _db.chars[i]=char; else _db.chars.push(char);
 
-  // Also mirror to settings table as a fallback for DMs who joined before this player
-  // (their _fetchCampChars strategy 4 scans this on pull)
-  if(char._playerInCamp && char.shareCode){
-    const settingsKey = 'player_char_'+String(char._playerInCamp)+'_'+char.shareCode;
+  // Always publish to settings table when the char has a campaign assignment.
+  // settings table has no RLS — readable by any group_id.
+  // Key: 'player_char_{campId}_{shareCode}' — scanned by pullAll on every login.
+  if(campId && char.shareCode){
+    const settingsKey = 'player_char_'+String(campId)+'_'+char.shareCode;
     try {
       await supa.from('settings').upsert(
         { key: settingsKey, value: JSON.stringify(char) },
@@ -1748,8 +1757,9 @@ async function dbSaveItems(campId, items, wealth){
   _db.items[campId] = items;
   if(wealth!==undefined) _db.wealth[campId] = wealth;
   // For shared campaigns use the DM's group_id so loot lands on the right row
+  // For joined campaigns, write loot under the owner's group so it lands on their row
   const camp = getCampaigns().find(c=>String(c.id)===String(campId));
-  const gid = (camp?._shared && camp?._ownerGid) ? camp._ownerGid : (getGroupId()||await ensureGroupId());
+  const gid = camp?._ownerGid || (getGroupId()||await ensureGroupId());
   if(!gid) return;
   const row = { id: campId, group_id: gid, campaign_id: campId, data: items, wealth: _db.wealth[campId]||{} };
   const { error } = await supa.from('loot').upsert(row, {onConflict:'id'});
@@ -1767,34 +1777,38 @@ async function pullAll(campId){
       supa.from('campaigns').select('*').eq('group_id', gid),
     ]);
 
-    // Preserve shared chars — only replace own chars
-    const sharedChars = _db.chars.filter(c=>c._shared);
+    // Merge own chars — keep cross-group chars (_sharedCampId set) intact
     if(!cr.error && cr.data && cr.data.length > 0){
       const ownChars = cr.data.map(r=>r.data||r).filter(c=>c && c.id);
-      _db.chars = [...ownChars, ...sharedChars];
-    } else if(!cr.error && cr.data && cr.data.length === 0 && _db.chars.filter(c=>!c._shared).length > 0){
+      const crossGroupChars = _db.chars.filter(c=>c._sharedCampId);
+      const merged = new Map();
+      crossGroupChars.forEach(c=>merged.set(String(c.id),c));
+      ownChars.forEach(c=>merged.set(String(c.id),c));
+      _db.chars = Array.from(merged.values());
+    } else if(!cr.error && cr.data && cr.data.length === 0 && _db.chars.filter(c=>!c._sharedCampId).length > 0){
       console.log('pullAll: Supabase returned 0 own chars — keeping existing');
-      // Still restore sharedChars in case they were wiped
-      _db.chars = [..._db.chars.filter(c=>!c._shared), ...sharedChars];
     }
 
-    // Preserve shared campaigns — only replace own campaigns
-    const sharedCamps = _db.campaigns.filter(c=>c._shared);
+    // Merge own campaigns — keep joined campaigns (_ownerGid set) intact
     if(!campr.error && campr.data && campr.data.length > 0){
-      const validCamps = [];
+      const joinedCamps = _db.campaigns.filter(c=>c._ownerGid);
+      const validOwn = [];
       for(const r of campr.data){
         const camp = r.data || r;
         if(camp && camp.id && camp.name){
-          validCamps.push(camp);
+          validOwn.push(camp);
         } else {
           console.warn('pullAll: removing invalid campaign row', r.id);
           supa.from('campaigns').delete().eq('id', r.id).eq('group_id', gid).then(()=>{});
         }
       }
-      _db.campaigns = [...validCamps, ...sharedCamps];
-      // Normalise all charIds to strings and deduplicate — fixes historic mixed-type corruption
+      // Joined camps take lower priority — own overwrites if same id
+      const merged = new Map();
+      joinedCamps.forEach(c=>merged.set(c.id,c));
+      validOwn.forEach(c=>merged.set(c.id,c));
+      _db.campaigns = Array.from(merged.values());
       _db.campaigns.forEach(c=>{ if(c.charIds) c.charIds=[...new Set(c.charIds.map(String))]; });
-    } else if(!campr.error && campr.data && campr.data.length === 0 && _db.campaigns.filter(c=>!c._shared).length > 0){
+    } else if(!campr.error && campr.data && campr.data.length === 0 && _db.campaigns.filter(c=>!c._ownerGid).length > 0){
       console.log('pullAll: Supabase returned 0 own campaigns — keeping existing');
     }
 
@@ -1803,24 +1817,28 @@ async function pullAll(campId){
       if(loot){ _db.items[campId]=loot.data||[]; _db.wealth[campId]=loot.wealth||{}; }
     }
 
-    // Pull player chars from other groups that have joined any of this user's campaigns.
-    // Uses the settings table (no RLS) — key: 'player_char_{campId}_{shareCode}'
-    // This is the only reliable cross-group read path when characters table has RLS.
-    const ownCampIds = _db.campaigns.filter(c=>!c._shared).map(c=>String(c.id));
-    if(ownCampIds.length){
+    // Pull chars published by other users for ALL campaigns this user participates in.
+    // Uses settings table (no RLS) — key: 'player_char_{campId}_{shareCode}'.
+    // Covers: own campaigns (DM seeing players' chars) AND joined campaigns (player seeing others).
+    const allCampIds = _db.campaigns.map(c=>String(c.id));
+    if(allCampIds.length){
       try {
-        for(const cid of ownCampIds){
+        for(const cid of allCampIds){
           const prefix = 'player_char_'+cid+'_';
           const { data: settingsRows } = await supa.from('settings').select('key,value').like('key', prefix+'%');
           if(settingsRows?.length){
             settingsRows.forEach(r=>{
               let c; try{ c=JSON.parse(r.value); }catch{ return; }
               if(!c || !c.id) return;
-              c._shared = true; c._sharedCampId = cid;
+              // Mark as cross-group char for this campaign
+              const existing = _db.chars.find(x=>String(x.id)===String(c.id));
+              // Don't overwrite own chars (same group_id) with stale settings copy
+              if(existing && !existing._sharedCampId) return;
+              c._sharedCampId = cid;  // marks this char as cross-group
               const idx = _db.chars.findIndex(x=>String(x.id)===String(c.id));
               if(idx>=0) _db.chars[idx]=c; else _db.chars.push(c);
             });
-            console.log('[pullAll] loaded', settingsRows.length, 'player chars for campaign', cid, 'via settings table');
+            console.log('[pullAll] loaded', settingsRows.length, 'cross-group chars for campaign', cid);
           }
         }
       } catch(e){ console.warn('[pullAll] player chars pull error:', e.message); }
@@ -1840,6 +1858,20 @@ async function pullAll(campId){
     syncIndicator('error');
     return false;
   }
+}
+
+/* ══ SHOW CAMPAIGN ASSIGN FOR SPECIFIC CAMPAIGN ══ */
+function showCampAssignForCampaign(campId){
+  const camp = getCampaigns().find(c=>String(c.id)===String(campId));
+  if(!camp) return;
+  const myChars = getChars().filter(c=>!c._sharedCampId);
+  if(!myChars.length) return;
+  // Temporarily set active camp so showCampAssignPrompt auto-assigns correctly
+  const prevActive = getActiveCampId();
+  setActiveCampId(campId);
+  // Use first own char as a proxy — showCampAssignPrompt will show all
+  showCampAssignPrompt(myChars[0]);
+  // (restoring active camp is handled by the user switching explicitly)
 }
 
 /* ══ MANUAL REFRESH ══ */
@@ -2555,7 +2587,7 @@ function getChars(){
 function saveChars(chars){
   // Find which chars were removed so we can delete them from Supabase
   const newIds = new Set(chars.map(c=>String(c.id)));
-  const removed = _db.chars.filter(c=>!c._shared && !newIds.has(String(c.id)));
+  const removed = _db.chars.filter(c=>!c._sharedCampId && !newIds.has(String(c.id)));
 
   // Update in-memory cache immediately
   _db.chars = chars;
@@ -2583,6 +2615,23 @@ function saveCampaign(camp){
   const i = _db.campaigns.findIndex(c=>c.id===camp.id);
   if(i>=0) _db.campaigns[i]=camp; else _db.campaigns.push(camp);
   dbSaveCampaign(camp);
+  // Re-publish all chars assigned to this campaign to the settings table
+  // so other users (different group_id) can discover them via pullAll.
+  if(!camp._ownerGid && (camp.charIds||[]).length){  // only for own campaigns (not joined ones)
+    const ownChars = _db.chars.filter(c=>!c._sharedCampId);
+    (camp.charIds||[]).forEach(cid=>{
+      const char = ownChars.find(c=>String(c.id)===String(cid));
+      if(char && char.shareCode){
+        // Tag the char with this campaign so dbSaveChar publishes to settings
+        if(!char._playerInCamp){
+          char._playerInCamp = camp.id;
+          const ci = _db.chars.findIndex(c=>String(c.id)===String(char.id));
+          if(ci>=0) _db.chars[ci] = char;
+        }
+        dbSaveChar(char);
+      }
+    });
+  }
 }
 
 // ── Loot / Items ──
@@ -2628,26 +2677,20 @@ function getVisibleChars(){
   if(!campaigns.length){
     result = all;
   } else if(!activeCamp){
-    // No active campaign set — show all chars so nothing is hidden
     result = all;
-  } else if(activeCamp._shared){
-    // Shared campaign: DM's fetched chars + player's own selected character
-    const campId = activeCamp.id;
-    const playerCharId = getPlayerCampChar(campId);
-    result = all.filter(c=>{
-      if(c._shared && c._sharedCampId===campId) return true;
-      if(playerCharId && String(c.id)===String(playerCharId) && !c._shared) return true;
-      if(c._playerInCamp===campId && !c._shared) return true;
-      return false;
-    });
   } else {
+    // Universal: show all chars that belong to this campaign.
+    // Works the same whether you created the campaign or joined it via share code.
+    const campId = activeCamp.id;
     const allAssigned = new Set();
     campaigns.forEach(c=>(c.charIds||[]).forEach(id=>allAssigned.add(String(id))));
     result = all.filter(c=>{
       const sid = String(c.id);
-      const isInActiveCamp = (activeCamp?.charIds||[]).some(x=>String(x)===sid);
-      const isUnassigned = !allAssigned.has(sid);
-      return isInActiveCamp || isUnassigned;
+      if(c._sharedCampId===campId) return true;                          // cross-group chars
+      if((activeCamp.charIds||[]).some(x=>String(x)===sid)) return true; // assigned chars
+      if(c._playerInCamp===campId) return true;                          // tagged chars
+      if(!allAssigned.has(sid) && !c._sharedCampId) return true;         // unassigned own chars
+      return false;
     });
   }
 
@@ -2846,12 +2889,9 @@ function deleteChar(id){
   // 6. Clear dice char selection if it was this character
   if(String(_userSettings['dice_char'])===sid){ setUserSetting('dice_char', null).catch(()=>{}); _userSettings['dice_char']=null; }
 
-  // 7. Clear player char if it was this character
-  const camps2 = getCampaigns();
-  camps2.forEach(c => {
-    if(String(getPlayerCampChar(c.id))===sid){
-      setPlayerCampChar(c.id, null);
-    }
+  // 7. Clear any player-char settings entries for this character
+  getCampaigns().forEach(c => {
+    if(String(getPlayerCampChar(c.id))===sid) setPlayerCampChar(c.id, null);
   });
 
   renderRoster();
@@ -3051,8 +3091,8 @@ function _showPostForgeAssign(char, camps){
   const cc = classColor(char.classIdx);
   const activeCampId = getActiveCampId();
 
-  // Auto-assign to the active campaign immediately on modal open
-  const activeCamp = camps.find(c=>!c._shared && String(c.id)===String(activeCampId));
+  // Auto-assign to the active campaign on modal open
+  const activeCamp = camps.find(c=>String(c.id)===String(activeCampId));
   if(activeCamp){
     const ci = _db.campaigns.findIndex(c=>c.id===activeCamp.id);
     if(ci>=0){
@@ -3063,9 +3103,6 @@ function _showPostForgeAssign(char, camps){
         saveCampaign(_db.campaigns[ci]);
       }
     }
-  } else {
-    const sharedActiveCamp = camps.find(c=>c._shared && String(c.id)===String(activeCampId));
-    if(sharedActiveCamp) confirmPlayerChar(sharedActiveCamp.id, char.id);
   }
 
   // If only one campaign, no need for the modal — just go to roster
@@ -3092,12 +3129,12 @@ function _showPostForgeAssign(char, camps){
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Assign ${char.name} to a campaign — tap to toggle</div>
     <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px" id="pfCampList">
       ${camps.map(camp=>{
-        const isShared = camp._shared;
+        const isShared = !!camp._ownerGid;
         const inCamp = isShared
           ? String(getPlayerCampChar(camp.id))===String(char.id)
           : (camp.charIds||[]).some(x=>String(x)===String(char.id));
-        const icon = isShared ? '⚔' : '📖';
-        const sub = isShared ? 'Shared campaign' : `${(camp.charIds||[]).length} character${(camp.charIds||[]).length!==1?'s':''}`;
+        const icon = '📖';
+        const sub = `${(camp.charIds||[]).length} character${(camp.charIds||[]).length!==1?'s':''}${camp._ownerGid?' (joined)':''}`;
         return `<div onclick="_pfAssign('${camp.id}',${char.id},this)" data-campid="${camp.id}"
           style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;border:1px solid ${inCamp?'var(--gold)':'var(--border)'};background:${inCamp?'var(--gold-dim)':'var(--surface2)'};cursor:pointer;transition:var(--trans)">
           <span style="font-size:18px">${icon}</span>
@@ -3123,37 +3160,23 @@ function _pfAssign(campId, charId, el){
   const camp = camps.find(c=>String(c.id)===String(campId));
   if(!camp) return;
 
-  if(camp._shared){
-    confirmPlayerChar(campId, charId);
-    const selected = String(getPlayerCampChar(campId))===String(charId);
-    el.style.border = `1px solid ${selected?'var(--gold)':'var(--border)'}`;
-    el.style.background = selected?'var(--gold-dim)':'var(--surface2)';
-    el.querySelector('div > div:first-child').style.color = selected?'var(--gold)':'var(--text)';
-    el.querySelector('span:last-child').textContent = selected?'✓':'+';
-    el.querySelector('span:last-child').style.color = selected?'var(--gold)':'var(--muted)';
-  } else {
-    const ci = _db.campaigns.findIndex(c=>String(c.id)===String(campId));
-    if(ci<0) return;
-    if(!_db.campaigns[ci].charIds) _db.campaigns[ci].charIds=[];
-    _db.campaigns[ci].charIds = [...new Set(_db.campaigns[ci].charIds.map(String))];
-    const cid = String(charId);
-    const idx = _db.campaigns[ci].charIds.indexOf(cid);
-    if(idx>=0){
-      _db.campaigns[ci].charIds.splice(idx,1);
-    } else {
-      _db.campaigns[ci].charIds.push(cid);
-    }
-    saveCampaign(_db.campaigns[ci]);
-    const inCamp = _db.campaigns[ci].charIds.includes(cid);
-    el.style.border = `1px solid ${inCamp?'var(--gold)':'var(--border)'}`;
-    el.style.background = inCamp?'var(--gold-dim)':'var(--surface2)';
-    el.querySelector('div > div:first-child').style.color = inCamp?'var(--gold)':'var(--text)';
-    // Update sub-text with fresh count
-    const subEl = el.querySelector('div > div:last-child');
-    if(subEl){ const n=_db.campaigns[ci].charIds.length; subEl.textContent=n+' character'+(n!==1?'s':''); }
-    el.querySelector('span:last-child').textContent = inCamp?'✓':'+';
-    el.querySelector('span:last-child').style.color = inCamp?'var(--gold)':'var(--muted)';
-  }
+  const ci = _db.campaigns.findIndex(c=>String(c.id)===String(campId));
+  if(ci<0) return;
+  if(!_db.campaigns[ci].charIds) _db.campaigns[ci].charIds=[];
+  _db.campaigns[ci].charIds = [...new Set(_db.campaigns[ci].charIds.map(String))];
+  const cid = String(charId);
+  const idx = _db.campaigns[ci].charIds.indexOf(cid);
+  if(idx>=0){ _db.campaigns[ci].charIds.splice(idx,1); }
+  else { _db.campaigns[ci].charIds.push(cid); }
+  saveCampaign(_db.campaigns[ci]);
+  const inCamp = _db.campaigns[ci].charIds.includes(cid);
+  el.style.border = `1px solid ${inCamp?'var(--gold)':'var(--border)'}`;
+  el.style.background = inCamp?'var(--gold-dim)':'var(--surface2)';
+  el.querySelector('div > div:first-child').style.color = inCamp?'var(--gold)':'var(--text)';
+  const subEl = el.querySelector('div > div:last-child');
+  if(subEl){ const n=_db.campaigns[ci].charIds.length; subEl.textContent=n+' character'+(n!==1?'s':''); }
+  el.querySelector('span:last-child').textContent = inCamp?'✓':'+';
+  el.querySelector('span:last-child').style.color = inCamp?'var(--gold)':'var(--muted)';
   renderRoster();
 }
 
@@ -3788,36 +3811,21 @@ function getFullParty(){
   const camp = getActiveCamp();
   if(!camp) return [];
 
-  let result = [];
+  const campId = camp.id;
+  const result = [];
+  const seen = new Set();
 
-  // For shared campaigns: show DM's chars + this player's own character
-  if(camp._shared){
-    const campId = camp.id;
-    const sharedChars = allChars.filter(c=>c._shared && c._sharedCampId===campId);
-    if(camp.charIds?.length){
-      const fromIds = allChars.filter(c=>camp.charIds.some(x=>String(x)===String(c.id)));
-      const seen = new Set(sharedChars.map(c=>String(c.id)));
-      fromIds.forEach(c=>{ if(!seen.has(String(c.id))){ sharedChars.push(c); seen.add(String(c.id)); } });
-    }
-    const playerCharId = getPlayerCampChar(campId);
-    if(playerCharId){
-      const playerChar = allChars.find(c=>String(c.id)===String(playerCharId) && !c._shared);
-      if(playerChar && !sharedChars.some(c=>String(c.id)===String(playerCharId))){
-        sharedChars.push(playerChar);
-      }
-    }
-    allChars.filter(c=>c._playerInCamp===campId && !c._shared).forEach(c=>{
-      if(!sharedChars.some(x=>String(x.id)===String(c.id))) sharedChars.push(c);
-    });
-    result = sharedChars;
-  } else if(camp.charIds?.length){
-    result = allChars.filter(c=>camp.charIds.some(x=>String(x)===String(c.id)));
-  }
+  const add = c => {
+    const sid = String(c.id);
+    if(!seen.has(sid)){ seen.add(sid); result.push(c); }
+  };
 
-  // Deduplicate by id
-  const seen = new Map();
-  result.forEach(c=>seen.set(String(c.id), c));
-  return Array.from(seen.values());
+  // Universal: same logic regardless of whether this is an own or joined campaign
+  allChars.filter(c=>(camp.charIds||[]).some(x=>String(x)===String(c.id))).forEach(add);
+  allChars.filter(c=>c._sharedCampId===campId).forEach(add);
+  allChars.filter(c=>c._playerInCamp===campId).forEach(add);
+
+  return result;
 }
 
 function renderPartyOverview(){
@@ -4147,7 +4155,7 @@ function _enterApp(){
   document.querySelector('.bottomnav').style.display='flex';
   _applyUserBadge();
   // Land on Campaign screen when no active campaign — user picks/creates one first
-  if(!getActiveCampId() || !getCampaigns().length){
+  if(!getActiveCampId() || !getCampaigns().filter(c=>!c._ownerGid).length){
     nav('campaign');
   } else {
     nav('roster');
@@ -4305,7 +4313,7 @@ async function joinSharedCampaign(){
   console.log('[join] campData:', campData?.name, 'charIds:', campData?.charIds);
   if(!campData){ toast('Campaign data not found — ask the owner to Force Sync','var(--red)'); return; }
 
-  campData._shared = true;
+  // Store _ownerGid so loot writes go to the right Supabase row
   campData._ownerGid = matchGid;
 
   const existing = _db.campaigns.findIndex(c=>c.id===matchCampId);
@@ -4317,13 +4325,11 @@ async function joinSharedCampaign(){
   console.log('[join] fetched', chars.length, 'chars:', chars.map(c=>c.name+' ('+c.id+')').join(', '));
 
   chars.forEach(c=>{
-    c._shared = true;
     c._sharedCampId = matchCampId;
     const ci = _db.chars.findIndex(x=>String(x.id)===String(c.id));
     if(ci >= 0) _db.chars[ci] = c; else _db.chars.push(c);
   });
 
-  console.log('[join] _db.chars now has', _db.chars.length, 'total, shared:', _db.chars.filter(c=>c._shared).length);
   console.log('[join] _db.campaigns now has', _db.campaigns.length, 'total');
 
   setActiveCampId(matchCampId);
@@ -4334,76 +4340,62 @@ async function joinSharedCampaign(){
   renderCampList();
   renderRoster();
 
-  // Prompt player to pick their own character if they have any
-  const myChars = _db.chars.filter(c=>!c._shared);
-  if(myChars.length){
-    _promptPlayerCharSelect(matchCampId, campData.name, myChars);
-  }
+  // Let user add their own characters to this campaign
+  const myChars2 = _db.chars.filter(c=>!c._sharedCampId);
+  if(myChars2.length) setTimeout(()=>showCampAssignForCampaign(matchCampId), 300);
 }
 
 // Shared campaigns stored as settings row for this user
 function _sharedCampsKey(){ return 'shared_camps_'+getGroupId(); }
 
-/* ── Player character selection for shared campaigns ── */
-// Stored in Supabase settings under "{gid}__player_char_{campId}"
+/* ── Player/campaign character helpers (unified — no player/DM distinction) ── */
 function _playerCharKey(campId){ return 'player_char_'+campId; }
+// getPlayerCampChar: find any char assigned to this campaign that belongs to this user
 function getPlayerCampChar(campId){
-  // Prefer cached value
   const cached = _userSettings[_playerCharKey(campId)];
   if(cached != null) return parseInt(cached)||null;
-  return null;
+  // Fallback: check charIds
+  const camp = getCampaigns().find(c=>String(c.id)===String(campId));
+  const ownIds = (camp?.charIds||[]).map(String);
+  const ownChar = getChars().find(c=>!c._sharedCampId && ownIds.includes(String(c.id)));
+  return ownChar ? ownChar.id : null;
 }
 function setPlayerCampChar(campId, charId){
+  if(charId != null) _userSettings[_playerCharKey(campId)] = String(charId);
+  else delete _userSettings[_playerCharKey(campId)];
   setUserSetting(_playerCharKey(campId), charId).catch(()=>{});
 }
 
-function _promptPlayerCharSelect(campId, campName, myChars){
-  const existing = document.getElementById('playerCharModal');
-  if(existing) existing.remove();
-  const modal = document.createElement('div');
-  modal.className = 'modal-backdrop';
-  modal.id = 'playerCharModal';
-  modal.innerHTML = `<div class="modal-box" style="max-width:380px">
-    <div style="font-family:'Cinzel',serif;font-size:14px;color:var(--gold);margin-bottom:6px">Which character are you playing?</div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">In <strong>${campName}</strong> — pick the character you're playing so it appears in Dice, Party and Loot.</div>
-    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
-      ${myChars.map(c=>{
-        const cls = CLASSES[c.classIdx]||CLASSES[0];
-        return `<div onclick="confirmPlayerChar('${campId}',${c.id})" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;cursor:pointer" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-          <div style="width:36px;height:36px;border-radius:50%;background:${cls.color}22;border:2px solid ${cls.color};display:flex;align-items:center;justify-content:center;font-size:18px">${cls.icon}</div>
-          <div>
-            <div style="font-family:'Cinzel',serif;font-size:12px;color:var(--text)">${c.name}</div>
-            <div style="font-size:10px;color:var(--muted)">Level ${c.level} ${c.race} ${cls.name}</div>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>
-    <button onclick="document.getElementById('playerCharModal').remove()" style="width:100%;padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--muted);cursor:pointer;font-size:12px">Skip — I'll set this later</button>
-  </div>`;
-  document.body.appendChild(modal);
-}
+// _promptPlayerCharSelect removed — use showCampAssignForCampaign instead
+function _promptPlayerCharSelect(campId, campName, myChars){ showCampAssignForCampaign(campId); }
 
+// confirmPlayerChar: assign a character to a campaign (unified — same for all users)
 function confirmPlayerChar(campId, charId){
   document.getElementById('playerCharModal')?.remove();
   setPlayerCampChar(campId, charId);
-  // Flag this char as associated with the shared camp so it appears in party views
   const chars = getChars();
   const char = chars.find(c=>String(c.id)===String(charId));
   if(char){
     char._playerInCamp = campId;
-    // Update in-memory store
-    const i = _db.chars.findIndex(c=>String(c.id)===String(charId));
-    if(i>=0) _db.chars[i]=char; else _db.chars.push(char);
-    // Save directly — this triggers the cross-group share_code write in dbSaveChar
-    // so the DM's realtime subscription sees it immediately
-    dbSaveChar(char);
-    // Set as default dice/loot/character screen char
+    // Add to charIds if not already there
+    const ci = _db.campaigns.findIndex(c=>String(c.id)===String(campId));
+    if(ci>=0){
+      if(!_db.campaigns[ci].charIds) _db.campaigns[ci].charIds=[];
+      const sid=String(charId);
+      if(!_db.campaigns[ci].charIds.includes(sid)) _db.campaigns[ci].charIds.push(sid);
+      saveCampaign(_db.campaigns[ci]);
+    } else {
+      // Campaign not in local DB yet (just joined) — still save char cross-group
+      const i = _db.chars.findIndex(c=>String(c.id)===String(charId));
+      if(i>=0) _db.chars[i]=char; else _db.chars.push(char);
+      dbSaveChar(char);
+    }
     setUserSetting('dice_char', charId).catch(()=>{});
     _userSettings['dice_char'] = String(charId);
     charScreenId = charId;
     lootOwner = charId;
   }
-  toast('✦ Playing as '+( char?.name||'character'),'var(--gold)');
+  toast('✦ '+( char?.name||'Character')+' added to campaign','var(--gold)');
   renderRoster();
   renderCampList();
 }
@@ -4429,15 +4421,13 @@ async function _loadSharedCamps(){
   for(const e of shared){
     const campData = await _fetchCampRow(e.ownerGid, e.campId);
     if(!campData) continue;
-    campData._shared = true;
-    campData._ownerGid = e.ownerGid;
+    campData._ownerGid = e.ownerGid;  // so loot saves go to owner's row
     const idx = _db.campaigns.findIndex(c=>c.id===e.campId);
     if(idx >= 0) _db.campaigns[idx] = campData;
     else _db.campaigns.push(campData);
     // Fetch and merge characters for this campaign
     const chars = await _fetchCampChars(e.ownerGid, e.campId, campData);
     chars.forEach(c=>{
-      c._shared = true;
       c._sharedCampId = e.campId;
       const ci = _db.chars.findIndex(x=>String(x.id)===String(c.id));
       if(ci >= 0) _db.chars[ci] = c; else _db.chars.push(c);
@@ -4468,10 +4458,10 @@ async function leaveSharedCampaign(campId){
   _db.campaigns = _db.campaigns.filter(c=>String(c.id)!==sid);
 
   // Remove DM's chars that came from this shared campaign
-  _db.chars = _db.chars.filter(c=>!c._shared || String(c._sharedCampId)!==sid);
+  _db.chars = _db.chars.filter(c=>String(c._sharedCampId)!==sid || !c._sharedCampId);
 
-  // Clear _playerInCamp flag from own chars tagged to this campaign
-  _db.chars.forEach(c=>{ if(String(c._playerInCamp)===sid) delete c._playerInCamp; });
+  // Clear _playerInCamp and _sharedCampId tags for this campaign
+  _db.chars.forEach(c=>{ if(String(c._playerInCamp)===sid) delete c._playerInCamp; if(String(c._sharedCampId)===sid) delete c._sharedCampId; });
 
   // Remove cross-group character entries from settings table
   try {
@@ -8600,18 +8590,15 @@ function showCampAssignPrompt(char){
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
           ${currentCamps.map(camp => {
-            const inCamp = camp._shared
-              ? String(getPlayerCampChar(camp.id)) === String(char.id)
-              : (camp.charIds||[]).some(x=>String(x)===String(char.id));
-            const checkSymbol = camp._shared ? (inCamp?'★':'+') : (inCamp?'✓':'+');
-            const label = camp._shared ? (inCamp?'My character':'Set as my character') : camp.name;
+            const inCamp = (camp.charIds||[]).some(x=>String(x)===String(char.id));
+            const joined = camp._ownerGid ? ' <span style="font-size:9px;color:var(--purple);font-family:monospace">' + (camp.joinCode||'') + '</span>' : '';
             return `<div onclick="toggleCampCharAndRefresh('${camp.id}','${char.id}',this)" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;border:1px solid ${inCamp?'var(--gold)':'var(--border)'};background:${inCamp?'var(--gold-dim)':'var(--surface2)'};cursor:pointer;transition:var(--trans)">
-              <span style="font-size:18px">${camp._shared?'⚔':'📖'}</span>
+              <span style="font-size:18px">📖</span>
               <div style="flex:1">
-                <div style="font-family:'Cinzel',serif;font-size:12px;color:${inCamp?'var(--gold)':'var(--text)'}">${camp.name}${camp._shared?' <span style="font-size:9px;opacity:0.7">(shared)</span>':''}</div>
-                <div style="font-size:10px;color:var(--muted)">${camp._shared?(inCamp?'★ Playing this character':'Tap to play this character'):(String((camp.sessions||[]).length)+' sessions · '+(camp.charIds||[]).length+' character'+((camp.charIds||[]).length!==1?'s':''))}</div>
+                <div style="font-family:'Cinzel',serif;font-size:12px;color:${inCamp?'var(--gold)':'var(--text)'}">${camp.name}${joined}</div>
+                <div style="font-size:10px;color:var(--muted)">${(camp.charIds||[]).length} character${(camp.charIds||[]).length!==1?'s':''}</div>
               </div>
-              <span style="font-size:16px;color:${inCamp?'var(--gold)':'var(--muted)'}">${checkSymbol}</span>
+              <span style="font-size:16px;color:${inCamp?'var(--gold)':'var(--muted)'}">${inCamp?'✓':'+'}</span>
             </div>`;
           }).join('')}
         </div>
@@ -8620,7 +8607,7 @@ function showCampAssignPrompt(char){
   };
   // Auto-assign to active campaign on open
   const activeCampNow = getActiveCamp();
-  if(activeCampNow && !activeCampNow._shared){
+  if(activeCampNow){
     const ci = _db.campaigns.findIndex(c=>c.id===activeCampNow.id);
     if(ci>=0){
       if(!_db.campaigns[ci].charIds) _db.campaigns[ci].charIds=[];
@@ -8630,8 +8617,6 @@ function showCampAssignPrompt(char){
         saveCampaign(_db.campaigns[ci]);
       }
     }
-  } else if(activeCampNow && activeCampNow._shared){
-    confirmPlayerChar(activeCampNow.id, char.id);
   }
 
   document.body.appendChild(modal);
@@ -8644,33 +8629,12 @@ function toggleCampCharAndRefresh(campId, charId, el){
   const ci = camps.findIndex(c=>c.id===campId);
   if(ci<0) return;
 
-  // Shared campaigns: just set as the player's character, no charIds modification
-  if(camps[ci]._shared){
-    confirmPlayerChar(campId, charId);
-    // Re-check state after confirmPlayerChar sets localStorage
-    const inCamp = String(getPlayerCampChar(campId)) === String(charId);
-    el.style.border = `1px solid ${inCamp?'var(--gold)':'var(--border)'}`;
-    el.style.background = inCamp?'var(--gold-dim)':'var(--surface2)';
-    const nameEl = el.querySelector('div > div:first-child');
-    if(nameEl) nameEl.style.color = inCamp?'var(--gold)':'var(--text)';
-    const subEl = el.querySelector('div > div:last-child');
-    if(subEl) subEl.textContent = inCamp?'★ Playing this character':'Tap to play this character';
-    const checkEl = el.querySelector('span:last-child');
-    if(checkEl){ checkEl.textContent = inCamp?'★':'+'; checkEl.style.color = inCamp?'var(--gold)':'var(--muted)'; }
-    return;
-  }
-
   if(!camps[ci].charIds) camps[ci].charIds=[];
   const cid = String(charId);
   camps[ci].charIds = [...new Set(camps[ci].charIds.map(String))];
   const idx = camps[ci].charIds.indexOf(cid);
   if(idx>=0){ camps[ci].charIds.splice(idx,1); }
-  else {
-    // Only block if in another non-shared own campaign
-    const otherCamp = camps.find(c=>!c._shared&&c.id!==campId&&(c.charIds||[]).some(x=>String(x)===cid));
-    if(otherCamp){ toast(`${getChars().find(c=>String(c.id)===cid)?.name||'Character'} is already in "${otherCamp.name}"`, 'var(--red)'); return; }
-    camps[ci].charIds.push(cid);
-  }
+  else { camps[ci].charIds.push(cid); }
   saveCampaign(camps[ci]);
   const campNow = getCampaigns();
   const inCamp = (campNow[ci].charIds||[]).some(x=>String(x)===cid);
@@ -8907,7 +8871,7 @@ function _bootContinue(mode, nav_bar){
   if(nav_bar) nav_bar.style.display='flex';
   _applyUserBadge();
   // Land on Campaign if no active campaign, otherwise Roster
-  if(!getActiveCampId() || !_db.campaigns.length){
+  if(!getActiveCampId() || !_db.campaigns.filter(c=>!c._ownerGid).length){
     nav('campaign');
   } else {
     nav('roster');
@@ -10373,7 +10337,7 @@ async function _registerCampJoinCode(camp){
 // Ensure all own campaigns have join codes — skips shared campaigns
 async function ensureCampJoinCodes(){
   const gid = getGroupId(); if(!gid) return;
-  const ownCamps = _db.campaigns.filter(c=>!c._shared);
+  const ownCamps = _db.campaigns.filter(c=>!c._ownerGid);  // only own (not joined) campaigns
   if(!ownCamps.length) return;
   let changed = false;
   for(const camp of ownCamps){
@@ -10423,30 +10387,30 @@ function _renderCampListInner() {
     const sesCount = (c.sessions||[]).length;
     const qCount = (c.quests||[]).filter(q=>q.status==='active').length;
     const joinCode = c.joinCode||'';
-    const isShared = !!c._shared;
-    const codeBar = !isShared && joinCode
+    const isJoined = !!c._ownerGid;  // joined via share code (not owned)
+    const codeBar = !isJoined && joinCode
       ? `<div style="margin-top:8px;display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:8px;padding:8px 10px;cursor:pointer" onclick="event.stopPropagation();copyText('${joinCode}');toast('Share code copied!')" title="Tap to copy share code">
           <span style="font-size:9px;color:var(--muted);letter-spacing:1px;font-family:'Cinzel',serif;flex-shrink:0">SHARE CODE</span>
           <span style="font-family:'Cinzel',serif;font-size:16px;color:var(--purple);letter-spacing:4px;font-weight:bold">${joinCode}</span>
           <span style="font-size:12px;color:var(--muted);margin-left:auto">📋</span>
         </div>`
-      : (!isShared && !joinCode ? `<div style="margin-top:6px;font-size:11px;color:var(--purple);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();ensureCampJoinCodes().then(()=>renderCampList())" title="Tap to generate share code">Tap to generate share code</div>` : '');
-    const sharedBadge = isShared ? `<span class="camp-badge" style="border-color:var(--purple);color:var(--purple)">🔗 Shared</span>` : '';
-    const actions = isShared
+      : (!isJoined && !joinCode ? `<div style="margin-top:6px;font-size:11px;color:var(--purple);cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();ensureCampJoinCodes().then(()=>renderCampList())" title="Tap to generate share code">Tap to generate share code</div>` : '');
+    const actions = isJoined
       ? `<div class="camp-actions">
            <button class="icon-btn" onclick="switchCampaign('${c.id}');event.stopPropagation()" style="color:var(--green);font-size:16px" title="Set Active">✓</button>
-           <button class="icon-btn" style="color:var(--muted)" onclick="leaveSharedCampaign('${c.id}');event.stopPropagation()" title="Leave shared campaign">↩</button>
+           <button class="icon-btn" style="color:var(--muted)" onclick="leaveSharedCampaign('${c.id}');event.stopPropagation()" title="Leave campaign">↩</button>
          </div>`
       : `<div class="camp-actions">
            <button class="icon-btn" onclick="switchCampaign('${c.id}');event.stopPropagation()" style="color:var(--green);font-size:16px" title="Set Active">✓</button>
            <button class="icon-btn" style="color:var(--red)" onclick="deleteCampaign('${c.id}');event.stopPropagation()" title="Delete">✕</button>
          </div>`;
+    const joinedBadge = isJoined ? `<span class="camp-badge" style="border-color:var(--purple);color:var(--purple)">🔗 Joined</span>` : '';
     return `<div class="camp-card ${isActive?'active-camp':''} fadein" onclick="openCamp('${c.id}')">
-      <div class="camp-title">${c.name}${isShared?'&ensp;<span style="font-size:10px;color:var(--purple)">🔗</span>':''}</div>
+      <div class="camp-title">${c.name}</div>
       <div class="camp-meta">${c.setting||'Custom Setting'}${c.dm?' · '+c.dm:''}</div>
       <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;align-items:center">
         ${isActive?'<span class="camp-badge active">● Active</span>':''}
-        ${sharedBadge}
+        ${joinedBadge}
         <span class="camp-badge">${sesCount} Session${sesCount!==1?'s':''}</span>
         ${qCount?`<span class="camp-badge">${qCount} Quest${qCount!==1?'s':''}</span>`:''}
         <span style="font-size:10px;color:var(--muted);margin-left:auto">${c.charIds?.length?c.charIds.length+' character'+(c.charIds.length!==1?'s':''):'No characters'}</span>
@@ -10845,14 +10809,13 @@ async function openCamp(id) {
   document.getElementById('campNewForm').style.display = 'none';
   document.getElementById('campDetailView').style.display = 'block';
 
-  // For shared campaigns, ensure chars are loaded before rendering
+  // For joined campaigns (_ownerGid set), ensure cross-group chars are loaded
   const camp = getCampaigns().find(c=>c.id===id);
-  if(camp?._shared){
+  if(camp?._ownerGid){
     const alreadyLoaded = getChars().some(c=>c._sharedCampId===id);
     if(!alreadyLoaded){
       const chars = await _fetchCampChars(camp._ownerGid, id, camp);
       chars.forEach(c=>{
-        c._shared = true;
         c._sharedCampId = id;
         const ci = _db.chars.findIndex(x=>String(x.id)===String(c.id));
         if(ci>=0) _db.chars[ci]=c; else _db.chars.push(c);
@@ -10883,28 +10846,8 @@ function renderCampDetailHeader() {
   if (!camp) return;
   const isActive = getActiveCampId() === camp.id;
   const el = document.getElementById('campDetailHeader');
-  // For shared campaigns: get chars by _sharedCampId tag
-  // For own campaigns: get from full char list
-  let allChars;
-  if(camp._shared){
-    // DM's fetched chars for this campaign
-    const sharedChars = getChars().filter(c=>c._sharedCampId===camp.id);
-    const seen = new Set(sharedChars.map(c=>String(c.id)));
-    // Also any charIds-matched chars not yet tagged
-    const extraIds = new Set((camp.charIds||[]).map(String));
-    getChars().forEach(c=>{
-      if(extraIds.has(String(c.id)) && !seen.has(String(c.id))){
-        sharedChars.push(c); seen.add(String(c.id));
-      }
-    });
-    // Include the player's own locally-created characters so they can select one
-    getChars().filter(c=>!c._shared && !seen.has(String(c.id))).forEach(c=>{
-      sharedChars.push(c); seen.add(String(c.id));
-    });
-    allChars = sharedChars;
-  } else {
-    allChars = getChars();
-  }
+  // All chars: own + cross-group chars tagged to this campaign
+  const allChars = getFullParty().length ? getFullParty() : getChars();
   const realCharIds = [...new Set((camp.charIds||[]).map(String))];
   // Also clean up the stored charIds if they had duplicates
   if(camp.charIds && camp.charIds.length !== realCharIds.length){
@@ -10923,7 +10866,7 @@ function renderCampDetailHeader() {
       </div>
       <div style="display:flex;gap:6px;margin-bottom:8px">
         <button onclick="exportCampaignBackup('${camp.id}')" style="flex:1;padding:7px 10px;background:var(--surface);border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;cursor:pointer">⬇ Export Backup</button>
-        ${!camp._shared?`<button onclick="showCampImportForm()" style="flex:1;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;cursor:pointer">⬆ Import / Restore</button>`:''}
+        <button onclick="showCampImportForm()" style="flex:1;padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;cursor:pointer">⬆ Import / Restore</button>
       </div>
       ${camp.description?('<p style="font-size:13px;color:var(--muted);font-style:italic;margin-bottom:10px;line-height:1.5">'+camp.description+'</p>'):''}
       <div class="stat-strip-sm">
@@ -10941,31 +10884,7 @@ function renderCampDetailHeader() {
             const globalAssigned = new Set();
             campaigns.forEach(c=>(c.charIds||[]).forEach(id=>globalAssigned.add(String(id))));
 
-            if(camp._shared){
-              // Shared campaign: DM's chars shown as read-only, own chars selectable
-              const campId = camp.id;
-              const playerCharId = String(getPlayerCampChar(campId)||'');
-              if(!allChars.length) return '<span style="font-size:12px;color:var(--muted);font-style:italic">No characters loaded yet</span>';
-              return allChars.map(c=>{
-                const cc = classColor(c.classIdx);
-                const isOwn = !c._shared;
-                const isSelected = isOwn && String(c.id)===playerCharId;
-                if(isOwn){
-                  // Player's own char — tappable to select as campaign character
-                  return `<div onclick="confirmPlayerChar('${campId}',${c.id})" style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:2px solid ${isSelected?'var(--gold)':cc};background:${isSelected?'var(--gold-dim)':cc+'22'};cursor:pointer" title="Set as my character">
-                    <span style="font-size:14px">${classIcon(c.classIdx)}</span>
-                    <span style="font-family:'Cinzel',serif;font-size:10px;color:${isSelected?'var(--gold)':cc}">${c.name}${isSelected?' ★':''}</span>
-                  </div>`;
-                }
-                // DM's char — read only
-                return `<div style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid ${cc};background:${cc}22">
-                  <span style="font-size:14px">${classIcon(c.classIdx)}</span>
-                  <span style="font-family:'Cinzel',serif;font-size:10px;color:${cc}">${c.name}</span>
-                </div>`;
-              }).join('');
-            }
-
-            // Own campaign: existing logic with ghost pills and add/remove
+            // All campaigns: unified add/remove char logic
             const seenPills = new Set();
             const assignedChars = allChars.filter(c=>{ const s=String(c.id); if(assignedIds.has(s)&&!seenPills.has(s)){seenPills.add(s);return true;}return false; });
             const unassignedChars = allChars.filter(c=>{ const s=String(c.id); if(!globalAssigned.has(s)&&!seenPills.has(s)){seenPills.add(s);return true;}return false; });
@@ -11000,29 +10919,13 @@ function toggleCampChar(campId, charId) {
   const ci = camps.findIndex(c => String(c.id) === String(campId));
   if (ci < 0) return;
 
-  // Shared campaigns: use confirmPlayerChar instead of modifying charIds
-  if(camps[ci]._shared){
-    confirmPlayerChar(campId, charId);
-    renderCampDetailHeader();
-    return;
-  }
-
   if (!camps[ci].charIds) camps[ci].charIds = [];
   const cid = String(charId);
-  // Normalise all ids to strings and deduplicate
   camps[ci].charIds = [...new Set(camps[ci].charIds.map(String))];
   const idx = camps[ci].charIds.indexOf(cid);
   if (idx >= 0) {
-    // Removing from this campaign — allowed
     camps[ci].charIds.splice(idx, 1);
   } else {
-    // Only block if char is already in another NON-shared own campaign
-    const otherCamp = camps.find(c => !c._shared && String(c.id) !== String(campId) && (c.charIds||[]).some(x=>String(x)===cid));
-    if(otherCamp){
-      const char = getChars().find(c=>String(c.id)===cid);
-      toast(`${char?.name||'Character'} is already in "${otherCamp.name}"`, 'var(--red)');
-      return;
-    }
     camps[ci].charIds.push(cid);
   }
   saveCampaign(camps[ci]);
