@@ -1049,9 +1049,9 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <div id="campSwitchBanner"></div>
     <div class="divider"><span>Your Characters</span></div>
     <div id="rosterList"></div>
-    <button class="btn btn-gold" onclick="showBuild()">+ Forge New Character</button>
-    <button class="btn btn-outline" onclick="showCharImport()">↓ Import Character</button>
-    <button class="btn btn-outline" onclick="nav('party')">⚔ View Party</button>
+    <button class="btn btn-gold" id="forgeBtn" onclick="showBuild()">+ Forge New Character</button>
+    <button class="btn btn-outline" id="importCharBtn" onclick="showCharImport()">↓ Import Character</button>
+    <button class="btn btn-outline" id="viewPartyBtn" onclick="nav('party')">⚔ View Party</button>
   </div>
 
   <!-- BUILD -->
@@ -2919,11 +2919,12 @@ function getVisibleChars(){
 
   let result;
 
-  // No campaigns at all — show everything
+  // Strict campaign separation: characters only exist within campaigns.
+  // No campaigns / no active campaign → empty roster everywhere.
   if(!campaigns.length){
-    result = all;
+    result = [];
   } else if(!activeCamp){
-    result = all;
+    result = [];
   } else {
     // Universal: show all chars that belong to this campaign.
     // Works the same whether you created the campaign or joined it via share code.
@@ -2935,7 +2936,6 @@ function getVisibleChars(){
       if(c._sharedCampId===campId) return true;                          // cross-group chars
       if((activeCamp.charIds||[]).some(x=>String(x)===sid)) return true; // assigned chars
       if(c._playerInCamp===campId) return true;                          // tagged chars
-      if(!allAssigned.has(sid) && !c._sharedCampId && campaigns.length<=1) return true; // unassigned own chars (single-campaign only)
       return false;
     });
   }
@@ -2944,6 +2944,23 @@ function getVisibleChars(){
   const seen = new Map();
   result.forEach(c=>seen.set(String(c.id), c));
   return Array.from(seen.values());
+}
+// Assign every orphaned character (in no campaign) to the active campaign.
+function adoptUnassignedChars(){
+  const camp = getActiveCamp(); if(!camp) return;
+  const ci = _db.campaigns.findIndex(c=>String(c.id)===String(camp.id)); if(ci<0) return;
+  const assigned = new Set();
+  getCampaigns().forEach(c=>(c.charIds||[]).forEach(id=>assigned.add(String(id))));
+  const orphans = getChars().filter(c=>!c._sharedCampId && !c._playerInCamp && !assigned.has(String(c.id)));
+  if(!orphans.length) return;
+  if(!_db.campaigns[ci].charIds) _db.campaigns[ci].charIds = [];
+  orphans.forEach(c=>{
+    const sid = String(c.id);
+    if(!_db.campaigns[ci].charIds.includes(sid)) _db.campaigns[ci].charIds.push(sid);
+  });
+  saveCampaign(_db.campaigns[ci]);
+  toast(orphans.length + ' character' + (orphans.length>1?'s':'') + ' added to ' + camp.name);
+  renderRoster(); renderCampList();
 }
 function getCharCampaign(charId){
   return getCampaigns().find(c=>(c.charIds||[]).some(x=>String(x)===String(charId)))||null;
@@ -3081,6 +3098,24 @@ function renderRoster(){
 }
 function _renderRosterInner(){
   try {
+  // Campaign gate: the roster is a view INTO a campaign. Without one,
+  // prompt for it and hide creation buttons.
+  const _gateCamps = getCampaigns();
+  const _gateActive = getActiveCamp();
+  const _fb = document.getElementById('forgeBtn');
+  const _ib = document.getElementById('importCharBtn');
+  const _pb = document.getElementById('viewPartyBtn');
+  const _gated = !_gateCamps.length || !_gateActive;
+  [_fb,_ib,_pb].forEach(b=>{ if(b) b.style.display = _gated ? 'none' : ''; });
+  if(_gated){
+    const _el = document.getElementById('rosterList');
+    if(_el) _el.innerHTML = `<div class="empty-state fadein"><div class="es-icon">🏰</div><p>${
+      _gateCamps.length
+        ? 'Select an active campaign to view its roster.'
+        : 'Characters live inside campaigns.<br>Create or join a campaign to begin.'
+    }</p><button class="btn btn-gold" style="margin-top:12px" onclick="nav('campaign')">Open Campaigns</button></div>`;
+    return;
+  }
   // Use getVisibleChars() as the single source of truth — it already handles all cases and deduplicates
   let chars = getVisibleChars();
 
@@ -3088,7 +3123,19 @@ function _renderRosterInner(){
   chars = chars.filter(c => c && Number.isInteger(c.classIdx) && CLASSES[c.classIdx]);
   const el=document.getElementById('rosterList');
   if(!el) return;
+  // Surface orphans (chars in no campaign — from before strict separation)
+  const _assignedAll = new Set();
+  getCampaigns().forEach(c=>(c.charIds||[]).forEach(id=>_assignedAll.add(String(id))));
+  const _orphans = getChars().filter(c=>!c._sharedCampId && !c._playerInCamp && !_assignedAll.has(String(c.id)));
+  let _orphanBanner = '';
+  if(_orphans.length){
+    _orphanBanner = `<div style="background:var(--surface2);border:1px solid var(--gold-dim);border-radius:11px;padding:11px 13px;margin-bottom:12px;font-size:12px;color:var(--muted)">
+      ${_orphans.length} character${_orphans.length>1?'s':''} not in any campaign: <span style="color:var(--text)">${_orphans.slice(0,4).map(c=>esc(c.name)).join(', ')}${_orphans.length>4?'…':''}</span>
+      <button class="btn btn-gold" style="margin-top:8px;width:100%;padding:8px" onclick="adoptUnassignedChars()">Add to ${esc(getActiveCamp().name)}</button>
+    </div>`;
+  }
   if(!chars.length){
+    if(_orphanBanner){ el.innerHTML = _orphanBanner + `<div class="empty-state fadein"><div class="es-icon">📜</div><p>No characters in this campaign yet.</p></div>`; return; }
     const activeCamp = getActiveCamp();
     const hasCampFilter = activeCamp && activeCamp.charIds && activeCamp.charIds.length;
     el.innerHTML=`<div class="empty-state fadein"><div class="es-icon">📜</div><p>${
@@ -3098,7 +3145,7 @@ function _renderRosterInner(){
     if(!hasCampFilter)renderInstallBanner();
     return;
   }
-  el.innerHTML=chars.map(c=>{
+  el.innerHTML=_orphanBanner+chars.map(c=>{
     const cls=CLASSES[c.classIdx];const cc=classColor(c.classIdx);
     const isDefault = String(_userSettings['dice_char'])===String(c.id);
     return`<div class="char-card theme-${classTheme(c.classIdx)} fadein" onclick="openSheet(${c.id})" style="${isDefault?'border:1px solid var(--gold);box-shadow:0 0 0 1px var(--gold)33;':''}">
@@ -3207,7 +3254,14 @@ function deleteChar(id){
 
 /* ══ BUILD ══ */
 let B={cls:null,scores:{STR:10,DEX:10,CON:10,INT:10,WIS:10,CHA:10},profs:new Set()};
-function showBuild(){B={cls:null,scores:{STR:10,DEX:10,CON:10,INT:10,WIS:10,CHA:10},profs:new Set(),multiCls:null,multiLevel:1};nav('build');buildStep1();}
+function showBuild(){
+  if(!getActiveCamp()){
+    toast('Characters belong to campaigns — create or join one first','var(--red)');
+    nav('campaign');
+    return;
+  }
+  B={cls:null,scores:{STR:10,DEX:10,CON:10,INT:10,WIS:10,CHA:10},profs:new Set(),multiCls:null,multiLevel:1};nav('build');buildStep1();
+}
 function buildStep1(){
   document.querySelectorAll('.build-step').forEach(s=>s.classList.remove('active'));
   document.getElementById('bstep1').classList.add('active');
@@ -8002,6 +8056,11 @@ function removeCustomEffect(charId, idx){
 
 /* ══ CHARACTER SHEET IMPORT ══ */
 function showCharImport(){
+  if(!getActiveCamp()){
+    toast('Characters belong to campaigns — create or join one first','var(--red)');
+    nav('campaign');
+    return;
+  }
   const modal = document.createElement('div');
   modal.id = 'charImportModal';
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:0';
