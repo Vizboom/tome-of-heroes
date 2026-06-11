@@ -13,6 +13,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Tome of Heroes">
 <title>Tome of Heroes — D&D 5e</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
@@ -1489,14 +1491,43 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
-  // If jsdelivr failed, try unpkg as fallback CDN
+  // If jsdelivr failed, try unpkg as fallback CDN (document.write is deprecated
+  // and blocked by Chrome on slow connections — inject via DOM instead).
   if(typeof supabase === 'undefined'){
-    document.write('<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"><\/script>');
+    (function(){
+      var s = document.createElement('script');
+      s.src = 'https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js';
+      s.onload = function(){
+        // The app may have already booted with the offline stub — reload once
+        // so it re-initialises with the real client. Guard against loops.
+        if(window.__supaStub && !sessionStorage.getItem('toh_cdn_retry')){
+          sessionStorage.setItem('toh_cdn_retry', '1');
+          location.reload();
+        }
+      };
+      document.head.appendChild(s);
+    })();
+  } else {
+    try { sessionStorage.removeItem('toh_cdn_retry'); } catch(e){}
   }
 </script>
 <script>
 /* ══ SUPABASE CONFIG ══ */
 const SUPA_URL = 'https://ndnkfhehtirnbmfpcbwx.supabase.co';
+
+/* ══ ESCAPING HELPERS (XSS protection) ══
+   esc(s)  — escape a string for any HTML text or attribute context.
+   jsq(s)  — escape a string for use inside a single-quoted JS string that
+             itself lives inside an inline on* attribute (backslash-escapes
+             quotes for JS, then HTML-escapes for the attribute parser). */
+function esc(s){
+  s = (s == null ? '' : String(s));
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function jsq(s){
+  s = (s == null ? '' : String(s));
+  return esc(s.replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
+}
 
 // ── Global error handler — prevents UI freeze on any uncaught JS error ──
 window.addEventListener('error', function(e){
@@ -1523,6 +1554,7 @@ const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 // Guard: if supabase library failed to load from CDN, create a no-op stub so the app still boots
 if(typeof supabase === 'undefined'){
   console.warn('Supabase CDN failed to load — running in offline mode');
+  window.__supaStub = true;
   window.supabase = {
     createClient: ()=>({
       from: ()=>({ select:()=>Promise.resolve({data:[],error:{message:'Offline'}}), upsert:()=>Promise.resolve({error:{message:'Offline'}}), delete:()=>({eq:()=>({eq:()=>Promise.resolve({})})}), insert:()=>Promise.resolve({error:{message:'Offline'}}), eq:()=>({eq:()=>({single:()=>Promise.resolve({data:null,error:{message:'Offline'}})})}), single:()=>Promise.resolve({data:null,error:{message:'Offline'}}) }),
@@ -1601,7 +1633,21 @@ async function getSupaUser(){
 // Username IS the group_id — stored only in localStorage as the session credential.
 // All app state (active camp, player char selections, etc.) lives in Supabase or _db.
 function getGroupId(){ return localStorage.getItem('toh_group_id')||null; }
-function setGroupId(id){ if(id) localStorage.setItem('toh_group_id', id); }
+function setGroupId(id){ if(id){ localStorage.setItem('toh_group_id', id); _claimGroupMembership(id); } }
+
+// ── RLS groundwork: record this signed-in (anonymous) user as a member of the
+// group. No-op until the group_members table + policies from
+// supabase-policies.sql are applied; errors are intentionally swallowed.
+async function _claimGroupMembership(gid){
+  try {
+    const { data:{ user } } = await supa.auth.getUser();
+    if(!user) return;
+    await supa.from('group_members').upsert(
+      { group_id: gid, user_id: user.id },
+      { onConflict: 'group_id,user_id' }
+    );
+  } catch(e){ /* table may not exist yet */ }
+}
 
 // Stable per-device ID (used for SW cache-busting only)
 function getDeviceId(){
@@ -1647,8 +1693,10 @@ async function setUserSetting(name, value){
 async function ensureGroupId(){
   let gid = getGroupId();
   if(gid) return gid;
-  // Generate a new group code
-  const code = Math.random().toString(36).slice(2,7).toUpperCase();
+  // Generate a new group code — crypto-secure and long enough that it
+  // cannot realistically be brute-forced against the open REST API.
+  const a = new Uint8Array(12); crypto.getRandomValues(a);
+  const code = Array.from(a, b=>'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[b%31]).join('');
   setGroupId(code);
   // Register it in Supabase settings so other devices can find/validate it
   try {
@@ -1693,17 +1741,15 @@ async function dbSaveChar(char){
   // Publish to settings table under player_char_{joinCode}_{charId}
   // One row per (campaign, character) pair — keyed by the campaign's joinCode.
   // settings table has no RLS so any user can read it by joinCode.
-  for(const camp of charCamps){
-    if(!camp.joinCode) continue;
+  await Promise.all(charCamps.filter(c=>c.joinCode).map(camp=>{
     const settingsKey = 'player_char_' + camp.joinCode + '_' + String(char.id);
-    try {
-      await supa.from('settings').upsert(
-        { key: settingsKey, value: JSON.stringify(char) },
-        { onConflict: 'key' }
-      );
+    return supa.from('settings').upsert(
+      { key: settingsKey, value: JSON.stringify(char) },
+      { onConflict: 'key' }
+    ).then(()=>{
       console.log('[dbSaveChar] published char', char.name, 'under key', settingsKey);
-    } catch(e){ console.warn('cross-group char write failed:', e.message); }
-  }
+    }).catch(e=>console.warn('cross-group char write failed:', e.message));
+  }));
 }
 
 async function dbDeleteChar(charId){
@@ -1880,9 +1926,9 @@ async function pullAll(campId){
           });
           if(staleRows.length){
             console.log('[pullAll] deleting', staleRows.length, 'stale settings rows');
-            for(const row of staleRows){
-              await supa.from('settings').delete().eq('key', row.key).catch(()=>{});
-            }
+            await Promise.all(staleRows.map(row=>
+              supa.from('settings').delete().eq('key', row.key).catch(()=>{})
+            ));
           }
         }
       } catch(e){ console.warn('[pullAll] player chars pull error:', e.message); }
@@ -1926,14 +1972,16 @@ async function _purgePresetCampaigns(){
   const presets = _db.campaigns.filter(c=>String(c.id).startsWith('preset_'));
   if(!presets.length) return;
   console.log('[purge] removing', presets.length, 'preset campaigns from DB and memory');
-  for(const camp of presets){
+  await Promise.all(presets.map(camp=>{
     const rowId = gid + '_' + camp.id;
-    await supa.from('campaigns').delete().eq('id', rowId).then(({error})=>{
-      if(error) console.warn('[purge] delete error for', camp.id, error.message);
-    });
-    // Also clean up any settings keys for this campaign
-    await supa.from('settings').delete().like('key', 'player_char_'+camp.id+'_%').then(()=>{});
-  }
+    return Promise.all([
+      supa.from('campaigns').delete().eq('id', rowId).then(({error})=>{
+        if(error) console.warn('[purge] delete error for', camp.id, error.message);
+      }),
+      // Also clean up any settings keys for this campaign
+      supa.from('settings').delete().like('key', 'player_char_'+camp.id+'_%').then(()=>{}),
+    ]);
+  }));
   _db.campaigns = _db.campaigns.filter(c=>!String(c.id).startsWith('preset_'));
   // Clear active camp if it was a preset
   if(String(getActiveCampId()).startsWith('preset_')) setActiveCampId(null);
@@ -2821,7 +2869,12 @@ const getMaxHP=(cls,level,con)=>{const c=parseInt(getMod(con))||0;return cls.hit
 const classColor=i=>CLASSES[i]?.color||'#7b5ea7';
 const classIcon=i=>CLASSES[i]?.icon||'?';
 const classTheme=i=>CLASSES[i]?.theme||'';
-const genCode=()=>Math.random().toString(36).slice(2,8).toUpperCase();
+const CODE_ALPHABET='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I/L/O/0/1 — unambiguous
+function secureCode(len){
+  const a=new Uint8Array(len); crypto.getRandomValues(a);
+  return Array.from(a, b=>CODE_ALPHABET[b%CODE_ALPHABET.length]).join('');
+}
+const genCode=()=>secureCode(8);
 const encodeChar=c=>{try{return btoa(JSON.stringify(c)).replace(/[+/=]/g,x=>({'+':`-`,'/':'_','=':''})[x]);}catch{return '';}};
 const decodeChar=s=>{try{const b=s.replace(/[-_]/g,x=>({'-':'+','_':'/'})[x]);return JSON.parse(atob(b));}catch{return null;}};
 const calcGP=w=>(w.gp||0)+(w.sp||0)/10+(w.ep||0)/2+(w.cp||0)/100;
@@ -3091,7 +3144,7 @@ function renderClassGrid(){
   document.getElementById('classGrid').innerHTML=CLASSES.map((c,i)=>`
     <div class="class-tile ${B.cls===i?'sel':''} theme-${c.theme}" onclick="selectClass(${i})" style="${B.cls===i?('--cc:'+c.color+';--cc-dim:'+c.color+'22'):''}">
       <div class="class-tile-icon">${c.icon}</div>
-      <div class="class-tile-name">${c.name}</div>
+      <div class="class-tile-name">${esc(c.name)}</div>
     </div>`).join('');
 }
 function selectClass(i){
@@ -3145,7 +3198,7 @@ function renderMulticlassGrid(){
       + (isMain ? ' title="Same as primary class"' : ` onclick="selectMulticlass(${i})"`)
       + ` style="${B.multiCls===i?('--cc:'+c.color+';--cc-dim:'+c.color+'22'):''}${isMain?';opacity:0.35;pointer-events:none':''}">`
       + `<div class="class-tile-icon">${c.icon}</div>`
-      + `<div class="class-tile-name">${c.name}</div></div>`;
+      + `<div class="class-tile-name">${esc(c.name)}</div></div>`;
   }).join('');
 }
 
@@ -3287,11 +3340,11 @@ function _showPostForgeAssign(char, camps){
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
       <div style="width:44px;height:44px;border-radius:50%;background:${cc}22;border:2px solid ${cc};display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${cls.icon}</div>
       <div>
-        <div style="font-family:'Cinzel',serif;font-size:15px;color:var(--gold)">${char.name} is ready!</div>
-        <div style="font-size:11px;color:var(--muted)">Level ${char.level} ${char.race} ${cls.name}</div>
+        <div style="font-family:'Cinzel',serif;font-size:15px;color:var(--gold)">${esc(char.name)} is ready!</div>
+        <div style="font-size:11px;color:var(--muted)">Level ${char.level} ${esc(char.race)} ${cls.name}</div>
       </div>
     </div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Assign ${char.name} to a campaign — tap to toggle</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Assign ${esc(char.name)} to a campaign — tap to toggle</div>
     <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px" id="pfCampList">
       ${camps.map(camp=>{
         const isShared = !!camp._ownerGid;
@@ -3304,7 +3357,7 @@ function _showPostForgeAssign(char, camps){
           style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;border:1px solid ${inCamp?'var(--gold)':'var(--border)'};background:${inCamp?'var(--gold-dim)':'var(--surface2)'};cursor:pointer;transition:var(--trans)">
           <span style="font-size:18px">${icon}</span>
           <div style="flex:1">
-            <div style="font-family:'Cinzel',serif;font-size:12px;color:${inCamp?'var(--gold)':'var(--text)'}">${camp.name}</div>
+            <div style="font-family:'Cinzel',serif;font-size:12px;color:${inCamp?'var(--gold)':'var(--text)'}">${esc(camp.name)}</div>
             <div style="font-size:10px;color:var(--muted)">${sub}</div>
           </div>
           <span style="font-size:16px;color:${inCamp?'var(--gold)':'var(--muted)'}">${inCamp?'✓':'+'}</span>
@@ -3391,11 +3444,11 @@ function renderSheetHero(char,cls,elId){
     : null;
   document.getElementById(elId).innerHTML=`
     <div class="sheet-avatar-lg" style="--cc:${cls.color};--cc-dim:${cls.color}22">${cls.icon}</div>
-    <div class="sheet-charname">${char.name}</div>
-    <div class="sheet-meta">Level ${char.level} ${char.race} ${multiStr || cls.name}</div>
+    <div class="sheet-charname">${esc(char.name)}</div>
+    <div class="sheet-meta">Level ${char.level} ${esc(char.race)} ${multiStr || cls.name}</div>
     ${char.subclass?('<div style="font-family:\'Cinzel\',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-top:2px">'+char.subclass.replace(/ \(.*?\)/,'')+'</div>'):''}
     <div class="sheet-badges">
-      <span class="sheet-badge">${char.background}</span>
+      <span class="sheet-badge">${esc(char.background)}</span>
       ${char.age?`<span class="sheet-badge">Age ${char.age}`+'</span>':''}
       ${char.alignment?`<span class="sheet-badge">${char.alignment}`+'</span>':''}
     </div>`;
@@ -3468,14 +3521,14 @@ function renderCombatTab(char,cls,elId,editable){
   const allAttacks = [...attacks, ...lootWeapons];
   if(!allAttacks.length){html+=`<div style="color:var(--muted);font-size:13px;font-style:italic;margin-bottom:8px">No attacks added yet.</div>`;}
   else{
-    attacks.forEach((a,i)=>{html+=`<div class="attack-card"><div class="attack-icon">${a.icon||'⚔'}</div><div style="flex:1"><div class="attack-name">${a.name}</div><div class="attack-meta">${a.type||''}</div></div><div><div class="attack-bonus">${a.atk||'—'}</div><div class="attack-dmg">${a.dmg||'—'}</div></div>${editable?('<button class="icon-btn" style="color:var(--red)" onclick="removeAttack('+char.id+','+i+')">✕</button>'):''}</div>`;});
+    attacks.forEach((a,i)=>{html+=`<div class="attack-card"><div class="attack-icon">${a.icon||'⚔'}</div><div style="flex:1"><div class="attack-name">${esc(a.name)}</div><div class="attack-meta">${a.type||''}</div></div><div><div class="attack-bonus">${a.atk||'—'}</div><div class="attack-dmg">${a.dmg||'—'}</div></div>${editable?('<button class="icon-btn" style="color:var(--red)" onclick="removeAttack('+char.id+','+i+')">✕</button>'):''}</div>`;});
     if(lootWeapons.length){
       html+=`<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin:8px 0 5px">FROM INVENTORY</div>`;
       lootWeapons.forEach(a=>{
         const rarityColor = a.rarity==='uncommon'?'var(--gold)':a.rarity==='rare'?'var(--purple)':a.rarity==='very-rare'?'#e74c3c':a.rarity==='legendary'?'#f39c12':'var(--muted)';
         html+=`<div class="attack-card" style="border-color:${rarityColor}33">
           <div class="attack-icon">⚔</div>
-          <div style="flex:1"><div class="attack-name">${a.name}</div>
+          <div style="flex:1"><div class="attack-name">${esc(a.name)}</div>
           <div class="attack-meta" style="color:${rarityColor}">${a.rarity} · ${a.type}</div></div>
           <div><div class="attack-bonus">${a.bonus}</div><div class="attack-dmg">${a.damage}</div></div>
         </div>`;
@@ -3852,10 +3905,10 @@ function renderGearTab(char,cls,elId,editable){
       const pct=Math.max(0,Math.round((char.currentHP/char.maxHP)*100));
       html+=`<div class="item-card"><div class="item-top">
         <div class="item-icon">${TYPE_ICONS[item.type]||'📦'}</div>
-        <div style="flex:1;min-width:0"><div class="item-name">${item.name}${item.qty>1?(' ×'+item.qty):''}</div>
+        <div style="flex:1;min-width:0"><div class="item-name">${esc(item.name)}${item.qty>1?(' ×'+item.qty):''}</div>
         <div class="item-meta">${item.type}${item.value>0?' · '+item.value+' gp':''}</div>
         <div class="item-badges"><span class="ibadge r-${item.rarity}">${item.rarity}</span></div></div>
-      </div>${item.desc?('<div class="item-desc">'+item.desc+'</div>'):''}</div>`;
+      </div>${item.desc?('<div class="item-desc">'+esc(item.desc)+'</div>'):''}</div>`;
     });
   } else {
     html+=`<div style="margin-top:12px"><div class="divider"><span>Loot Tracker</span></div><div style="color:var(--muted);font-size:13px;font-style:italic;text-align:center;padding:10px 0">No items tracked yet. Add them in the Loot tab.</div></div>`;
@@ -3940,9 +3993,9 @@ function openPartySheet(id){
   document.getElementById('pageTitle').textContent=char.name;
   const el=document.getElementById('partySheetHero');
   el.innerHTML=`<div class="party-sheet-av" style="--cc:${cls.color};--cc-dim:${cls.color}22">${cls.icon}</div>
-    <div class="sheet-charname" style="font-size:18px">${char.name}</div>
-    <div class="sheet-meta">Level ${char.level} ${char.race} ${cls.name}</div>
-    <div class="sheet-badges"><span class="sheet-badge">${char.background}</span></div>`;
+    <div class="sheet-charname" style="font-size:18px">${esc(char.name)}</div>
+    <div class="sheet-meta">Level ${char.level} ${esc(char.race)} ${cls.name}</div>
+    <div class="sheet-badges"><span class="sheet-badge">${esc(char.background)}</span></div>`;
   // Show Level Up tab only for DM and char below max level
   const lvlBtn = document.getElementById('pstab-levelup-btn');
   if(lvlBtn) lvlBtn.style.display = (char.level < 20) ? '' : 'none';
@@ -4038,7 +4091,7 @@ function renderPartyOverview(){
     return`<div class="party-member" style="--cc:${cc};--cc-dim:${cc}22" onclick="openPartySheet(${c.id})">
       <div class="pm-top">
         <div class="pm-av">${classIcon(c.classIdx)}</div>
-        <div style="flex:1"><div class="pm-name">${c.name}</div><div class="pm-meta">${c.race} ${CLASSES[c.classIdx]?.name} · Lv ${c.level}</div></div>
+        <div style="flex:1"><div class="pm-name">${esc(c.name)}</div><div class="pm-meta">${esc(c.race)} ${CLASSES[c.classIdx]?.name} · Lv ${c.level}</div></div>
         <div class="pm-actions">
           <button class="icon-btn" style="color:var(--green);font-size:18px;font-weight:700" onclick="adjHP(${c.id},1);event.stopPropagation()">+</button>
           <button class="icon-btn" style="color:var(--red);font-size:18px;font-weight:700" onclick="adjHP(${c.id},-1);event.stopPropagation()">−</button>
@@ -4075,10 +4128,10 @@ function adjHP(id,sign){
     // Auto-log to party history
     if(ci_camp>=0){
       if(prevHP>0 && char.currentHP===0){
-        addPartyHistoryEvent(camps[ci_camp],'death',`${char.name} fell to 0 HP!`,'💀');
+        addPartyHistoryEvent(camps[ci_camp],'death',`${esc(char.name)} fell to 0 HP!`,'💀');
         saveCampaigns(camps);
       } else if(prevHP===0 && char.currentHP>0){
-        addPartyHistoryEvent(camps[ci_camp],'revive',`${char.name} was revived!`,'✨');
+        addPartyHistoryEvent(camps[ci_camp],'revive',`${esc(char.name)} was revived!`,'✨');
         saveCampaigns(camps);
       }
     }
@@ -4104,7 +4157,7 @@ function renderInitiative(){
     const isAct=i===active;const pct=Math.max(0,Math.round((c.hp/c.maxHP)*100));const hpC=pct>60?'var(--green)':pct>25?'var(--gold)':'var(--red)';
     return`<div class="init-row ${isAct?'active-turn':''}" style="--cc:${c.color};--cc-dim:${c.color}22">
       <div class="init-num">${c.initiative}</div><div class="init-av">${c.icon}</div>
-      <div class="init-info"><div class="init-name">${c.name}${isAct?(' <span class="turn-badge">ACTIVE</span>'):''}</div>
+      <div class="init-info"><div class="init-name">${esc(c.name)}${isAct?(' <span class="turn-badge">ACTIVE</span>'):''}</div>
       <div class="init-hpbar"><div class="init-hpfill" style="width:${pct}%;background:${hpC}"></div></div>
       <div style="font-size:10px;color:${hpC};margin-top:2px">${c.hp}/${c.maxHP} HP</div></div>
       <div class="init-controls">
@@ -4149,8 +4202,8 @@ const groupSection = gid ? (' <div style="background:var(--gold-dim);border:1px 
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
           <div style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;border:2px solid ${cc};background:${cc}22;flex-shrink:0">${classIcon(c.classIdx)}</div>
           <div style="flex:1">
-            <div style="font-family:'Cinzel',serif;font-size:14px;color:var(--text)">${c.name}</div>
-            <div style="font-size:11px;color:var(--muted)">${CLASSES[c.classIdx]?.name} · ${c.race} · Lv ${c.level}</div>
+            <div style="font-family:'Cinzel',serif;font-size:14px;color:var(--text)">${esc(c.name)}</div>
+            <div style="font-size:11px;color:var(--muted)">${CLASSES[c.classIdx]?.name} · ${esc(c.race)} · Lv ${c.level}</div>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
@@ -4164,10 +4217,10 @@ const groupSection = gid ? (' <div style="background:var(--gold-dim);border:1px 
           </div>
         </div>
         <div style="display:flex;gap:6px">
-          <button class="btn btn-primary" style="flex:1;margin:0;padding:8px;font-size:11px" onclick="copyText('${joinUrl}');toast('Share info copied for ${c.name}!')">📋 Copy Both Codes</button>
+          <button class="btn btn-primary" style="flex:1;margin:0;padding:8px;font-size:11px" onclick="copyText('${joinUrl}');toast('Share info copied for ${jsq(c.name)}!')">📋 Copy Both Codes</button>
           <button class="btn btn-outline" style="margin:0;padding:8px 12px;font-size:11px" onclick="copyText('${code}');toast('Character code copied!')">Copy Char Code</button>
         </div>
-        <div style="font-size:10px;color:var(--muted);margin-top:8px;font-style:italic;text-align:center">Player enters group code then character code to join as ${c.name}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:8px;font-style:italic;text-align:center">Player enters group code then character code to join as ${esc(c.name)}</div>
       </div>`;
     }).join('');
 
@@ -4179,7 +4232,7 @@ const groupSection = gid ? (' <div style="background:var(--gold-dim);border:1px 
   const cc=classColor(char.classIdx);const partyId=getPartyId();
   el.innerHTML=`<div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:12px;margin-bottom:14px">
     <div style="width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;border:2px solid ${cc};background:${cc}22">${classIcon(char.classIdx)}</div>
-    <div><div style="font-family:'Cinzel',serif;font-size:13px">${char.name}</div><div style="font-size:11px;color:var(--muted)">${char.race} ${CLASSES[char.classIdx]?.name} · Lv ${char.level}</div></div>
+    <div><div style="font-family:'Cinzel',serif;font-size:13px">${esc(char.name)}</div><div style="font-size:11px;color:var(--muted)">${esc(char.race)} ${CLASSES[char.classIdx]?.name} · Lv ${char.level}</div></div>
   </div>
   <div class="tab-row"><button class="tab-btn active" onclick="shareSubTab('code',this)">Short Code</button><button class="tab-btn" onclick="shareSubTab('full',this)">Full Export</button><button class="tab-btn" onclick="shareSubTab('import',this)">Import</button></div>
   <div id="shareSubContent"></div>`;
@@ -4204,10 +4257,10 @@ function shareSubTab(t,btn){
         return `<div class="access-code-card">
           <div style="width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;border:2px solid ${cc};background:${cc}22;flex-shrink:0">${classIcon(c.classIdx)}</div>
           <div class="access-code-char">
-            <div class="access-code-char-name">${c.name}</div>
-            <div class="access-code-char-meta">${CLASSES[c.classIdx]?.name} · ${c.race}</div>
+            <div class="access-code-char-name">${esc(c.name)}</div>
+            <div class="access-code-char-meta">${CLASSES[c.classIdx]?.name} · ${esc(c.race)}</div>
           </div>
-          <div class="access-code-value" onclick="copyText('${code}');toast('Code copied for ${c.name}!')" title="Tap to copy">${code}</div>
+          <div class="access-code-value" onclick="copyText('${code}');toast('Code copied for ${jsq(c.name)}!')" title="Tap to copy">${code}</div>
         </div>`;
       }).join('');
       html+=`<div style="font-size:11px;color:var(--muted);font-style:italic;text-align:center;margin-top:10px;line-height:1.5">Tap any code to copy it.<br>Players enter this on the first-launch screen.</div>`;
@@ -4561,22 +4614,31 @@ async function _saveSharedCamp(entry){
 }
 async function _loadSharedCamps(){
   const shared = await _getSharedCamps();
-  for(const e of shared){
+  // Fetch every shared campaign (camp row, characters, loot) in parallel,
+  // then merge + subscribe sequentially in the original order so the final
+  // realtime subscription matches the previous behaviour.
+  const results = await Promise.all(shared.map(async e=>{
     const campData = await _fetchCampRow(e.ownerGid, e.campId);
-    if(!campData) continue;
+    if(!campData) return null;
     campData._ownerGid = e.ownerGid;  // so loot saves go to owner's row
+    const [chars] = await Promise.all([
+      _fetchCampChars(e.ownerGid, e.campId, campData),
+      // Loot for this campaign (readable by campaign_id regardless of group)
+      dbGetItems(e.campId),
+    ]);
+    return { e, campData, chars };
+  }));
+  for(const r of results){
+    if(!r) continue;
+    const { e, campData, chars } = r;
     const idx = _db.campaigns.findIndex(c=>c.id===e.campId);
     if(idx >= 0) _db.campaigns[idx] = campData;
     else _db.campaigns.push(campData);
-    // Fetch and merge characters for this campaign
-    const chars = await _fetchCampChars(e.ownerGid, e.campId, campData);
     chars.forEach(c=>{
       c._sharedCampId = e.campId;
       const ci = _db.chars.findIndex(x=>String(x.id)===String(c.id));
       if(ci >= 0) _db.chars[ci] = c; else _db.chars.push(c);
     });
-    // Fetch loot for this campaign (readable by campaign_id regardless of group)
-    await dbGetItems(e.campId);
     // Subscribe to real-time updates for this shared campaign
     subscribeRealtime(e.campId);
   }
@@ -5026,7 +5088,7 @@ function renderProgressTab(char, cls){
   const asiHistory = char.asiHistory || [];
   if(asiHistory.length){
     html += `<div class="divider"><span>Ability Score History</span></div>`;
-    html += asiHistory.map(a=>`<div style="font-size:12px;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--border)">Lv${a.level}: ${a.desc}</div>`).join('');
+    html += asiHistory.map(a=>`<div style="font-size:12px;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--border)">Lv${a.level}: ${esc(a.desc)}</div>`).join('');
     html += '<div style="margin-bottom:12px"></div>';
   }
 
@@ -5102,7 +5164,7 @@ function awardXP(charId){
   renderProgressTab(char, cls);
   // Auto level-up suggestion
   if(char.level < 20 && char.xp >= xpForLevel(char.level+1)){
-    toast(`⬆ ${char.name} has enough XP for Level ${char.level+1}!`,'var(--gold)');
+    toast(`⬆ ${esc(char.name)} has enough XP for Level ${char.level+1}!`,'var(--gold)');
   }
 }
 
@@ -6276,7 +6338,7 @@ function renderLevelUpTab(char, cls){
   const el = document.getElementById('pstab-levelup');
   const newLevel = char.level + 1;
   if(char.level >= 20){
-    el.innerHTML = `<div class="empty-state"><div class="es-icon">✦</div><p>${char.name} is already at max level.</p></div>`;
+    el.innerHTML = `<div class="empty-state"><div class="es-icon">✦</div><p>${esc(char.name)} is already at max level.</p></div>`;
     return;
   }
   const ld = (LEVEL_FEATURES[cls.name]||{})[newLevel]||{};
@@ -6517,8 +6579,8 @@ function renderLevelUpTab(char, cls){
 
     html += `<div style="background:var(--surface2);border:1px solid ${cc};border-radius:10px;padding:12px;margin-bottom:14px">
       <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">SPELLS GAINED</div>
-      ${newSpellSlots?('<div style="font-size:12px;color:var(--text);margin-bottom:4px">✦ +'+newSpellSlots+' spell slot'+newSpellSlots!==1?'s':''+' unlocked up to level '+maxSL+'</div>'):''}
-      ${newCantrips?('<div style="font-size:12px;color:var(--text);margin-bottom:4px">✦ +'+newCantrips+' new cantrip'+newCantrips!==1?'s':''+'</div>'):''}
+      ${newSpellSlots?('<div style="font-size:12px;color:var(--text);margin-bottom:4px">✦ +'+newSpellSlots+' spell slot'+(newSpellSlots!==1?'s':'')+' unlocked up to level '+maxSL+'</div>'):''}
+      ${newCantrips?('<div style="font-size:12px;color:var(--text);margin-bottom:4px">✦ +'+newCantrips+' new cantrip'+(newCantrips!==1?'s':'')+'</div>'):''}
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px">${pickLabel}</div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${newCantrips>0?('<button class="btn btn-outline" style="margin:0;border-color:'+cc+';color:'+cc+'" onclick="openSpellPicker('+char.id+','+newCantrips+',true)">✦ Pick '+newCantrips+' Cantrip'+(newCantrips!==1?'s':'')+'</button>'):''}
@@ -7013,7 +7075,7 @@ function confirmPartySheetLevelUp(){
 
   // Save to Supabase
   saveChar(char);
-  toast(`✦ ${char.name} is now Level ${newLevel}!`, 'var(--gold)');
+  toast(`✦ ${esc(char.name)} is now Level ${newLevel}!`, 'var(--gold)');
 
   // Refresh all affected UI
   openPartySheet(char.id);
@@ -7043,7 +7105,7 @@ function removeLevelUp(charId){
   const levelToRemove = char.level;
   const cls = CLASSES[char.classIdx];
 
-  if(!confirm(`Remove Level ${levelToRemove} from ${char.name}?\n\nThis will:\n• Drop them to Level ${levelToRemove-1}\n• Undo any ASI or feat gained at this level\n• Reduce max HP by the amount gained\n• Set XP to the Level ${levelToRemove-1} floor\n\nThis cannot be undone automatically.`)) return;
+  if(!confirm(`Remove Level ${levelToRemove} from ${esc(char.name)}?\n\nThis will:\n• Drop them to Level ${levelToRemove-1}\n• Undo any ASI or feat gained at this level\n• Reduce max HP by the amount gained\n• Set XP to the Level ${levelToRemove-1} floor\n\nThis cannot be undone automatically.`)) return;
 
   // ── 1. Undo ASI / Feat from this level ──
   const asiEntry = (char.asiHistory||[]).filter(e=>e.level===levelToRemove).pop();
@@ -7088,7 +7150,7 @@ function removeLevelUp(charId){
 
   chars[ci] = char;
   saveChars(chars);
-  toast(`↓ ${char.name} is now Level ${char.level}.`,'var(--muted)');
+  toast(`↓ ${esc(char.name)} is now Level ${char.level}.`,'var(--muted)');
 
   // Refresh all affected UI
   const updatedChar = getChars().find(c=>c.id===charId);
@@ -7211,7 +7273,7 @@ function buildLevelUpHTML(char, cls, newLevel, ld, avgHP, conMod){
     <!-- Header -->
     <div style="background:linear-gradient(135deg,#1a1535,#2a1f0a);padding:20px 24px;border-bottom:1px solid var(--gold)33">
       <div style="font-family:'Cinzel',serif;font-size:22px;color:var(--gold);letter-spacing:2px">⬆ Level ${newLevel}</div>
-      <div style="font-size:13px;color:var(--muted);margin-top:4px">${char.name} · ${cls.name}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px">${esc(char.name)} · ${cls.name}</div>
     </div>
     <div style="padding:20px 24px;max-height:75vh;overflow-y:auto">`;
 
@@ -7615,7 +7677,7 @@ function confirmLevelUp(){
 
   saveChars(chars);
   document.getElementById('levelUpModal').remove();
-  toast(`⬆ ${char.name} is now Level ${s.newLevel}! +${hpGain} HP`,'var(--gold)');
+  toast(`⬆ ${esc(char.name)} is now Level ${s.newLevel}! +${hpGain} HP`,'var(--gold)');
 
   const updatedChar = getChars().find(c=>c.id===s.charId);
   if(updatedChar){
@@ -8123,8 +8185,8 @@ Rules:
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
           <span style="font-size:28px">${cls.icon}</span>
           <div>
-            <div style="font-family:'Cinzel',serif;font-size:15px;color:var(--gold)">${char.name}</div>
-            <div style="font-size:12px;color:var(--muted)">Level ${char.level} ${char.race} ${cls.name}${char.subclass?' · '+char.subclass:''}</div>
+            <div style="font-family:'Cinzel',serif;font-size:15px;color:var(--gold)">${esc(char.name)}</div>
+            <div style="font-size:12px;color:var(--muted)">Level ${char.level} ${esc(char.race)} ${cls.name}${char.subclass?' · '+char.subclass:''}</div>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-bottom:8px">
@@ -8135,10 +8197,10 @@ Rules:
             </div>`).join('')}
         </div>
         <div style="font-size:11px;color:var(--muted)">${char.maxHP} HP · AC ${char.ac} · Speed ${char.speed}</div>
-        ${char.proficiencies.length?('<div style="font-size:11px;color:var(--muted);margin-top:3px">Prof: '+char.proficiencies.slice(0,5).join(', ')+char.proficiencies.length>5?' +more':''+'</div>'):''}
+        ${char.proficiencies.length?('<div style="font-size:11px;color:var(--muted);margin-top:3px">Prof: '+esc(char.proficiencies.slice(0,5).join(', '))+(char.proficiencies.length>5?' +more':'')+'</div>'):''}
         ${char.attacks.length?('<div style="font-size:11px;color:var(--muted);margin-top:3px">⚔ '+char.attacks.map(a=>a.name).join(', ')+'</div>'):''}
       </div>
-      <button class="btn btn-gold" onclick="confirmClaudeImport()">✦ Import ${char.name}</button>`;
+      <button class="btn btn-gold" onclick="confirmClaudeImport()">✦ Import ${esc(char.name)}</button>`;
 
     window._pendingClaudeChar = char;
     btn.disabled = false;
@@ -8197,8 +8259,8 @@ async function handlePdfUpload(input){
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
           <span style="font-size:28px">${cls.icon}</span>
           <div>
-            <div style="font-family:'Cinzel',serif;font-size:15px;color:var(--gold)">${char.name}</div>
-            <div style="font-size:12px;color:var(--muted)">Level ${char.level} ${char.race} ${cls.name}${char.subclass?' · '+char.subclass:''}</div>
+            <div style="font-family:'Cinzel',serif;font-size:15px;color:var(--gold)">${esc(char.name)}</div>
+            <div style="font-size:12px;color:var(--muted)">Level ${char.level} ${esc(char.race)} ${cls.name}${char.subclass?' · '+char.subclass:''}</div>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-bottom:8px">
@@ -8212,7 +8274,7 @@ async function handlePdfUpload(input){
         ${char.spells&&char.spells.length?('<div style="font-size:11px;color:var(--muted);margin-top:4px">⚡ '+char.spells.length+' spells imported</div>'):''}
         ${char.attacks&&char.attacks.length?('<div style="font-size:11px;color:var(--muted);margin-top:2px">⚔ '+char.attacks.map(a=>a.name).join(', ')+'</div>'):''}
       </div>
-      <button class="btn btn-gold" onclick="confirmPdfImport()">✦ Import ${char.name}</button>`;
+      <button class="btn btn-gold" onclick="confirmPdfImport()">✦ Import ${esc(char.name)}</button>`;
     window._pendingPdfChar = char;
   } catch(e) {
     statusEl.textContent = '⚠ Error: ' + e.message;
@@ -8700,7 +8762,7 @@ function _finishCharImport(char, source){
   chars.push(char);
   saveChars(chars);
   document.getElementById('charImportModal')?.remove();
-  toast(`✦ ${char.name} imported from ${source}!`);
+  toast(`✦ ${esc(char.name)} imported from ${source}!`);
 
   // Auto-log to party history
   const activeCamp = getActiveCamp();
@@ -8710,7 +8772,7 @@ function _finishCharImport(char, source){
     if(ci2>=0){
       const cls = CLASSES[char.classIdx]||CLASSES[0];
       addPartyHistoryEvent(camps2[ci2],'join',
-        `${char.name} joined the party — Level ${char.level} ${char.race} ${cls.name}`, '⚔');
+        `${esc(char.name)} joined the party — Level ${char.level} ${esc(char.race)} ${cls.name}`, '⚔');
       saveCampaigns(camps2);
     }
   }
@@ -8732,7 +8794,7 @@ function showCampAssignPrompt(char){
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
           <div style="width:36px;height:36px;border-radius:50%;background:${cc}22;border:2px solid ${cc};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${cls.icon}</div>
           <div style="flex:1">
-            <div style="font-family:'Cinzel',serif;font-size:13px;color:var(--gold)">${char.name}</div>
+            <div style="font-family:'Cinzel',serif;font-size:13px;color:var(--gold)">${esc(char.name)}</div>
             <div style="font-size:11px;color:var(--muted)">Assign to a campaign</div>
           </div>
         </div>
@@ -8743,7 +8805,7 @@ function showCampAssignPrompt(char){
             return `<div onclick="toggleCampCharAndRefresh('${camp.id}','${char.id}',this)" style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;border:1px solid ${inCamp?'var(--gold)':'var(--border)'};background:${inCamp?'var(--gold-dim)':'var(--surface2)'};cursor:pointer;transition:var(--trans)">
               <span style="font-size:18px">📖</span>
               <div style="flex:1">
-                <div style="font-family:'Cinzel',serif;font-size:12px;color:${inCamp?'var(--gold)':'var(--text)'}">${camp.name}${joined}</div>
+                <div style="font-family:'Cinzel',serif;font-size:12px;color:${inCamp?'var(--gold)':'var(--text)'}">${esc(camp.name)}${joined}</div>
                 <div style="font-size:10px;color:var(--muted)">${(camp.charIds||[]).length} character${(camp.charIds||[]).length!==1?'s':''}</div>
               </div>
               <span style="font-size:16px;color:${inCamp?'var(--gold)':'var(--muted)'}">${inCamp?'✓':'+'}</span>
@@ -8997,6 +9059,15 @@ async function forceSyncAll(){
 function bootApp(){
   const nav_bar = document.querySelector('.bottomnav');
   (async () => {
+    // RLS groundwork: ensure an (anonymous) auth session so requests carry a
+    // JWT identity. Harmless no-op if anonymous sign-ins are disabled.
+    try {
+      const { data:{ session } } = await supa.auth.getSession();
+      if(!session){
+        await supa.auth.signInAnonymously().catch(()=>{});
+      }
+      if(getGroupId()) _claimGroupMembership(getGroupId());
+    } catch(e){}
     if(getGroupId()){
       await pullAll(null).catch(()=>{});
       // Load DB-backed user settings into cache
@@ -9112,7 +9183,7 @@ function renderPartyManage(){
   const party=getFullParty();const el=document.getElementById('ptab-manage');
   let html=`<div class="section-label">Party Members (${party.length})</div>`;
   if(!party.length)html+=`<div class="empty-state" style="padding:20px"><p>No members yet.</p></div>`;
-  else html+=party.map(c=>{const cc=classColor(c.classIdx);return`<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--border)"><div style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid ${cc};background:${cc}22">${classIcon(c.classIdx)}</div><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${c.name}</div><div style="font-size:10px;color:var(--muted)">${CLASSES[c.classIdx]?.name} Lv${c.level} · ${c.currentHP}/${c.maxHP} HP</div></div><button class="icon-btn" style="color:var(--red)" onclick="removePartyMember(${c.id})">✕</button></div>`;}).join('');
+  else html+=party.map(c=>{const cc=classColor(c.classIdx);return`<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--border)"><div style="width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;border:2px solid ${cc};background:${cc}22">${classIcon(c.classIdx)}</div><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${esc(c.name)}</div><div style="font-size:10px;color:var(--muted)">${CLASSES[c.classIdx]?.name} Lv${c.level} · ${c.currentHP}/${c.maxHP} HP</div></div><button class="icon-btn" style="color:var(--red)" onclick="removePartyMember(${c.id})">✕</button></div>`;}).join('');
   html+=`<div class="divider"><span>Add via Code</span></div><div class="field"><label>Character Export Code</label><input id="addToPartyIn" placeholder="Paste export code…"></div><button class="btn btn-primary" onclick="addToParty()">Add to Party</button>`;
   el.innerHTML=html;
 }
@@ -9221,7 +9292,7 @@ function renderPartyHistory(){
         <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:10px;margin-bottom:5px;border:1px solid var(--border)33">
           <span style="font-size:20px;line-height:1.4">${e.icon||'📜'}</span>
           <div style="flex:1;min-width:0">
-            <div style="font-size:12px;line-height:1.5">${e.text}</div>
+            <div style="font-size:12px;line-height:1.5">${esc(e.text)}</div>
             <div style="font-size:10px;color:var(--muted);margin-top:2px">${timeStr}</div>
           </div>
           ${'<button onclick="deletePartyEvent(\''+e.id+'\')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:0 4px;opacity:0.5;flex-shrink:0">✕</button>'}
@@ -9302,7 +9373,7 @@ function renderDiceCharPanel(){
   // Collapse toggle strip — always visible even when collapsed
   const toggleStrip = `<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);background:var(--surface2);user-select:none;-webkit-tap-highlight-color:transparent" onclick="toggleDiceCharPanel()">
     <span style="font-size:16px">${cls.icon}</span>
-    <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${char.name}</span>
+    <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(char.name)}</span>
     <span class="dice-toggle-arrow" style="font-size:10px;color:var(--muted);flex-shrink:0;font-family:'Cinzel',serif;letter-spacing:1px"></span>
   </div>`;
 
@@ -9311,14 +9382,14 @@ function renderDiceCharPanel(){
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
         <div style="width:40px;height:40px;border-radius:50%;background:${cc}22;border:2px solid ${cc};display:flex;align-items:center;justify-content:center;font-size:20px">${cls.icon}</div>
         <div style="flex:1">
-          <div style="font-family:'Cinzel',serif;font-size:14px;color:var(--gold)">${char.name}</div>
+          <div style="font-family:'Cinzel',serif;font-size:14px;color:var(--gold)">${esc(char.name)}</div>
           <div style="font-size:11px;color:var(--muted)">Lv${char.level} ${cls.name} · PB +${pb} · ${char.currentHP}/${char.maxHP} HP</div>
         </div>
         <select id="diceCharSelect" onchange="switchDiceChar(this.value)" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px 8px;color:var(--text);font-size:11px;max-width:100px">
           ${(()=>{
             const camp = getActiveCamp();
             const pool = getFullParty();
-            return pool.map(c=>`<option value="${c.id}" ${String(c.id)===String(char.id)?'selected':''}>${c.name}</option>`).join('');
+            return pool.map(c=>`<option value="${c.id}" ${String(c.id)===String(char.id)?'selected':''}>${esc(c.name)}</option>`).join('');
           })()}
         </select>
       </div>
@@ -9938,7 +10009,7 @@ Rules:
       html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px">
         <span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span>
         <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-family:'Cinzel',serif">${item.qty>1?item.qty+'× ':''}${item.name}</div>
+          <div style="font-size:12px;font-family:'Cinzel',serif">${item.qty>1?item.qty+'× ':''}${esc(item.name)}</div>
           <div style="font-size:10px;color:var(--muted)">${item.rarity}${item.value?' · '+item.value+'gp':''}</div>
         </div>
         <span onclick="this.parentElement.remove()" style="color:var(--red);cursor:pointer;font-size:16px;padding:0 6px">✕</span>
@@ -10085,7 +10156,7 @@ function parseBulkLoot(){
     html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px">
       <span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span>
       <div style="flex:1;min-width:0">
-        <div style="font-size:12px;font-family:'Cinzel',serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.qty>1?item.qty+'× ':''}${item.name}</div>
+        <div style="font-size:12px;font-family:'Cinzel',serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.qty>1?item.qty+'× ':''}${esc(item.name)}</div>
         <div style="font-size:10px;color:var(--muted)">${item.rarity}${item.value?' · '+item.value+'gp':''} → Party Pool</div>
       </div>
       <span onclick="removeBulkPreviewItem(${i})" style="color:var(--red);cursor:pointer;font-size:16px;padding:0 6px;flex-shrink:0">✕</span>
@@ -10118,7 +10189,7 @@ function parseBulkLootPreviewOnly(){
   items.forEach((item,i) => {
     html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px">
       <span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span>
-      <div style="flex:1;min-width:0"><div style="font-size:12px;font-family:'Cinzel',serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.qty>1?item.qty+'× ':''}${item.name}</div>
+      <div style="flex:1;min-width:0"><div style="font-size:12px;font-family:'Cinzel',serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.qty>1?item.qty+'× ':''}${esc(item.name)}</div>
       <div style="font-size:10px;color:var(--muted)">${item.rarity}${item.value?' · '+item.value+'gp':''} → Party Pool</div></div>
       <span onclick="removeBulkPreviewItem(${i})" style="color:var(--red);cursor:pointer;font-size:16px;padding:0 6px;flex-shrink:0">✕</span>
     </div>`;
@@ -10163,7 +10234,7 @@ function setLootOwner(id){lootOwner=id;lootFilter='all';renderInventory();}
 function setLootFilter(f){lootFilter=f;renderInventory();}
 function renderOwnerPills(activeId){
   const chars = getFullParty();
-  return`<div class="owner-pills"><div class="owner-pill ${activeId==='pool'?'active':''}" style="--pill-c:var(--gold)" onclick="setLootOwner('pool')">🎒 Party Pool</div>${chars.map(c=>{const cc=classColor(c.classIdx);return`<div class="owner-pill ${activeId==c.id?'active':''}" style="--pill-c:${cc}" onclick="setLootOwner(${c.id})">${classIcon(c.classIdx)} ${c.name}</div>`;}).join('')}</div>`;
+  return`<div class="owner-pills"><div class="owner-pill ${activeId==='pool'?'active':''}" style="--pill-c:var(--gold)" onclick="setLootOwner('pool')">🎒 Party Pool</div>${chars.map(c=>{const cc=classColor(c.classIdx);return`<div class="owner-pill ${activeId==c.id?'active':''}" style="--pill-c:${cc}" onclick="setLootOwner(${c.id})">${classIcon(c.classIdx)} ${esc(c.name)}</div>`;}).join('')}</div>`;
 }
 function renderInventory(){
   // Reset lootOwner if the selected character no longer exists
@@ -10182,7 +10253,7 @@ function renderInventory(){
   html+=`<div class="inv-summary"><div class="inv-sum-card"><div class="isc-label">ITEMS</div><div class="isc-val">${owned.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val" style="font-size:15px">${fmtGP(totalVal)}<span style="font-size:9px;color:var(--muted)"> gp</span></div></div><div class="inv-sum-card"><div class="isc-label">WEIGHT</div><div class="isc-val" style="font-size:15px;color:${wC}">${totalWt%1===0?totalWt:totalWt.toFixed(1)}<span style="font-size:9px;color:var(--muted)"> lb</span></div></div></div>`;
   if(char)html+=`<div class="wbar-wrap"><div class="wbar-labels"><span>Carry weight</span><span>${totalWt%1===0?totalWt:totalWt.toFixed(1)} / ${maxCarry} lb</span></div><div class="wbar-track"><div class="wbar-fill" style="width:${wPct}%;background:${wC}"></div></div></div>`;
   if(!filtered.length)html+=`<div class="empty-state"><div class="es-icon">🎒</div><p>No items here.</p></div>`;
-  else html+=filtered.map(item=>{const icon=TYPE_ICONS[item.type]||'📦';const al=item.attune==='attuned'?'✦ Attuned':item.attune==='required'?'◇ Needs Attune':'';return`<div class="item-card fadein"><div class="item-top"><div class="item-icon">${icon}</div><div style="flex:1;min-width:0"><div class="item-name">${item.name}${item.qty>1?(' <span style="color:var(--muted);font-size:11px">×'+item.qty+'</span>'):''}</div><div class="item-meta">${item.type}${item.value>0?' · '+item.value+' gp':''}${item.weight>0?' · '+item.weight+' lb':''}</div><div class="item-badges"><span class="ibadge r-${item.rarity}">${item.rarity.replace('-',' ')}</span>${al?('<span class="ibadge" style="border-color:var(--purple);color:var(--purple)">'+al+'</span>'):''}</div></div></div>${item.desc?('<div class="item-desc">'+item.desc+'</div>'):''}<div class="item-acts">${item.owner!=='pool'?('<button class="icon-btn" title="To pool" onclick="itemToPool(\''+item.id+'\')">🎒</button>'):''} ${item.owner==='pool'?('<button class="icon-btn" style="color:var(--gold)" title="Assign" onclick="assignFromPool(\''+item.id+'\')">→</button>'):''}<button class="icon-btn" style="color:var(--red)" title="Remove" onclick="removeItem('${item.id}')">✕</button></div></div>`;}).join('');
+  else html+=filtered.map(item=>{const icon=TYPE_ICONS[item.type]||'📦';const al=item.attune==='attuned'?'✦ Attuned':item.attune==='required'?'◇ Needs Attune':'';return`<div class="item-card fadein"><div class="item-top"><div class="item-icon">${icon}</div><div style="flex:1;min-width:0"><div class="item-name">${esc(item.name)}${item.qty>1?(' <span style="color:var(--muted);font-size:11px">×'+item.qty+'</span>'):''}</div><div class="item-meta">${item.type}${item.value>0?' · '+item.value+' gp':''}${item.weight>0?' · '+item.weight+' lb':''}</div><div class="item-badges"><span class="ibadge r-${item.rarity}">${item.rarity.replace('-',' ')}</span>${al?('<span class="ibadge" style="border-color:var(--purple);color:var(--purple)">'+al+'</span>'):''}</div></div></div>${item.desc?('<div class="item-desc">'+esc(item.desc)+'</div>'):''}<div class="item-acts">${item.owner!=='pool'?('<button class="icon-btn" title="To pool" onclick="itemToPool(\''+item.id+'\')">🎒</button>'):''} ${item.owner==='pool'?('<button class="icon-btn" style="color:var(--gold)" title="Assign" onclick="assignFromPool(\''+item.id+'\')">→</button>'):''}<button class="icon-btn" style="color:var(--red)" title="Remove" onclick="removeItem('${item.id}')">✕</button></div></div>`;}).join('');
   el.innerHTML=html;
 }
 function removeItem(id){saveItems(getItems().filter(i=>i.id!==id));renderInventory();renderPool();toast('Item removed','var(--red)');}
@@ -10191,7 +10262,7 @@ function assignFromPool(id){
   const camp = getActiveCamp();
   const chars = getFullParty();
   if(!chars.length){toast('No characters in campaign','var(--red)');return;}
-  const pick=prompt(chars.map((c,i)=>`${i+1}. ${c.name}`).join('\n')+'\n\nAssign to (number):');
+  const pick=prompt(chars.map((c,i)=>`${i+1}. ${esc(c.name)}`).join('\n')+'\n\nAssign to (number):');
   const idx=parseInt(pick)-1;
   if(idx>=0&&idx<chars.length){
     const items=getItems();const ii=items.findIndex(i=>i.id===id);
@@ -10240,7 +10311,7 @@ function renderAddTab(){
     <div class="field"><label>Assign To</label>
       <select id="iOwner">
         <option value="pool">Party Pool</option>
-        ${chars.map(c=>`<option value="${c.id}">${classIcon(c.classIdx)} ${c.name}</option>`).join('')}
+        ${chars.map(c=>`<option value="${c.id}">${classIcon(c.classIdx)} ${esc(c.name)}</option>`).join('')}
       </select>
     </div>
     <button class="btn btn-gold" onclick="addItem()">Add to Inventory ✦</button>
@@ -10249,7 +10320,7 @@ function renderAddTab(){
   <div class="quick-grid">${QUICK_ITEMS.map((q,qi)=>`
     <div class="quick-tile" onclick="quickAdd(${qi})">
       <span style="font-size:22px">${TYPE_ICONS[q.type]}</span>
-      <div><div style="font-family:'Cinzel',serif;font-size:11px">${q.name}</div>
+      <div><div style="font-family:'Cinzel',serif;font-size:11px">${esc(q.name)}</div>
       <div style="font-size:10px;color:var(--muted)" class="rtext-${q.rarity}">${q.rarity} · ${q.value} gp</div></div>
     </div>`).join('')}
   </div>`;
@@ -10307,7 +10378,7 @@ function dndItemSearch(q) {
       onmousedown="dndSelectItem(${i})">
       <span style="font-size:18px;width:22px;text-align:center;flex-shrink:0">${TYPE_ICONS[item.type]||'📦'}</span>
       <div style="flex:1;min-width:0;overflow:hidden">
-        <div style="font-family:'Cinzel',serif;font-size:12px;color:${rc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.name}${attTag}</div>
+        <div style="font-family:'Cinzel',serif;font-size:12px;color:${rc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.name)}${attTag}</div>
         <div style="font-size:10px;color:var(--muted)">${item.rarity} ${item.type}${item.value ? ' · ' + item.value + ' gp' : ''}</div>
       </div>
     </div>`;
@@ -10416,7 +10487,7 @@ document.addEventListener('mousedown', function(e) {
 });
 function addItem(){const name=(document.getElementById('iName')?.value||'').trim();if(!name){toast('Enter item name','var(--red)');return;}const item={id:'i'+Date.now(),name,type:document.getElementById('iType').value,rarity:document.getElementById('iRarity').value,qty:Math.max(1,parseInt(document.getElementById('iQty').value)||1),weight:parseFloat(document.getElementById('iWt').value)||0,value:parseFloat(document.getElementById('iVal').value)||0,attune:document.getElementById('iAttune').value,desc:(document.getElementById('iDesc').value||'').trim(),owner:document.getElementById('iOwner').value};const items=getItems();items.push(item);saveItems(items);document.getElementById('iName').value='';document.getElementById('iDesc').value='';document.getElementById('iQty').value='1';toast('✦ '+name+' added!');renderInventory();renderPool();}
 function quickAdd(qi){const q=QUICK_ITEMS[qi];const ownerEl=document.querySelector('#ltab-add #iOwner');const owner=ownerEl?.value||'pool';const item={...q,id:'i'+Date.now()+qi,owner};const items=getItems();items.push(item);saveItems(items);toast('✦ '+q.name+' added!');renderInventory();renderPool();}
-function renderPool(){const items=getItems().filter(i=>i.owner==='pool');const el=document.getElementById('ltab-pool');const totVal=items.reduce((s,i)=>s+(parseFloat(i.value)||0)*i.qty,0);let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px"><div class="inv-sum-card"><div class="isc-label">UNASSIGNED</div><div class="isc-val">${items.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val">${fmtGP(totVal)} <span style="font-size:9px;color:var(--muted)">gp</span></div></div></div>`;if(!items.length)html+=`<div class="empty-state"><div class="es-icon">🪙</div><p>Pool is empty!</p></div>`;else html+=`<div class="card">`+items.map(item=>`<div class="pool-row"><span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${item.name}${item.qty>1?(' ×'+item.qty):''}</div><div style="font-size:10px"><span class="rtext-${item.rarity}">${item.rarity}</span>${item.value>0?' · '+item.value+' gp':''}</div></div><button class="pool-assign-btn" onclick="assignFromPool('${item.id}')">Assign →</button><button class="icon-btn" style="color:var(--red)" onclick="removeItem('${item.id}')">✕</button></div>`).join('')+`</div>`;el.innerHTML=html;}
+function renderPool(){const items=getItems().filter(i=>i.owner==='pool');const el=document.getElementById('ltab-pool');const totVal=items.reduce((s,i)=>s+(parseFloat(i.value)||0)*i.qty,0);let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px"><div class="inv-sum-card"><div class="isc-label">UNASSIGNED</div><div class="isc-val">${items.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val">${fmtGP(totVal)} <span style="font-size:9px;color:var(--muted)">gp</span></div></div></div>`;if(!items.length)html+=`<div class="empty-state"><div class="es-icon">🪙</div><p>Pool is empty!</p></div>`;else html+=`<div class="card">`+items.map(item=>`<div class="pool-row"><span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${esc(item.name)}${item.qty>1?(' ×'+item.qty):''}</div><div style="font-size:10px"><span class="rtext-${item.rarity}">${item.rarity}</span>${item.value>0?' · '+item.value+' gp':''}</div></div><button class="pool-assign-btn" onclick="assignFromPool('${item.id}')">Assign →</button><button class="icon-btn" style="color:var(--red)" onclick="removeItem('${item.id}')">✕</button></div>`).join('')+`</div>`;el.innerHTML=html;}
 function renderWealth(){
   // Scope to campaign characters only
   const camp = getActiveCamp();
@@ -10427,7 +10498,7 @@ function renderWealth(){
   if(w_changed) saveWealth(w_all);
   const el=document.getElementById('ltab-wealth');let html=`<div class="divider"><span>Party Treasury</span></div><div class="coin-grid"><div class="coin-cell coin-gp"><label>GP</label><input type="number" min="0" value="${pw.gp||0}" onchange="updateWealth('party','gp',+this.value)"></div><div class="coin-cell coin-sp"><label>SP</label><input type="number" min="0" value="${pw.sp||0}" onchange="updateWealth('party','sp',+this.value)"></div><div class="coin-cell coin-ep"><label>EP</label><input type="number" min="0" value="${pw.ep||0}" onchange="updateWealth('party','ep',+this.value)"></div><div class="coin-cell coin-cp"><label>CP</label><input type="number" min="0" value="${pw.cp||0}" onchange="updateWealth('party','cp',+this.value)"></div></div><div class="wealth-total"><div><div class="wealth-total-label">TOTAL VALUE</div><div class="wealth-total-val">${fmtGP(calcGP(pw))} gp</div></div><button onclick="splitGold()" style="padding:7px 13px;background:var(--gold-dim);border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:9px;cursor:pointer;letter-spacing:1px">Split Evenly</button></div><div class="divider"><span>Per Character</span></div>`;
 if(!chars.length)html+=`<div class="empty-state" style="padding:20px"><p>Create characters first.</p></div>`;
-chars.forEach(c=>{const cw=wealth[c.id]||{gp:0,sp:0,ep:0,cp:0};const items=getItems().filter(i=>i.owner==c.id);const itemVal=items.reduce((s,i)=>s+(parseFloat(i.value)||0)*i.qty,0);const cc=classColor(c.classIdx);html+=`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;border-left:4px solid ${cc}"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span style="font-size:18px">${classIcon(c.classIdx)}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:13px">${c.name}</div><div style="font-size:10px;color:var(--muted)">Items worth ${fmtGP(itemVal)} gp</div></div><div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold)">${fmtGP(calcGP(cw))} gp</div></div><div class="coin-grid"><div class="coin-cell coin-gp"><label>GP</label><input type="number" min="0" value="${cw.gp||0}" onchange="updateWealth(${c.id},'gp',+this.value)"></div><div class="coin-cell coin-sp"><label>SP</label><input type="number" min="0" value="${cw.sp||0}" onchange="updateWealth(${c.id},'sp',+this.value)"></div><div class="coin-cell coin-ep"><label>EP</label><input type="number" min="0" value="${cw.ep||0}" onchange="updateWealth(${c.id},'ep',+this.value)"></div><div class="coin-cell coin-cp"><label>CP</label><input type="number" min="0" value="${cw.cp||0}" onchange="updateWealth(${c.id},'cp',+this.value)"></div></div></div>`;});
+chars.forEach(c=>{const cw=wealth[c.id]||{gp:0,sp:0,ep:0,cp:0};const items=getItems().filter(i=>i.owner==c.id);const itemVal=items.reduce((s,i)=>s+(parseFloat(i.value)||0)*i.qty,0);const cc=classColor(c.classIdx);html+=`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;border-left:4px solid ${cc}"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span style="font-size:18px">${classIcon(c.classIdx)}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:13px">${esc(c.name)}</div><div style="font-size:10px;color:var(--muted)">Items worth ${fmtGP(itemVal)} gp</div></div><div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold)">${fmtGP(calcGP(cw))} gp</div></div><div class="coin-grid"><div class="coin-cell coin-gp"><label>GP</label><input type="number" min="0" value="${cw.gp||0}" onchange="updateWealth(${c.id},'gp',+this.value)"></div><div class="coin-cell coin-sp"><label>SP</label><input type="number" min="0" value="${cw.sp||0}" onchange="updateWealth(${c.id},'sp',+this.value)"></div><div class="coin-cell coin-ep"><label>EP</label><input type="number" min="0" value="${cw.ep||0}" onchange="updateWealth(${c.id},'ep',+this.value)"></div><div class="coin-cell coin-cp"><label>CP</label><input type="number" min="0" value="${cw.cp||0}" onchange="updateWealth(${c.id},'cp',+this.value)"></div></div></div>`;});
 el.innerHTML=html;}
 function updateWealth(key,coin,val){const w=getWealth();if(!w[key])w[key]={gp:0,sp:0,ep:0,cp:0};w[key][coin]=Math.max(0,val);saveWealth(w);}
 function splitGold(){const chars=getChars();if(!chars.length){toast('No characters','var(--red)');return;}const w=getWealth();const pw=w['party']||{gp:0,sp:0,ep:0,cp:0};const totalCP=Math.round((pw.gp||0)*100+(pw.sp||0)*10+(pw.ep||0)*50+(pw.cp||0));const perChar=Math.floor(totalCP/chars.length);const rem=totalCP%chars.length;chars.forEach(c=>{if(!w[c.id])w[c.id]={gp:0,sp:0,ep:0,cp:0};w[c.id].cp=(w[c.id].cp||0)+perChar;});w['party']={gp:0,sp:0,ep:0,cp:rem};saveWealth(w);renderWealth();toast('Gold split!');}
@@ -10593,7 +10664,7 @@ function _renderCampListInner() {
          </div>`;
     const joinedBadge = isJoined ? `<span class="camp-badge" style="border-color:var(--purple);color:var(--purple)">🔗 Joined</span>` : '';
     return `<div class="camp-card ${isActive?'active-camp':''} fadein" onclick="openCamp('${c.id}')">
-      <div class="camp-title">${c.name}</div>
+      <div class="camp-title">${esc(c.name)}</div>
       <div class="camp-meta">${c.setting||'Custom Setting'}${c.dm?' · '+c.dm:''}</div>
       <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;align-items:center">
         ${isActive?'<span class="camp-badge active">● Active</span>':''}
@@ -10800,7 +10871,7 @@ function renderCampDetailHeader() {
     <div style="background:var(--surface2);border:1px solid var(--border);border-radius:13px;padding:14px;margin-bottom:14px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
         <div>
-          <div style="font-family:'Cinzel',serif;font-size:18px;color:var(--gold)">${camp.name}</div>
+          <div style="font-family:'Cinzel',serif;font-size:18px;color:var(--gold)">${esc(camp.name)}</div>
           <div style="font-size:12px;color:var(--muted);margin-top:2px">${camp.setting||'Custom Setting'}</div>
         </div>
         ${isActive?`<span class="camp-badge active" style="flex-shrink:0">● Active</span>`:
@@ -10839,13 +10910,13 @@ function renderCampDetailHeader() {
                   // Player's own char — tappable to select as campaign character
                   return `<div onclick="confirmPlayerChar('${campId}',${c.id})" style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:2px solid ${isSelected?'var(--gold)':cc};background:${isSelected?'var(--gold-dim)':cc+'22'};cursor:pointer" title="Set as my character">
                     <span style="font-size:14px">${classIcon(c.classIdx)}</span>
-                    <span style="font-family:'Cinzel',serif;font-size:10px;color:${isSelected?'var(--gold)':cc}">${c.name}${isSelected?' ★':''}</span>
+                    <span style="font-family:'Cinzel',serif;font-size:10px;color:${isSelected?'var(--gold)':cc}">${esc(c.name)}${isSelected?' ★':''}</span>
                   </div>`;
                 }
                 // DM's char — read only
                 return `<div style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid ${cc};background:${cc}22">
                   <span style="font-size:14px">${classIcon(c.classIdx)}</span>
-                  <span style="font-family:'Cinzel',serif;font-size:10px;color:${cc}">${c.name}</span>
+                  <span style="font-family:'Cinzel',serif;font-size:10px;color:${cc}">${esc(c.name)}</span>
                 </div>`;
               }).join('');
             }
@@ -10870,7 +10941,7 @@ function renderCampDetailHeader() {
               const cc = classColor(c.classIdx);
               return `<div onclick="toggleCampChar('${camp.id}','${c.id}')" style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid ${inCamp?cc:'var(--border)'};background:${inCamp?cc+'22':'transparent'};cursor:pointer;transition:var(--trans)">
                 <span style="font-size:14px">${classIcon(c.classIdx)}</span>
-                <span style="font-family:'Cinzel',serif;font-size:10px;color:${inCamp?cc:'var(--muted)'}">${c.name}</span>
+                <span style="font-family:'Cinzel',serif;font-size:10px;color:${inCamp?cc:'var(--muted)'}">${esc(c.name)}</span>
               </div>`;
             }).join('');
             return html;
@@ -10902,7 +10973,7 @@ function toggleCampChar(campId, charId) {
     const otherCamp = camps.find(c => !c._ownerGid && String(c.id) !== String(campId) && (c.charIds||[]).some(x=>String(x)===cid));
     if(otherCamp){
       const char = getChars().find(c=>String(c.id)===cid);
-      toast(`${char?.name||'Character'} is already in "${otherCamp.name}"`, 'var(--red)');
+      toast(`${char?.name||'Character'} is already in "${esc(otherCamp.name)}"`, 'var(--red)');
       return;
     }
     camps[ci].charIds.push(cid);
@@ -10967,7 +11038,7 @@ function renderSessions() {
           return `<div id="sp_${c.id}" onclick="toggleSessionPresence('${c.id}')"
             style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:transparent;cursor:pointer;transition:var(--trans)">
             <span style="font-size:13px">${classIcon(c.classIdx)}</span>
-            <span style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted)">${c.name}</span>
+            <span style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted)">${esc(c.name)}</span>
           </div>`;
         }).join('')}
       </div>
@@ -11044,12 +11115,12 @@ function renderSessions() {
           ${presentChars.length ? presentChars.map(c => {
             const cc = classColor(c.classIdx);
             return `<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:10px;border:1px solid ${cc};background:${cc}22;font-family:'Cinzel',serif;font-size:9px;color:${cc}">
-              ${classIcon(c.classIdx)} ${c.name}
+              ${classIcon(c.classIdx)} ${esc(c.name)}
             </span>`;
           }).join('') : `<span style="font-size:11px;color:var(--muted);font-style:italic">None recorded</span>`}
           ${absentChars.length && presentChars.length ? absentChars.map(c =>
             `<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:10px;border:1px solid var(--border);background:transparent;font-family:'Cinzel',serif;font-size:9px;color:var(--muted);opacity:0.5">
-              ${classIcon(c.classIdx)} ${c.name}
+              ${classIcon(c.classIdx)} ${esc(c.name)}
             </span>`).join('') : ''}
         </div>` : '';
 
@@ -11076,7 +11147,7 @@ function renderSessions() {
                 return `<div onclick="toggleSessionCharPresence('${s.id}','${c.id}');event.stopPropagation()"
                   style="display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:10px;border:1px solid ${present?cc:'var(--border)'};background:${present?cc+'22':'transparent'};cursor:pointer;transition:var(--trans)">
                   <span style="font-size:13px">${classIcon(c.classIdx)}</span>
-                  <span style="font-family:'Cinzel',serif;font-size:10px;color:${present?cc:'var(--muted)'}">${c.name}</span>
+                  <span style="font-family:'Cinzel',serif;font-size:10px;color:${present?cc:'var(--muted)'}">${esc(c.name)}</span>
                 </div>`;
               }).join('')}
             </div>
@@ -11916,7 +11987,7 @@ function renderNPCs() {
         html += `<div class="npc-card">
           <div class="npc-avatar rel-${n.relationship||'neutral'}">${initials}</div>
           <div style="flex:1;min-width:0">
-            <div class="npc-name">${n.name}${!n.alive?(' <span style="color:var(--red);font-size:10px">[Deceased]</span>'):''}</div>
+            <div class="npc-name">${esc(n.name)}${!n.alive?(' <span style="color:var(--red);font-size:10px">[Deceased]</span>'):''}</div>
             <div class="npc-role">${n.race?n.race+' · ':''}${n.role||'Unknown'} ${n.location?'· '+n.location:''}</div>
             ${n.desc?('<div style="font-size:12px;color:var(--muted);font-style:italic;line-height:1.4;margin-top:4px">'+n.desc+'</div>'):''}
           </div>
@@ -12089,9 +12160,9 @@ function renderNotes() {
   if (!notes.length) { html += `<div class="empty-state"><div class="es-icon">📝</div><p>No notes yet.<br>Jot down anything — world lore, player theories, DM secrets…</p></div>`; }
   else {
     html += notes.map((n,i) => `<div class="note-card">
-      <input class="note-title-input" value="${n.title||''}" placeholder="Note title…" onblur="saveNoteField(${i},'title',this.value)">
+      <input class="note-title-input" value="${esc(n.title||'')}" placeholder="Note title…" onblur="saveNoteField(${i},'title',this.value)">
       <div style="height:1px;background:var(--border);margin-bottom:6px"></div>
-      <textarea class="note-body-input" placeholder="Write anything…" onblur="saveNoteField(${i},'body',this.value)">${n.body||''}</textarea>
+      <textarea class="note-body-input" placeholder="Write anything…" onblur="saveNoteField(${i},'body',this.value)">${esc(n.body||'')}</textarea>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
         <span style="font-size:10px;color:var(--muted2)">${n.updated?new Date(n.updated).toLocaleDateString():''}</span>
         <button class="icon-btn" style="color:var(--red);font-size:12px" onclick="deleteNote(${i})">✕ Delete</button>
@@ -12158,7 +12229,7 @@ function renderCampaignSwitchBanner() {
   el.innerHTML = `<div class="switch-camp-banner" onclick="nav('campaign')" style="cursor:pointer">
     <span style="font-size:24px">📖</span>
     <div style="flex:1">
-      <strong style="font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;display:block;margin-bottom:2px;color:var(--gold)">${camp.name}</strong>
+      <strong style="font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;display:block;margin-bottom:2px;color:var(--gold)">${esc(camp.name)}</strong>
       <span style="font-size:11px;color:var(--muted)">${(camp.sessions||[]).length} sessions · ${activeQ} active quest${activeQ!==1?'s':''} · ${chars.length} character${chars.length!==1?'s':''}</span>
     </div>
     <span style="color:var(--gold);font-family:'Cinzel',serif;font-size:10px">→</span>
@@ -12209,7 +12280,7 @@ async function forceReinstallPresets(){
     const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
     if(error){
       console.error('Preset save error for', camp.name, ':', error.message, error.code);
-      errors.push(`${camp.name}: ${error.message} (${error.code})`);
+      errors.push(`${esc(camp.name)}: ${error.message} (${error.code})`);
     } else {
       // Update _db cache
       const i = _db.campaigns.findIndex(c=>c.id===camp.id);
@@ -12858,7 +12929,7 @@ function renderCharacterScreen(){
   // Character selector pills
   heroEl.innerHTML='<div class="char-select-bar">'+chars.map(function(c){
     const cc=classColor(c.classIdx);
-    return '<div class="char-select-pill '+(String(c.id)===String(charScreenId)?'active':'')+'" style="--cc:'+cc+';--cc-dim:'+cc+'22" onclick="selectCharScreen('+c.id+')"><span class="csp-icon">'+classIcon(c.classIdx)+'</span>'+c.name+'</div>';
+    return '<div class="char-select-pill '+(String(c.id)===String(charScreenId)?'active':'')+'" style="--cc:'+cc+';--cc-dim:'+cc+'22" onclick="selectCharScreen('+c.id+')"><span class="csp-icon">'+classIcon(c.classIdx)+'</span>'+esc(c.name)+'</div>';
   }).join('')+'</div>';
 
   // Re-activate the current tab
@@ -13114,7 +13185,7 @@ function renderInvBag(char, cls){
       +(isEq?'<div class="it-equipped-dot"></div>':'')
       +(magicM?'<div class="it-bonus">+'+magicM[1]+'</div>':'')
       +'<div class="it-icon">'+(TYPE_ICONS[item.type]||'📦')+'</div>'
-      +'<div class="it-name" style="color:'+rc+'">'+item.name+'</div>'
+      +'<div class="it-name" style="color:'+rc+'">'+esc(item.name)+'</div>'
       +(item.qty>1?'<div class="it-qty">×'+item.qty+'</div>':'')
       +'</div>';
   });
@@ -13164,7 +13235,7 @@ function renderCharStats(char, cls){
       return '<div class="equipped-item-row">'
         +'<span class="ei-slot-label">'+slot.label.toUpperCase()+'</span>'
         +'<span class="ei-icon">'+(TYPE_ICONS[item.type]||'📦')+'</span>'
-        +'<div style="flex:1;min-width:0"><div class="ei-name" style="color:'+rc+'">'+item.name+'</div>'+(eff?'<div class="ei-effect">'+eff+'</div>':'')+'</div>'
+        +'<div style="flex:1;min-width:0"><div class="ei-name" style="color:'+rc+'">'+esc(item.name)+'</div>'+(eff?'<div class="ei-effect">'+eff+'</div>':'')+'</div>'
         +'<span class="ei-unequip" onclick="unequipSlot(\''+slot.id+'\')" title="Unequip">✕</span>'
         +'</div>';
     }).join('')+'</div>';
@@ -13366,7 +13437,7 @@ function handleItemClick(itemId){
 
   let listHTML='<div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border)">'
     +'<div style="font-size:28px">'+(TYPE_ICONS[item.type]||'📦')+'</div>'
-    +'<div><div style="font-family:\'Cinzel\',serif;font-size:14px;color:'+rc+'">'+item.name+'</div>'
+    +'<div><div style="font-family:\'Cinzel\',serif;font-size:14px;color:'+rc+'">'+esc(item.name)+'</div>'
     +'<div style="font-size:11px;color:var(--muted)">'+item.rarity+' '+item.type+(eff?' · '+eff:'')+'</div></div></div>'
     +'<div style="padding:10px 18px 4px;font-family:\'Cinzel\',serif;font-size:9px;letter-spacing:1.5px;color:var(--muted)">EQUIP TO SLOT</div>'
     +'<div style="padding:0 14px 16px;display:flex;flex-direction:column;gap:5px">';
@@ -13426,7 +13497,7 @@ function openSlotPicker(slotId){
       const isEq=Object.values(slots).some(function(s){return s&&String(s.id)===String(item.id);});
       listHTML+='<div class="slot-picker-item" onclick="equipItem(\''+slotId+'\',\''+item.id+'\');closeSlotPicker()">'
         +'<div class="pi-icon">'+(TYPE_ICONS[item.type]||'📦')+'</div>'
-        +'<div style="flex:1"><div class="pi-name" style="color:'+rc+'">'+item.name+'</div>'
+        +'<div style="flex:1"><div class="pi-name" style="color:'+rc+'">'+esc(item.name)+'</div>'
         +'<div class="pi-meta">'+item.rarity+(eff?' · '+eff:'')+(isEq?' · (equipped elsewhere)':'')+'</div></div>'
         +'</div>';
     });
@@ -13457,10 +13528,10 @@ function showItemTooltip(evt, itemId){
   const eff=getItemEffect(item);
   const eligible=EQUIP_SLOTS.filter(function(s){return s.accepts.indexOf(item.type)>=0;}).map(function(s){return s.label;}).join(', ');
   const tt=document.getElementById('invTooltip');
-  tt.innerHTML='<div class="inv-tooltip-name" style="color:'+rc+'">'+item.name+'</div>'
+  tt.innerHTML='<div class="inv-tooltip-name" style="color:'+rc+'">'+esc(item.name)+'</div>'
     +'<div class="inv-tooltip-type">'+item.rarity+' '+item.type+'</div>'
     +(eff?'<div class="inv-tooltip-effect">⚡ '+eff+'</div>':'')
-    +(item.desc?'<div class="inv-tooltip-desc">'+item.desc.slice(0,80)+(item.desc.length>80?'…':'')+'</div>':'')
+    +(item.desc?'<div class="inv-tooltip-desc">'+esc(item.desc.slice(0,80))+(item.desc.length>80?'…':'')+'</div>':'')
     +(equippedIn?'<div class="inv-tooltip-hint">✓ EQUIPPED — '+equippedIn.label+'</div>':'<div class="inv-tooltip-hint">Slots: '+(eligible||'none')+'</div>');
   const x=evt.clientX+12, y=evt.clientY-10;
   tt.style.left=Math.min(x,window.innerWidth-240)+'px';
