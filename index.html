@@ -1529,6 +1529,54 @@ function jsq(s){
   return esc(s.replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
 }
 
+/* ── Auth resilience ─────────────────────────────────────────────
+   Every database request needs a session (RLS revokes the raw anon
+   role). If anonymous sign-in fails at boot — e.g. the hourly
+   anonymous sign-in rate limit during heavy testing — the device
+   must NOT silently brick: retry with backoff and show a banner. */
+async function ensureAuthSession(maxTries = 3){
+  try {
+    const { data:{ session } } = await supa.auth.getSession();
+    if(session){ _hideAuthBanner(); return true; }
+  } catch(e){}
+  let lastErr = '';
+  for(let i = 0; i < maxTries; i++){
+    if(i) await new Promise(r=>setTimeout(r, 2000 * i));
+    try {
+      const { data, error } = await supa.auth.signInAnonymously();
+      if(!error && data?.session){ _hideAuthBanner(); return true; }
+      lastErr = error?.message || 'unknown error';
+      console.warn('[auth] anonymous sign-in attempt', i+1, 'failed:', lastErr);
+    } catch(e){ lastErr = e.message; }
+  }
+  _showAuthBanner(lastErr);
+  return false;
+}
+function _showAuthBanner(msg){
+  if(document.getElementById('_authBanner')) return;
+  const b = document.createElement('div');
+  b.id = '_authBanner';
+  b.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#b8860b;color:#fff;padding:9px 14px;font-size:12px;z-index:99999;display:flex;align-items:center;gap:10px;font-family:sans-serif';
+  const safe = String(msg||'').slice(0,90);
+  b.innerHTML = '<span style="flex:1">⚠ Not connected to the server (' + esc(safe) + '). Campaigns may be missing — your data is safe.</span>' +
+    '<button id="_authRetryBtn" style="background:#fff;color:#b8860b;border:none;border-radius:6px;padding:5px 10px;cursor:pointer;font-weight:bold">Retry</button>';
+  document.body.appendChild(b);
+  document.getElementById('_authRetryBtn').onclick = async () => {
+    const btn = document.getElementById('_authRetryBtn');
+    btn.textContent = '…'; btn.disabled = true;
+    const ok = await ensureAuthSession(2);
+    if(ok){ location.reload(); }
+    else { btn.textContent = 'Retry'; btn.disabled = false; }
+  };
+  // Quiet periodic self-heal (e.g. rate-limit window expiring)
+  const t = setInterval(async ()=>{
+    if(!document.getElementById('_authBanner')){ clearInterval(t); return; }
+    const ok = await ensureAuthSession(1);
+    if(ok){ clearInterval(t); location.reload(); }
+  }, 90000);
+}
+function _hideAuthBanner(){ document.getElementById('_authBanner')?.remove(); }
+
 // ── Global error handler — prevents UI freeze on any uncaught JS error ──
 window.addEventListener('error', function(e){
   console.error('Tome of Heroes error:', e.message, 'at', e.filename, e.lineno);
@@ -4355,6 +4403,8 @@ async function userLogin(){
   const _status = msg => { statusDiv.textContent = msg; console.log('[login]', msg); };
 
   _status('Setting up…');
+  // Fresh devices arrive with no session — establish one before any reads
+  try { await ensureAuthSession(); } catch(e){}
   setGroupId(username);
   localStorage.setItem('toh_username', username);
   // Ensure the membership claim has landed before the first RLS-gated reads
@@ -9129,13 +9179,10 @@ async function forceSyncAll(){
 function bootApp(){
   const nav_bar = document.querySelector('.bottomnav');
   (async () => {
-    // RLS groundwork: ensure an (anonymous) auth session so requests carry a
-    // JWT identity. Harmless no-op if anonymous sign-ins are disabled.
+    // Ensure an (anonymous) auth session so requests carry a JWT identity.
+    // Retries with backoff and shows a banner if it cannot connect.
     try {
-      const { data:{ session } } = await supa.auth.getSession();
-      if(!session){
-        await supa.auth.signInAnonymously().catch(()=>{});
-      }
+      await ensureAuthSession();
       if(getGroupId()) await _claimGroupMembership(getGroupId()).catch(()=>{});
     } catch(e){}
     if(getGroupId()){
