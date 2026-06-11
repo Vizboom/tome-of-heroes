@@ -11010,8 +11010,24 @@ function renderCampDetailHeader() {
         sharedChars.push(c); seen.add(String(c.id));
       }
     });
-    // Include the player's own locally-created characters so they can select one
-    getChars().filter(c=>!c._shared && !seen.has(String(c.id))).forEach(c=>{
+    // Include the player's own characters as selectable candidates — but
+    // only ones not committed to another campaign (campaigns keep fully
+    // separate rosters). Eligible: the character currently selected for
+    // THIS campaign, characters in this campaign's local list, and
+    // globally-unassigned free agents.
+    const _otherAssigned = new Set();
+    getCampaigns().forEach(c2=>{
+      if(String(c2.id)===String(camp.id)) return;
+      (c2.charIds||[]).forEach(id=>_otherAssigned.add(String(id)));
+    });
+    const _selectedPC = String(getPlayerCampChar(camp.id)||'');
+    getChars().filter(c=>{
+      if(c._shared || seen.has(String(c.id))) return false;
+      const sid = String(c.id);
+      if(sid === _selectedPC) return true;                    // current PC here
+      if(c._playerInCamp && String(c._playerInCamp)!==String(camp.id)) return false; // committed to another joined campaign
+      return !_otherAssigned.has(sid);                        // free agents only
+    }).forEach(c=>{
       sharedChars.push(c); seen.add(String(c.id));
     });
     allChars = sharedChars;
