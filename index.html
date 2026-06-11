@@ -3421,8 +3421,13 @@ function _pfAssign(campId, charId, el){
   if(!_db.campaigns[ci].charIds) _db.campaigns[ci].charIds=[];
   _db.campaigns[ci].charIds = [...new Set(_db.campaigns[ci].charIds.map(String))];
   const cid = String(charId);
+  const pfCharPre = _db.chars.find(c=>String(c.id)===cid);
   const idx = _db.campaigns[ci].charIds.indexOf(cid);
-  if(idx>=0){ _db.campaigns[ci].charIds.splice(idx,1); }
+  if(idx>=0){
+    _db.campaigns[ci].charIds.splice(idx,1);
+    _unpublishCharFromCamp(_db.campaigns[ci], cid);
+    if(pfCharPre && String(pfCharPre._playerInCamp)===String(campId)){ delete pfCharPre._playerInCamp; }
+  }
   else { _db.campaigns[ci].charIds.push(cid); }
   // Tag char with campaign so dbSaveChar publishes under the right joinCode
   const pfChar = _db.chars.find(c=>String(c.id)===cid);
@@ -4448,6 +4453,14 @@ async function _fetchCampRow(ownerGid, campId){
 
 // Fetch all characters for a campaign by its joinCode (primary) or by ownerGid (fallback).
 // Returns an array of character data objects (not Supabase rows).
+// Remove a character's cross-group publish row for a campaign.
+// Called when a character is unassigned, so settings can't resurrect it.
+function _unpublishCharFromCamp(camp, charId){
+  if(!camp || !camp.joinCode) return;
+  const key = 'player_char_' + camp.joinCode + '_' + String(charId);
+  supa.from('settings').delete().eq('key', key).then(()=>{}).catch(()=>{});
+}
+
 async function _fetchCampChars(ownerGid, campId, campData){
   const joinCode = campData?.joinCode;
   const charIds = (campData?.charIds || []).map(String);
@@ -4479,8 +4492,11 @@ async function _fetchCampChars(ownerGid, campId, campData){
       (rows||[]).forEach(r=>{
         const c = r.data; if(!c || !c.id) return;
         const cid = String(c.id);
-        // Only use this if it's in charIds and not already found via settings
-        if(!seen.has(cid) && (!charIds.length || charIds.includes(cid))) seen.set(cid, c);
+        // Strict: only chars actually assigned to this campaign. An empty
+        // charIds list means the campaign has NO assigned characters — it
+        // must not vacuum up the owner group's entire roster (that is how
+        // unassigned characters were leaking into every campaign).
+        if(!seen.has(cid) && charIds.includes(cid)) seen.set(cid, c);
       });
     } catch(e){ console.warn('[fetchCampChars] chars fallback threw:', e.message); }
   }
@@ -4659,6 +4675,10 @@ async function _loadSharedCamps(){
   // then merge + subscribe sequentially in the original order so the final
   // realtime subscription matches the previous behaviour.
   const results = await Promise.all(shared.map(async e=>{
+    // A "shared" entry pointing at our own group is a self-join artifact —
+    // we already own that campaign; loading it as shared would shadow the
+    // real one and mis-tag our own characters into it.
+    if(String(e.ownerGid) === String(getGroupId())) return null;
     const campData = await _fetchCampRow(e.ownerGid, e.campId);
     if(!campData) return null;
     campData._ownerGid = e.ownerGid;  // so loot saves go to owner's row
@@ -4676,8 +4696,11 @@ async function _loadSharedCamps(){
     if(idx >= 0) _db.campaigns[idx] = campData;
     else _db.campaigns.push(campData);
     chars.forEach(c=>{
-      c._sharedCampId = e.campId;
       const ci = _db.chars.findIndex(x=>String(x.id)===String(c.id));
+      // Never overwrite a locally-owned char with a fetched copy — the
+      // local character is authoritative and keeps its campaign scoping.
+      if(ci >= 0 && !_db.chars[ci]._sharedCampId) return;
+      c._sharedCampId = e.campId;
       if(ci >= 0) _db.chars[ci] = c; else _db.chars.push(c);
     });
     // Subscribe to real-time updates for this shared campaign
@@ -11016,6 +11039,9 @@ function toggleCampChar(campId, charId) {
   const idx = camps[ci].charIds.indexOf(cid);
   if (idx >= 0) {
     camps[ci].charIds.splice(idx, 1);
+    _unpublishCharFromCamp(camps[ci], cid);
+    const _tch = getChars().find(c=>String(c.id)===cid);
+    if(_tch && String(_tch._playerInCamp)===String(campId)){ delete _tch._playerInCamp; saveChar(_tch); }
   } else {
     const otherCamp = camps.find(c => !c._ownerGid && String(c.id) !== String(campId) && (c.charIds||[]).some(x=>String(x)===cid));
     if(otherCamp){
