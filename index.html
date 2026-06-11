@@ -1767,7 +1767,10 @@ function _normalizeOwnCharTags(c){
   if(c._sharedCampId !== undefined){ delete c._sharedCampId; changed = true; }
   if(c._playerInCamp !== undefined){
     const tagCamp = (_db.campaigns||[]).find(x=>String(x.id)===String(c._playerInCamp));
-    if(!tagCamp || !tagCamp._ownerGid){ delete c._playerInCamp; changed = true; }
+    // Only delete when we can PROVE the tag is stale: the campaign is
+    // loaded and is our own (own campaigns use charIds, not tags). An
+    // unknown id may be a joined campaign that hasn't loaded yet.
+    if(tagCamp && !tagCamp._ownerGid){ delete c._playerInCamp; changed = true; }
   }
   return changed;
 }
@@ -2030,6 +2033,10 @@ async function pullAll(campId){
         if(s?.value) _userSettings['claude_key'] = s.value;
       }
     } catch(e){}
+    // Always re-merge joined campaigns — dbGetCampaigns above replaced
+    // _db.campaigns with own rows only, which made joined campaigns
+    // disappear on any refresh that didn't separately reload them.
+    await _loadSharedCamps().catch(()=>{});
     syncIndicator('live');
     return true;
   } catch(e){
@@ -4849,6 +4856,20 @@ async function _loadSharedCamps(){
     });
     // Subscribe to real-time updates for this shared campaign
     subscribeRealtime(e.campId);
+    // Self-heal: restore the player's character link for this joined
+    // campaign if a previous cleanup stripped it. The selection survives
+    // in user settings even when the tag on the character was lost.
+    try {
+      const selId = getPlayerCampChar(e.campId);
+      if(selId != null){
+        const own = _db.chars.find(c=>String(c.id)===String(selId) && !c._sharedCampId);
+        if(own && String(own._playerInCamp||'') !== String(e.campId)){
+          own._playerInCamp = e.campId;
+          console.log('[heal] restored campaign link for', own.name, '→', e.campId);
+          saveChar(own);
+        }
+      }
+    } catch(err){ console.warn('[heal] restore failed:', err.message); }
   }
 }
 async function leaveSharedCampaign(campId){
