@@ -1757,16 +1757,37 @@ async function ensureGroupId(){
 
 /* ══ DIRECT SUPABASE READ/WRITE — no localStorage for app data ══ */
 
+// Normalize scoping tags on an OWN character. Returns true if changed.
+// _sharedCampId never belongs on own characters (it grants ghost visibility
+// in that campaign — contamination from an old sync bug). _playerInCamp is
+// only meaningful for JOINED campaigns; for own campaigns charIds is the
+// single source of truth.
+function _normalizeOwnCharTags(c){
+  let changed = false;
+  if(c._sharedCampId !== undefined){ delete c._sharedCampId; changed = true; }
+  if(c._playerInCamp !== undefined){
+    const tagCamp = (_db.campaigns||[]).find(x=>String(x.id)===String(c._playerInCamp));
+    if(!tagCamp || !tagCamp._ownerGid){ delete c._playerInCamp; changed = true; }
+  }
+  return changed;
+}
+
 async function dbGetChars(){
   const gid = getGroupId(); if(!gid) return [];
   const { data, error } = await supa.from('characters').select('*').eq('group_id', gid);
   if(error){ console.warn('getChars error:', error.message); return _db.chars; }
   _db.chars = (data||[]).map(r=>r.data||r);
+  // Strip contaminated scoping tags baked into stored rows
+  _db.chars.forEach(c=>_normalizeOwnCharTags(c));
   return _db.chars;
 }
 
 async function dbSaveChar(char){
   const gid = getGroupId()||await ensureGroupId(); if(!gid) return;
+  // Cross-group copies (other players' characters) are never saved to our
+  // own characters table.
+  if(char._sharedCampId) return;
+  _normalizeOwnCharTags(char);
   const rowId = gid + '_' + String(char.id);
 
   // Find every campaign this character is assigned to and publish under its joinCode
@@ -1933,6 +1954,24 @@ async function pullAll(campId){
     }
     // Purge any legacy preset_ campaigns (removes from DB and memory)
     await _purgePresetCampaigns();
+
+    // One-time cleanup: strip stale scoping tags baked into character rows
+    // by the old shared-campaign vacuum bug, and persist the cleaned rows so
+    // they stop granting ghost visibility on every device.
+    try {
+      const dirty = (_db.chars||[]).filter(c=>{
+        if(c._sharedCampId===undefined && c._playerInCamp===undefined) return false;
+        // A live cross-group copy (another player's char in a campaign we
+        // JOINED) legitimately carries _sharedCampId — leave those alone.
+        const isCross = c._sharedCampId && (_db.campaigns||[]).some(x=>x._ownerGid && String(x.id)===String(c._sharedCampId));
+        if(isCross) return false;
+        return _normalizeOwnCharTags(c);
+      });
+      if(dirty.length){
+        console.log('[migrate] cleaned stale scoping tags on', dirty.length, 'character(s)');
+        await Promise.all(dirty.map(c=>dbSaveChar(c)));
+      }
+    } catch(e){ console.warn('[migrate] tag cleanup failed:', e.message); }
 
     if(campId){
       const { data: loot } = await supa.from('loot').select('*').eq('campaign_id', campId).single();
@@ -3351,8 +3390,9 @@ function saveCharacter(){
       if(!_db.campaigns[fci].charIds) _db.campaigns[fci].charIds=[];
       const fsid = String(char.id);
       if(!_db.campaigns[fci].charIds.includes(fsid)) _db.campaigns[fci].charIds.push(fsid);
-      // Tag so cross-group publishing targets this campaign's joinCode
-      char._playerInCamp = _forgeCamp.id;
+      // Tag only for JOINED campaigns (we can't write the DM's charIds);
+      // for own campaigns charIds is the single source of truth.
+      if(_db.campaigns[fci]._ownerGid) char._playerInCamp = _forgeCamp.id;
     }
   }
   const chars=getChars();chars.push(char);saveChars(chars);
@@ -3411,7 +3451,7 @@ function _showPostForgeAssign(char, camps){
         if(ti>=0){
           if(!_db.campaigns[ti].charIds) _db.campaigns[ti].charIds=[];
           _db.campaigns[ti].charIds.push(_sid);
-          char._playerInCamp = target.id;
+          if(_db.campaigns[ti]._ownerGid) char._playerInCamp = target.id;
           saveChar(char);
           saveCampaign(_db.campaigns[ti]);
           toast(char.name+' assigned to '+target.name);
@@ -8888,7 +8928,7 @@ function _finishCharImport(char, source){
       if(!camps2[ci2].charIds) camps2[ci2].charIds=[];
       const isid = String(char.id);
       if(!camps2[ci2].charIds.includes(isid)) camps2[ci2].charIds.push(isid);
-      char._playerInCamp = activeCamp.id;
+      if(camps2[ci2]._ownerGid) char._playerInCamp = activeCamp.id;
       saveChar(char);
       const cls = CLASSES[char.classIdx]||CLASSES[0];
       addPartyHistoryEvent(camps2[ci2],'join',
@@ -11097,6 +11137,13 @@ function toggleCampChar(campId, charId) {
       return;
     }
     camps[ci].charIds.push(cid);
+    // Adding to an own campaign: any tag pointing at another OWN campaign
+    // is stale (charIds governs own campaigns) and would double-show the char.
+    const _ach = getChars().find(c=>String(c.id)===cid);
+    if(_ach && _ach._playerInCamp){
+      const tagCamp = camps.find(x=>String(x.id)===String(_ach._playerInCamp));
+      if(!tagCamp || !tagCamp._ownerGid){ delete _ach._playerInCamp; saveChar(_ach); }
+    }
   }
   saveCampaign(camps[ci]);
   renderCampDetailHeader();
