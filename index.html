@@ -1668,7 +1668,7 @@ async function dbGetUserSetting(name){
 async function dbSetUserSetting(name, value){
   const gid = getGroupId(); if(!gid) return;
   try {
-    await supa.from('settings').upsert({ key: gid+'__'+name, value: String(value) }, { onConflict: 'key' });
+    await supa.from('settings').upsert({ key: gid+'__'+name, value: String(value), owner_group: gid }, { onConflict: 'key' });
   } catch(e){ console.warn('dbSetUserSetting error:', e.message); }
 }
 async function dbDelUserSetting(name){
@@ -1698,9 +1698,11 @@ async function ensureGroupId(){
   const a = new Uint8Array(12); crypto.getRandomValues(a);
   const code = Array.from(a, b=>'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[b%31]).join('');
   setGroupId(code);
+  // Claim membership first so the RLS write-check below passes
+  try { await _claimGroupMembership(code); } catch(e){}
   // Register it in Supabase settings so other devices can find/validate it
   try {
-    await supa.from('settings').upsert({ key: 'group_'+code, value: code }, { onConflict: 'key' });
+    await supa.from('settings').upsert({ key: 'group_'+code, value: code, owner_group: code }, { onConflict: 'key' });
   } catch(e){ console.warn('Could not register group code in settings:', e.message); }
   return code;
 }
@@ -1744,7 +1746,7 @@ async function dbSaveChar(char){
   await Promise.all(charCamps.filter(c=>c.joinCode).map(camp=>{
     const settingsKey = 'player_char_' + camp.joinCode + '_' + String(char.id);
     return supa.from('settings').upsert(
-      { key: settingsKey, value: JSON.stringify(char) },
+      { key: settingsKey, value: JSON.stringify(char), owner_group: gid },
       { onConflict: 'key' }
     ).then(()=>{
       console.log('[dbSaveChar] published char', char.name, 'under key', settingsKey);
@@ -4314,6 +4316,8 @@ async function userLogin(){
   _status('Setting up…');
   setGroupId(username);
   localStorage.setItem('toh_username', username);
+  // Ensure the membership claim has landed before the first RLS-gated reads
+  try { await _claimGroupMembership(username); } catch(e){}
 
   try {
     _status('Loading data…');
@@ -4602,13 +4606,14 @@ async function _saveSharedCamp(entry){
   if(!arr.find(e=>String(e.campId)===String(entry.campId))) arr.push(entry);
   const key = _sharedCampsKey();
   const val = JSON.stringify(arr);
+  const og = getGroupId();
   try {
-    await supa.from('settings').upsert({key, value: val}, {onConflict:'key'});
+    await supa.from('settings').upsert({key, value: val, owner_group: og}, {onConflict:'key'});
   } catch(e){
     // Fallback to delete+insert if upsert not supported
     try {
       await supa.from('settings').delete().eq('key', key);
-      await supa.from('settings').insert({key, value: val});
+      await supa.from('settings').insert({key, value: val, owner_group: og});
     } catch(e2){ console.warn('_saveSharedCamp failed:', e2.message); }
   }
 }
@@ -4655,7 +4660,7 @@ async function leaveSharedCampaign(campId){
   const val = JSON.stringify(filtered);
   try {
     if(filtered.length){
-      await supa.from('settings').upsert({key, value: val}, {onConflict:'key'});
+      await supa.from('settings').upsert({key, value: val, owner_group: getGroupId()}, {onConflict:'key'});
     } else {
       await supa.from('settings').delete().eq('key', key);
     }
@@ -4747,7 +4752,7 @@ async function saveClaudeApiKey(val){
       if(gid){
         const rowKey = 'claude_key_' + gid;
         if(trimmed){
-          await supa.from('settings').upsert({ key: rowKey, value: trimmed }, { onConflict: 'key' });
+          await supa.from('settings').upsert({ key: rowKey, value: trimmed, owner_group: gid }, { onConflict: 'key' });
         } else {
           await supa.from('settings').delete().eq('key', rowKey);
         }
@@ -9066,7 +9071,7 @@ function bootApp(){
       if(!session){
         await supa.auth.signInAnonymously().catch(()=>{});
       }
-      if(getGroupId()) _claimGroupMembership(getGroupId());
+      if(getGroupId()) await _claimGroupMembership(getGroupId()).catch(()=>{});
     } catch(e){}
     if(getGroupId()){
       await pullAll(null).catch(()=>{});
@@ -10555,13 +10560,13 @@ async function _registerCampJoinCode(camp){
     const meta = JSON.stringify({ gid, campId: camp.id });
     // Try with updated_at (some Supabase settings tables require it)
     const { error: e1 } = await supa.from('settings').upsert(
-      { key: 'camp_'+camp.joinCode, value: meta, updated_at: new Date().toISOString() },
+      { key: 'camp_'+camp.joinCode, value: meta, owner_group: gid, updated_at: new Date().toISOString() },
       { onConflict: 'key' }
     );
     if(e1){
       // Retry without updated_at
       const { error: e2 } = await supa.from('settings').upsert(
-        { key: 'camp_'+camp.joinCode, value: meta },
+        { key: 'camp_'+camp.joinCode, value: meta, owner_group: gid },
         { onConflict: 'key' }
       );
       if(e2) console.warn('Could not register campaign join code:', e2.message, '| camp:', camp.name, 'code:', camp.joinCode);
