@@ -1801,8 +1801,9 @@ async function dbSaveChar(char){
   char._campaignId = campaignId;
   const rowId = char._rowId || ('c_' + String(char.id));
   char._rowId = rowId;
+  const cleanChar = { ...char }; delete cleanChar._rowId; delete cleanChar._campaignId;
   const row = { id: rowId, group_id: gid, campaign_id: campaignId,
-                share_code: char.shareCode || null, data: char };
+                share_code: char.shareCode || null, data: cleanChar };
   const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
   if(error) console.warn('saveChar error:', error.message);
   const i = _db.chars.findIndex(c=>String(c.id)===String(char.id));
@@ -1821,7 +1822,7 @@ async function dbGetCampaigns(){
   // RLS scopes this to campaigns the user is a member of.
   const { data, error } = await supa.from('campaigns').select('*');
   if(error){ console.warn('getCampaigns error:', error.message); return _db.campaigns; }
-  _db.campaigns = (data||[]).map(r=>{ const c = r.data||r; c._rowId = r.id; return c; });
+  _db.campaigns = (data||[]).map(r=>{ const c = r.data||r; delete c._ownerGid; c._rowId = r.id; return c; });
   return _db.campaigns;
 }
 
@@ -1831,9 +1832,10 @@ async function dbSaveCampaign(camp){
   // One canonical row per campaign; every member writes the same row.
   const rowId = camp._rowId || String(camp.id);
   camp._rowId = rowId;
+  const clean = { ...camp }; delete clean._ownerGid; delete clean._rowId;
   const row = { id: rowId, group_id: gid, camp_id: String(camp.id),
                 join_code: camp.joinCode || null,
-                name: camp.name||'Untitled Campaign', data: camp };
+                name: camp.name||'Untitled Campaign', data: clean };
   const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
   if(error) console.warn('saveCampaign error:', error.message);
   const i = _db.campaigns.findIndex(c=>c.id===camp.id);
@@ -1897,7 +1899,7 @@ async function pullAll(campId){
       syncIndicator('error');
       return false;
     }
-    _db.campaigns = (campr.data||[]).map(r=>{ const c=r.data||r; c._rowId=r.id; return c; })
+    _db.campaigns = (campr.data||[]).map(r=>{ const c=r.data||r; delete c._ownerGid; c._rowId=r.id; return c; })
       .filter(c=>c && c.id && c.name);
     _db.campaigns.forEach(c=>{ if(c.charIds) c.charIds=[...new Set(c.charIds.map(String))]; });
     _db.chars = (cr.data||[]).map(r=>{ const c=r.data||r; c._rowId=r.id; c._campaignId=r.campaign_id; return c; })
