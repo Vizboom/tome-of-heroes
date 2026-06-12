@@ -1782,12 +1782,12 @@ async function dbGetChars(){
   // RLS scopes this to characters in campaigns the user is a member of.
   const { data, error } = await supa.from('characters').select('*');
   if(error){ console.warn('getChars error:', error.message); return _db.chars; }
-  _db.chars = (data||[]).map(r=>{
+  _db.chars = _dedupeByDataId((data||[]).map(r=>{
     const c = r.data||r;
     c._rowId = r.id;                 // stable storage key (legacy ids vary)
     c._campaignId = r.campaign_id;   // RLS scoping column
     return c;
-  });
+  }), 'character');
   _db.chars.forEach(c=>_normalizeOwnCharTags(c));
   return _db.chars;
 }
@@ -1826,8 +1826,28 @@ async function dbGetCampaigns(){
   // RLS scopes this to campaigns the user is a member of.
   const { data, error } = await supa.from('campaigns').select('*');
   if(error){ console.warn('getCampaigns error:', error.message); return _db.campaigns; }
-  _db.campaigns = (data||[]).map(r=>{ const c = r.data||r; delete c._ownerGid; c._rowId = r.id; return c; });
+  _db.campaigns = _dedupeByDataId(
+    (data||[]).map(r=>{ const c = r.data||r; delete c._ownerGid; c._rowId = r.id; return c; }), 'campaign');
   return _db.campaigns;
+}
+
+// Collapse duplicate rows that share one logical id (caused by an old
+// realtime-echo bug that dropped row keys). Keeps the richest copy.
+function _dedupeByDataId(list, label){
+  const byId = new Map();
+  for(const item of list){
+    const key = String(item.id);
+    const prev = byId.get(key);
+    if(!prev){ byId.set(key, item); continue; }
+    const a = JSON.stringify(prev).length, b = JSON.stringify(item).length;
+    const keep = b > a ? item : prev;
+    const drop = b > a ? prev : item;
+    byId.set(key, keep);
+    console.warn('[dedupe] duplicate', label, 'rows for', key,
+      '— showing row', keep._rowId, '| spare row:', drop._rowId,
+      '(clean up in SQL editor)');
+  }
+  return [...byId.values()];
 }
 
 async function dbSaveCampaign(camp){
@@ -1903,11 +1923,13 @@ async function pullAll(campId){
       syncIndicator('error');
       return false;
     }
-    _db.campaigns = (campr.data||[]).map(r=>{ const c=r.data||r; delete c._ownerGid; c._rowId=r.id; return c; })
-      .filter(c=>c && c.id && c.name);
+    _db.campaigns = _dedupeByDataId(
+      (campr.data||[]).map(r=>{ const c=r.data||r; delete c._ownerGid; c._rowId=r.id; return c; })
+        .filter(c=>c && c.id && c.name), 'campaign');
     _db.campaigns.forEach(c=>{ if(c.charIds) c.charIds=[...new Set(c.charIds.map(String))]; });
-    _db.chars = (cr.data||[]).map(r=>{ const c=r.data||r; c._rowId=r.id; c._campaignId=r.campaign_id; return c; })
-      .filter(c=>c && c.id);
+    _db.chars = _dedupeByDataId(
+      (cr.data||[]).map(r=>{ const c=r.data||r; c._rowId=r.id; c._campaignId=r.campaign_id; return c; })
+        .filter(c=>c && c.id), 'character');
     _db.chars.forEach(c=>_normalizeOwnCharTags(c));
 
     if(campId){
@@ -1968,7 +1990,10 @@ function subscribeRealtime(campId){
         _db.chars = _db.chars.filter(c=>String(c.id)!==String(payload.old?.id));
       } else if(payload.new?.data){
         const updated = payload.new.data;
-        const i = _db.chars.findIndex(c=>String(c.id)===String(updated.id));
+        _normalizeOwnCharTags(updated);
+        updated._rowId = payload.new.id;
+        updated._campaignId = payload.new.campaign_id;
+        const i = _db.chars.findIndex(c=>String(c.id)===String(updated.id) || c._rowId===payload.new.id);
         if(i>=0) _db.chars[i]=updated; else _db.chars.push(updated);
       }
       if(document.getElementById('rosterList')?.closest('.screen.active')) renderRoster();
@@ -1981,7 +2006,10 @@ function subscribeRealtime(campId){
     .on('postgres_changes',{event:'*',schema:'public',table:'campaigns'}, payload=>{
       if(payload.new?.data){
         const updated = payload.new.data;
-        const i = _db.campaigns.findIndex(c=>c.id===updated.id);
+        delete updated._ownerGid;
+        updated._rowId = payload.new.id;   // CRITICAL: keep the storage key,
+                                           // or the next save inserts a duplicate row
+        const i = _db.campaigns.findIndex(c=>String(c.id)===String(updated.id) || c._rowId===payload.new.id);
         if(i>=0) _db.campaigns[i]=updated; else _db.campaigns.push(updated);
         if(document.getElementById('campList')) _refreshCampScreen();
         if(document.getElementById('campDetailHeader') && editingCampId===updated.id) renderCampDetailHeader();
