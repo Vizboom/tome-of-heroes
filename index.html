@@ -2022,7 +2022,7 @@ async function pullAll(campId){
     } catch(e){ console.warn('[migrate] tag cleanup failed:', e.message); }
 
     if(campId){
-      const { data: loot } = await supa.from('loot').select('*').eq('campaign_id', campId).single();
+      const { data: loot } = await supa.from('loot').select('*').eq('campaign_id', campId).maybeSingle();
       if(loot){ _db.items[campId]=loot.data||[]; _db.wealth[campId]=loot.wealth||{}; }
     }
 
@@ -2108,24 +2108,13 @@ function showCampAssignForCampaign(campId){
 /* ══ PRESET CLEANUP ══ */
 // Delete any preset_ campaigns from Supabase and memory — they're no longer supported
 async function _purgePresetCampaigns(){
-  const gid = getGroupId();
-  if(!gid) return;
-  const presets = _db.campaigns.filter(c=>String(c.id).startsWith('preset_'));
-  if(!presets.length) return;
-  console.log('[purge] removing', presets.length, 'preset campaigns from DB and memory');
-  await Promise.all(presets.map(camp=>{
-    const rowId = gid + '_' + camp.id;
-    return Promise.all([
-      supa.from('campaigns').delete().eq('id', rowId).then(({error})=>{
-        if(error) console.warn('[purge] delete error for', camp.id, error.message);
-      }),
-      // Also clean up any settings keys for this campaign
-      supa.from('settings').delete().like('key', 'player_char_'+camp.id+'_%').then(()=>{}),
-    ]);
-  }));
-  _db.campaigns = _db.campaigns.filter(c=>!String(c.id).startsWith('preset_'));
-  // Clear active camp if it was a preset
-  if(String(getActiveCampId()).startsWith('preset_')) setActiveCampId(null);
+  // DISABLED. This used to delete every campaign whose id starts with
+  // 'preset_' from the DB at every boot. But preset-derived campaigns are
+  // REAL campaigns once a user builds on them (forceReinstallPresets writes
+  // them to the DB by design, sessions/quests accumulate on the row), so
+  // this was deleting live user data. Its deletes were silently blocked
+  // during the RLS-membership outage; fixing auth armed it. Never again.
+  return;
 }
 
 /* ══ MANUAL REFRESH ══ */
