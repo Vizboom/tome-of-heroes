@@ -3731,7 +3731,7 @@ function renderSpellsTab(char,cls,elId,editable){
   }
 
   html += `<div style="display:flex;justify-content:flex-end;margin-bottom:10px">
-    <button onclick="resetAllSlots(${char.id},'${slotKey}','${elId}')" style="background:none;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:5px 12px;cursor:pointer">↺ Long Rest — Restore Slots</button>
+    <button onclick="resetAllSlots(${char.id},'${slotKey}','${elId}')" style="background:none;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:5px 12px;cursor:pointer">↺ Long Rest — Slots · HP · Spells</button>
   </div>`;
   const isKnownCaster = ['Bard','Sorcerer','Warlock','Ranger'].includes(cls.name);
   // Build indexed copies — each item gets its original index preserved for safe onclick refs
@@ -3765,6 +3765,7 @@ function renderSpellsTab(char,cls,elId,editable){
           <span class="spell-level-badge" style="border-color:${cls.color};color:${cls.color}">${isCantrip?'Cantrip':'Lv '+sp.level}</span>
           <span class="spell-name">${sp.name}</span>
           ${school?('<span class="spell-school">'+school+'</span>'):''}
+          ${sp.pinned && !isCantrip ?('<span title="Pinned — stays prepared through long rests" style="font-size:11px;color:var(--gold);flex-shrink:0">📌</span>'):''}
           ${sp.prepared && !isCantrip ?('<span style="font-size:9px;color:var(--gold);font-family:\'Cinzel\',serif;letter-spacing:1px;flex-shrink:0">★ PREP</span>'):''}
           <span class="spell-chevron">▼</span>
         </div>
@@ -3778,7 +3779,8 @@ function renderSpellsTab(char,cls,elId,editable){
           ${desc?('<div class="spell-desc">'+desc+'</div>'):''}
           ${editable && !isCantrip && !isKnownCaster ?`<div style="display:flex;gap:6px;margin-top:8px">
             ${isPreparedList
-              ? `<button class="btn btn-outline" style="margin:0;padding:5px 10px;font-size:11px;flex:1;border-color:var(--muted);color:var(--muted)" onclick="toggleSpellPrepared(${char.id},${i},'${elId}');event.stopPropagation()">☆ Un-prepare</button>`
+              ? `<button class="btn btn-outline" style="margin:0;padding:5px 10px;font-size:11px;flex:1;border-color:${sp.pinned?'var(--gold)':'var(--border)'};color:${sp.pinned?'var(--gold)':'var(--muted)'}" onclick="toggleSpellPinned(${char.id},${i},'${elId}');event.stopPropagation()">${sp.pinned?'📌 Pinned':'📌 Pin'}</button>
+                 <button class="btn btn-outline" style="margin:0;padding:5px 10px;font-size:11px;flex:1;border-color:var(--muted);color:var(--muted)" onclick="toggleSpellPrepared(${char.id},${i},'${elId}');event.stopPropagation()">☆ Un-prepare</button>`
               : `<button class="btn btn-outline" style="margin:0;padding:5px 10px;font-size:11px;flex:1;border-color:var(--gold);color:var(--gold)" onclick="toggleSpellPrepared(${char.id},${i},'${elId}');event.stopPropagation()">★ Prepare</button>`
             }
             ${!isPreparedList ? ('<button class="icon-btn" style="color:var(--red);font-size:12px" title="Remove from spellbook" onclick="if(confirm(\'Remove '+sp.name.replace(/'/g,"\\'")+' from spellbook?\'))removeSpell('+char.id+','+i+',\''+elId+'\');event.stopPropagation()">✕</button>') : ''}
@@ -3903,15 +3905,47 @@ function toggleSlot(cid,lvl,idx,total,key,elId){
   if(char) renderSpellsTab(char, CLASSES[char.classIdx], elId, elId==='stab-spells'||elId==='pstab-spells');
 }
 
+function toggleSpellPinned(charId, idx, elId){
+  const apply = (char)=>{
+    if(!char.spells?.[idx]) return false;
+    char.spells[idx].pinned = !char.spells[idx].pinned;
+    if(char.spells[idx].pinned) char.spells[idx].prepared = true;
+    return true;
+  };
+  const ownChars = getChars();
+  const ownIdx = ownChars.findIndex(c=>c.id===charId);
+  if(ownIdx >= 0){
+    if(!apply(ownChars[ownIdx])) return;
+    saveChars(ownChars);
+    renderSpellsTab(ownChars[ownIdx], CLASSES[ownChars[ownIdx].classIdx], elId, true);
+  } else {
+    const char = getFullParty().find(c=>c.id===charId);
+    if(!char || !apply(char)) return;
+    saveChar(char);
+    renderSpellsTab(char, CLASSES[char.classIdx], elId, true);
+  }
+}
+
 function resetAllSlots(cid,key,elId){
+  // Full Long Rest: restore spell slots, restore HP to max, and return all
+  // prepared spells to the spellbook — except 📌 pinned ones (and cantrips).
   const char = getChars().find(c=>c.id===cid) || getFullParty().find(c=>c.id===cid);
   if(!char) return;
   char.spellSlotsUsed = {};
+  let unprepared = 0;
+  (char.spells||[]).forEach(sp=>{
+    if(sp.level !== 'cantrip' && sp.prepared && !sp.pinned){ sp.prepared = false; unprepared++; }
+  });
+  const healed = Math.max(0, (char.maxHP||0) - (char.hp ?? char.maxHP ?? 0));
+  if(char.maxHP != null) char.hp = char.maxHP;
   const ownChars = getChars();
   const ci = ownChars.findIndex(c=>c.id===cid);
-  if(ci>=0){ ownChars[ci]=char; saveChars(ownChars); }
-  if(char) renderSpellsTab(char, CLASSES[char.classIdx], elId, elId==='stab-spells'||elId==='pstab-spells');
-  toast('Spell slots restored — Long Rest complete!','var(--green)');
+  if(ci>=0){ ownChars[ci]=char; saveChars(ownChars); } else { saveChar(char); }
+  renderSpellsTab(char, CLASSES[char.classIdx], elId, elId==='stab-spells'||elId==='pstab-spells');
+  const bits = ['slots restored'];
+  if(healed) bits.push('+'+healed+' HP');
+  if(unprepared) bits.push(unprepared+' spell'+(unprepared>1?'s':'')+' returned to spellbook');
+  toast('Long Rest — '+bits.join(', ')+'!','var(--green)');
 }
 function renderGearTab(char,cls,elId,editable){
   const items=getItems().filter(i=>i.owner==char.id);
@@ -10162,7 +10196,14 @@ function renderAddTab(){
           onkeydown="dndSearchKey(event)">
       </div>
       <div class="field"><label>Type</label>
-        <select id="iType">${Object.entries(TYPE_ICONS).map(([k,v])=>`<option value="${k}">${v} ${k}</option>`).join('')}</select>
+        <select id="iType" onchange="document.getElementById('iHandsWrap').style.display=this.value==='weapon'?'':'none'">${Object.entries(TYPE_ICONS).map(([k,v])=>`<option value="${k}">${v} ${k}</option>`).join('')}</select>
+      </div>
+      <div class="field" id="iHandsWrap" style="display:none"><label>Hands</label>
+        <select id="iHands">
+          <option value="1">One-handed</option>
+          <option value="v">Versatile</option>
+          <option value="2">Two-handed</option>
+        </select>
       </div>
     </div>
     <div class="form-row three">
@@ -10362,7 +10403,7 @@ document.addEventListener('mousedown', function(e) {
     closeDndSuggest();
   }
 });
-function addItem(){const name=(document.getElementById('iName')?.value||'').trim();if(!name){toast('Enter item name','var(--red)');return;}const item={id:'i'+Date.now(),name,type:document.getElementById('iType').value,rarity:document.getElementById('iRarity').value,qty:Math.max(1,parseInt(document.getElementById('iQty').value)||1),weight:parseFloat(document.getElementById('iWt').value)||0,value:parseFloat(document.getElementById('iVal').value)||0,attune:document.getElementById('iAttune').value,desc:(document.getElementById('iDesc').value||'').trim(),owner:document.getElementById('iOwner').value};const items=getItems();items.push(item);saveItems(items);document.getElementById('iName').value='';document.getElementById('iDesc').value='';document.getElementById('iQty').value='1';toast('✦ '+name+' added!');renderInventory();renderPool();}
+function addItem(){const name=(document.getElementById('iName')?.value||'').trim();if(!name){toast('Enter item name','var(--red)');return;}const item={id:'i'+Date.now(),name,type:document.getElementById('iType').value,hands:(document.getElementById('iType').value==='weapon'?(document.getElementById('iHands')?.value||'1'):undefined),rarity:document.getElementById('iRarity').value,qty:Math.max(1,parseInt(document.getElementById('iQty').value)||1),weight:parseFloat(document.getElementById('iWt').value)||0,value:parseFloat(document.getElementById('iVal').value)||0,attune:document.getElementById('iAttune').value,desc:(document.getElementById('iDesc').value||'').trim(),owner:document.getElementById('iOwner').value};const items=getItems();items.push(item);saveItems(items);document.getElementById('iName').value='';document.getElementById('iDesc').value='';document.getElementById('iQty').value='1';toast('✦ '+name+' added!');renderInventory();renderPool();}
 function quickAdd(qi){const q=QUICK_ITEMS[qi];const ownerEl=document.querySelector('#ltab-add #iOwner');const owner=ownerEl?.value||'pool';const item={...q,id:'i'+Date.now()+qi,owner};const items=getItems();items.push(item);saveItems(items);toast('✦ '+q.name+' added!');renderInventory();renderPool();}
 function renderPool(){const items=getItems().filter(i=>i.owner==='pool');const el=document.getElementById('ltab-pool');const totVal=items.reduce((s,i)=>s+(parseFloat(i.value)||0)*i.qty,0);let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px"><div class="inv-sum-card"><div class="isc-label">UNASSIGNED</div><div class="isc-val">${items.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val">${fmtGP(totVal)} <span style="font-size:9px;color:var(--muted)">gp</span></div></div></div>`;if(!items.length)html+=`<div class="empty-state"><div class="es-icon">🪙</div><p>Pool is empty!</p></div>`;else html+=`<div class="card">`+items.map(item=>`<div class="pool-row"><span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${esc(item.name)}${item.qty>1?(' ×'+item.qty):''}</div><div style="font-size:10px"><span class="rtext-${item.rarity}">${item.rarity}</span>${item.value>0?' · '+item.value+' gp':''}</div></div><button class="pool-assign-btn" onclick="assignFromPool('${item.id}')">Assign →</button><button class="icon-btn" style="color:var(--red)" onclick="removeItem('${item.id}')">✕</button></div>`).join('')+`</div>`;el.innerHTML=html;}
 function renderWealth(){
@@ -12303,9 +12344,18 @@ const RARITY_COLORS = {
 /* ── Two-handed weapon helpers ── */
 function isTwoHandedWeapon(item){
   if(!item || item.type !== 'weapon') return false;
+  if(item.hands === 2 || item.hands === '2') return true;     // explicit (manual entry)
+  if(item.hands === 1 || item.hands === '1') return false;
   if(/two.hand|2h\b|greatsword|greataxe|maul|halberd|glaive|pike|heavy crossbow|longbow|shortbow|light crossbow|war bow/i.test(item.name)) return true;
   if(item.desc && /two.hand/i.test(item.desc)) return true;
   return false;
+}
+// Small badge text for weapon rows: '2H', 'Vers', or '1H'
+function weaponHandsLabel(item){
+  if(!item || item.type !== 'weapon') return '';
+  if(isTwoHandedWeapon(item)) return '2H';
+  if(item.hands === 'v' || (item.desc && /versatile/i.test(item.desc))) return 'Vers';
+  return '1H';
 }
 function isOffhandBlocked(char){
   var mh = (getEquippedItems(char)||{})['mainhand'];
@@ -12489,7 +12539,10 @@ function renderCharProgressTab(char, cls){
         </div>`;
       }
     });
-    h += `<button onclick="csAddMulticlass('${char.id}')" style="width:100%;padding:8px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--muted);cursor:pointer;margin-top:4px">+ Add Another Class</button>`;
+    h += `<select onchange="if(this.value!=='')csConfirmAddMc('${char.id}',parseInt(this.value));this.value=''" style="width:100%;padding:9px;background:var(--surface);border:1px dashed var(--border);border-radius:8px;color:var(--muted);font-family:inherit;font-size:13px;cursor:pointer;margin-top:4px">
+      <option value="" selected>+ Add Multiclass…</option>
+      ${CLASSES.map((cl,i)=>`<option value="${i}">${cl.icon} ${cl.name}</option>`).join('')}
+    </select>`;
     h += `</div>`;
   } else {
     // Single class display
@@ -12516,7 +12569,10 @@ function renderCharProgressTab(char, cls){
         </select>
       </div>`;
     }
-    h += `<button onclick="csAddMulticlass('${char.id}')" style="width:100%;padding:8px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--muted);cursor:pointer;margin-bottom:16px">+ Add Multiclass</button>`;
+    h += `<select onchange="if(this.value!=='')csConfirmAddMc('${char.id}',parseInt(this.value));this.value=''" style="width:100%;padding:9px;background:var(--surface);border:1px dashed var(--border);border-radius:8px;color:var(--muted);font-family:inherit;font-size:13px;cursor:pointer;margin-bottom:16px">
+      <option value="" selected>+ Add Multiclass…</option>
+      ${CLASSES.map((cl,i)=>`<option value="${i}">${cl.icon} ${cl.name}</option>`).join('')}
+    </select>`;
   }
 
   // ── Level controls ──
@@ -12754,7 +12810,8 @@ function csRemoveMulticlass(id, idx){
   if(char){ renderCharacterScreen(); charTab('progress'); }
 }
 function csAddMulticlass(id){
-  // Show a quick modal to pick the new class
+  // Replaced by an inline dropdown in the Progress tab. Legacy shim:
+  return;
   const modal = document.createElement('div');
   modal.className = 'modal-backdrop';
   modal.innerHTML = `<div class="modal-box" style="max-width:360px">
@@ -13069,7 +13126,7 @@ function renderInvBag(char, cls){
       +(isEq?'<div class="it-equipped-dot"></div>':'')
       +(magicM?'<div class="it-bonus">+'+magicM[1]+'</div>':'')
       +'<div class="it-icon">'+(TYPE_ICONS[item.type]||'📦')+'</div>'
-      +'<div class="it-name" style="color:'+rc+'">'+esc(item.name)+'</div>'
+      +'<div class="it-name" style="color:'+rc+'">'+esc(item.name)+(item.type==='weapon'?' <span style="font-size:9px;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:0 4px;vertical-align:middle">'+weaponHandsLabel(item)+'</span>':'')+'</div>'
       +(item.qty>1?'<div class="it-qty">×'+item.qty+'</div>':'')
       +'</div>';
   });
@@ -13119,7 +13176,7 @@ function renderCharStats(char, cls){
       return '<div class="equipped-item-row">'
         +'<span class="ei-slot-label">'+slot.label.toUpperCase()+'</span>'
         +'<span class="ei-icon">'+(TYPE_ICONS[item.type]||'📦')+'</span>'
-        +'<div style="flex:1;min-width:0"><div class="ei-name" style="color:'+rc+'">'+esc(item.name)+'</div>'+(eff?'<div class="ei-effect">'+eff+'</div>':'')+'</div>'
+        +'<div style="flex:1;min-width:0"><div class="ei-name" style="color:'+rc+'">'+esc(item.name)+(item.type==='weapon'?' <span style="font-size:9px;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:0 4px;vertical-align:middle">'+weaponHandsLabel(item)+'</span>':'')+'</div>'+(eff?'<div class="ei-effect">'+eff+'</div>':'')+'</div>'
         +'<span class="ei-unequip" onclick="unequipSlot(\''+slot.id+'\')" title="Unequip">✕</span>'
         +'</div>';
     }).join('')+'</div>';
@@ -13257,6 +13314,11 @@ function _doEquipItem(slotId, itemId){
   if(!item) return;
   const slots=Object.assign({},getEquippedItems(char));
   Object.keys(slots).forEach(function(k){if(slots[k]&&String(slots[k].id)===String(itemId)) delete slots[k];});
+  // Two-handed weapons always occupy BOTH hands — route offhand picks to mainhand
+  if(slotId==='offhand' && isTwoHandedWeapon(item)){
+    slotId='mainhand';
+    toast(item.name+' needs both hands — equipped to Main Hand','var(--muted)');
+  }
   slots[slotId]=item;
   // 2H weapon in mainhand locks offhand
   if(slotId==='mainhand' && isTwoHandedWeapon(item)){
@@ -13382,7 +13444,7 @@ function openSlotPicker(slotId){
       listHTML+='<div class="slot-picker-item" onclick="equipItem(\''+slotId+'\',\''+item.id+'\');closeSlotPicker()">'
         +'<div class="pi-icon">'+(TYPE_ICONS[item.type]||'📦')+'</div>'
         +'<div style="flex:1"><div class="pi-name" style="color:'+rc+'">'+esc(item.name)+'</div>'
-        +'<div class="pi-meta">'+item.rarity+(eff?' · '+eff:'')+(isEq?' · (equipped elsewhere)':'')+'</div></div>'
+        +'<div class="pi-meta">'+item.rarity+(item.type==='weapon'?' · '+weaponHandsLabel(item):'')+(eff?' · '+eff:'')+(isEq?' · (equipped elsewhere)':'')+'</div></div>'
         +'</div>';
     });
   }
