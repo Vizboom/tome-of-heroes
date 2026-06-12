@@ -1631,7 +1631,9 @@ document.addEventListener('visibilitychange', ()=>{
     // Throttle: only refresh if it's been more than 30 seconds since last refresh
     if(now - _lastFocusRefresh > 30000){
       _lastFocusRefresh = now;
-      pullAll(getActiveCampId()).then(ok=>{
+      Promise.resolve(typeof ensureAuthSession==='function' ? ensureAuthSession() : true)
+        .catch(()=>{})
+        .then(()=>pullAll(getActiveCampId())).then(ok=>{
         if(!ok) return;
         if(currentScreen==='roster') renderRoster();
         else if(currentScreen==='campaign') _refreshCampScreen();
@@ -1688,13 +1690,32 @@ function setGroupId(id){ if(id){ localStorage.setItem('toh_group_id', id); _clai
 // supabase-policies.sql are applied; errors are intentionally swallowed.
 async function _claimGroupMembership(gid){
   try {
-    const { data:{ user } } = await supa.auth.getUser();
-    if(!user) return;
-    await supa.from('group_members').upsert(
+    let { data:{ user } } = await supa.auth.getUser();
+    if(!user){
+      // No identity yet — try to establish one, then re-read
+      try { await ensureAuthSession(); } catch(e){}
+      user = (await supa.auth.getUser()).data.user;
+    }
+    if(!user){ console.warn('[membership] no auth user — cannot claim', gid); return false; }
+    const { error } = await supa.from('group_members').upsert(
       { group_id: gid, user_id: user.id },
       { onConflict: 'group_id,user_id' }
     );
-  } catch(e){ /* table may not exist yet */ }
+    if(error){ console.warn('[membership] claim failed for', gid, ':', error.message); return false; }
+    return true;
+  } catch(e){ console.warn('[membership] claim error:', e.message); return false; }
+}
+
+// Is the current auth user a recorded member of this group?
+async function _verifyMembership(gid){
+  try {
+    const { data:{ user } } = await supa.auth.getUser();
+    if(!user) return false;
+    const { data, error } = await supa.from('group_members')
+      .select('group_id').eq('group_id', gid).eq('user_id', user.id).maybeSingle();
+    if(error) return false;
+    return !!data;
+  } catch(e){ return false; }
 }
 
 // Stable per-device ID (used for SW cache-busting only)
@@ -1709,7 +1730,7 @@ function getDeviceId(){
 async function dbGetUserSetting(name){
   const gid = getGroupId(); if(!gid) return null;
   try {
-    const { data } = await supa.from('settings').select('value').eq('key', gid+'__'+name).single();
+    const { data } = await supa.from('settings').select('value').eq('key', gid+'__'+name).maybeSingle();
     return data?.value ?? null;
   } catch(e){ return null; }
 }
@@ -1869,8 +1890,8 @@ async function dbDeleteCampaign(campId){
 
 async function dbGetItems(campId){
   if(!campId) return [];
-  const { data, error } = await supa.from('loot').select('*').eq('campaign_id', campId).single();
-  if(error) return _db.items[campId]||[];
+  const { data, error } = await supa.from('loot').select('*').eq('campaign_id', campId).maybeSingle();
+  if(error || !data) return _db.items[campId]||[];
   _db.items[campId] = data?.data||[];
   _db.wealth[campId] = data?.wealth||{};
   return _db.items[campId];
@@ -1902,10 +1923,31 @@ async function pullAll(campId){
   const gid = getGroupId(); if(!gid) return false;
   try {
     syncIndicator('saving');
-    const [cr, campr] = await Promise.all([
+    let [cr, campr] = await Promise.all([
       supa.from('characters').select('*').eq('group_id', gid),
       supa.from('campaigns').select('*').eq('group_id', gid),
     ]);
+
+    // Empty-with-no-error on BOTH tables is the signature of a missing
+    // group_members row: RLS legally returns zero rows to a non-member.
+    // Self-heal: re-claim membership and retry once before believing it.
+    if(!cr.error && !campr.error && !(cr.data||[]).length && !(campr.data||[]).length){
+      console.warn('[pullAll] server returned no rows — verifying membership for', gid);
+      const member = await _verifyMembership(gid);
+      if(!member){
+        console.warn('[pullAll] membership row missing — re-claiming');
+        await _claimGroupMembership(gid);
+      }
+      [cr, campr] = await Promise.all([
+        supa.from('characters').select('*').eq('group_id', gid),
+        supa.from('campaigns').select('*').eq('group_id', gid),
+      ]);
+      if((cr.data||[]).length || (campr.data||[]).length){
+        console.log('[pullAll] data visible after membership repair');
+      } else {
+        console.warn('[pullAll] still no rows — either the group is genuinely empty or membership/RLS needs attention');
+      }
+    }
 
     // Merge own chars — keep cross-group chars (_sharedCampId set) intact
     if(!cr.error && cr.data && cr.data.length > 0){
@@ -2029,7 +2071,7 @@ async function pullAll(campId){
       const gid = getGroupId();
       if(gid){
         const rowKey = 'claude_key_' + gid;
-        const { data: s } = await supa.from('settings').select('value').eq('key', rowKey).single();
+        const { data: s } = await supa.from('settings').select('value').eq('key', rowKey).maybeSingle();
         if(s?.value) _userSettings['claude_key'] = s.value;
       }
     } catch(e){}
