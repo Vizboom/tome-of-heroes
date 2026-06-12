@@ -1380,8 +1380,13 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
         autocomplete="username"
         style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-family:'Cinzel',serif;font-size:22px;letter-spacing:4px;text-align:center;text-transform:uppercase;box-sizing:border-box"
         oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'').slice(0,20)"
+        onkeydown="if(event.key==='Enter')document.getElementById('pinInput')?.focus()">
+      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin:14px 0 8px;text-align:left">PIN <span style="opacity:.6">(6+ characters)</span></div>
+      <input id="pinInput" type="password" placeholder="••••••"
+        autocomplete="current-password"
+        style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-family:'Cinzel',serif;font-size:22px;letter-spacing:6px;text-align:center;box-sizing:border-box"
         onkeydown="if(event.key==='Enter')userLogin()">
-      <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Same username on any device loads your data.<br>New username = fresh account.</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Your own account — sign in from any device.<br>First time with a new name creates the account.</div>
     </div>
 
     <button class="modegate-btn" style="width:100%;max-width:320px;margin-top:16px" onclick="userLogin()">
@@ -1534,23 +1539,36 @@ function jsq(s){
    role). If anonymous sign-in fails at boot — e.g. the hourly
    anonymous sign-in rate limit during heavy testing — the device
    must NOT silently brick: retry with backoff and show a banner. */
-async function ensureAuthSession(maxTries = 3){
+let _authUid = null;
+async function ensureAuthSession(){
+  // Accounts model: a session exists only after username+PIN sign-in at the
+  // gate. This only verifies/caches it — it never mints identities.
   try {
     const { data:{ session } } = await supa.auth.getSession();
-    if(session){ _hideAuthBanner(); return true; }
+    if(session){ _authUid = session.user.id; _hideAuthBanner(); return true; }
   } catch(e){}
-  let lastErr = '';
-  for(let i = 0; i < maxTries; i++){
-    if(i) await new Promise(r=>setTimeout(r, 2000 * i));
-    try {
-      const { data, error } = await supa.auth.signInAnonymously();
-      if(!error && data?.session){ _hideAuthBanner(); return true; }
-      lastErr = error?.message || 'unknown error';
-      console.warn('[auth] anonymous sign-in attempt', i+1, 'failed:', lastErr);
-    } catch(e){ lastErr = e.message; }
-  }
-  _showAuthBanner(lastErr);
   return false;
+}
+
+// Sign in with username+PIN; create the account on first use of a name.
+// Returns { ok, created } or { ok:false, error }.
+async function authSignIn(username, pin){
+  const email = username.toLowerCase() + '@tome.local';
+  let r = await supa.auth.signInWithPassword({ email, password: pin });
+  if(!r.error){ _authUid = r.data.user.id; return { ok:true, created:false }; }
+  const msg = (r.error.message||'').toLowerCase();
+  if(msg.includes('invalid login credentials')){
+    // Either a new name (create it) or a wrong PIN on an existing name.
+    const s = await supa.auth.signUp({ email, password: pin, options: { data: { username } } });
+    if(!s.error && s.data?.session){ _authUid = s.data.user.id; return { ok:true, created:true }; }
+    if(!s.error && s.data?.user && !s.data.session){
+      return { ok:false, error:'Account created but needs email confirmation — disable "Confirm email" in Supabase Auth settings.' };
+    }
+    const smsg = (s.error?.message||'').toLowerCase();
+    if(smsg.includes('already registered')) return { ok:false, error:'Wrong PIN for this username.' };
+    return { ok:false, error: s.error?.message || 'Could not create account.' };
+  }
+  return { ok:false, error: r.error.message };
 }
 function _showAuthBanner(msg){
   if(document.getElementById('_authBanner')) return;
@@ -1608,7 +1626,7 @@ if(typeof supabase === 'undefined'){
       from: ()=>({ select:()=>Promise.resolve({data:[],error:{message:'Offline'}}), upsert:()=>Promise.resolve({error:{message:'Offline'}}), delete:()=>({eq:()=>({eq:()=>Promise.resolve({})})}), insert:()=>Promise.resolve({error:{message:'Offline'}}), eq:()=>({eq:()=>({single:()=>Promise.resolve({data:null,error:{message:'Offline'}})})}), single:()=>Promise.resolve({data:null,error:{message:'Offline'}}) }),
       channel: ()=>({ on:function(){return this;}, subscribe:function(){return this;} }),
       removeChannel: ()=>{},
-      auth: { getSession:()=>Promise.resolve({data:{session:null}}), getUser:()=>Promise.resolve({data:{user:null}}), signInAnonymously:()=>Promise.resolve({error:{message:'Offline'}}) }
+      auth: { getSession:()=>Promise.resolve({data:{session:null}}), getUser:()=>Promise.resolve({data:{user:null}}), signInAnonymously:()=>Promise.resolve({error:{message:'Offline'}}), signInWithPassword:()=>Promise.resolve({error:{message:'Offline — could not reach the server'}}), signUp:()=>Promise.resolve({error:{message:'Offline — could not reach the server'}}), signOut:()=>Promise.resolve({}) }, rpc:()=>Promise.resolve({data:null,error:{message:'Offline'}})
     })
   };
 }
@@ -1688,38 +1706,9 @@ function setGroupId(id){ if(id){ localStorage.setItem('toh_group_id', id); _clai
 // ── RLS groundwork: record this signed-in (anonymous) user as a member of the
 // group. No-op until the group_members table + policies from
 // supabase-policies.sql are applied; errors are intentionally swallowed.
-async function _claimGroupMembership(gid){
-  try {
-    let { data:{ user } } = await supa.auth.getUser();
-    if(!user){
-      // No identity yet — try to establish one, then re-read
-      try { await ensureAuthSession(); } catch(e){}
-      user = (await supa.auth.getUser()).data.user;
-    }
-    if(!user){ console.warn('[membership] no auth user — cannot claim', gid); return false; }
-    // Already a member? Done — never UPDATE an existing row (group_members
-    // has no update policy, so a conflicting upsert 403s pointlessly).
-    if(await _verifyMembership(gid)) return true;
-    const { error } = await supa.from('group_members').upsert(
-      { group_id: gid, user_id: user.id },
-      { onConflict: 'group_id,user_id', ignoreDuplicates: true }   // ON CONFLICT DO NOTHING
-    );
-    if(error){ console.warn('[membership] claim failed for', gid, ':', error.message); return false; }
-    return true;
-  } catch(e){ console.warn('[membership] claim error:', e.message); return false; }
-}
-
-// Is the current auth user a recorded member of this group?
-async function _verifyMembership(gid){
-  try {
-    const { data:{ user } } = await supa.auth.getUser();
-    if(!user) return false;
-    const { data, error } = await supa.from('group_members')
-      .select('group_id').eq('group_id', gid).eq('user_id', user.id).maybeSingle();
-    if(error) return false;
-    return !!data;
-  } catch(e){ return false; }
-}
+// Legacy group-membership layer — replaced by per-campaign membership.
+async function _claimGroupMembership(){ return true; }
+async function _verifyMembership(){ return true; }
 
 // Stable per-device ID (used for SW cache-busting only)
 function getDeviceId(){
@@ -1738,9 +1727,11 @@ async function dbGetUserSetting(name){
   } catch(e){ return null; }
 }
 async function dbSetUserSetting(name, value){
-  const gid = getGroupId(); if(!gid) return;
+  const gid = getGroupId(); if(!gid || !_authUid) return;
   try {
-    await supa.from('settings').upsert({ key: gid+'__'+name, value: String(value), owner_group: gid }, { onConflict: 'key' });
+    await supa.from('settings').upsert(
+      { key: gid+'__'+name, value: String(value), owner_group: gid, user_id: _authUid },
+      { onConflict: 'key' });
   } catch(e){ console.warn('dbSetUserSetting error:', e.message); }
 }
 async function dbDelUserSetting(name){
@@ -1763,20 +1754,8 @@ async function setUserSetting(name, value){
 }
 
 async function ensureGroupId(){
-  let gid = getGroupId();
-  if(gid) return gid;
-  // Generate a new group code — crypto-secure and long enough that it
-  // cannot realistically be brute-forced against the open REST API.
-  const a = new Uint8Array(12); crypto.getRandomValues(a);
-  const code = Array.from(a, b=>'ABCDEFGHJKMNPQRSTUVWXYZ23456789'[b%31]).join('');
-  setGroupId(code);
-  // Claim membership first so the RLS write-check below passes
-  try { await _claimGroupMembership(code); } catch(e){}
-  // Register it in Supabase settings so other devices can find/validate it
-  try {
-    await supa.from('settings').upsert({ key: 'group_'+code, value: code, owner_group: code }, { onConflict: 'key' });
-  } catch(e){ console.warn('Could not register group code in settings:', e.message); }
-  return code;
+  // Username IS the identity label now — set at login, never auto-generated.
+  return getGroupId();
 }
 
 /* ══ DIRECT SUPABASE READ/WRITE — no localStorage for app data ══ */
@@ -1787,93 +1766,74 @@ async function ensureGroupId(){
 // only meaningful for JOINED campaigns; for own campaigns charIds is the
 // single source of truth.
 function _normalizeOwnCharTags(c){
+  // Legacy scoping tags from the old owner/joiner model — fully retired.
   let changed = false;
   if(c._sharedCampId !== undefined){ delete c._sharedCampId; changed = true; }
-  if(c._playerInCamp !== undefined){
-    const tagCamp = (_db.campaigns||[]).find(x=>String(x.id)===String(c._playerInCamp));
-    // Only delete when we can PROVE the tag is stale: the campaign is
-    // loaded and is our own (own campaigns use charIds, not tags). An
-    // unknown id may be a joined campaign that hasn't loaded yet.
-    if(tagCamp && !tagCamp._ownerGid){ delete c._playerInCamp; changed = true; }
-  }
+  if(c._playerInCamp !== undefined){ delete c._playerInCamp; changed = true; }
   return changed;
 }
 
 async function dbGetChars(){
-  const gid = getGroupId(); if(!gid) return [];
-  const { data, error } = await supa.from('characters').select('*').eq('group_id', gid);
+  if(!_authUid) return _db.chars;
+  // RLS scopes this to characters in campaigns the user is a member of.
+  const { data, error } = await supa.from('characters').select('*');
   if(error){ console.warn('getChars error:', error.message); return _db.chars; }
-  _db.chars = (data||[]).map(r=>r.data||r);
-  // Strip contaminated scoping tags baked into stored rows
+  _db.chars = (data||[]).map(r=>{
+    const c = r.data||r;
+    c._rowId = r.id;                 // stable storage key (legacy ids vary)
+    c._campaignId = r.campaign_id;   // RLS scoping column
+    return c;
+  });
   _db.chars.forEach(c=>_normalizeOwnCharTags(c));
   return _db.chars;
 }
 
 async function dbSaveChar(char){
-  const gid = getGroupId()||await ensureGroupId(); if(!gid) return;
-  // Cross-group copies (other players' characters) are never saved to our
-  // own characters table.
-  if(char._sharedCampId) return;
+  const gid = getGroupId(); if(!gid || !_authUid) return;
   _normalizeOwnCharTags(char);
-  const rowId = gid + '_' + String(char.id);
-
-  // Find every campaign this character is assigned to and publish under its joinCode
-  const campaigns = _db.campaigns || [];
-  const charCamps = campaigns.filter(c => (c.charIds||[]).includes(String(char.id)));
-  // Also include _playerInCamp tag
-  if(char._playerInCamp){
-    const tagged = campaigns.find(c=>String(c.id)===String(char._playerInCamp));
-    if(tagged && !charCamps.includes(tagged)) charCamps.push(tagged);
+  // A character lives in exactly one campaign — that scopes its access.
+  const camp = (_db.campaigns||[]).find(c => (c.charIds||[]).includes(String(char.id)));
+  const campaignId = camp ? String(camp.id) : (char._campaignId || null);
+  if(!campaignId){
+    console.warn('[saveChar] no campaign for', char.name, '— not saved (characters belong to campaigns)');
+    return;
   }
-
-  // Use the first campaign's joinCode as the share_code column for realtime subscriptions
-  const firstJoinCode = charCamps.find(c=>c.joinCode)?.joinCode || null;
-  const shareCode = firstJoinCode ? 'camp_' + firstJoinCode : (char.shareCode || null);
-
-  const row = { id: rowId, group_id: gid, share_code: shareCode, data: char };
+  char._campaignId = campaignId;
+  const rowId = char._rowId || ('c_' + String(char.id));
+  char._rowId = rowId;
+  const row = { id: rowId, group_id: gid, campaign_id: campaignId,
+                share_code: char.shareCode || null, data: char };
   const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
   if(error) console.warn('saveChar error:', error.message);
   const i = _db.chars.findIndex(c=>String(c.id)===String(char.id));
   if(i>=0) _db.chars[i]=char; else _db.chars.push(char);
-
-  // Publish to settings table under player_char_{joinCode}_{charId}
-  // One row per (campaign, character) pair — keyed by the campaign's joinCode.
-  // settings table has no RLS so any user can read it by joinCode.
-  await Promise.all(charCamps.filter(c=>c.joinCode).map(camp=>{
-    const settingsKey = 'player_char_' + camp.joinCode + '_' + String(char.id);
-    return supa.from('settings').upsert(
-      { key: settingsKey, value: JSON.stringify(char), owner_group: gid },
-      { onConflict: 'key' }
-    ).then(()=>{
-      console.log('[dbSaveChar] published char', char.name, 'under key', settingsKey);
-    }).catch(e=>console.warn('cross-group char write failed:', e.message));
-  }));
 }
 
 async function dbDeleteChar(charId){
-  const gid = getGroupId(); if(!gid) return;
-  const rowId = gid + '_' + String(charId);
-  await Promise.all([
-    supa.from('characters').delete().eq('id', rowId).eq('group_id', gid),
-    supa.from('characters').delete().eq('id', String(charId)).eq('group_id', gid),
-  ]);
-  _db.chars = _db.chars.filter(c=>String(c.id)!==String(charId));
+  const c = _db.chars.find(x=>String(x.id)===String(charId));
+  const rowIds = [...new Set([c?._rowId, 'c_'+String(charId), (getGroupId()||'')+'_'+String(charId)].filter(Boolean))];
+  await Promise.all(rowIds.map(rid=>supa.from('characters').delete().eq('id', rid)));
+  _db.chars = _db.chars.filter(x=>String(x.id)!==String(charId));
 }
 
 async function dbGetCampaigns(){
-  const gid = getGroupId(); if(!gid) return [];
-  const { data, error } = await supa.from('campaigns').select('*').eq('group_id', gid);
+  if(!_authUid) return _db.campaigns;
+  // RLS scopes this to campaigns the user is a member of.
+  const { data, error } = await supa.from('campaigns').select('*');
   if(error){ console.warn('getCampaigns error:', error.message); return _db.campaigns; }
-  _db.campaigns = (data||[]).map(r=>r.data||r);
+  _db.campaigns = (data||[]).map(r=>{ const c = r.data||r; c._rowId = r.id; return c; });
   return _db.campaigns;
 }
 
 async function dbSaveCampaign(camp){
   if(!camp || !camp.id) { console.warn('dbSaveCampaign: invalid camp', camp); return; }
-  const gid = getGroupId()||await ensureGroupId(); if(!gid) return;
-  // Use composite row key (group_id + camp.id) to prevent cross-group overwrites
-  const rowId = gid + '_' + camp.id;
-  const row = { id: rowId, group_id: gid, name: camp.name||'Untitled Campaign', data: camp };
+  const gid = getGroupId(); if(!gid || !_authUid) return;
+  // One canonical row per campaign; every member writes the same row.
+  const rowId = camp._rowId || String(camp.id);
+  camp._rowId = rowId;
+  const row = { id: rowId, group_id: gid, camp_id: String(camp.id),
+                join_code: camp.joinCode || null,
+                name: camp.name||'Untitled Campaign', data: camp };
   const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
   if(error) console.warn('saveCampaign error:', error.message);
   const i = _db.campaigns.findIndex(c=>c.id===camp.id);
@@ -1923,165 +1883,31 @@ async function dbSaveItems(campId, items, wealth){
 /* ══ PULL ALL — refresh in-memory cache from Supabase ══ */
 async function pullAll(campId){
   if(!_online) return false;
-  const gid = getGroupId(); if(!gid) return false;
+  if(!_authUid){ await ensureAuthSession(); }
+  if(!_authUid) return false;
   try {
     syncIndicator('saving');
-    let [cr, campr] = await Promise.all([
-      supa.from('characters').select('*').eq('group_id', gid),
-      supa.from('campaigns').select('*').eq('group_id', gid),
+    // RLS scopes both reads to the user's campaign memberships.
+    const [cr, campr] = await Promise.all([
+      supa.from('characters').select('*'),
+      supa.from('campaigns').select('*'),
     ]);
-
-    // Empty-with-no-error on BOTH tables is the signature of a missing
-    // group_members row: RLS legally returns zero rows to a non-member.
-    // Self-heal: re-claim membership and retry once before believing it.
-    if(!cr.error && !campr.error && !(cr.data||[]).length && !(campr.data||[]).length){
-      console.warn('[pullAll] server returned no rows — verifying membership for', gid);
-      const member = await _verifyMembership(gid);
-      if(!member){
-        console.warn('[pullAll] membership row missing — re-claiming');
-        await _claimGroupMembership(gid);
-      }
-      [cr, campr] = await Promise.all([
-        supa.from('characters').select('*').eq('group_id', gid),
-        supa.from('campaigns').select('*').eq('group_id', gid),
-      ]);
-      if((cr.data||[]).length || (campr.data||[]).length){
-        console.log('[pullAll] data visible after membership repair');
-      } else {
-        console.warn('[pullAll] still no rows — either the group is genuinely empty or membership/RLS needs attention');
-      }
+    if(cr.error || campr.error){
+      console.warn('pullAll error:', cr.error?.message || campr.error?.message);
+      syncIndicator('error');
+      return false;
     }
-
-    // Merge own chars — keep cross-group chars (_sharedCampId set) intact
-    if(!cr.error && cr.data && cr.data.length > 0){
-      const ownChars = cr.data.map(r=>r.data||r).filter(c=>c && c.id);
-      const crossGroupChars = _db.chars.filter(c=>c._sharedCampId);
-      const merged = new Map();
-      crossGroupChars.forEach(c=>merged.set(String(c.id),c));
-      ownChars.forEach(c=>merged.set(String(c.id),c));
-      _db.chars = Array.from(merged.values());
-    } else if(!cr.error && cr.data && cr.data.length === 0 && _db.chars.filter(c=>!c._sharedCampId).length > 0){
-      console.log('pullAll: Supabase returned 0 own chars — keeping existing');
-    }
-
-    // Merge own campaigns — keep joined campaigns (_ownerGid set) intact
-    if(!campr.error && campr.data && campr.data.length > 0){
-      const joinedCamps = _db.campaigns.filter(c=>c._ownerGid);
-      // Build a set of campaign IDs the user has joined (via share code from another group)
-      // These may have been accidentally written to Supabase by a previous forceSyncAll bug.
-      // We need to load the shared camps list to know which IDs are joined, not owned.
-      let joinedIds = new Set(joinedCamps.map(c=>String(c.id)));
-      try {
-        const sharedList = await _getSharedCamps();
-        sharedList.forEach(e=>joinedIds.add(String(e.campId)));
-      } catch(e){}
-      const validOwn = [];
-      for(const r of campr.data){
-        const camp = r.data || r;
-        if(camp && camp.id && camp.name){
-          // If this campaign ID is in our joined list, it was written here by mistake — delete it
-          if(joinedIds.has(String(camp.id))){
-            console.log('[pullAll] Removing incorrectly-owned joined campaign row:', camp.id, camp.name);
-            (async()=>{ await supa.from('campaigns').delete().eq('id', r.id).eq('group_id', gid); })().catch(()=>{});
-            continue;
-          }
-          validOwn.push(camp);
-        } else {
-          console.warn('pullAll: removing invalid campaign row', r.id);
-          (async()=>{ await supa.from('campaigns').delete().eq('id', r.id).eq('group_id', gid); })().catch(()=>{});
-        }
-      }
-      // Joined camps take lower priority — own overwrites if same id
-      const merged = new Map();
-      joinedCamps.forEach(c=>merged.set(c.id,c));
-      validOwn.forEach(c=>merged.set(c.id,c));
-      _db.campaigns = Array.from(merged.values());
-      _db.campaigns.forEach(c=>{ if(c.charIds) c.charIds=[...new Set(c.charIds.map(String))]; });
-    } else if(!campr.error && campr.data && campr.data.length === 0 && _db.campaigns.filter(c=>!c._ownerGid).length > 0){
-      console.log('pullAll: Supabase returned 0 own campaigns — keeping existing');
-    }
-    // Purge any legacy preset_ campaigns (removes from DB and memory)
-    await _purgePresetCampaigns();
-
-    // One-time cleanup: strip stale scoping tags baked into character rows
-    // by the old shared-campaign vacuum bug, and persist the cleaned rows so
-    // they stop granting ghost visibility on every device.
-    try {
-      const dirty = (_db.chars||[]).filter(c=>{
-        if(c._sharedCampId===undefined && c._playerInCamp===undefined) return false;
-        // A live cross-group copy (another player's char in a campaign we
-        // JOINED) legitimately carries _sharedCampId — leave those alone.
-        const isCross = c._sharedCampId && (_db.campaigns||[]).some(x=>x._ownerGid && String(x.id)===String(c._sharedCampId));
-        if(isCross) return false;
-        return _normalizeOwnCharTags(c);
-      });
-      if(dirty.length){
-        console.log('[migrate] cleaned stale scoping tags on', dirty.length, 'character(s)');
-        await Promise.all(dirty.map(c=>dbSaveChar(c)));
-      }
-    } catch(e){ console.warn('[migrate] tag cleanup failed:', e.message); }
+    _db.campaigns = (campr.data||[]).map(r=>{ const c=r.data||r; c._rowId=r.id; return c; })
+      .filter(c=>c && c.id && c.name);
+    _db.campaigns.forEach(c=>{ if(c.charIds) c.charIds=[...new Set(c.charIds.map(String))]; });
+    _db.chars = (cr.data||[]).map(r=>{ const c=r.data||r; c._rowId=r.id; c._campaignId=r.campaign_id; return c; })
+      .filter(c=>c && c.id);
+    _db.chars.forEach(c=>_normalizeOwnCharTags(c));
 
     if(campId){
       const { data: loot } = await supa.from('loot').select('*').eq('campaign_id', campId).maybeSingle();
       if(loot){ _db.items[campId]=loot.data||[]; _db.wealth[campId]=loot.wealth||{}; }
     }
-
-    // Pull chars published by other users for ALL campaigns this user participates in.
-    // Key format: 'player_char_{joinCode}_{charId}' — joinCode is the campaign's public share code.
-    // Deduplication: if multiple rows exist for the same charId in a campaign, last-write-wins.
-    const allJoinCodes = _db.campaigns.filter(c=>c.joinCode).map(c=>({id:String(c.id), joinCode:c.joinCode}));
-    if(allJoinCodes.length){
-      try {
-        for(const {id: cid, joinCode} of allJoinCodes){
-          const prefix = 'player_char_' + joinCode + '_';
-          const { data: settingsRows } = await supa.from('settings').select('key,value').like('key', prefix+'%');
-          if(!settingsRows?.length) continue;
-          // De-dup: if multiple rows for same charId, keep the most recently written one
-          const charMap = new Map();
-          settingsRows.forEach(r=>{
-            let c; try{ c=JSON.parse(r.value); }catch{ return; }
-            if(!c || !c.id) return;
-            const cid2 = String(c.id);
-            if(!charMap.has(cid2) || (c.created||0) > (charMap.get(cid2).created||0)){
-              charMap.set(cid2, c);
-            }
-          });
-          charMap.forEach((c, charId)=>{
-            // Never overwrite a locally-owned char with a cross-group copy
-            const existing = _db.chars.find(x=>String(x.id)===charId);
-            if(existing && !existing._sharedCampId) return;
-            c._sharedCampId = cid;
-            const idx = _db.chars.findIndex(x=>String(x.id)===charId);
-            if(idx>=0) _db.chars[idx]=c; else _db.chars.push(c);
-          });
-          if(charMap.size) console.log('[pullAll] loaded', charMap.size, 'cross-group chars for campaign', joinCode);
-          // Clean up duplicate settings rows (keep only the canonical keyed-by-charId rows)
-          const staleRows = settingsRows.filter(r=>{
-            const parts = r.key.split('_'); // player_char_{joinCode}_{charId}
-            // canonical key has exactly 4 parts; old-style keys may have more
-            return parts.length !== 4;
-          });
-          if(staleRows.length){
-            console.log('[pullAll] deleting', staleRows.length, 'stale settings rows');
-            await Promise.all(staleRows.map(row=>
-              supa.from('settings').delete().eq('key', row.key).catch(()=>{})
-            ));
-          }
-        }
-      } catch(e){ console.warn('[pullAll] player chars pull error:', e.message); }
-    }
-    try {
-      const gid = getGroupId();
-      if(gid){
-        const rowKey = 'claude_key_' + gid;
-        const { data: s } = await supa.from('settings').select('value').eq('key', rowKey).maybeSingle();
-        if(s?.value) _userSettings['claude_key'] = s.value;
-      }
-    } catch(e){}
-    // Always re-merge joined campaigns — dbGetCampaigns above replaced
-    // _db.campaigns with own rows only, which made joined campaigns
-    // disappear on any refresh that didn't separately reload them.
-    await _loadSharedCamps().catch(()=>{});
     syncIndicator('live');
     return true;
   } catch(e){
@@ -2089,32 +1915,6 @@ async function pullAll(campId){
     syncIndicator('error');
     return false;
   }
-}
-
-/* ══ SHOW CAMPAIGN ASSIGN FOR SPECIFIC CAMPAIGN ══ */
-function showCampAssignForCampaign(campId){
-  const camp = getCampaigns().find(c=>String(c.id)===String(campId));
-  if(!camp) return;
-  const myChars = getChars().filter(c=>!c._sharedCampId);
-  if(!myChars.length) return;
-  // Temporarily set active camp so showCampAssignPrompt auto-assigns correctly
-  const prevActive = getActiveCampId();
-  setActiveCampId(campId);
-  // Use first own char as a proxy — showCampAssignPrompt will show all
-  showCampAssignPrompt(myChars[0]);
-  // (restoring active camp is handled by the user switching explicitly)
-}
-
-/* ══ PRESET CLEANUP ══ */
-// Delete any preset_ campaigns from Supabase and memory — they're no longer supported
-async function _purgePresetCampaigns(){
-  // DISABLED. This used to delete every campaign whose id starts with
-  // 'preset_' from the DB at every boot. But preset-derived campaigns are
-  // REAL campaigns once a user builds on them (forceReinstallPresets writes
-  // them to the DB by design, sessions/quests accumulate on the row), so
-  // this was deleting live user data. Its deletes were silently blocked
-  // during the RLS-membership outage; fixing auth armed it. Never again.
-  return;
 }
 
 /* ══ MANUAL REFRESH ══ */
@@ -2156,8 +1956,8 @@ function subscribeRealtime(campId){
   _realtimeSubs = [];
   const gid = getGroupId(); if(!gid) return;
 
-  const charSub = supa.channel('chars-'+gid)
-    .on('postgres_changes',{event:'*',schema:'public',table:'characters',filter:'group_id=eq.'+gid}, async payload=>{
+  const charSub = supa.channel('chars-'+(campId||gid))
+    .on('postgres_changes',{event:'*',schema:'public',table:'characters'}, async payload=>{
       if(payload.eventType==='DELETE'){
         _db.chars = _db.chars.filter(c=>String(c.id)!==String(payload.old?.id));
       } else if(payload.new?.data){
@@ -2171,8 +1971,8 @@ function subscribeRealtime(campId){
     }).subscribe();
   _realtimeSubs.push(charSub);
 
-  const campSub = supa.channel('camps-'+gid)
-    .on('postgres_changes',{event:'*',schema:'public',table:'campaigns',filter:'group_id=eq.'+gid}, payload=>{
+  const campSub = supa.channel('camps-'+(campId||gid))
+    .on('postgres_changes',{event:'*',schema:'public',table:'campaigns'}, payload=>{
       if(payload.new?.data){
         const updated = payload.new.data;
         const i = _db.campaigns.findIndex(c=>c.id===updated.id);
@@ -2857,8 +2657,8 @@ function saveChar(char){
 function getCampaigns(){ return _db.campaigns||[]; }
 function saveCampaigns(camps){
   _db.campaigns = (camps||[]).filter(c=>c&&c.id);
-  // Only save own campaigns — never overwrite joined campaigns (owned by another group_id)
-  _db.campaigns.forEach(c => { if(!c._ownerGid) dbSaveCampaign(c); });
+  // Symmetric model: every member writes the canonical campaign row.
+  _db.campaigns.forEach(c => dbSaveCampaign(c));
 }
 function saveCampaign(camp){
   if(!camp || !camp.id) return;
@@ -2974,7 +2774,7 @@ function getVisibleChars(){
     campaigns.forEach(c=>(c.charIds||[]).forEach(id=>allAssigned.add(String(id))));
     result = all.filter(c=>{
       const sid = String(c.id);
-      if(c._sharedCampId===campId) return true;                          // cross-group chars
+      if(String(c._campaignId||'')===String(campId)) return true;       // row-scoped membership                          // cross-group chars
       if((activeCamp.charIds||[]).some(x=>String(x)===sid)) return true; // assigned chars
       if(c._playerInCamp===campId) return true;                          // tagged chars
       return false;
@@ -4537,13 +4337,17 @@ async function userLogin(){
   document.body.appendChild(statusDiv);
   const _status = msg => { statusDiv.textContent = msg; console.log('[login]', msg); };
 
-  _status('Setting up…');
-  // Fresh devices arrive with no session — establish one before any reads
-  try { await ensureAuthSession(); } catch(e){}
+  const pin = (document.getElementById('pinInput')?.value||'');
+  if(pin.length < 6){ toast('PIN must be at least 6 characters','var(--red)'); _reenable(); statusDiv.remove(); return; }
+  _status('Signing in…');
+  const auth = await authSignIn(username, pin);
+  if(!auth.ok){
+    toast(auth.error || 'Sign-in failed','var(--red)');
+    _reenable(); statusDiv.remove(); return;
+  }
+  if(auth.created) toast('✦ Account created — welcome, '+username+'!','var(--gold)');
   setGroupId(username);
   localStorage.setItem('toh_username', username);
-  // Ensure the membership claim has landed before the first RLS-gated reads
-  try { await _claimGroupMembership(username); } catch(e){}
 
   try {
     _status('Loading data…');
@@ -4625,16 +4429,7 @@ function _applyUserBadge(){
 
 // Campaign sharing — join a shared campaign by code (adds it to your campaign list)
 // Fetch a single specific campaign row without affecting group_id or _db
-async function _fetchCampRow(ownerGid, campId){
-  try {
-    const rowId = ownerGid + '_' + campId;
-    const { data: rows } = await supa.from('campaigns').select('data').eq('id', rowId);
-    if(rows?.[0]?.data) return rows[0].data;
-    // Fallback: scan by group_id
-    const { data: all } = await supa.from('campaigns').select('data').eq('group_id', ownerGid);
-    return (all||[]).map(r=>r.data).find(d=>d?.id===campId) || null;
-  } catch(e){ return null; }
-}
+async function _fetchCampRow(){ return null; }
 
 // Fetch all characters for a campaign by its joinCode (primary) or by ownerGid (fallback).
 // Returns an array of character data objects (not Supabase rows).
@@ -4646,129 +4441,36 @@ function _unpublishCharFromCamp(camp, charId){
   supa.from('settings').delete().eq('key', key).then(()=>{}).catch(()=>{});
 }
 
-async function _fetchCampChars(ownerGid, campId, campData){
-  const joinCode = campData?.joinCode;
-  const charIds = (campData?.charIds || []).map(String);
-  console.log('[fetchCampChars] joinCode:', joinCode, 'ownerGid:', ownerGid, 'charIds:', charIds.length);
-
-  const seen = new Map(); // charId → char data
-
-  // Primary: settings table by joinCode — no RLS, works across group_ids
-  if(joinCode){
-    try {
-      const prefix = 'player_char_' + joinCode + '_';
-      const { data: rows, error } = await supa.from('settings').select('key,value').like('key', prefix+'%');
-      console.log('[fetchCampChars] settings scan:', rows?.length||0, 'rows, error:', error?.message||'none');
-      (rows||[]).forEach(r=>{
-        let c; try{ c=JSON.parse(r.value); }catch{ return; }
-        if(!c || !c.id) return;
-        const cid = String(c.id);
-        // If multiple rows for the same char, keep freshest
-        if(!seen.has(cid) || (c.created||0) > (seen.get(cid).created||0)) seen.set(cid, c);
-      });
-    } catch(e){ console.warn('[fetchCampChars] settings scan threw:', e.message); }
-  }
-
-  // Fallback: owner's characters table — catches chars not yet cross-published
-  if(ownerGid){
-    try {
-      const { data: rows, error } = await supa.from('characters').select('data,id').eq('group_id', ownerGid);
-      console.log('[fetchCampChars] chars table fallback:', rows?.length||0, 'rows, error:', error?.message||'none');
-      (rows||[]).forEach(r=>{
-        const c = r.data; if(!c || !c.id) return;
-        const cid = String(c.id);
-        // Strict: only chars actually assigned to this campaign. An empty
-        // charIds list means the campaign has NO assigned characters — it
-        // must not vacuum up the owner group's entire roster (that is how
-        // unassigned characters were leaking into every campaign).
-        if(!seen.has(cid) && charIds.includes(cid)) seen.set(cid, c);
-      });
-    } catch(e){ console.warn('[fetchCampChars] chars fallback threw:', e.message); }
-  }
-
-  const allChars = Array.from(seen.values());
-  console.log('[fetchCampChars] result:', allChars.length, 'chars:', allChars.map(c=>c.name||c.id).join(', '));
-  return allChars;
-}
+async function _fetchCampChars(){ return []; }
 
 async function joinSharedCampaign(){
   const code = (document.getElementById('joinCampCodeInput')?.value||'').trim().toUpperCase();
   if(!code || code.length < 4){ toast('Enter a campaign code','var(--red)'); return; }
   const btn = document.querySelector('#joinCampFormInner .btn-primary');
   if(btn){ btn.style.opacity='0.6'; btn.style.pointerEvents='none'; }
-  toast('Looking up campaign…','var(--purple)');
-
-  let matchGid = null, matchCampId = null;
-
+  toast('Joining campaign…','var(--purple)');
   try {
-    const { data: rows, error } = await supa.from('campaigns').select('id,group_id,data');
-    if(error) console.error('[join] scan error:', error.message);
-    console.log('[join] scanned', rows?.length, 'campaign rows looking for code', code);
-    const row = (rows||[]).find(r=>(r.data?.joinCode||'').toUpperCase()===code);
-    if(row){
-      matchGid = row.group_id;
-      // IMPORTANT: use data.id (real campaign id), fall back to stripping composite key
-      matchCampId = row.data?.id || row.id.replace(row.group_id+'_','');
-      console.log('[join] found campaign:', row.id, '→ gid:', matchGid, 'campId:', matchCampId);
-    } else {
-      console.log('[join] no match. Sample joinCodes:', (rows||[]).slice(0,5).map(r=>r.data?.joinCode||'(none)').join(', '));
+    const { data, error } = await supa.rpc('join_campaign', { p_code: code, p_username: getGroupId()||'' });
+    if(error || !data){
+      toast(error?.message?.includes('not found') ? 'No campaign found with that code' : ('Join failed: '+(error?.message||'unknown')), 'var(--red)');
+      return;
     }
-  } catch(e){ console.warn('[join] scan failed:', e.message); }
-
-  // Fallback: settings table
-  if(!matchGid){
-    try {
-      const { data: rows } = await supa.from('settings').select('value').eq('key','camp_'+code);
-      if(rows?.length){ let m; try{m=JSON.parse(rows[0].value);}catch{} if(m?.gid){matchGid=m.gid;matchCampId=m.campId;} }
-    } catch(e){}
+    await pullAll(null);
+    const joined = _db.campaigns.find(c=>String(c.id)===String(data));
+    if(joined){
+      setActiveCampId(joined.id);
+      toast('✦ Joined: '+joined.name,'var(--purple)');
+    } else {
+      toast('Joined — refreshing…','var(--purple)');
+    }
+    hideCampForm();
+    renderCampList();
+    renderRoster();
+  } catch(e){
+    toast('Join failed: '+e.message,'var(--red)');
+  } finally {
+    if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
   }
-
-  if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; }
-
-  if(!matchGid || !matchCampId){
-    toast('Campaign code not found — check with the campaign owner','var(--red)');
-    return;
-  }
-  if(matchGid === getGroupId()){
-    toast('That\'s one of your own campaigns!','var(--gold)');
-    hideCampForm(); return;
-  }
-
-  console.log('[join] fetching campaign row for gid:', matchGid, 'campId:', matchCampId);
-  const campData = await _fetchCampRow(matchGid, matchCampId);
-  console.log('[join] campData:', campData?.name, 'charIds:', campData?.charIds);
-  if(!campData){ toast('Campaign data not found — ask the owner to Force Sync','var(--red)'); return; }
-
-  // Store _ownerGid so loot writes go to the right Supabase row
-  campData._ownerGid = matchGid;
-
-  const existing = _db.campaigns.findIndex(c=>c.id===matchCampId);
-  if(existing >= 0) _db.campaigns[existing] = campData;
-  else _db.campaigns.push(campData);
-
-  console.log('[join] fetching chars for gid:', matchGid, 'campId:', matchCampId);
-  const chars = await _fetchCampChars(matchGid, matchCampId, campData);
-  console.log('[join] fetched', chars.length, 'chars:', chars.map(c=>c.name+' ('+c.id+')').join(', '));
-
-  chars.forEach(c=>{
-    c._sharedCampId = matchCampId;
-    const ci = _db.chars.findIndex(x=>String(x.id)===String(c.id));
-    if(ci >= 0) _db.chars[ci] = c; else _db.chars.push(c);
-  });
-
-  console.log('[join] _db.campaigns now has', _db.campaigns.length, 'total');
-
-  setActiveCampId(matchCampId);
-  await _saveSharedCamp({ code, ownerGid: matchGid, campId: matchCampId, name: campData.name });
-
-  toast('✦ Joined: '+campData.name+' ('+chars.length+' chars)','var(--purple)');
-  hideCampForm();
-  renderCampList();
-  renderRoster();
-
-  // Let user add their own characters to this campaign
-  const myChars2 = _db.chars.filter(c=>!c._sharedCampId);
-  if(myChars2.length) setTimeout(()=>showCampAssignForCampaign(matchCampId), 300);
 }
 
 // Shared campaigns stored as settings row for this user
@@ -4831,130 +4533,22 @@ function confirmPlayerChar(campId, charId){
   renderRoster();
   renderCampList();
 }
-async function _getSharedCamps(){
-  try {
-    const { data } = await supa.from('settings').select('value').eq('key', _sharedCampsKey());
-    if(data?.[0]?.value) return JSON.parse(data[0].value);
-  } catch(e){}
-  return [];
-}
-async function _saveSharedCamp(entry){
-  const arr = await _getSharedCamps();
-  if(!arr.find(e=>String(e.campId)===String(entry.campId))) arr.push(entry);
-  const key = _sharedCampsKey();
-  const val = JSON.stringify(arr);
-  const og = getGroupId();
-  try {
-    await supa.from('settings').upsert({key, value: val, owner_group: og}, {onConflict:'key'});
-  } catch(e){
-    // Fallback to delete+insert if upsert not supported
-    try {
-      await supa.from('settings').delete().eq('key', key);
-      await supa.from('settings').insert({key, value: val, owner_group: og});
-    } catch(e2){ console.warn('_saveSharedCamp failed:', e2.message); }
-  }
-}
+async function _getSharedCamps(){ return []; }
+async function _saveSharedCamp(){ /* obsolete — membership model */ }
 async function _loadSharedCamps(){
-  const shared = await _getSharedCamps();
-  // Fetch every shared campaign (camp row, characters, loot) in parallel,
-  // then merge + subscribe sequentially in the original order so the final
-  // realtime subscription matches the previous behaviour.
-  const results = await Promise.all(shared.map(async e=>{
-    // A "shared" entry pointing at our own group is a self-join artifact —
-    // we already own that campaign; loading it as shared would shadow the
-    // real one and mis-tag our own characters into it.
-    if(String(e.ownerGid) === String(getGroupId())) return null;
-    const campData = await _fetchCampRow(e.ownerGid, e.campId);
-    if(!campData) return null;
-    campData._ownerGid = e.ownerGid;  // so loot saves go to owner's row
-    const [chars] = await Promise.all([
-      _fetchCampChars(e.ownerGid, e.campId, campData),
-      // Loot for this campaign (readable by campaign_id regardless of group)
-      dbGetItems(e.campId),
-    ]);
-    return { e, campData, chars };
-  }));
-  for(const r of results){
-    if(!r) continue;
-    const { e, campData, chars } = r;
-    const idx = _db.campaigns.findIndex(c=>c.id===e.campId);
-    if(idx >= 0) _db.campaigns[idx] = campData;
-    else _db.campaigns.push(campData);
-    chars.forEach(c=>{
-      const ci = _db.chars.findIndex(x=>String(x.id)===String(c.id));
-      // Never overwrite a locally-owned char with a fetched copy — the
-      // local character is authoritative and keeps its campaign scoping.
-      if(ci >= 0 && !_db.chars[ci]._sharedCampId) return;
-      c._sharedCampId = e.campId;
-      if(ci >= 0) _db.chars[ci] = c; else _db.chars.push(c);
-    });
-    // Subscribe to real-time updates for this shared campaign
-    subscribeRealtime(e.campId);
-    // Self-heal: restore the player's character link for this joined
-    // campaign if a previous cleanup stripped it. The selection survives
-    // in user settings even when the tag on the character was lost.
-    try {
-      const selId = getPlayerCampChar(e.campId);
-      if(selId != null){
-        const own = _db.chars.find(c=>String(c.id)===String(selId) && !c._sharedCampId);
-        if(own && String(own._playerInCamp||'') !== String(e.campId)){
-          own._playerInCamp = e.campId;
-          console.log('[heal] restored campaign link for', own.name, '→', e.campId);
-          saveChar(own);
-        }
-      }
-    } catch(err){ console.warn('[heal] restore failed:', err.message); }
-  }
+  // Obsolete: campaign membership makes joined campaigns arrive through
+  // the normal member-scoped pull. Kept as a no-op for old call sites.
 }
 async function leaveSharedCampaign(campId){
-  if(!confirm('Leave this shared campaign? You can rejoin with the code.')) return;
-
-  const sid = String(campId);
-
-  // Remove from persisted shared camps list
-  const arr = await _getSharedCamps();
-  const filtered = arr.filter(e=>String(e.campId)!==sid);
-  const key = _sharedCampsKey();
-  const val = JSON.stringify(filtered);
-  try {
-    if(filtered.length){
-      await supa.from('settings').upsert({key, value: val, owner_group: getGroupId()}, {onConflict:'key'});
-    } else {
-      await supa.from('settings').delete().eq('key', key);
-    }
-  } catch(e){ console.warn('leaveSharedCampaign: settings save failed', e.message); }
-
-  // Remove the campaign from memory
-  _db.campaigns = _db.campaigns.filter(c=>String(c.id)!==sid);
-
-  // Remove DM's chars that came from this shared campaign
-  _db.chars = _db.chars.filter(c=>String(c._sharedCampId)!==sid || !c._sharedCampId);
-
-  // Clear _playerInCamp and _sharedCampId tags for this campaign
-  _db.chars.forEach(c=>{ if(String(c._playerInCamp)===sid) delete c._playerInCamp; if(String(c._sharedCampId)===sid) delete c._sharedCampId; });
-
-  // Remove cross-group character entries from settings table
-  try {
-    await supa.from('settings').delete().like('key', 'player_char_'+sid+'_%');
-  } catch(e){ console.warn('cleanup cross-group chars failed:', e.message); }
-
-  // Clear stored player character selection for this campaign
-  setPlayerCampChar(campId, null);
-
-  // Clear dice/loot default if it now points at a missing character
-  const diceChar = _userSettings['dice_char'];
-  if(diceChar && !_db.chars.find(c=>String(c.id)===String(diceChar))){
-    setUserSetting('dice_char', null).catch(()=>{}); _userSettings['dice_char']=null;
-    lootOwner = 'pool';
-    charScreenId = null;
-  }
-
-  // Switch active campaign away if we just left the active one
-  if(String(getActiveCampId())===sid) setActiveCampId(_db.campaigns[0]?.id||null);
-
-  renderCampList();
-  renderRoster();
-  toast('Left shared campaign','var(--muted)');
+  const camp = getCampaigns().find(c=>String(c.id)===String(campId));
+  if(!confirm('Leave "'+(camp?.name||'this campaign')+'"? You can rejoin with its invite code.')) return;
+  const { error } = await supa.from('campaign_members').delete()
+    .eq('campaign_id', String(campId)).eq('user_id', _authUid);
+  if(error){ toast('Could not leave: '+error.message,'var(--red)'); return; }
+  _db.campaigns = _db.campaigns.filter(c=>String(c.id)!==String(campId));
+  if(String(getActiveCampId())===String(campId)) setActiveCampId(_db.campaigns[0]?.id||null);
+  toast('Left '+(camp?.name||'campaign'));
+  renderCampList(); renderRoster();
 }
 
 // Show/hide the join campaign form
@@ -9333,13 +8927,16 @@ async function forceSyncAll(){
 function bootApp(){
   const nav_bar = document.querySelector('.bottomnav');
   (async () => {
-    // Ensure an (anonymous) auth session so requests carry a JWT identity.
-    // Retries with backoff and shows a banner if it cannot connect.
-    try {
-      await ensureAuthSession();
-      if(getGroupId()) await _claimGroupMembership(getGroupId()).catch(()=>{});
-    } catch(e){}
-    if(getGroupId()){
+    // Accounts model: require BOTH a stored username and a live session;
+    // otherwise route to the sign-in gate.
+    let _hasSession = false;
+    try { _hasSession = await ensureAuthSession(); } catch(e){}
+    if(getGroupId() && !_hasSession){
+      console.log('[boot] username present but no session — sign-in required');
+      localStorage.setItem('toh_last_username', getGroupId());
+      localStorage.removeItem('toh_group_id');
+    }
+    if(getGroupId() && _hasSession){
       await pullAll(null).catch(()=>{});
       // Load DB-backed user settings into cache
       await _loadUserSettings().catch(()=>{});
@@ -10821,23 +10418,8 @@ function genItemId() { return 'i_' + Date.now() + Math.random().toString(36).sli
 
 // Register a campaign's join code in Supabase settings so players can connect
 async function _registerCampJoinCode(camp){
-  const gid = getGroupId(); if(!gid || !camp?.joinCode) return;
-  try {
-    const meta = JSON.stringify({ gid, campId: camp.id });
-    // Try with updated_at (some Supabase settings tables require it)
-    const { error: e1 } = await supa.from('settings').upsert(
-      { key: 'camp_'+camp.joinCode, value: meta, owner_group: gid, updated_at: new Date().toISOString() },
-      { onConflict: 'key' }
-    );
-    if(e1){
-      // Retry without updated_at
-      const { error: e2 } = await supa.from('settings').upsert(
-        { key: 'camp_'+camp.joinCode, value: meta, owner_group: gid },
-        { onConflict: 'key' }
-      );
-      if(e2) console.warn('Could not register campaign join code:', e2.message, '| camp:', camp.name, 'code:', camp.joinCode);
-    }
-  } catch(e){ console.warn('_registerCampJoinCode threw:', e.message); }
+  // Join codes are a column on the campaign row (saved by dbSaveCampaign);
+  // the join_campaign RPC reads them server-side. Nothing to register.
 }
 
 // Ensure all own campaigns have join codes — skips shared campaigns
@@ -10931,7 +10513,8 @@ function _renderCampListInner() {
          </div>`
       : `<div class="camp-actions">
            <button class="icon-btn" onclick="switchCampaign('${c.id}');event.stopPropagation()" style="color:var(--green);font-size:16px" title="Set Active">✓</button>
-           <button class="icon-btn" style="color:var(--red)" onclick="deleteCampaign('${c.id}');event.stopPropagation()" title="Delete">✕</button>
+           <button class="icon-btn" style="color:var(--muted)" onclick="leaveSharedCampaign('${c.id}');event.stopPropagation()" title="Leave campaign (rejoin anytime with its code)">↩</button>
+           <button class="icon-btn" style="color:var(--red)" onclick="deleteCampaign('${c.id}');event.stopPropagation()" title="Delete for ALL members">✕</button>
          </div>`;
     const joinedBadge = isJoined ? `<span class="camp-badge" style="border-color:var(--purple);color:var(--purple)">🔗 Joined</span>` : '';
     return `<div class="camp-card ${isActive?'active-camp':''} fadein" onclick="openCamp('${c.id}')">
@@ -11012,7 +10595,11 @@ function createCampaign() {
   const camps = getCampaigns();
   camps.push(camp);
   saveCampaigns(camps);
-  _registerCampJoinCode(camp);
+  // Creator becomes the campaign's first member (RLS bootstrap policy
+  // allows self-insert only while the campaign has no members).
+  supa.from('campaign_members').insert(
+    { campaign_id: String(camp.id), user_id: _authUid, username: getGroupId()||'' }
+  ).then(({error})=>{ if(error) console.warn('[members] bootstrap failed:', error.message); });
   if (!getActiveCampId()) setActiveCampId(camp.id);
   hideCampForm();
   toast('\u2756 '+name+' created!');
@@ -11089,17 +10676,8 @@ async function openCamp(id) {
   document.getElementById('backBtn').onclick = () => showCampList();
   document.getElementById('pageTitle').textContent = camp.name;
 
-  if(camp._ownerGid){
-    const alreadyLoaded = getChars().some(c=>String(c._sharedCampId)===String(id));
-    if(!alreadyLoaded){
-      const chars = await _fetchCampChars(camp._ownerGid, id, camp);
-      chars.forEach(c=>{
-        c._sharedCampId = id;
-        const ci = _db.chars.findIndex(x=>String(x.id)===String(c.id));
-        if(ci>=0) _db.chars[ci]=c; else _db.chars.push(c);
-      });
-    }
-  }
+  // (legacy owner/joiner loader removed — members receive campaign
+  // characters through the normal RLS-scoped pull)
 
   renderCampDetailHeader();
   campTab('sessions');
