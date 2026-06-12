@@ -1432,8 +1432,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <p style="font-size:13px;color:var(--muted);font-style:italic;text-align:center;margin-bottom:16px;line-height:1.6">Enter a share code from another user's campaign to add it to your list.</p>
       <div id="joinCampFormInner">
         <div class="field"><label>Campaign Share Code</label>
-          <input id="joinCampCodeInput" placeholder="e.g. XYZABC" style="font-family:'Cinzel',serif;letter-spacing:3px;text-transform:uppercase;font-size:18px;text-align:center"
-            oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6)"
+          <input id="joinCampCodeInput" placeholder="e.g. XK7M2QASW9BF" style="font-family:'Cinzel',serif;letter-spacing:3px;text-transform:uppercase;font-size:18px;text-align:center"
+            oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16)"
             onkeydown="if(event.key==='Enter')joinSharedCampaign()">
         </div>
         <button class="btn btn-primary" onclick="joinSharedCampaign()">🔗 Join Campaign</button>
