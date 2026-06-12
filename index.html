@@ -1398,10 +1398,14 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     </button>
 
     <div style="margin-top:24px;width:100%;max-width:280px">
-      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;text-align:left">CLAUDE API KEY <span style="color:var(--muted);font-style:italic;font-family:'Crimson Pro',serif;letter-spacing:0">(set once — shared across the campaign)</span></div>
+      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;text-align:left">CLAUDE API KEY <span style="color:var(--muted);font-style:italic;font-family:'Crimson Pro',serif;letter-spacing:0">(yours, or shared by a campaign)</span></div>
       <input id="claudeApiKeyInput" type="password" placeholder="sk-ant-api03-…"
         style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace"
         oninput="saveClaudeApiKey(this.value)" value="">
+      <button onclick="shareKeyWithCampaign()" style="margin-top:8px;width:100%;background:none;border:1px dashed var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:8px;cursor:pointer;opacity:0.85">
+        ⚭ Share this key with the active campaign
+      </button>
+      <div style="font-size:10px;color:var(--muted);margin-top:5px;text-align:left">Shared keys are usable (and visible) to every member of that campaign. Leave the field blank to rely on a campaign-shared key.</div>
     </div>
     <button onclick="clearAllData()" style="margin-top:16px;background:none;border:1px solid var(--red);border-radius:8px;color:var(--red);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.6">
       🗑 Clear All Data
@@ -4638,6 +4642,25 @@ function showPlayerGate(){}
 function applyDesktopSplit(){}
 
 
+async function shareKeyWithCampaign(){
+  const key = (document.getElementById('claudeApiKeyInput')?.value||'').trim()
+            || _userSettings['claude_key'] || '';
+  const camp = getActiveCamp();
+  if(!camp){ toast('Select an active campaign first','var(--red)'); return; }
+  if(!key){
+    if(camp.claudeKey && confirm('Remove the shared key from "'+camp.name+'"?')){
+      delete camp.claudeKey; saveCampaign(camp);
+      toast('Shared key removed from '+camp.name);
+    } else if(!camp.claudeKey){
+      toast('Enter a key first','var(--red)');
+    }
+    return;
+  }
+  camp.claudeKey = key;
+  saveCampaign(camp);
+  toast('✦ Key shared with all members of '+camp.name,'var(--gold)');
+}
+
 async function saveClaudeApiKey(val){
   const trimmed = val.trim();
   // Sync to Supabase using group-scoped key so other groups can't read it
@@ -4660,6 +4683,12 @@ async function saveClaudeApiKey(val){
 async function getClaudeApiKey(){
   // Try in-memory cache first
   if(_userSettings['claude_key']) return _userSettings['claude_key'];
+  // Campaign-shared key: stored on the campaign row, so RLS already limits
+  // it to members. Active campaign first, then any campaign you belong to.
+  const _ac = (typeof getActiveCamp==='function') ? getActiveCamp() : null;
+  if(_ac?.claudeKey) return _ac.claudeKey;
+  const _anyShared = (_db.campaigns||[]).find(c=>c.claudeKey);
+  if(_anyShared) return _anyShared.claudeKey;
   // Fetch from Supabase
   if(_online){
     try {
