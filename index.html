@@ -1697,9 +1697,12 @@ async function _claimGroupMembership(gid){
       user = (await supa.auth.getUser()).data.user;
     }
     if(!user){ console.warn('[membership] no auth user — cannot claim', gid); return false; }
+    // Already a member? Done — never UPDATE an existing row (group_members
+    // has no update policy, so a conflicting upsert 403s pointlessly).
+    if(await _verifyMembership(gid)) return true;
     const { error } = await supa.from('group_members').upsert(
       { group_id: gid, user_id: user.id },
-      { onConflict: 'group_id,user_id' }
+      { onConflict: 'group_id,user_id', ignoreDuplicates: true }   // ON CONFLICT DO NOTHING
     );
     if(error){ console.warn('[membership] claim failed for', gid, ':', error.message); return false; }
     return true;
