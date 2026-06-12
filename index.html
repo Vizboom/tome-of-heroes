@@ -4348,6 +4348,13 @@ async function userLogin(){
     _reenable(); statusDiv.remove(); return;
   }
   if(auth.created) toast('✦ Account created — welcome, '+username+'!','var(--gold)');
+  // Hard-reset in-memory state: a login switch must never inherit the
+  // previous user's campaigns, characters, loot, or settings cache.
+  _db.chars=[]; _db.campaigns=[]; _db.items={}; _db.wealth={};
+  _activeCampId = null;
+  Object.keys(_userSettings).forEach(k=>delete _userSettings[k]);
+  _realtimeSubs.forEach(s=>{ try{ supa.removeChannel(s); }catch(e){} });
+  _realtimeSubs = [];
   setGroupId(username);
   localStorage.setItem('toh_username', username);
 
@@ -9017,7 +9024,7 @@ async function doLogout(){
   if(lastUsername) localStorage.setItem('toh_last_username', lastUsername);
   _realtimeSubs.forEach(s=>supa.removeChannel(s));
   _realtimeSubs = [];
-  _db.chars=[]; _db.campaigns=[];
+  _db.chars=[]; _db.campaigns=[]; _db.items={}; _db.wealth={};
   _activeCampId = null;
   // Clear in-memory user settings cache
   Object.keys(_userSettings).forEach(k=>delete _userSettings[k]);
