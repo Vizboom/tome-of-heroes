@@ -9628,7 +9628,6 @@ function renderDiceCharPanel(){
           + '<div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">INSPIRATION</div>'
           + '<div style="display:flex;align-items:center;gap:8px">'
           + '<div onclick="diceToggleInspiration(\''+char.id+'\');event.stopPropagation()" title="Toggle inspiration" style="width:18px;height:18px;border-radius:50%;border:2px solid var(--gold);background:'+(inspired?'var(--gold)':'transparent')+';cursor:pointer;transition:all 0.15s;box-shadow:'+(inspired?'0 0 8px var(--gold)':'none')+'"></div>'
-          + '<span style="font-size:11px;color:'+(inspired?'var(--gold)':'var(--muted)')+'">'+(inspired?'🌟 Inspired':'Not inspired')+'</span>'
           + '</div></div>';
       })()}
 
@@ -10118,6 +10117,117 @@ function confirmClaudeLootImport(){
   lootTab('inventory');
 }
 
+async function scanSessionForLoot(){
+  const sel = document.getElementById('scanLootSession');
+  const statusEl = document.getElementById('scanLootStatus');
+  const previewEl = document.getElementById('scanLootPreview');
+  const btn = document.getElementById('scanLootBtn');
+  const camp = getActiveCamp();
+  if(!camp){ if(statusEl) statusEl.innerHTML='<span style="color:var(--red)">No active campaign selected.</span>'; return; }
+  const sessions = camp.sessions||[];
+  const sessionId = sel ? sel.value : '';
+  const sIdx = sessions.findIndex(s=>String(s.id)===String(sessionId));
+  const session = sessions[sIdx];
+  if(!session){ if(statusEl) statusEl.innerHTML='<span style="color:var(--red)">Select a session to scan.</span>'; return; }
+
+  // Guard: this session was already imported — only re-scan on explicit confirmation
+  if(session.lootScanned && !confirm(`Session ${sIdx+1} was already imported into the pool. Scan it again anyway? This may add duplicate items.`)) return;
+
+  // Build text from THIS session only
+  const parts=[];
+  if(session.summary) parts.push(session.summary);
+  if(session.highlights && session.highlights.length) parts.push(session.highlights.join('\n'));
+  const corpus = parts.join('\n').trim();
+  if(!corpus){ if(statusEl) statusEl.innerHTML='<span style="color:var(--muted)">This session has no summary or highlights to scan.</span>'; return; }
+
+  if(btn) btn.disabled=true;
+  if(statusEl) statusEl.innerHTML='<span style="color:var(--gold)">🤖 Reading session for loot…</span>';
+  if(previewEl) previewEl.innerHTML='';
+
+  const systemPrompt = `You are a D&D 5e loot extractor. You will be given the summary and highlights of a SINGLE game session. Identify every distinct physical item of LOOT or TREASURE that the party found, was awarded, looted, or picked up during this session (weapons, armor, potions, scrolls, magic items, gems, art objects, valuables, trinkets, etc.).
+
+Return ONLY valid JSON with NO markdown and NO backticks:
+{
+  "items": [
+    { "name": "item name", "qty": 1, "value": 0, "rarity": "common", "type": "weapon|armor|potion|scroll|ring|rod|staff|wand|gem|treasure|tool|wondrous|misc", "found": "short note on where/how it was found" }
+  ]
+}
+
+Rules:
+- ONLY include tangible items/treasure. DO NOT include raw currency (gp/sp/ep/cp/gold/silver/copper) — currency is tracked separately.
+- DO NOT include items the party merely used, already owned, or that stayed with NPCs and were not taken.
+- "3x Healing Potion" → qty:3. Combine duplicates of the same item within this session.
+- Estimate value in gp when stated or implied; set rarity from power/value (>5000gp legendary, >500 rare, >100 uncommon, else common).
+- If no loot is described in this session, return {"items":[]}.
+- Return ONLY the JSON.`;
+
+  try {
+    const res = await callClaude({ model:'claude-sonnet-4-20250514', max_tokens:1200, system:systemPrompt, messages:[{role:'user', content: corpus}] });
+    const raw = (res.content?.find(b=>b.type==='text')?.text||'').replace(/^```[a-z]*\n?/,'').replace(/```$/,'').trim();
+    const parsed = JSON.parse(raw);
+    let scanItems = (parsed.items||[]).filter(it=> it && it.name);
+    window._pendingSessionLoot = { sessionId: session.id, sIdx, items: scanItems };
+
+    if(!scanItems.length){
+      if(statusEl) statusEl.innerHTML='<span style="color:var(--muted)">No loot found in this session.</span>';
+      if(btn) btn.disabled=false;
+      return;
+    }
+    let html = `<div class="divider"><span>Found ${scanItems.length} item${scanItems.length!==1?'s':''} in Session ${sIdx+1}</span></div>`;
+    scanItems.forEach((item,i)=>{
+      html += `<div data-loot-idx="${i}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px">
+        <span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-family:'Cinzel',serif">${item.qty>1?item.qty+'× ':''}${esc(item.name)}</div>
+          <div style="font-size:10px;color:var(--muted)">${esc(item.rarity||'common')}${item.value?' · '+item.value+'gp':''}${item.found?' · '+esc(item.found):''}</div>
+        </div>
+        <span onclick="this.parentElement.remove()" style="color:var(--red);cursor:pointer;font-size:16px;padding:0 6px">✕</span>
+      </div>`;
+    });
+    html += `<button class="btn btn-gold" onclick="confirmSessionLootScan()" style="margin-top:8px">✦ Add to Pool</button>
+             <button class="btn btn-outline" onclick="document.getElementById('scanLootPreview').innerHTML='';window._pendingSessionLoot=null" style="margin-top:4px">Cancel</button>`;
+    if(previewEl) previewEl.innerHTML = html;
+    if(statusEl) statusEl.innerHTML = '';
+  } catch(e){
+    if(statusEl) statusEl.innerHTML = `<span style="color:var(--red)">⚠ ${e.message}</span>`;
+    console.error(e);
+  }
+  if(btn) btn.disabled=false;
+}
+
+function confirmSessionLootScan(){
+  const pending = window._pendingSessionLoot;
+  if(!pending || !pending.items){ toast('Nothing to add','var(--red)'); return; }
+  const previewEl = document.getElementById('scanLootPreview');
+  // Respect any rows the user removed from the preview
+  let keep = pending.items;
+  if(previewEl){
+    const idxs = [...previewEl.querySelectorAll('[data-loot-idx]')].map(el=>parseInt(el.dataset.lootIdx));
+    keep = idxs.map(i=>pending.items[i]).filter(Boolean);
+  }
+  if(!keep.length){ toast('No items to add','var(--red)'); return; }
+  const existing = getItems();
+  keep.forEach(item=>existing.push({
+    id:'i'+Date.now()+Math.random(), name:item.name, type:item.type||'misc',
+    rarity:item.rarity||'common', qty:item.qty||1, weight:0,
+    value:item.value||0, attune:'none', desc:item.found?('Found: '+item.found):'', owner:'pool'
+  }));
+  saveItems(existing);
+
+  // Mark the session as imported so re-runs don't silently duplicate it (mirrors goldAddedToLoot)
+  const camps = getCampaigns();
+  const activeId = getActiveCampId();
+  const ci = camps.findIndex(c=>c.id===activeId);
+  if(ci>=0){
+    const si = camps[ci].sessions.findIndex(s=>String(s.id)===String(pending.sessionId));
+    if(si>=0){ camps[ci].sessions[si].lootScanned = true; saveCampaigns(camps); }
+  }
+
+  window._pendingSessionLoot = null;
+  toast(`✦ ${keep.length} item${keep.length!==1?'s':''} added to pool!`,'var(--gold)');
+  renderPool();
+}
+
 function parseBulkLoot(){
   const raw = document.getElementById('bulkLootText')?.value||'';
   const lines = raw.split('\n').map(l=>l.trim()).filter(l=>l && !l.match(/^[-–—=*#\s]+$/));
@@ -10553,7 +10663,44 @@ document.addEventListener('mousedown', function(e) {
 });
 function addItem(){const name=(document.getElementById('iName')?.value||'').trim();if(!name){toast('Enter item name','var(--red)');return;}const item={id:'i'+Date.now(),name,type:document.getElementById('iType').value,hands:(document.getElementById('iType').value==='weapon'?(document.getElementById('iHands')?.value||'1'):undefined),rarity:document.getElementById('iRarity').value,qty:Math.max(1,parseInt(document.getElementById('iQty').value)||1),weight:parseFloat(document.getElementById('iWt').value)||0,value:parseFloat(document.getElementById('iVal').value)||0,attune:document.getElementById('iAttune').value,desc:(document.getElementById('iDesc').value||'').trim(),owner:document.getElementById('iOwner').value};const items=getItems();items.push(item);saveItems(items);document.getElementById('iName').value='';document.getElementById('iDesc').value='';document.getElementById('iQty').value='1';toast('✦ '+name+' added!');renderInventory();renderPool();}
 function quickAdd(qi){const q=QUICK_ITEMS[qi];const ownerEl=document.querySelector('#ltab-add #iOwner');const owner=ownerEl?.value||'pool';const item={...q,id:'i'+Date.now()+qi,owner};const items=getItems();items.push(item);saveItems(items);toast('✦ '+q.name+' added!');renderInventory();renderPool();}
-function renderPool(){const items=getItems().filter(i=>i.owner==='pool');const el=document.getElementById('ltab-pool');const totVal=items.reduce((s,i)=>s+(parseFloat(i.value)||0)*i.qty,0);let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px"><div class="inv-sum-card"><div class="isc-label">UNASSIGNED</div><div class="isc-val">${items.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val">${fmtGP(totVal)} <span style="font-size:9px;color:var(--muted)">gp</span></div></div></div>`;if(!items.length)html+=`<div class="empty-state"><div class="es-icon">🪙</div><p>Pool is empty!</p></div>`;else html+=`<div class="card">`+items.map(item=>`<div class="pool-row"><span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${esc(item.name)}${item.qty>1?(' ×'+item.qty):''}</div><div style="font-size:10px"><span class="rtext-${item.rarity}">${item.rarity}</span>${item.value>0?' · '+item.value+' gp':''}</div></div><button class="pool-assign-btn" onclick="assignFromPool('${item.id}')">Assign →</button><button class="icon-btn" style="color:var(--red)" onclick="removeItem('${item.id}')">✕</button></div>`).join('')+`</div>`;el.innerHTML=html;}
+function renderPool(){
+  const items=getItems().filter(i=>i.owner==='pool');
+  const el=document.getElementById('ltab-pool');
+  const totVal=items.reduce((s,i)=>s+(parseFloat(i.value)||0)*i.qty,0);
+
+  // ── Session-loot scanner: one session at a time, tracked to prevent duplicate imports ──
+  const camp = getActiveCamp();
+  const sessions = (camp&&camp.sessions)||[];
+  const scannable = sessions.map((s,idx)=>({s,idx})).filter(({s})=> (s.summary&&s.summary.trim()) || (s.highlights&&s.highlights.length));
+  let scanCard;
+  if(!scannable.length){
+    scanCard = `<div class="card" style="margin-bottom:12px">
+      <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-bottom:6px">🔍 Loot from Session Notes</div>
+      <p style="font-size:11px;color:var(--muted);margin:0;line-height:1.5">No session summaries or highlights to scan yet. Log a session — note any loot in its summary or highlights — then scan it here.</p>
+    </div>`;
+  } else {
+    let defaulted=false;
+    const opts = scannable.map(({s,idx})=>{
+      const done = s.lootScanned ? '✓ ' : '';
+      const sel = (!s.lootScanned && !defaulted) ? (defaulted=true,' selected') : '';
+      const title = s.title ? ' — '+s.title : '';
+      return `<option value="${s.id}"${sel}>${done}Session ${idx+1}${esc(title)}</option>`;
+    }).join('');
+    const remaining = scannable.filter(({s})=>!s.lootScanned).length;
+    scanCard = `<div class="card" style="margin-bottom:12px">
+      <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-bottom:6px">🔍 Loot from Session Notes</div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">Scan one session's summary &amp; highlights for described loot, then add items to the pool. Imported sessions are marked ✓ — re-running won't double them up. <strong style="color:var(--text)">${remaining}</strong> of ${scannable.length} not yet imported.</p>
+      <select id="scanLootSession" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:12px;margin-bottom:8px;box-sizing:border-box">${opts}</select>
+      <button class="btn btn-gold" id="scanLootBtn" onclick="scanSessionForLoot()" style="margin:0">🔍 Scan Selected Session</button>
+      <div id="scanLootStatus" style="margin-top:8px;font-size:12px;text-align:center;min-height:16px"></div>
+      <div id="scanLootPreview" style="margin-top:8px"></div>
+    </div>`;
+  }
+
+  let html = scanCard + `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px"><div class="inv-sum-card"><div class="isc-label">UNASSIGNED</div><div class="isc-val">${items.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val">${fmtGP(totVal)} <span style="font-size:9px;color:var(--muted)">gp</span></div></div></div>`;
+  if(!items.length)html+=`<div class="empty-state"><div class="es-icon">🪙</div><p>Pool is empty!</p></div>`;else html+=`<div class="card">`+items.map(item=>`<div class="pool-row"><span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${esc(item.name)}${item.qty>1?(' ×'+item.qty):''}</div><div style="font-size:10px"><span class="rtext-${item.rarity}">${item.rarity}</span>${item.value>0?' · '+item.value+' gp':''}</div></div><button class="pool-assign-btn" onclick="assignFromPool('${item.id}')">Assign →</button><button class="icon-btn" style="color:var(--red)" onclick="removeItem('${item.id}')">✕</button></div>`).join('')+`</div>`;
+  el.innerHTML=html;
+}
 function renderWealth(){
   // Scope to campaign characters only
   const camp = getActiveCamp();
