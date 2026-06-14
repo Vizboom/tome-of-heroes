@@ -10422,7 +10422,7 @@ function renderInventory(){
   html+=`<div class="inv-summary"><div class="inv-sum-card"><div class="isc-label">ITEMS</div><div class="isc-val">${owned.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val" style="font-size:15px">${fmtGP(totalVal)}<span style="font-size:9px;color:var(--muted)"> gp</span></div></div><div class="inv-sum-card"><div class="isc-label">WEIGHT</div><div class="isc-val" style="font-size:15px;color:${wC}">${totalWt%1===0?totalWt:totalWt.toFixed(1)}<span style="font-size:9px;color:var(--muted)"> lb</span></div></div></div>`;
   if(char)html+=`<div class="wbar-wrap"><div class="wbar-labels"><span>Carry weight</span><span>${totalWt%1===0?totalWt:totalWt.toFixed(1)} / ${maxCarry} lb</span></div><div class="wbar-track"><div class="wbar-fill" style="width:${wPct}%;background:${wC}"></div></div></div>`;
   if(!filtered.length)html+=`<div class="empty-state"><div class="es-icon">🎒</div><p>No items here.</p></div>`;
-  else html+=filtered.map(item=>{const icon=TYPE_ICONS[item.type]||'📦';const al=item.attune==='attuned'?'✦ Attuned':item.attune==='required'?'◇ Needs Attune':'';return`<div class="item-card fadein"><div class="item-top"><div class="item-icon">${icon}</div><div style="flex:1;min-width:0"><div class="item-name">${esc(item.name)}${item.qty>1?(' <span style="color:var(--muted);font-size:11px">×'+item.qty+'</span>'):''}</div><div class="item-meta">${item.type}${item.value>0?' · '+item.value+' gp':''}${item.weight>0?' · '+item.weight+' lb':''}</div><div class="item-badges"><span class="ibadge r-${item.rarity}">${item.rarity.replace('-',' ')}</span>${al?('<span class="ibadge" style="border-color:var(--purple);color:var(--purple)">'+al+'</span>'):''}</div></div></div>${item.desc?('<div class="item-desc">'+esc(item.desc)+'</div>'):''}<div class="item-acts">${item.owner!=='pool'?('<button class="icon-btn" title="To pool" onclick="itemToPool(\''+item.id+'\')">🎒</button>'):''} ${item.owner==='pool'?('<button class="icon-btn" style="color:var(--gold)" title="Assign" onclick="assignFromPool(\''+item.id+'\')">→</button>'):''}<button class="icon-btn" style="color:var(--red)" title="Remove" onclick="removeItem('${item.id}')">✕</button></div></div>`;}).join('');
+  else html+=filtered.map(item=>{const icon=TYPE_ICONS[item.type]||'📦';const al=item.attune==='attuned'?'✦ Attuned':item.attune==='required'?'◇ Needs Attune':'';return`<div class="item-card fadein"><div class="item-top"><div class="item-icon">${icon}</div><div style="flex:1;min-width:0"><div class="item-name">${esc(item.name)}${item.qty>1?(' <span style="color:var(--muted);font-size:11px">×'+item.qty+'</span>'):''}</div><div class="item-meta">${item.type}${item.value>0?' · '+item.value+' gp':''}${item.weight>0?' · '+item.weight+' lb':''}</div><div class="item-badges"><span class="ibadge r-${item.rarity}">${item.rarity.replace('-',' ')}</span>${al?('<span class="ibadge" style="border-color:var(--purple);color:var(--purple)">'+al+'</span>'):''}</div></div></div>${item.desc?('<div class="item-desc">'+esc(item.desc)+'</div>'):''}<div class="item-acts">${item.owner!=='pool'?('<button class="icon-btn" title="To pool" onclick="itemToPool(\''+item.id+'\')">🎒</button>'):''} ${item.owner==='pool'?('<button class="icon-btn" style="color:var(--gold)" title="Assign" onclick="assignFromPool(\''+item.id+'\')">→</button>'):''}<button class="icon-btn" title="Edit" onclick="openItemEdit('${item.id}')">✎</button><button class="icon-btn" style="color:var(--red)" title="Remove" onclick="removeItem('${item.id}')">✕</button></div></div>`;}).join('');
   el.innerHTML=html;
 }
 function removeItem(id){saveItems(getItems().filter(i=>i.id!==id));renderInventory();renderPool();toast('Item removed','var(--red)');}
@@ -10438,6 +10438,66 @@ function assignFromPool(id){
     if(ii>=0){items[ii].owner=chars[idx].id;saveItems(items);}
     renderPool();renderInventory();toast('Assigned to '+chars[idx].name);
   }
+}
+function openItemEdit(id){
+  const item = getItems().find(i=>i.id===id);
+  if(!item){ toast('Item not found','var(--red)'); return; }
+  document.getElementById('itemEditModal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'itemEditModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  const typeOpts = Object.entries(TYPE_ICONS).map(([k,v])=>`<option value="${k}" ${item.type===k?'selected':''}>${v} ${k}</option>`).join('');
+  const rarityOpts = [['common','Common'],['uncommon','Uncommon'],['rare','Rare'],['very-rare','Very Rare'],['legendary','Legendary'],['artifact','Artifact']].map(([v,l])=>`<option value="${v}" ${item.rarity===v?'selected':''}>${l}</option>`).join('');
+  const attuneOpts = [['none','None'],['required','Required'],['attuned','Attuned']].map(([v,l])=>`<option value="${v}" ${item.attune===v?'selected':''}>${l}</option>`).join('');
+  const handsOpts = [['1','One-handed'],['v','Versatile'],['2','Two-handed']].map(([v,l])=>`<option value="${v}" ${(item.hands||'1')===v?'selected':''}>${l}</option>`).join('');
+  modal.innerHTML = `
+    <div class="card" style="max-width:440px;width:100%;max-height:90vh;overflow-y:auto;margin:0">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <div style="font-family:'Cinzel',serif;font-size:14px;color:var(--gold);flex:1">✎ Edit Item</div>
+        <button class="icon-btn" onclick="document.getElementById('itemEditModal').remove()" style="font-size:16px">✕</button>
+      </div>
+      <div class="field"><label>Item Name</label><input id="ieName" value="${esc(item.name||'')}"></div>
+      <div class="form-row two">
+        <div class="field"><label>Type</label><select id="ieType" onchange="document.getElementById('ieHandsWrap').style.display=this.value==='weapon'?'':'none'">${typeOpts}</select></div>
+        <div class="field" id="ieHandsWrap" style="display:${item.type==='weapon'?'':'none'}"><label>Hands</label><select id="ieHands">${handsOpts}</select></div>
+      </div>
+      <div class="form-row three">
+        <div class="field"><label>Rarity</label><select id="ieRarity">${rarityOpts}</select></div>
+        <div class="field"><label>Qty</label><input id="ieQty" type="number" min="1" value="${item.qty||1}"></div>
+        <div class="field"><label>Weight</label><input id="ieWt" type="number" min="0" step="0.5" value="${item.weight||0}"></div>
+      </div>
+      <div class="form-row two">
+        <div class="field"><label>Value (gp)</label><input id="ieVal" type="number" min="0" value="${item.value||0}"></div>
+        <div class="field"><label>Attunement</label><select id="ieAttune">${attuneOpts}</select></div>
+      </div>
+      <div class="field"><label>Description</label><textarea id="ieDesc" style="min-height:90px" placeholder="Properties, abilities, damage dice (e.g. 1d8 slashing)…">${esc(item.desc||'')}</textarea></div>
+      <button class="btn btn-gold" onclick="saveItemEdit('${item.id}')">Save Changes ✦</button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e=>{ if(e.target===modal) modal.remove(); });
+}
+function saveItemEdit(id){
+  const items = getItems();
+  const ii = items.findIndex(i=>i.id===id);
+  if(ii<0){ document.getElementById('itemEditModal')?.remove(); return; }
+  const g = x=>document.getElementById(x);
+  const name = (g('ieName').value||'').trim();
+  if(!name){ toast('Item needs a name','var(--red)'); return; }
+  const type = g('ieType').value;
+  items[ii].name   = name;
+  items[ii].type   = type;
+  items[ii].rarity = g('ieRarity').value;
+  items[ii].qty    = Math.max(1, parseInt(g('ieQty').value)||1);
+  items[ii].weight = parseFloat(g('ieWt').value)||0;
+  items[ii].value  = parseFloat(g('ieVal').value)||0;
+  items[ii].attune = g('ieAttune').value;
+  items[ii].desc   = (g('ieDesc').value||'').trim();
+  if(type==='weapon') items[ii].hands = g('ieHands').value; else delete items[ii].hands;
+  saveItems(items);
+  document.getElementById('itemEditModal')?.remove();
+  toast('✦ '+name+' updated!','var(--gold)');
+  renderInventory();
+  renderPool();
 }
 function renderAddTab(){
   const chars = getFullParty();
@@ -10698,7 +10758,7 @@ function renderPool(){
   }
 
   let html = scanCard + `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px"><div class="inv-sum-card"><div class="isc-label">UNASSIGNED</div><div class="isc-val">${items.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val">${fmtGP(totVal)} <span style="font-size:9px;color:var(--muted)">gp</span></div></div></div>`;
-  if(!items.length)html+=`<div class="empty-state"><div class="es-icon">🪙</div><p>Pool is empty!</p></div>`;else html+=`<div class="card">`+items.map(item=>`<div class="pool-row"><span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${esc(item.name)}${item.qty>1?(' ×'+item.qty):''}</div><div style="font-size:10px"><span class="rtext-${item.rarity}">${item.rarity}</span>${item.value>0?' · '+item.value+' gp':''}</div></div><button class="pool-assign-btn" onclick="assignFromPool('${item.id}')">Assign →</button><button class="icon-btn" style="color:var(--red)" onclick="removeItem('${item.id}')">✕</button></div>`).join('')+`</div>`;
+  if(!items.length)html+=`<div class="empty-state"><div class="es-icon">🪙</div><p>Pool is empty!</p></div>`;else html+=`<div class="card">`+items.map(item=>`<div class="pool-row"><span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${esc(item.name)}${item.qty>1?(' ×'+item.qty):''}</div><div style="font-size:10px"><span class="rtext-${item.rarity}">${item.rarity}</span>${item.value>0?' · '+item.value+' gp':''}</div></div><button class="pool-assign-btn" onclick="assignFromPool('${item.id}')">Assign →</button><button class="icon-btn" title="Edit" onclick="openItemEdit('${item.id}')">✎</button><button class="icon-btn" style="color:var(--red)" onclick="removeItem('${item.id}')">✕</button></div>`).join('')+`</div>`;
   el.innerHTML=html;
 }
 function renderWealth(){
