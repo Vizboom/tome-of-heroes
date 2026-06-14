@@ -1329,9 +1329,9 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <div id="charScreenMain" style="display:none">
       <div class="tab-bar" style="position:sticky;top:0;z-index:10;background:var(--bg)">
         <button class="tab-btn active" onclick="charTab('equip')">⚔ Equip</button>
-        <button class="tab-btn" onclick="charTab('stats')">📊 Stats</button>
-        <button class="tab-btn" onclick="charTab('progress')">⬆ Level</button>
         <button class="tab-btn" onclick="charTab('spells')">✨ Spells</button>
+        <button class="tab-btn" onclick="charTab('progress')">⬆ Level</button>
+        <button class="tab-btn" onclick="charTab('stats')">📊 Stats</button>
         <button class="tab-btn" onclick="charTab('profs')">📜 Profs</button>
       </div>
       <!-- Equip tab (existing paperdoll + inventory) -->
@@ -9488,8 +9488,8 @@ function renderDiceCharPanel(){
           html+='</div>';
         }
 
-        // Character sheet attacks
-        charAtks.forEach(function(atk){
+        // Character sheet attacks — hidden when a weapon is equipped (equipped weapon shown alone)
+        if(!hasMH) charAtks.forEach(function(atk){
           const bonus=parseInt((atk.bonus||atk.atk||'+0').replace(/[^-+\d]/g,''))||0;
           const uid='dp_ca_'+char.id+'_'+(atk.name||'').replace(/\W/g,'');
           html+='<div style="background:var(--surface);border:1px solid var(--red);border-radius:8px;padding:5px 10px;cursor:pointer">';
@@ -9499,8 +9499,8 @@ function renderDiceCharPanel(){
           html+='</div>';
         });
 
-        // Loot weapon pills
-        lootWpns.forEach(function(atk){
+        // Loot weapon pills — hidden when a weapon is equipped (equipped weapon shown alone)
+        if(!hasMH) lootWpns.forEach(function(atk){
           const bonus=parseInt((atk.bonus||'+0').replace(/[^-+\d]/g,''))||0;
           const rarityColor=atk.rarity==='uncommon'?'var(--gold)':atk.rarity==='rare'?'var(--purple)':atk.rarity==='very-rare'?'#e74c3c':'var(--red)';
           const uid='dp_lw_'+char.id+'_'+(atk.name||'').replace(/\W/g,'');
@@ -9580,6 +9580,17 @@ function renderDiceCharPanel(){
       })()}
 
       ${(()=>{
+        // Inspiration — single gold bubble that toggles like a spell slot pip
+        const inspired = !!(char.effects && char.effects.inspiration);
+        return '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ffffff22">'
+          + '<div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">INSPIRATION</div>'
+          + '<div style="display:flex;align-items:center;gap:8px">'
+          + '<div onclick="diceToggleInspiration(\''+char.id+'\');event.stopPropagation()" title="Toggle inspiration" style="width:18px;height:18px;border-radius:50%;border:2px solid var(--gold);background:'+(inspired?'var(--gold)':'transparent')+';cursor:pointer;transition:all 0.15s;box-shadow:'+(inspired?'0 0 8px var(--gold)':'none')+'"></div>'
+          + '<span style="font-size:11px;color:'+(inspired?'var(--gold)':'var(--muted)')+'">'+(inspired?'🌟 Inspired':'Not inspired')+'</span>'
+          + '</div></div>';
+      })()}
+
+      ${(()=>{
         // Prepared spells — quick reference
         const prepared = (char.spells||[]).filter(s=>s.prepared);
         if(!prepared.length) return '';
@@ -9623,6 +9634,33 @@ function renderDiceCharPanel(){
         });
         html2 += '</div></div>';
         return html2;
+      })()}
+
+      ${(()=>{
+        // Feats — full descriptions as a quick reference guide (mirrors the prepared-spells list)
+        const feats = char.feats||[];
+        if(!feats.length) return '';
+        const featSectionId = 'diceFeatSection_'+char.id;
+        const featBodyId = 'diceFeatBody_'+char.id;
+        const fcMap = char.featClassMap||{};
+        let html3 = '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ffffff22">'
+          + '<div onclick="toggleDicePrepSection(\''+featBodyId+'\',\''+featSectionId+'\')" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:6px;user-select:none">'
+          + '<div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:1px">⚡ FEATS</div>'
+          + '<span id="'+featSectionId+'" style="font-size:11px;color:var(--muted);transition:transform 0.2s">▸</span>'
+          + '</div>'
+          + '<div id="'+featBodyId+'" style="display:none">';
+        html3 += feats.map(function(fname){
+          const fd = (typeof FEATS_DB!=='undefined' ? FEATS_DB.find(function(f){return f.name===fname;}) : null) || {name:fname,desc:'',req:''};
+          const tag = fcMap[fname] ? '<span style="font-size:9px;color:var(--muted);font-family:\'Cinzel\',serif;letter-spacing:0.5px;margin-left:6px">· '+esc(fcMap[fname])+'</span>' : '';
+          const reqLine = fd.req ? '<div style="font-size:10px;color:var(--muted);font-style:italic;margin-bottom:3px">Requires: '+esc(fd.req)+'</div>' : '';
+          return '<div style="background:var(--surface);border:1px solid var(--gold)44;border-radius:8px;margin-bottom:4px;padding:7px 10px">'
+            + '<div style="font-family:\'Cinzel\',serif;font-size:11px;color:var(--gold);margin-bottom:'+((fd.desc||fd.req)?'3px':'0')+'">'+esc(fd.name||fname)+tag+'</div>'
+            + reqLine
+            + (fd.desc ? '<div style="font-size:11px;color:var(--text);line-height:1.55">'+fd.desc+'</div>' : '')
+            + '</div>';
+        }).join('');
+        html3 += '</div></div>';
+        return html3;
       })()}
     </div></div>`;
 }
@@ -9733,6 +9771,17 @@ function diceResetSlots(charId){
   const ci = chars.findIndex(c=>String(c.id)===String(charId));
   if(ci<0) return;
   chars[ci].spellSlotsUsed = {};
+  saveChar(chars[ci]);
+  renderDiceCharPanel();
+}
+
+function diceToggleInspiration(charId){
+  const chars = getChars();
+  const ci = chars.findIndex(c=>String(c.id)===String(charId));
+  if(ci<0) return;
+  chars[ci].effects = chars[ci].effects||{};
+  if(chars[ci].effects.inspiration) delete chars[ci].effects.inspiration;
+  else chars[ci].effects.inspiration = true;
   saveChar(chars[ci]);
   renderDiceCharPanel();
 }
@@ -12471,7 +12520,7 @@ function getCurrentCharItems(){
 /* ── Render entry point ── */
 function charTab(t){
   _charTab = t;
-  document.querySelectorAll('#scr-character .tab-btn').forEach((b,i)=>b.classList.toggle('active',['equip','stats','progress','spells','profs'][i]===t));
+  document.querySelectorAll('#scr-character .tab-btn').forEach((b,i)=>b.classList.toggle('active',['equip','spells','progress','stats','profs'][i]===t));
   document.querySelectorAll('#scr-character .tab-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('cstab-'+t)?.classList.add('active');
   const chars = getVisibleChars();
@@ -12718,24 +12767,48 @@ function renderCharProfsTab(char, cls){
 
   // Feats
   h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">FEATS</div>`;
+  const mcList = char.multiclasses||[];
+  const isMultiF = mcList.length > 1;
+  const featClassMap = char.featClassMap||{};
   feats.forEach((feat, i)=>{
     const featData = FEATS_DB?.find(f=>f.name===feat)||{name:feat,desc:''};
+    const clsTag = featClassMap[feat] ? `<span style="font-size:9px;color:var(--muted);font-family:'Cinzel',serif;letter-spacing:0.5px;margin-left:6px">· ${esc(featClassMap[feat])}</span>` : '';
     h += `<div style="background:var(--surface2);border:1px solid ${cc};border-radius:10px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:flex-start;gap:8px">
       <div style="flex:1">
-        <div style="font-family:'Cinzel',serif;font-size:11px;color:${cc}">${featData.name}</div>
+        <div style="font-family:'Cinzel',serif;font-size:11px;color:${cc}">${featData.name}${clsTag}</div>
         ${featData.desc?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${featData.desc}</div>`:''}
       </div>
       <button onclick="csRemoveFeat('${char.id}',${i})" style="background:none;border:none;color:var(--red);font-size:14px;cursor:pointer;flex-shrink:0">✕</button>
     </div>`;
   });
-  // Add feat
-  h += `<div style="display:flex;gap:8px;margin-bottom:18px">
-    <select id="csFeatPicker" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:11px">
-      <option value="">— Add a feat —</option>
-      ${(FEATS_DB||FEATS_5E||[]).map(f=>`<option value="${f.name||f}">${f.name||f}</option>`).join('')}
-    </select>
-    <button onclick="csAddFeat('${char.id}')" style="padding:6px 14px;background:${cc};border:none;border-radius:8px;color:#fff;font-size:12px;cursor:pointer">Add</button>
-  </div>`;
+  // Add feat — single dropdown normally, or one dropdown per class when multiclassed
+  const _featOpts = (FEATS_DB||FEATS_5E||[]).map(f=>`<option value="${f.name||f}">${f.name||f}</option>`).join('');
+  if(isMultiF){
+    h += `<div style="font-size:10px;color:var(--muted);font-style:italic;margin-bottom:8px">Multiclassed — choose feats for each class' ASI slots separately.</div>`;
+    mcList.forEach((mc, mi)=>{
+      const mcCls = CLASSES[mc.classIdx];
+      if(!mcCls) return;
+      h += `<div style="margin-bottom:10px">
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:${mcCls.color};letter-spacing:0.5px;margin-bottom:5px">${mcCls.icon} ${mcCls.name.toUpperCase()} (Lv ${mc.level})</div>
+        <div style="display:flex;gap:8px">
+          <select id="csFeatPicker_${mi}" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:11px">
+            <option value="">— Add a feat —</option>
+            ${_featOpts}
+          </select>
+          <button onclick="csAddFeatForClass('${char.id}',${mc.classIdx},${mi})" style="padding:6px 14px;background:${mcCls.color};border:none;border-radius:8px;color:#fff;font-size:12px;cursor:pointer">Add</button>
+        </div>
+      </div>`;
+    });
+    h += `<div style="margin-bottom:18px"></div>`;
+  } else {
+    h += `<div style="display:flex;gap:8px;margin-bottom:18px">
+      <select id="csFeatPicker" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 10px;font-size:11px">
+        <option value="">— Add a feat —</option>
+        ${_featOpts}
+      </select>
+      <button onclick="csAddFeat('${char.id}')" style="padding:6px 14px;background:${cc};border:none;border-radius:8px;color:#fff;font-size:12px;cursor:pointer">Add</button>
+    </div>`;
+  }
 
   // Language / tool / weapon proficiencies (free text)
   h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">OTHER PROFICIENCIES</div>`;
@@ -12789,8 +12862,27 @@ function csAddFeat(id){
   const char = chars.find(c=>String(c.id)===String(id));
   if(char) renderCharProfsTab(char, CLASSES[char.classIdx]);
 }
+function csAddFeatForClass(id, classIdx, pickerIdx){
+  const sel = document.getElementById('csFeatPicker_'+pickerIdx);
+  if(!sel||!sel.value) return;
+  const className = (CLASSES[classIdx]||{}).name||'';
+  _csSaveChar(id, c=>{
+    if(!c.feats) c.feats=[];
+    if(!c.feats.includes(sel.value)) c.feats.push(sel.value);
+    if(!c.featClassMap) c.featClassMap={};
+    c.featClassMap[sel.value] = className;
+  });
+  const chars = getVisibleChars();
+  const char = chars.find(c=>String(c.id)===String(id));
+  if(char) renderCharProfsTab(char, CLASSES[char.classIdx]);
+}
 function csRemoveFeat(id, idx){
-  _csSaveChar(id, c=>{ if(c.feats) c.feats.splice(idx,1); });
+  _csSaveChar(id, c=>{
+    if(c.feats){
+      const removed = c.feats.splice(idx,1)[0];
+      if(removed && c.featClassMap) delete c.featClassMap[removed];
+    }
+  });
   const chars = getVisibleChars();
   const char = chars.find(c=>String(c.id)===String(id));
   if(char) renderCharProfsTab(char, CLASSES[char.classIdx]);
