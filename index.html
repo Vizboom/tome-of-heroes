@@ -2846,6 +2846,15 @@ function getCharCampaign(charId){
 /* ══ HELPERS ══ */
 const getMod=s=>{const m=Math.floor((s-10)/2);return(m>=0?'+':'')+m;};
 const getPB=l=>Math.ceil(l/4)+1;
+// Spell slots are based on the primary spellcasting class' own level (safest for multiclass —
+// avoids over-counting slots from total character level). Falls back to total level for single-class.
+function getPrimaryCastingLevel(char){
+  if(char && char.multiclasses && char.multiclasses.length>1){
+    const firstCaster = char.multiclasses.find(m=>CLASSES[m.classIdx] && CLASSES[m.classIdx].spellcaster);
+    if(firstCaster) return firstCaster.level||1;
+  }
+  return (char && char.level)||1;
+}
 const getMaxHP=(cls,level,con)=>{const c=parseInt(getMod(con))||0;return cls.hit+c+(level-1)*(Math.ceil(cls.hit/2)+1+c);};
 const classColor=i=>CLASSES[i]?.color||'#7b5ea7';
 const classIcon=i=>CLASSES[i]?.icon||'?';
@@ -3712,17 +3721,25 @@ let spellFilter='all';
 function renderSpellsTab(char,cls,elId,editable){
   const el=document.getElementById(elId); if(!el) return;
   try {
-  if(!cls.spellcaster){
+  // Determine spellcasting classes (supports multiclass)
+  const _mcs = char.multiclasses||[];
+  const isMC = _mcs.length>1;
+  const casterClasses = isMC
+    ? _mcs.map(mc=>({idx:mc.classIdx, cls:CLASSES[mc.classIdx], level:mc.level})).filter(x=>x.cls && x.cls.spellcaster)
+    : (cls.spellcaster ? [{idx:char.classIdx, cls:cls, level:char.level}] : []);
+  if(!casterClasses.length){
     el.innerHTML=`<div class="empty-state"><div class="es-icon">⚔</div><p>${cls.name}s draw power from steel, not sorcery.</p></div>`;
     return;
   }
+  // If the primary class can't cast (martial + caster multiclass), display using the first caster class
+  if(!cls.spellcaster) cls = casterClasses[0].cls;
   const aMap={bard:'CHA',cleric:'WIS',druid:'WIS',paladin:'CHA',ranger:'WIS',sorcerer:'CHA',warlock:'CHA',wizard:'INT'};
   const sab=aMap[cls.name.toLowerCase()]||'WIS';
   const smod=parseInt(getMod(char.abilities?.[sab]))||0;
   const pb=getPB(char.level);
   const slotKey='slots_'+char.id; // kept for onclick signature compatibility
   const used = char.spellSlotsUsed || {};
-  const slots=SPELL_SLOTS[char.level]||SPELL_SLOTS[20];
+  const slots=SPELL_SLOTS[getPrimaryCastingLevel(char)]||SPELL_SLOTS[20];
   const spells=char.spells||[];
 
   let html=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px">
@@ -3743,8 +3760,8 @@ function renderSpellsTab(char,cls,elId,editable){
   const isWarlock = cls.name === 'Warlock';
 
   if(isWarlock){
-    const pactCount = PACT_MAGIC_SLOTS[char.level]||2;
-    const pactLevel = PACT_MAGIC_LEVEL[char.level]||1;
+    const pactCount = PACT_MAGIC_SLOTS[getPrimaryCastingLevel(char)]||2;
+    const pactLevel = PACT_MAGIC_LEVEL[getPrimaryCastingLevel(char)]||1;
     const usedN = used[0]||0;
     html += `<div class="slot-row" style="--cc:${cls.color};--cc-dim:${cls.color}22">
       <div class="slot-level" style="min-width:80px">Pact L${pactLevel}</div>
@@ -3797,6 +3814,7 @@ function renderSpellsTab(char,cls,elId,editable){
           <span class="spell-level-badge" style="border-color:${cls.color};color:${cls.color}">${isCantrip?'Cantrip':'Lv '+sp.level}</span>
           <span class="spell-name">${sp.name}</span>
           ${school?('<span class="spell-school">'+school+'</span>'):''}
+          ${isMC && sp.srcClass?('<span style="font-size:8px;color:var(--muted);font-family:\'Cinzel\',serif;letter-spacing:0.5px;flex-shrink:0">'+sp.srcClass+'</span>'):''}
           ${sp.pinned && !isCantrip ?('<span title="Pinned — stays prepared through long rests" style="font-size:11px;color:var(--gold);flex-shrink:0">📌</span>'):''}
           ${sp.prepared && !isCantrip ?('<span style="font-size:9px;color:var(--gold);font-family:\'Cinzel\',serif;letter-spacing:1px;flex-shrink:0">★ PREP</span>'):''}
           <span class="spell-chevron">▼</span>
@@ -3841,15 +3859,31 @@ function renderSpellsTab(char,cls,elId,editable){
   }
 
   if(editable){
-    html+=`<div class="divider"><span>Add Spells</span></div>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
-      <button class="btn btn-primary" style="margin:0;padding:12px" onclick="openSpellBrowser(${char.id},'${elId}',false)">
-        📖 Browse Spell List
-      </button>
-      <button class="btn btn-outline" style="margin:0;padding:10px;border-color:${cls.color};color:${cls.color}" onclick="openSpellBrowser(${char.id},'${elId}',true)">
-        ✨ Browse Cantrips
-      </button>
-    </div>`;
+    html+=`<div class="divider"><span>Add Spells</span></div>`;
+    if(casterClasses.length<=1){
+      // Single spellcasting class — existing UI
+      html+=`<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+        <button class="btn btn-primary" style="margin:0;padding:12px" onclick="openSpellBrowser(${char.id},'${elId}',false,${casterClasses[0].idx})">
+          📖 Browse Spell List
+        </button>
+        <button class="btn btn-outline" style="margin:0;padding:10px;border-color:${cls.color};color:${cls.color}" onclick="openSpellBrowser(${char.id},'${elId}',true,${casterClasses[0].idx})">
+          ✨ Browse Cantrips
+        </button>
+      </div>`;
+    } else {
+      // Multiclass — one browse block per spellcasting class, each filtered to that class' list & level
+      html+=`<div style="font-size:11px;color:var(--muted);font-style:italic;margin-bottom:8px">Add spells from each class' list, filtered to that class' level.</div>`;
+      casterClasses.forEach(sc=>{
+        html+=`<div style="margin-bottom:10px">
+          <div style="font-family:'Cinzel',serif;font-size:9px;color:${sc.cls.color};letter-spacing:0.5px;margin-bottom:5px">${sc.cls.icon} ${sc.cls.name.toUpperCase()} (Lv ${sc.level})</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary" style="margin:0;padding:10px;flex:1" onclick="openSpellBrowser(${char.id},'${elId}',false,${sc.idx})">📖 Spells</button>
+            <button class="btn btn-outline" style="margin:0;padding:10px;flex:1;border-color:${sc.cls.color};color:${sc.cls.color}" onclick="openSpellBrowser(${char.id},'${elId}',true,${sc.idx})">✨ Cantrips</button>
+          </div>
+        </div>`;
+      });
+      html+=`<div style="margin-bottom:14px"></div>`;
+    }
   }
 
   el.innerHTML=html;
@@ -6619,18 +6653,25 @@ function updateASITotal(){
 // ══ LEVEL-UP SPELL PICKER ════════════════════════════════════════════════════
 
 // Browser mode: unlimited selection, launched from Spells tab
-function openSpellBrowser(charId, returnElId, cantripOnly){
+function openSpellBrowser(charId, returnElId, cantripOnly, classIdxOverride){
   const char = getChars().find(c=>c.id===charId) || getFullParty().find(c=>c.id===charId);
   if(!char) return;
-  const cls  = CLASSES[char.classIdx];
+  const browseClassIdx = (classIdxOverride!=null && classIdxOverride!=='') ? Number(classIdxOverride) : char.classIdx;
+  const cls  = CLASSES[browseClassIdx];
   const cc   = cls.color;
   const spellList = CLASS_SPELL_LISTS[cls.name];
 
   if(!cls.spellcaster){ toast(cls.name+'s don\'t use spells','var(--red)'); return; }
 
-  // Work out max spell level this character can currently access
+  // Class level for this specific class (multiclass-aware), used to cap accessible spell level
+  let classLevel = char.level;
+  if(char.multiclasses && char.multiclasses.length>1){
+    const mc = char.multiclasses.find(m=>m.classIdx===browseClassIdx);
+    if(mc) classLevel = mc.level;
+  }
+  // Work out max spell level this character can currently access in this class
   const casterType = CASTER_TYPE[cls.name]||'full';
-  const maxSpellLevel = (MAX_SPELL_LEVEL_BY_LEVEL[casterType]||{})[char.level]||0;
+  const maxSpellLevel = (MAX_SPELL_LEVEL_BY_LEVEL[casterType]||{})[classLevel]||0;
 
   // Build spell list filtered to accessible levels
   let allSpells = [];
@@ -6655,6 +6696,7 @@ function openSpellBrowser(charId, returnElId, cantripOnly){
 
   window._spellPickerState = {
     charId, returnElId,
+    classIdx: browseClassIdx,
     slotsToAdd: 999,
     asCantrips: cantripOnly,
     browserMode: true,
@@ -6675,7 +6717,7 @@ function openSpellBrowser(charId, returnElId, cantripOnly){
 
   const subtitle = cantripOnly
     ? `${cls.name} cantrips`
-    : `${cls.name} spells up to level ${maxSpellLevel} (character level ${char.level})`;
+    : `${cls.name} spells up to level ${maxSpellLevel} (${cls.name} level ${classLevel})`;
 
   const isKnownCasterBr = ['Bard','Sorcerer','Warlock','Ranger'].includes(cls.name);
   modal.innerHTML = `
@@ -6722,7 +6764,7 @@ function confirmSpellBrowse(asPrepared){
   const workChar = isPartyChar ? partyChar : chars[ci];
   if(!workChar.spells) workChar.spells=[];
 
-  const cls = CLASSES[workChar.classIdx];
+  const cls = CLASSES[(st.classIdx!=null ? st.classIdx : workChar.classIdx)];
   const allByName = {};
   const spellList = CLASS_SPELL_LISTS[cls.name]||{};
   Object.entries(spellList).forEach(([lvl,names])=>names.forEach(n=>{ allByName[n]=lvl; }));
@@ -6733,7 +6775,7 @@ function confirmSpellBrowse(asPrepared){
     const lvl = allByName[name]||'cantrip';
     workChar.spells.push({ name, level:lvl, school:db.school||'', castTime:db.castTime||'',
       range:db.range||'', duration:db.duration||'', components:db.components||'',
-      desc:db.desc||'', prepared:asPrepared });
+      desc:db.desc||'', prepared:asPrepared, srcClass:cls.name });
   });
 
   workChar.spells.sort((a,b)=>{
@@ -6752,7 +6794,7 @@ function confirmSpellBrowse(asPrepared){
   document.getElementById('spellPickerModal')?.remove();
   toast(`✦ ${count} spell${count!==1?'s':''} added${asPrepared?' as prepared':''}!`,'var(--gold)');
 
-  renderSpellsTab(workChar, cls, st.returnElId||'pstab-spells', true);
+  renderSpellsTab(workChar, CLASSES[workChar.classIdx], st.returnElId||'pstab-spells', true);
   if(document.getElementById('diceCharPanel')) renderDiceCharPanel();
 }
 
@@ -9549,7 +9591,7 @@ function renderDiceCharPanel(){
 
       ${(()=>{
         if(!cls.spellcaster) return '';
-        const slots = SPELL_SLOTS[char.level] || SPELL_SLOTS[20];
+        const slots = SPELL_SLOTS[getPrimaryCastingLevel(char)] || SPELL_SLOTS[20];
         if(!slots || !slots.length) return '';
         const slotKey = 'slots_'+char.id; // kept for diceToggleSlot signature compatibility
         // Read from char.spellSlotsUsed (Supabase) so dice panel stays in sync with character sheet
