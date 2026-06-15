@@ -2941,6 +2941,18 @@ function featReqMet(feat, char){
   // "Weapon proficiency" (Fighting Initiate) — virtually every class has at least one; treat as met
   if(/weapon proficiency/i.test(req)) return {met:true, reason:''};
 
+  // Subclass choice requirements, e.g. "Totem Spirit: Bear"
+  const subMatch = req.match(/^(.*?):(.*?)$/);
+  if(subMatch){
+    const choiceName = subMatch[1].trim();
+    const requiredValue = subMatch[2].trim().toLowerCase();
+    const choices = char.subclassChoices || {};
+    if(choices[choiceName] && choices[choiceName].toLowerCase() === requiredValue){
+      return {met:true, reason:''};
+    }
+    return {met:false, reason:`Requires ${choiceName}: ${subMatch[2]}`};
+  }
+
   // "Small race" (Squat Nimbleness)
   if(/small race/i.test(req)){
     const ok = SMALL_RACES.some(r=>charRaceMatches(char, r));
@@ -5575,10 +5587,23 @@ const SUBCLASS_FEATURES = {
     14: [{n:'Retaliation',d:'When you take damage from a creature within 5 ft, you can use a reaction to make a melee weapon attack against it.'}],
   },
   'Path of the Totem Warrior': {
-    3:  [{n:'Spirit Seeker',d:'You can cast Beast Sense and Speak with Animals as rituals.'},{n:'Totem Spirit',d:'Choose a totem animal: Bear (resistance to all non-psychic damage while raging), Eagle (Dash as bonus action while raging, provoke no opportunity attacks), Wolf (allies have advantage on melee attacks vs enemies within 5 ft of you while raging).'}],
-    6:  [{n:'Aspect of the Beast',d:'Gain a non-combat benefit from your totem: Bear (carry weight doubled, advantage on STR checks), Eagle (see up to 1 mile clearly, dim light counts as bright), Wolf (track at fast pace, stealth at normal pace).'}],
+    3:  [{n:'Spirit Seeker',d:'You can cast Beast Sense and Speak with Animals as rituals.'},
+      {n:'Totem Spirit', choice:true, options:[
+        {value:'bear',label:'Bear',desc:'Resistance to all non-psychic damage while raging'},
+        {value:'eagle',label:'Eagle',desc:'Dash as bonus action while raging, provoke no opportunity attacks'},
+        {value:'wolf',label:'Wolf',desc:'Allies have advantage on melee attacks vs enemies within 5 ft of you while raging'}
+      ]}],
+    6:  [{n:'Aspect of the Beast', choice:true, options:[
+        {value:'bear',label:'Bear',desc:'Carry weight doubled, advantage on STR checks'},
+        {value:'eagle',label:'Eagle',desc:'See up to 1 mile clearly, dim light counts as bright'},
+        {value:'wolf',label:'Wolf',desc:'Track at fast pace, stealth at normal pace'}
+      ]}],
     10: [{n:'Spirit Walker',d:'You can cast Commune with Nature as a ritual.'}],
-    14: [{n:'Totemic Attunement',d:'Gain a combat benefit from your totem: Bear (enemies have disadvantage on attacks vs your allies if you\'re within 5 ft), Eagle (fly speed equal to walk speed while raging), Wolf (knock Large or smaller creatures prone with melee weapon attacks while raging).'}],
+    14: [{n:'Totemic Attunement', choice:true, options:[
+        {value:'bear',label:'Bear',desc:'Enemies have disadvantage on attacks vs your allies if you\'re within 5 ft'},
+        {value:'eagle',label:'Eagle',desc:'Fly speed equal to walk speed while raging'},
+        {value:'wolf',label:'Wolf',desc:'Knock Large or smaller creatures prone with melee weapon attacks while raging'}
+      ]}],
   },
   'Path of the Ancestral Guardian': {
     3:  [{n:'Ancestral Protectors',d:'First creature you hit each rage becomes the target of your ancestors. That target has disadvantage on attacks vs creatures other than you, and those creatures have resistance vs the target\'s attacks.'}],
@@ -7136,6 +7161,9 @@ function confirmPartySheetLevelUp(){
     const sel = document.getElementById('lvlupSubclass')?.value;
     if(!sel){ toast('Choose a subclass first','var(--red)'); return; }
     char.subclass = sel;
+    const subFeatures = SUBCLASS_FEATURES[sel]||{};
+    const choiceNames = Object.values(subFeatures).flat().filter(ft=>ft.choice).map(ft=>ft.n);
+    char.subclassChoices = Object.fromEntries(choiceNames.map(n=>[n,'']));
   }
 
   // Apply HP
@@ -13080,8 +13108,24 @@ function renderCharProgressTab(char, cls){
 
   // ── Features at current level ──
   const ld = (LEVEL_FEATURES[cls.name]||{})[level]||{};
+
+  // ── Subclass Choices ──
+  const subFeatures = char.subclass ? (SUBCLASS_FEATURES[char.subclass]||{}) : {};
+  const choices = char.subclassChoices || {};
+  Object.values(subFeatures).flat().filter(ft=>ft.choice).forEach(ft=>{
+    h += `<div style="margin-bottom:12px">
+      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">${esc(ft.n)}</div>
+      <select onchange="csUpdateSubclassChoice('${char.id}','${esc(ft.n)}',this.value)"
+        style="width:100%;background:var(--surface);border:1px solid ${cc};border-radius:8px;color:var(--text);padding:8px 12px;font-size:12px">
+        <option value="">— Choose —</option>
+        ${ft.options.map(opt=>`<option value="${opt.value}" ${choices[ft.n]===opt.value?'selected':''}>${esc(opt.label)}</option>`).join('')}
+      </select>
+    </div>`;
+  });
+  h += `<div style="margin-bottom:8px"></div>`;
+
+  // ── Features ──
   const allFeatures = [];
-  const subFeatures = char.subclass ? (SUBCLASS_FEATURES[char.subclass]||{})[level]||[] : [];
   if(ld.features) allFeatures.push(...ld.features);
   if(subFeatures.length) allFeatures.push(...subFeatures);
 
@@ -13230,6 +13274,13 @@ function csUpdateAbility(id, ab, val){
 }
 function csUpdateField(id, field, val){
   _csSaveChar(id, c=>{ c[field]=val; });
+  renderCharacterScreen();
+}
+function csUpdateSubclassChoice(id, choiceName, val){
+  _csSaveChar(id, c=>{
+    if(!c.subclassChoices) c.subclassChoices={};
+    c.subclassChoices[choiceName] = val;
+  });
   renderCharacterScreen();
 }
 function csToggleSaveProf(id, ab, on){
