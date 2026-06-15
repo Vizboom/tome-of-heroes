@@ -2856,6 +2856,127 @@ function getPrimaryCastingLevel(char){
   return (char && char.level)||1;
 }
 const getMaxHP=(cls,level,con)=>{const c=parseInt(getMod(con))||0;return cls.hit+c+(level-1)*(Math.ceil(cls.hit/2)+1+c);};
+
+/* ══ FEAT ELIGIBILITY (2014 PHB rules) ══
+   Feats in 5e (2014) are gated by ability scores, race, and proficiencies/spellcasting
+   granted by class — NOT by subclass directly. This checks a character's actual
+   abilities, race, and class-derived armor proficiency / spellcasting against each
+   feat's `req` string. */
+
+// Armor proficiencies granted at level 1 by each class (2014 PHB).
+const CLASS_ARMOR_PROFS = {
+  Barbarian:['Light Armor','Medium Armor','Shields'],
+  Bard:['Light Armor'],
+  Cleric:['Light Armor','Medium Armor','Shields'],
+  Druid:['Light Armor','Medium Armor','Shields'], // non-metal only, but proficiency itself still applies
+  Fighter:['Light Armor','Medium Armor','Heavy Armor','Shields'],
+  Monk:[],
+  Paladin:['Light Armor','Medium Armor','Heavy Armor','Shields'],
+  Ranger:['Light Armor','Medium Armor','Shields'],
+  Rogue:['Light Armor'],
+  Sorcerer:[],
+  Warlock:['Light Armor'],
+  Wizard:[],
+};
+
+// Races (2014 sources) that count as Small for "Squat Nimbleness" etc.
+const SMALL_RACES = ['Halfling','Gnome','Kobold'];
+
+function getCharArmorProfs(char){
+  const set = new Set();
+  const classNames = (char.multiclasses&&char.multiclasses.length>1)
+    ? char.multiclasses.map(mc=>CLASSES[mc.classIdx]?.name).filter(Boolean)
+    : [CLASSES[char.classIdx]?.name].filter(Boolean);
+  classNames.forEach(name=>(CLASS_ARMOR_PROFS[name]||[]).forEach(p=>set.add(p)));
+  return set;
+}
+
+function getCharIsSpellcaster(char){
+  if(char.multiclasses && char.multiclasses.length>1){
+    return char.multiclasses.some(mc=>CLASSES[mc.classIdx]?.spellcaster);
+  }
+  return !!CLASSES[char.classIdx]?.spellcaster;
+}
+
+// True if char's race string matches a race requirement (handles "Elf (High)" → High Elf / Elf, etc.)
+function charRaceMatches(char, reqRace){
+  const race = (char.race||'').trim();
+  if(!race) return false;
+  const raceLower = race.toLowerCase();
+  const reqLower = reqRace.toLowerCase();
+  // Direct base-race match, e.g. "Dragonborn" req vs "Dragonborn" race
+  const baseRace = race.replace(/\s*\(.*?\)\s*/g,'').trim().toLowerCase();
+  if(baseRace === reqLower) return true;
+  // Subrace-prefixed match, e.g. "High Elf" req vs "Elf (High)" race
+  const subraceMatch = race.match(/\(([^)]+)\)/);
+  if(subraceMatch){
+    const combined = (subraceMatch[1]+' '+baseRace).toLowerCase(); // "High Elf"
+    if(combined === reqLower) return true;
+  }
+  // Loose contains check as a fallback (e.g. "Wood Elf" req vs "Elf (Wood)" race)
+  if(raceLower.includes(reqLower) || reqLower.includes(baseRace)) return true;
+  return false;
+}
+
+// Returns {met:boolean, reason:string} — reason explains an unmet requirement for display.
+function featReqMet(feat, char){
+  const req = (feat.req||'').trim();
+  if(!req) return {met:true, reason:''};
+  const abilities = char.abilities||{};
+
+  // "Can cast spells" / "Spellcasting or Pact Magic"
+  if(/can cast spells|spellcasting or pact magic/i.test(req)){
+    return getCharIsSpellcaster(char) ? {met:true,reason:''} : {met:false,reason:'Requires a spellcasting class'};
+  }
+  // Armor proficiency requirements
+  if(/heavy armor prof/i.test(req)){
+    return getCharArmorProfs(char).has('Heavy Armor') ? {met:true,reason:''} : {met:false,reason:'Requires Heavy Armor proficiency'};
+  }
+  if(/medium armor prof/i.test(req)){
+    return getCharArmorProfs(char).has('Medium Armor') ? {met:true,reason:''} : {met:false,reason:'Requires Medium Armor proficiency'};
+  }
+  if(/light armor prof/i.test(req)){
+    return getCharArmorProfs(char).has('Light Armor') ? {met:true,reason:''} : {met:false,reason:'Requires Light Armor proficiency'};
+  }
+  // "Weapon proficiency" (Fighting Initiate) — virtually every class has at least one; treat as met
+  if(/weapon proficiency/i.test(req)) return {met:true, reason:''};
+
+  // "Small race" (Squat Nimbleness)
+  if(/small race/i.test(req)){
+    const ok = SMALL_RACES.some(r=>charRaceMatches(char, r));
+    return ok ? {met:true,reason:''} : {met:false,reason:'Requires a Small race'};
+  }
+
+  // Ability score requirements, e.g. "STR 13", "STR or DEX 13", "INT or WIS 13"
+  const abilityMatch = req.match(/^((?:STR|DEX|CON|INT|WIS|CHA)(?:\s+or\s+(?:STR|DEX|CON|INT|WIS|CHA))*)\s+(\d+)$/i);
+  if(abilityMatch){
+    const abilNames = abilityMatch[1].split(/\s+or\s+/i).map(a=>a.toUpperCase());
+    const minScore = parseInt(abilityMatch[2]);
+    const ok = abilNames.some(a=>(abilities[a]||10) >= minScore);
+    return ok ? {met:true,reason:''} : {met:false,reason:'Requires '+abilNames.join(' or ')+' '+minScore+'+'};
+  }
+
+  // Race / race-group requirements, e.g. "Dragonborn", "Elf or Half-Elf", "Halfling, Dwarf or Small race"
+  if(/^[A-Za-z][A-Za-z\s,]*(-[A-Za-z]+)*( or [A-Za-z\s-]+)*$/.test(req) && !/\d/.test(req)){
+    const options = req.split(/,|\bor\b/i).map(s=>s.trim()).filter(Boolean);
+    const ok = options.some(opt=>{
+      if(/small race/i.test(opt)) return SMALL_RACES.some(r=>charRaceMatches(char,r));
+      return charRaceMatches(char, opt);
+    });
+    return ok ? {met:true,reason:''} : {met:false,reason:'Requires '+req};
+  }
+
+  // Unrecognised requirement format — don't block on it, just surface as info
+  return {met:true, reason:''};
+}
+
+// Returns FEATS_DB sorted so eligible feats come first (stable within each group).
+function getFeatsForChar(char){
+  const annotated = FEATS_DB.map(f=>Object.assign({}, f, featReqMet(f, char)));
+  const eligible = annotated.filter(f=>f.met);
+  const ineligible = annotated.filter(f=>!f.met);
+  return eligible.concat(ineligible);
+}
 const classColor=i=>CLASSES[i]?.color||'#7b5ea7';
 const classIcon=i=>CLASSES[i]?.icon||'?';
 const classTheme=i=>CLASSES[i]?.theme||'';
@@ -6531,15 +6652,23 @@ function renderLevelUpTab(char, cls){
         <input id="featSearch" oninput="filterFeatCards('featCardList','featSearch')" placeholder="Search feats…"
           style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;margin-bottom:8px;box-sizing:border-box">
         <div id="featCardList" style="display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto">
-          ${FEATS_DB.map(f=>`<div class="feat-card" data-feat="${f.name}" data-req="${f.req||''}"
-            onclick="selectFeatCard(this,'lvlupFeat')"
-            style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;transition:border-color 0.12s">
-            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
-              <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--text)">${f.name}</span>
-              ${f.req?'<span style="font-size:9px;color:var(--muted);flex-shrink:0">'+f.req+'</span>':''}
-            </div>
-            <div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">${f.desc}</div>
-          </div>`).join('')}
+          ${(()=>{
+            const ranked = getFeatsForChar(char);
+            const firstIneligible = ranked.findIndex(f=>!f.met);
+            return ranked.map((f,i)=>{
+              const divider = (i===firstIneligible && firstIneligible>0)
+                ? `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;padding:6px 2px 2px;border-top:1px solid var(--border);margin-top:4px">OTHER FEATS (requirements not met)</div>` : '';
+              return divider + `<div class="feat-card${f.met?'':' feat-ineligible'}" data-feat="${f.name}" data-req="${f.req||''}"
+                onclick="selectFeatCard(this,'lvlupFeat')"
+                style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;transition:border-color 0.12s${f.met?'':';opacity:0.55'}">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
+                  <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--text)">${f.name}</span>
+                  ${f.req?'<span style="font-size:9px;color:var(--muted);flex-shrink:0" title="'+(f.reason||'')+'">'+f.req+(f.met?'':' ⚠')+'</span>':''}
+                </div>
+                <div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">${f.desc}</div>
+              </div>`;
+            }).join('');
+          })()}
         </div>
         <input type="hidden" id="lvlupFeat" value="">
         <div id="featChosenLabel" style="font-size:11px;color:var(--gold);margin-top:6px;min-height:16px;font-family:'Cinzel',serif"></div>
@@ -7464,15 +7593,23 @@ function buildLevelUpHTML(char, cls, newLevel, ld, avgHP, conMod){
         <input id="lvlFeatSearch" oninput="filterFeatCards('lvlFeatCardList','lvlFeatSearch')" placeholder="Search feats…"
           style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;margin-bottom:8px;box-sizing:border-box">
         <div id="lvlFeatCardList" style="display:flex;flex-direction:column;gap:4px;max-height:240px;overflow-y:auto">
-          ${FEATS_DB.map(f=>`<div class="feat-card" data-feat="${f.name}" data-req="${f.req||''}"
-            onclick="selectFeatCard(this,'lvlFeatSelect')"
-            style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;transition:border-color 0.12s">
-            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
-              <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--text)">${f.name}</span>
-              ${f.req?'<span style="font-size:9px;color:var(--muted);flex-shrink:0">'+f.req+'</span>':''}
-            </div>
-            <div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">${f.desc}</div>
-          </div>`).join('')}
+          ${(()=>{
+            const ranked = getFeatsForChar(char);
+            const firstIneligible = ranked.findIndex(f=>!f.met);
+            return ranked.map((f,i)=>{
+              const divider = (i===firstIneligible && firstIneligible>0)
+                ? `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;padding:6px 2px 2px;border-top:1px solid var(--border);margin-top:4px">OTHER FEATS (requirements not met)</div>` : '';
+              return divider + `<div class="feat-card${f.met?'':' feat-ineligible'}" data-feat="${f.name}" data-req="${f.req||''}"
+                onclick="selectFeatCard(this,'lvlFeatSelect')"
+                style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;transition:border-color 0.12s${f.met?'':';opacity:0.55'}">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
+                  <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--text)">${f.name}</span>
+                  ${f.req?'<span style="font-size:9px;color:var(--muted);flex-shrink:0" title="'+(f.reason||'')+'">'+f.req+(f.met?'':' ⚠')+'</span>':''}
+                </div>
+                <div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">${f.desc}</div>
+              </div>`;
+            }).join('');
+          })()}
         </div>
         <input type="hidden" id="lvlFeatSelect" value="">
         <div id="lvlFeatChosenLabel" style="font-size:11px;color:var(--gold);margin-top:6px;min-height:16px;font-family:'Cinzel',serif"></div>
@@ -10214,13 +10351,13 @@ function confirmSessionLootScan(){
   }));
   saveItems(existing);
 
-  // Mark the session as imported so re-runs don't silently duplicate it (mirrors goldAddedToLoot)
-  const camps = getCampaigns();
-  const activeId = getActiveCampId();
-  const ci = camps.findIndex(c=>c.id===activeId);
-  if(ci>=0){
-    const si = camps[ci].sessions.findIndex(s=>String(s.id)===String(pending.sessionId));
-    if(si>=0){ camps[ci].sessions[si].lootScanned = true; saveCampaigns(camps); }
+  // Mark the session as imported so re-runs don't silently duplicate it.
+  // Use the ownership-aware singular save so we never try to write a joined
+  // (other-group) campaign row — that would be rejected and surface as a sync error.
+  const camp = getActiveCamp();
+  if(camp && Array.isArray(camp.sessions)){
+    const si = camp.sessions.findIndex(s=>String(s.id)===String(pending.sessionId));
+    if(si>=0){ camp.sessions[si].lootScanned = true; saveCampaign(camp); }
   }
 
   window._pendingSessionLoot = null;
@@ -13031,7 +13168,16 @@ function renderCharProfsTab(char, cls){
     </div>`;
   });
   // Add feat — single dropdown normally, or one dropdown per class when multiclassed
-  const _featOpts = (FEATS_DB||FEATS_5E||[]).map(f=>`<option value="${f.name||f}">${f.name||f}</option>`).join('');
+  const _rankedFeats = getFeatsForChar(char);
+  const _eligibleFeats = _rankedFeats.filter(f=>f.met);
+  const _ineligibleFeats = _rankedFeats.filter(f=>!f.met);
+  const _featOpts =
+    `<optgroup label="Available to ${esc(char.name||'this character')}">`
+    + _eligibleFeats.map(f=>`<option value="${f.name}">${f.name}</option>`).join('')
+    + `</optgroup>`
+    + (_ineligibleFeats.length
+      ? `<optgroup label="Requirements not met">` + _ineligibleFeats.map(f=>`<option value="${f.name}" title="${esc(f.reason||'')}">${f.name} (${esc(f.req)})</option>`).join('') + `</optgroup>`
+      : '');
   if(isMultiF){
     h += `<div style="font-size:10px;color:var(--muted);font-style:italic;margin-bottom:8px">Multiclassed — choose feats for each class' ASI slots separately.</div>`;
     mcList.forEach((mc, mi)=>{
