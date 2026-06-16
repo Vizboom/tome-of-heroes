@@ -3751,7 +3751,13 @@ function renderCombatTab(char,cls,elId,editable){
   }
   html+=`<div class="divider"><span>Class Features</span></div>`;
   cls.features.forEach(f=>{html+=`<div class="feature-card" style="--cc:${cls.color}"><div class="feature-name">${f.n}</div><div class="feature-desc">${f.d}</div></div>`;});
-  if(char.subclass){html+=`<div class="feature-card" style="--cc:var(--purple);border-color:var(--purple)"><div class="feature-name" style="color:var(--purple)">⚡ ${char.subclass.replace(/ \(.*?\)/,'')}</div><div class="feature-desc">${char.subclass} — see sourcebook for full subclass features.</div></div>`;}
+  if(char.subclass){
+    html+=`<div class="feature-card" style="--cc:var(--purple);border-color:var(--purple)"><div class="feature-name" style="color:var(--purple)">⚡ ${cleanSub(char.subclass)}</div><div class="feature-desc">Subclass — features and your chosen options are listed below.</div></div>`;
+  }
+  // Resolved subclass features + the character's specific selections (detailed)
+  getResolvedSelections(char, cls).forEach(s=>{
+    html+=`<div class="feature-card" style="--cc:${s.color};border-color:${s.color}33"><div class="feature-name" style="color:${s.color}">${s.level?('L'+s.level+' · '):''}${esc(s.title)}</div>${s.desc?`<div class="feature-desc">${esc(s.desc)}</div>`:''}</div>`;
+  });
   // Show feats as feature cards
   (char.feats||[]).forEach(featName=>{
     const featData = FEATS_DB.find(f=>f.name===featName);
@@ -5273,6 +5279,65 @@ function _backfillRefresh(charId){
   try{ if(document.getElementById('stab-skills')) renderSkillsTab(char, cls, 'stab-skills'); }catch(e){}
   try{ if(document.getElementById('stab-combat'))  renderCombatTab(char, cls, 'stab-combat', true); }catch(e){}
   try{ if(document.getElementById('sheetHero'))    renderSheetHero(char, cls, 'sheetHero'); }catch(e){}
+  try{ if(document.getElementById('pstab-combat'))  renderCombatTab(char, cls, 'pstab-combat', false); }catch(e){}
+  try{ if(document.getElementById('diceCharPanel')) renderDiceCharPanel(); }catch(e){}
+}
+
+// Resolve a character's actual subclass features and the specific choices they
+// have made (subclass options, metamagic, invocations, expertise, fighting
+// style, maneuvers, favored enemy, etc.) into displayable cards. Used by the
+// combat/class-features view and the dice quick-reference panel.
+function getResolvedSelections(char, cls){
+  const out = [];
+  if(!char || !cls) return out;
+  const seen = new Set();
+  const add = (level, title, desc, color)=>{
+    const key = (title+'|'+(desc||'')).toLowerCase();
+    if(seen.has(key)) return;
+    seen.add(key);
+    out.push({level:Number(level)||0, title, desc:desc||'', color:color||'var(--purple)'});
+  };
+
+  const subName = cleanSub(char.subclass);
+  const sf = subName ? (SUBCLASS_FEATURES[subName]||{}) : {};
+  const subChoiceNames = new Set(Object.values(sf).flat().filter(ft=>ft&&ft.choice).map(ft=>ft.n));
+
+  // 1) Subclass features per level (with chosen-option detail where applicable)
+  Object.keys(sf).map(Number).filter(l=>l<=char.level).sort((a,b)=>a-b).forEach(lvl=>{
+    (sf[lvl]||[]).forEach(ft=>{
+      if(ft.choice && Array.isArray(ft.options)){
+        const chosen = (char.subclassChoices||{})[ft.n];
+        const opt = ft.options.find(o=>o.value===chosen);
+        add(lvl, ft.n + (opt?(': '+opt.label):''), opt ? (opt.desc||'') : '⚠ Not yet chosen — set it on the Progress tab.', 'var(--purple)');
+      } else {
+        add(lvl, ft.n, ft.d||'', 'var(--purple)');
+      }
+    });
+  });
+
+  // 2) Logged choices — picks already contain descriptive text
+  const loggedPicks = new Set();
+  (char.featureChoiceLog||[]).forEach(e=>{
+    (e.picks||[]).forEach(p=>loggedPicks.add(String(p).toLowerCase()));
+    if(subChoiceNames.has(e.choice)) return;            // shown via subclass features
+    const picks = (e.picks||[]).filter(Boolean);
+    if(!picks.length) return;
+    add(e.level, e.choice, picks.join(' · '), 'var(--gold)');
+  });
+
+  // 3) Stores that may not have been logged (e.g. dedicated level-up pickers)
+  const extraMeta = (char.metamagic||[]).filter(m=>!loggedPicks.has(String(m).toLowerCase()));
+  if(extraMeta.length) add(0, 'Metamagic', extraMeta.join(' · '), 'var(--gold)');
+  const extraInv = (char.invocations||[]).filter(m=>!loggedPicks.has(String(m).toLowerCase()));
+  if(extraInv.length) add(0, 'Eldritch Invocations', extraInv.join(' · '), 'var(--gold)');
+  if(char.fightingStyle && !loggedPicks.has(String(char.fightingStyle).toLowerCase()))
+    add(0, 'Fighting Style', char.fightingStyle, 'var(--gold)');
+  const expert = char.expertiseSkills||[];
+  if(expert.length && !expert.every(s=>loggedPicks.has(String(s).toLowerCase())))
+    add(0, 'Expertise', expert.join(' · '), 'var(--gold)');
+
+  out.sort((a,b)=>a.level-b.level);
+  return out;
 }
 
 function renderProgressTab(char, cls){
@@ -10093,6 +10158,28 @@ function renderDiceCharPanel(){
         }).join('');
         html3 += '</div></div>';
         return html3;
+      })()}
+
+      ${(()=>{
+        // Subclass features & the character's specific choices — quick reference
+        const sels = getResolvedSelections(char, cls);
+        if(!sels.length) return '';
+        const secId  = 'diceSelSection_'+char.id;
+        const bodyId = 'diceSelBody_'+char.id;
+        let h = '<div style="margin-top:10px;padding-top:10px;border-top:1px solid #ffffff22">'
+          + '<div onclick="toggleDicePrepSection(\''+bodyId+'\',\''+secId+'\')" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:6px;user-select:none">'
+          + '<div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:1px">⚜ SUBCLASS &amp; CHOICES</div>'
+          + '<span id="'+secId+'" style="font-size:11px;color:var(--muted);transition:transform 0.2s">▸</span>'
+          + '</div><div id="'+bodyId+'" style="display:none">';
+        h += sels.map(function(s){
+          const lvl = s.level ? '<span style="color:var(--muted);font-size:9px;font-family:\'Cinzel\',serif">L'+s.level+' · </span>' : '';
+          return '<div style="background:var(--surface);border:1px solid '+s.color+'44;border-radius:8px;margin-bottom:4px;padding:7px 10px">'
+            + '<div style="font-family:\'Cinzel\',serif;font-size:11px;color:'+s.color+';margin-bottom:'+(s.desc?'3px':'0')+'">'+lvl+esc(s.title)+'</div>'
+            + (s.desc ? '<div style="font-size:11px;color:var(--text);line-height:1.55">'+esc(s.desc)+'</div>' : '')
+            + '</div>';
+        }).join('');
+        h += '</div></div>';
+        return h;
       })()}
     </div></div>`;
 }
