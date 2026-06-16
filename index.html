@@ -11184,7 +11184,7 @@ function openItemEdit(id){
   const typeOpts = Object.entries(TYPE_ICONS).map(([k,v])=>`<option value="${k}" ${item.type===k?'selected':''}>${v} ${k}</option>`).join('');
   const rarityOpts = [['common','Common'],['uncommon','Uncommon'],['rare','Rare'],['very-rare','Very Rare'],['legendary','Legendary'],['artifact','Artifact']].map(([v,l])=>`<option value="${v}" ${item.rarity===v?'selected':''}>${l}</option>`).join('');
   const attuneOpts = [['none','None'],['required','Required'],['attuned','Attuned']].map(([v,l])=>`<option value="${v}" ${item.attune===v?'selected':''}>${l}</option>`).join('');
-  const handsOpts = [['1','One-handed'],['v','Versatile'],['2','Two-handed']].map(([v,l])=>`<option value="${v}" ${(item.hands||'1')===v?'selected':''}>${l}</option>`).join('');
+  const handsOpts = [['1','One-handed'],['2','Two-handed'],['off','Off-hand'],['v','Versatile']].map(([v,l])=>`<option value="${v}" ${(item.hands||'1')===v?'selected':''}>${l}</option>`).join('');
   modal.innerHTML = `
     <div class="card" style="max-width:440px;width:100%;max-height:90vh;overflow-y:auto;margin:0">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
@@ -11254,8 +11254,9 @@ function renderAddTab(){
       <div class="field" id="iHandsWrap" style="display:none"><label>Hands</label>
         <select id="iHands">
           <option value="1">One-handed</option>
-          <option value="v">Versatile</option>
           <option value="2">Two-handed</option>
+          <option value="off">Off-hand</option>
+          <option value="v">Versatile</option>
         </select>
       </div>
     </div>
@@ -13444,6 +13445,7 @@ function isTwoHandedWeapon(item){
 function weaponHandsLabel(item){
   if(!item || item.type !== 'weapon') return '';
   if(isTwoHandedWeapon(item)) return '2H';
+  if(item.hands === 'off') return 'Off';
   if(item.hands === 'v' || (item.desc && /versatile/i.test(item.desc))) return 'Vers';
   return '1H';
 }
