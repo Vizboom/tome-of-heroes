@@ -2224,7 +2224,7 @@ function getCharLootWeapons(char){
 // Falls back to char.ac (manually set) or 10+DEX if nothing is equipped.
 function getCharAC(char){
   const dex = parseInt(getMod(char.abilities&&char.abilities.DEX?char.abilities.DEX:10))||0;
-  const slots = (char.equippedSlots) ? Object.values(char.equippedSlots) : [];
+  const slots = Object.values(getEquippedItems(char)).filter(it => it && !it._2hBlocked);
   let armorAC = 0, hasArmor = false, shieldBonus = 0, bonusAC = 0;
 
   slots.forEach(function(item){
@@ -2758,14 +2758,28 @@ async function migrateAllCampaigns(){
 // ── Loot / Items ──
 const _itemsKey=()=>{const c=getActiveCampId();return c?'toh_items_'+c:'toh_items';};
 const _wealthKey=()=>{const c=getActiveCampId();return c?'toh_wealth_'+c:'toh_wealth';};
+// Repair a single item so renderers can safely call .name.match, .rarity.replace,
+// read .qty as a number, etc. Returns the same object when already safe.
+function normalizeItem(i){
+  if(!i || typeof i!=='object') return null;
+  const nameOk   = typeof i.name === 'string';
+  const rarityOk = typeof i.rarity === 'string';
+  const typeOk   = typeof i.type === 'string';
+  const qtyOk    = typeof i.qty === 'number' && i.qty > 0;
+  if(nameOk && rarityOk && typeOk && qtyOk) return i;
+  return Object.assign({}, i, {
+    name:   nameOk   ? i.name   : (i.name!=null ? String(i.name) : ''),
+    rarity: rarityOk ? i.rarity : 'common',
+    type:   typeOk   ? i.type   : 'misc',
+    qty:    qtyOk    ? i.qty    : (parseInt(i.qty) || 1),
+  });
+}
 function getItems(){
   const campId = getActiveCampId();
   const list = campId ? (_db.items[campId]||[]) : [];
-  // Guard against malformed entries (e.g. an imported item missing its name) so
-  // a single bad item can't crash inventory rendering via .name.match/.toLowerCase.
-  return list.filter(Boolean).map(i =>
-    typeof i.name === 'string' ? i : Object.assign({}, i, {name: i.name!=null ? String(i.name) : ''})
-  );
+  // Guard against malformed entries (missing name/rarity/type/qty) so a single
+  // bad item can't crash inventory rendering or hide the whole loot list.
+  return list.map(normalizeItem).filter(Boolean);
 }
 function getWealth(){
   const campId = getActiveCampId();
@@ -13408,13 +13422,12 @@ function isOffhandBlocked(char){
 
 function getEquippedItems(char){
   const slots = (char && char.equippedSlots) || {};
-  // Normalize so a malformed equipped item (missing name) can't crash renders.
+  // Normalize so a malformed equipped item can't crash renders. Leave the
+  // special two-handed lock placeholder ({_2hBlocked:true}) intact.
   const out = {};
   for(const k in slots){
     const it = slots[k];
-    out[k] = (it && typeof it.name !== 'string')
-      ? Object.assign({}, it, {name: it.name!=null ? String(it.name) : ''})
-      : it;
+    out[k] = (it && it._2hBlocked) ? it : (it ? normalizeItem(it) : it);
   }
   return out;
 }
@@ -14203,6 +14216,15 @@ function renderPaperdoll(char, cls){
 
   EQUIP_SLOTS.forEach(function(slot){
     const item = slots[slot.id];
+    // Two-handed lock placeholder — render a dimmed "locked" slot, skip item render
+    if(item && item._2hBlocked){
+      const gp = 'grid-column:'+slot.col+';grid-row:'+slot.row+';';
+      html += '<div class="equip-slot locked-2h" id="eslot-'+slot.id+'" data-slot="'+slot.id+'" style="'+gp+'opacity:0.55" title="Occupied by two-handed weapon">'
+        + '<div class="slot-icon" style="opacity:0.5">🔒</div>'
+        + '<div class="slot-label" style="font-size:9px">2H — '+esc(item._lockedBy||'Both hands')+'</div>'
+        + '</div>';
+      return;
+    }
     const rc = item ? (RARITY_COLORS[item.rarity]||'#aaa') : null;
     const styleStr = item ? '--slot-c:'+rc+';--slot-bg:'+rc+'22;' : '';
     const gridPos = 'grid-column:'+slot.col+';grid-row:'+slot.row+';';
