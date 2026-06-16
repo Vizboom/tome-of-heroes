@@ -6465,6 +6465,173 @@ const SUBCLASS_FEATURES = {
     10: [{n:'Song of Defense',d:'While bladesong active, reaction to reduce damage by expending spell slot: damage reduced by 5 x slot level.'}],
     14: [{n:'Song of Victory',d:'While bladesong active, add INT mod to melee weapon attack damage rolls.'}],
   },
+
+  // ── BARBARIAN (added) ─────────────────────────────────────────────────────
+  'Path of the Battlerager': {
+    3:  [{n:'Battlerager Armor',d:'Requires spiked armor. Bonus action: make one melee attack with your armor spikes (1d4 piercing). When you use Reckless Attack while raging, gain temp HP equal to your barbarian level if you grapple a creature that turn.'}],
+    6:  [{n:'Reckless Abandon',d:'When you use Reckless Attack while raging, gain temp HP equal to your CON modifier (min 1) that last until the rage ends.'}],
+    10: [{n:'Battlerager Charge',d:'You can take the Dash action as a bonus action while raging.'}],
+    14: [{n:'Spiked Retribution',d:'While raging and wearing spiked armor, a creature within 5 ft that hits you with a melee attack takes 3 piercing damage.'}],
+  },
+  'Path of the Giant': {
+    3:  [{n:'Giant\'s Power',d:'You learn the Giant language and one cantrip (Druidcraft, Thaumaturgy, or similar). While raging you may grow toward giant size.'},{n:'Crushing Throw',d:'When you make a thrown weapon attack while raging, add your rage damage bonus and you can knock the target prone or push it (STR save).'}],
+    6:  [{n:'Elemental Cleaver',d:'When you rage, imbue one weapon with elemental power: it deals an extra 1d6 damage (fire, cold, or thunder) and gains a thrown range of 20/60, returning to your hand.'}],
+    10: [{n:'Mighty Impel',d:'As a bonus action while raging, hurl a Large or smaller creature within reach up to 30 ft (STR save to avoid); on a failure it takes 1d8 bludgeoning per 10 ft thrown.'}],
+    14: [{n:'Demiurgic Colossus',d:'While raging you grow Huge (space permitting), your reach increases by 5 ft, and your elemental/extra damage die improves.'}],
+  },
+
+  // ── BARD (added) ──────────────────────────────────────────────────────────
+  'College of Spirits': {
+    3:  [{n:'Guiding Whispers',d:'You learn the Guidance cantrip with a range of 60 ft.'},{n:'Spiritual Focus',d:'Use a candle, censer, or talking board as a spellcasting focus; when you cast a bard spell through it, add a bonus 1d6 to one damage or healing roll (scales with level).'},{n:'Tales from Beyond',d:'Bonus action: expend a use of Bardic Inspiration to roll on the Spirit Tales table for a random magical effect you can hold until you use it.'}],
+    6:  [{n:'Spirit Session',d:'Conduct a 1-minute ritual with allies to temporarily learn one spell from any class (level up to the number of participants, max 4th) until your next long rest.'}],
+    14: [{n:'Mystical Connection',d:'When you roll on the Spirit Tales table, roll twice and choose which result to use.'}],
+  },
+
+  // ── CLERIC DOMAINS (added) ────────────────────────────────────────────────
+  'Death Domain': {
+    1:  [{n:'Domain Spells: False Life, Inflict Wounds',d:'Always prepared.'},{n:'Reaper',d:'Learn one necromancy cantrip from any class. When you cast a necromancy cantrip that targets one creature, it can target two within 5 ft of each other.'}],
+    2:  [{n:'Channel Divinity: Touch of Death',d:'When you hit with a melee attack, expend Channel Divinity to deal extra necrotic damage equal to 5 + twice your cleric level.'}],
+    6:  [{n:'Inescapable Destruction',d:'Your spells and Channel Divinity ignore resistance to necrotic damage.'}],
+    8:  [{n:'Divine Strike',d:'Once per turn, add 1d8 necrotic damage to a weapon attack (2d8 at level 14).'}],
+    17: [{n:'Improved Reaper',d:'When you cast a necromancy spell of levels 1-5 that targets one creature, you can target a second within 5 ft of the first (once per turn).'}],
+  },
+  'Arcana Domain': {
+    1:  [{n:'Domain Spells: Detect Magic, Magic Missile',d:'Always prepared.'},{n:'Arcane Initiate',d:'Proficiency in Arcana and two wizard cantrips of your choice (count as cleric cantrips).'}],
+    2:  [{n:'Channel Divinity: Arcane Abjuration',d:'Action: turn one celestial, elemental, fey, or fiend within 30 ft (WIS save); low-CR ones may be banished for 1 minute.'}],
+    6:  [{n:'Spell Breaker',d:'When you restore HP to an ally with a level 1+ spell, you can also end one spell on them of a level up to the slot used.'}],
+    8:  [{n:'Potent Spellcasting',d:'Add WIS modifier to damage rolls of cleric cantrips.'}],
+    17: [{n:'Arcane Mastery',d:'Add one spell each of 6th, 7th, 8th, and 9th level from the wizard list to your cleric spell list.'}],
+  },
+  'Forge Domain': {
+    1:  [{n:'Domain Spells: Identify, Searing Smite',d:'Always prepared. Bonus proficiencies: Heavy Armor and smith\'s tools.'},{n:'Blessing of the Forge',d:'After a long rest, touch one nonmagical weapon or suit of armor to make it +1 until you use this feature again.'}],
+    2:  [{n:'Channel Divinity: Artisan\'s Blessing',d:'Conduct a 1-hour ritual to create one nonmagical metal item (weapon, armor, tool, or similar) worth up to 100 gp.'}],
+    6:  [{n:'Soul of the Forge',d:'+1 AC while wearing heavy armor and resistance to fire damage.'}],
+    8:  [{n:'Divine Strike',d:'Once per turn, add 1d8 fire damage to a weapon attack (2d8 at level 14).'}],
+    17: [{n:'Saint of Forge and Fire',d:'Immunity to fire damage; while in heavy armor, resistance to bludgeoning, piercing, and slashing from nonmagical attacks.'}],
+  },
+  'Grave Domain': {
+    1:  [{n:'Domain Spells: Bane, False Life',d:'Always prepared.'},{n:'Circle of Mortality',d:'When you cast a healing cantrip on a creature at 0 HP it heals as if you rolled max. You learn Spare the Dying (bonus action, range 30 ft).'},{n:'Eyes of the Grave',d:'Action: detect undead within 60 ft (prof-bonus times per long rest).'}],
+    2:  [{n:'Channel Divinity: Path to the Grave',d:'Action: curse a creature; the next attack against it has advantage and the target gains vulnerability to that attack\'s damage.'}],
+    6:  [{n:'Sentinel at Death\'s Door',d:'Reaction: turn a critical hit against you or a creature within 30 ft into a normal hit (WIS-mod times per long rest).'}],
+    8:  [{n:'Potent Spellcasting',d:'Add WIS modifier to damage rolls of cleric cantrips.'}],
+    17: [{n:'Keeper of Souls',d:'When an enemy you can see dies within 60 ft, you or an ally within 60 ft regains HP equal to the enemy\'s Hit Dice (once per turn).'}],
+  },
+  'Order Domain': {
+    1:  [{n:'Domain Spells: Command, Heroism',d:'Always prepared. Bonus proficiencies: Heavy Armor and Intimidation or Persuasion.'},{n:'Voice of Authority',d:'When you cast a level 1+ spell on an ally, they can use their reaction to make one weapon attack against a creature of your choice.'}],
+    2:  [{n:'Channel Divinity: Order\'s Demand',d:'Action: each chosen creature within 30 ft (CHA save) is charmed until end of your next turn, or drops what it is holding and falls prone.'}],
+    6:  [{n:'Embodiment of the Law',d:'Cast enchantment spells of level 1+ as a bonus action (WIS-mod times per long rest).'}],
+    8:  [{n:'Divine Strike',d:'Once per turn, add 1d8 psychic damage to a weapon attack (2d8 at level 14).'}],
+    17: [{n:'Order\'s Wrath',d:'When you hit a creature with Divine Strike, it becomes doomed; the next time you or an ally hits it before your next turn it takes an extra 2d8 psychic damage (once per turn).'}],
+  },
+  'Peace Domain': {
+    1:  [{n:'Domain Spells: Heroism, Sanctuary',d:'Always prepared. Bonus proficiency: Insight, Performance, or Persuasion.'},{n:'Emboldening Bond',d:'Bond up to prof-bonus willing creatures within 30 ft for 10 min; while two bonded creatures are within 30 ft of each other, one can add a 1d4 to an attack, check, or save (prof-bonus times per long rest).'}],
+    2:  [{n:'Channel Divinity: Balm of Peace',d:'Action: move up to your speed without provoking opportunity attacks, healing each creature you pass once (WIS mod + cleric level HP each).'}],
+    6:  [{n:'Protective Bond',d:'A bonded creature can use its reaction to teleport to within 5 ft of an ally about to take damage and take that damage instead.'}],
+    8:  [{n:'Potent Spellcasting',d:'Add WIS modifier to damage rolls of cleric cantrips.'}],
+    17: [{n:'Expansive Bond',d:'Emboldening and Protective Bond range increases to 60 ft, and a protected creature gains resistance to the redirected damage.'}],
+  },
+  'Twilight Domain': {
+    1:  [{n:'Domain Spells: Faerie Fire, Sleep',d:'Always prepared. Bonus proficiencies: Martial weapons and Heavy Armor.'},{n:'Eyes of Night',d:'Gain darkvision 300 ft; as an action share it with prof-bonus creatures for 1 hour (recharge on long rest, or by spending a spell slot).'},{n:'Vigilant Blessing',d:'Touch a creature (or yourself) to grant advantage on its next initiative roll.'}],
+    2:  [{n:'Channel Divinity: Twilight Sanctuary',d:'Bonus action: 30-ft sphere of twilight for 1 min. Each turn a creature in it gains temp HP (1d6 + cleric level) or ends a charm or fright effect.'}],
+    6:  [{n:'Steps of Night',d:'While in dim light or darkness, use a bonus action to gain a flying speed equal to your walking speed for 1 minute (prof-bonus times per long rest).'}],
+    8:  [{n:'Divine Strike',d:'Once per turn, add 1d8 radiant damage to a weapon attack (2d8 at level 14).'}],
+    17: [{n:'Twilight Shroud',d:'Creatures of your choice in your Twilight Sanctuary gain half cover.'}],
+  },
+
+  // ── DRUID (added) ─────────────────────────────────────────────────────────
+  'Circle of Dreams': {
+    2:  [{n:'Balm of the Summer Court',d:'Pool of d6s equal to your druid level. As a bonus action, spend dice to heal a creature within 120 ft for the total rolled, plus temp HP equal to the number of dice spent. Refreshes on a long rest.'}],
+    6:  [{n:'Hearth of Moonlight and Shadow',d:'During a rest, create a 30-ft protective sphere: total cover from sight beyond it, and you and allies inside gain +5 to WIS (Perception) and Stealth checks.'}],
+    10: [{n:'Hidden Paths',d:'Bonus action: teleport up to 60 ft to an unoccupied space you can see; or as an action teleport a willing creature you touch up to 30 ft (WIS-mod times per long rest).'}],
+    14: [{n:'Walker in Dreams',d:'After a short or long rest, cast (without a slot) Dream, Scrying, or a teleport to a place you have rested. Recharges on a long rest.'}],
+  },
+  'Circle of the Shepherd': {
+    2:  [{n:'Speech of the Woods',d:'You can speak with and understand beasts.'},{n:'Spirit Totem',d:'Bonus action: summon a 30-ft Bear, Hawk, or Unicorn spirit for 1 minute (temp HP, advantage on attacks, or healing). Once per short/long rest.'}],
+    6:  [{n:'Mighty Summoner',d:'Beasts and fey you conjure gain +2 HP per Hit Die, and their attacks count as magical.'}],
+    10: [{n:'Guardian Spirit',d:'Summoned beasts and fey that start their turn within your Spirit Totem aura gain temp HP equal to half your druid level.'}],
+    14: [{n:'Faithful Summons',d:'When you drop to 0 HP or are incapacitated, you automatically cast Conjure Animals (four CR 2 beasts) that defend you. Recharges on a long rest.'}],
+  },
+
+  // ── FIGHTER (added) ───────────────────────────────────────────────────────
+  'Rune Knight': {
+    3:  [{n:'Bonus Proficiencies',d:'Proficiency with smith\'s tools and understand Giant.'},{n:'Rune Carver',d:'Inscribe magic runes (e.g. Cloud, Fire, Frost, Stone) on items; invoke one as a bonus action for a temporary benefit. Uses recharge on a rest; you learn more runes at higher levels.'}],
+    7:  [{n:'Giant\'s Might',d:'Bonus action: become Large (if room), gain advantage on STR checks and saves, and once per turn deal an extra 1d6 damage (prof-bonus times per long rest).'}],
+    10: [{n:'Runic Shield',d:'Reaction: force an attacker that hits an ally within 60 ft to reroll the attack (prof-bonus times per long rest).'}],
+    15: [{n:'Great Stature',d:'Your Giant\'s Might extra damage becomes 1d8 and your height increases by 3d4 inches.'}],
+    18: [{n:'Master of Runes',d:'You can invoke each of your runes twice rather than once per rest.'}],
+  },
+
+  // ── MONK (added) ──────────────────────────────────────────────────────────
+  'Way of the Drunken Master': {
+    3:  [{n:'Bonus Proficiencies',d:'Proficiency in Performance and with brewer\'s supplies.'},{n:'Drunken Technique',d:'When you use Flurry of Blows, gain the benefit of the Disengage action and +10 ft speed for the turn.'}],
+    6:  [{n:'Tipsy Sway',d:'Leap to Your Feet: stand from prone using only 5 ft of movement. Redirect Attack: when a creature misses you with a melee attack, spend 1 ki to redirect it to another creature within 5 ft.'}],
+    11: [{n:'Drunkard\'s Luck',d:'When you make an ability check, attack roll, or saving throw with disadvantage, spend 2 ki to cancel the disadvantage.'}],
+    17: [{n:'Intoxicated Frenzy',d:'When you use Flurry of Blows you can make up to three extra unarmed strikes (five total), provided each targets a different creature.'}],
+  },
+  'Way of the Mercy': {
+    3:  [{n:'Implements of Mercy',d:'Proficiency in Insight, Medicine, and with a herbalism kit.'},{n:'Hand of Healing',d:'Bonus action, spend 1 ki: restore HP equal to your Martial Arts die + WIS mod to a creature you touch.'},{n:'Hand of Harm',d:'Once per turn when you hit with an unarmed strike, spend 1 ki to deal extra necrotic damage equal to your Martial Arts die + WIS mod.'}],
+    6:  [{n:'Physician\'s Touch',d:'Hand of Healing also ends one disease or condition; Hand of Harm can also poison the target until the end of your next turn.'}],
+    11: [{n:'Flurry of Healing and Harm',d:'When you use Flurry of Blows you can replace each strike with Hand of Healing (no ki cost), and use Hand of Harm once during the flurry without spending ki.'}],
+    17: [{n:'Hand of Ultimate Mercy',d:'Action: spend 5 ki to touch a creature dead no more than 24 hours and return it to life with 4d10 + WIS mod HP, ending several conditions. Once per long rest.'}],
+  },
+
+  // ── PALADIN (added) ───────────────────────────────────────────────────────
+  'Oath of the Watchers': {
+    3:  [{n:'Channel Divinity: Watcher\'s Will',d:'Action: you and up to CHA-mod creatures within 30 ft gain advantage on INT, WIS, and CHA saves for 1 minute.'},{n:'Channel Divinity: Abjure the Extraplanar',d:'Action: turn aberrations, celestials, elementals, fey, and fiends within 30 ft (WIS save).'}],
+    7:  [{n:'Aura of the Sentinel',d:'You and allies within 10 ft gain a bonus to initiative equal to your proficiency bonus (30 ft at level 18).'}],
+    15: [{n:'Vigilant Rebuke',d:'Reaction: when you or a creature within 30 ft succeeds on an INT, WIS, or CHA save, deal 2d8 + CHA force damage to the creature that forced the save.'}],
+    20: [{n:'Mortal Bulwark',d:'Bonus action: for 1 min gain truesight 120 ft, advantage on attacks vs aberrations/celestials/elementals/fey/fiends, and banish such a creature you hit (CHA save). Once per long rest.'}],
+  },
+
+  // ── RANGER (added) ────────────────────────────────────────────────────────
+  'Horizon Walker': {
+    3:  [{n:'Detect Portal',d:'Action: sense the distance and direction to the nearest planar portal within 1 mile. Once per short/long rest.'},{n:'Planar Warrior',d:'Bonus action: mark a creature you can see; your next hit against it this turn deals an extra 1d8 force damage and turns all the attack\'s damage into force (2d8 at level 11).'}],
+    7:  [{n:'Ethereal Step',d:'Bonus action at the start of your turn: cast Etherealness (no slot) lasting until end of the turn. Once per short/long rest.'}],
+    11: [{n:'Distant Strike',d:'When you take the Attack action you can teleport 10 ft before each attack; if you attack two different creatures you may make a third attack against a third creature.'}],
+    15: [{n:'Spectral Defense',d:'Reaction: when you take damage from an attack, gain resistance to that attack\'s damage.'}],
+  },
+  'Monster Slayer': {
+    3:  [{n:'Hunter\'s Sense',d:'Action: learn one target\'s damage immunities, resistances, and vulnerabilities (WIS-mod times per long rest).'},{n:'Slayer\'s Prey',d:'Bonus action: mark a target; the first time you hit it each turn deal an extra 1d6 damage.'}],
+    7:  [{n:'Supernatural Defense',d:'When your Slayer\'s Prey target forces you to make a save, or you try to escape its grapple, add 1d6 to the roll.'}],
+    11: [{n:'Magic-User\'s Nemesis',d:'Reaction: when a creature within 60 ft casts a spell or teleports, force it to fail (WIS save). Once per short/long rest.'}],
+    15: [{n:'Slayer\'s Counter',d:'When your Slayer\'s Prey target forces you to make a save, you can use your reaction to attack it first; if you hit, you automatically succeed on the save.'}],
+  },
+  'Drakewarden': {
+    3:  [{n:'Draconic Gift',d:'Learn the Thaumaturgy cantrip and the Draconic language.'},{n:'Drake Companion',d:'Action: summon a Medium drake (choose a damage type) that acts on your turn; you can command its attack. Once per long rest, or by spending a spell slot.'}],
+    7:  [{n:'Bond of Fang and Scale',d:'Your drake grows larger and gains a flying speed; while it is within 30 ft, you and the drake have resistance to its damage type and your weapon attacks deal +1d6 of that type.'}],
+    11: [{n:'Drake\'s Breath',d:'Action: your drake exhales a 30-ft cone (CON save) dealing 8d6 fire or lightning damage (half on a success). Recharges on a long rest or by spending a 3rd-level slot.'}],
+    15: [{n:'Perfected Bond',d:'Your drake becomes Large with extra HP; once per turn when you or the drake hits a creature, the other can use its reaction to attack it.'}],
+  },
+
+  // ── ROGUE (added) ─────────────────────────────────────────────────────────
+  'Mastermind': {
+    3:  [{n:'Master of Intrigue',d:'Proficiency with disguise kit, forgery kit, and one gaming set; learn two languages; mimic the speech patterns and accents of creatures you hear.'},{n:'Master of Tactics',d:'Use the Help action as a bonus action, and you can Help to aid an ally\'s attack against a creature within 30 ft.'}],
+    9:  [{n:'Insightful Manipulator',d:'After observing or interacting with a creature for 1 minute, learn whether it is your superior or inferior in INT, WIS, CHA, and class levels.'}],
+    13: [{n:'Misdirection',d:'Reaction: when targeted by an attack while a creature is within 5 ft granting you cover, redirect the attack to that creature instead.'}],
+    17: [{n:'Soul of Deceit',d:'Your thoughts cannot be read; lie-detecting magic registers your deliberate lies as truth, and you can present false thoughts to mind-reading effects.'}],
+  },
+
+  // ── WARLOCK (added) ───────────────────────────────────────────────────────
+  'The Fathomless': {
+    1:  [{n:'Tentacle of the Deeps',d:'Bonus action: summon a spectral 10-ft tentacle for 1 min; when it appears, and as a bonus action on later turns, it deals 1d8 cold damage to a creature within 10 ft and reduces its speed by 10 ft. Prof-bonus times per long rest.'},{n:'Gift of the Sea',d:'Gain a swimming speed of 40 ft and the ability to breathe underwater.'}],
+    6:  [{n:'Oceanic Soul',d:'Resistance to cold damage; you can speak with any creature with a swimming speed and breathe and speak underwater.'},{n:'Guardian Coil',d:'Your Tentacle of the Deeps can use its reaction to reduce damage to you or a creature within 10 ft of it by 1d8 (2d8 at level 10).'}],
+    10: [{n:'Grasping Tentacles',d:'You learn Evard\'s Black Tentacles. When you cast it you gain temp HP equal to your warlock level and you have advantage on Concentration saves to maintain it.'}],
+    14: [{n:'Fathomless Plunge',d:'Action: teleport yourself and up to five willing creatures within 30 ft to a body of water you have seen within 1 mile. Once per short/long rest.'}],
+  },
+  'The Genie': {
+    1:  [{n:'Genie\'s Vessel',d:'Choose a genie kind (Dao, Djinni, Efreeti, or Marid) granting bonus spells and a damage type. Once per turn when you hit with an attack, deal bonus damage of that type equal to your proficiency bonus. As an action you can vanish into your vessel (Bottled Respite) to rest.'}],
+    6:  [{n:'Elemental Gift',d:'Resistance to your genie\'s damage type; as a bonus action gain a flying speed of 30 ft (hover) for 10 minutes (prof-bonus times per long rest).'}],
+    10: [{n:'Sanctuary Vessel',d:'When you enter your vessel via Bottled Respite you can bring up to five willing creatures; each creature finishing a rest inside gains 1d4 + CHA temp HP on leaving.'}],
+    14: [{n:'Limited Wish',d:'Action: replicate any spell of 6th level or lower (no components needed). Once per 1d4 long rests.'}],
+  },
+
+  // ── WIZARD (added) ────────────────────────────────────────────────────────
+  'School of Transmutation': {
+    2:  [{n:'Transmutation Savant',d:'Copy transmutation spells into your spellbook in half the time and at half the cost.'},{n:'Minor Alchemy',d:'Transform one nonmagical material into another similar material (e.g. wood to stone) for up to 1 hour.'}],
+    6:  [{n:'Transmuter\'s Stone',d:'Create a stone granting one benefit (darkvision 60 ft, +10 ft speed, proficiency in CON saves, or resistance to a chosen element). You can change the benefit when you craft a new stone or cast a transmutation spell.'}],
+    10: [{n:'Shapechanger',d:'Add Polymorph to your spellbook. You can cast it on yourself (no slot) to become a CR 1 beast. Once per short/long rest.'}],
+    14: [{n:'Master Transmuter',d:'Action: consume your Transmuter\'s Stone for one major effect — Major Transformation, Panacea, Restore Youth, or Restore Life (as Raise Dead).'}],
+  },
 };
 
 // Spells known/prepared to pick at level-up + class spell lists by spell level
