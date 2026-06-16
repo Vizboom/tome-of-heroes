@@ -5052,6 +5052,229 @@ function getASILevels(className){
   return ASI_LEVELS[className] || ASI_LEVELS.default;
 }
 
+// ══ BACKFILL: retroactive subclass & feature choices ═════════════════════════
+// When a character is created (or imported) at a level beyond where they would
+// have chosen a subclass and its subsequent feature choices, this lets the DM
+// select and backfill everything they "should" already have.
+
+// Strip a source tag like " (PHB)" so subclasses created in the builder still
+// resolve against SUBCLASS_FEATURES (which is keyed by clean names).
+function cleanSub(name){ return String(name||'').replace(/\s*\(.*?\)\s*$/,'').trim(); }
+
+// Canonical level at which each class chooses its subclass.
+const SUBCLASS_LEVEL = {Cleric:1, Sorcerer:1, Warlock:1, Druid:2, Wizard:2,
+  Barbarian:3, Bard:3, Fighter:3, Monk:3, Paladin:3, Ranger:3, Rogue:3};
+function getSubclassLevelFor(clsName){
+  if(SUBCLASS_LEVEL[clsName]) return SUBCLASS_LEVEL[clsName];
+  const lf = LEVEL_FEATURES[clsName]||{};
+  for(let lvl=1; lvl<=20; lvl++){ if(lf[lvl] && lf[lvl].subclass) return lvl; }
+  return (SUBCLASSES[clsName]||[]).length ? 3 : null;
+}
+
+// Returns { needsSubclass, subclassLevel, subclassOptions, choices:[...] }
+function computePendingChoices(char, cls){
+  const result = { needsSubclass:false, subclassLevel:null, subclassOptions:[], choices:[] };
+  if(!cls) return result;
+
+  // 1) Missing subclass (only when the character is at/past the unlock level)
+  const subLvl  = getSubclassLevelFor(cls.name);
+  const subOpts = SUBCLASSES[cls.name] || [];
+  if(subLvl && char.level >= subLvl && !char.subclass && subOpts.length){
+    result.needsSubclass  = true;
+    result.subclassLevel  = subLvl;
+    result.subclassOptions = subOpts;
+  }
+
+  const log    = char.featureChoiceLog || [];
+  const logged = (level,label)=> log.some(e=>e.level===level && e.choice===label);
+
+  // 2) Subclass "choice:true" features (Totem Spirit, Aspect of the Beast, …)
+  if(char.subclass){
+    const sf = SUBCLASS_FEATURES[cleanSub(char.subclass)] || {};
+    Object.keys(sf).map(Number).filter(lvl=>lvl<=char.level).sort((a,b)=>a-b).forEach(lvl=>{
+      (sf[lvl]||[]).forEach((ft,fi)=>{
+        if(ft && ft.choice && Array.isArray(ft.options)){
+          if(!(char.subclassChoices||{})[ft.n]){
+            result.choices.push({
+              id:`sub_${lvl}_${fi}`, source:'subclass', level:lvl, label:ft.n,
+              icon:'⚡', note:ft.d||'', count:1, type:'subchoice', subName:ft.n,
+              options: ft.options.map(o=>({value:o.value, label:`${o.label}${o.desc?' — '+o.desc:''}`}))
+            });
+          }
+        }
+      });
+    });
+  }
+
+  // 3) Fighting Style granted by the base class (LEVEL_FEATURES fightingStyle flag)
+  const lf = LEVEL_FEATURES[cls.name] || {};
+  for(let lvl=1; lvl<=char.level; lvl++){
+    if(lf[lvl] && lf[lvl].fightingStyle){
+      const hasFS = !!char.fightingStyle || (char.equipment||[]).some(e=>/^Fighting Style:/i.test(e));
+      if(!hasFS){
+        result.choices.push({
+          id:`fs_${lvl}`, source:'fightingStyle', level:lvl, label:'Fighting Style',
+          icon:'⚔', note:'', count:1, type:'fightingStyle',
+          options: FIGHTING_STYLES.map(o=>({value:o,label:o}))
+        });
+      }
+    }
+  }
+
+  // 4) CLASS_LEVEL_CHOICES (Expertise, Metamagic, Invocations, Favored Enemy,
+  //    Battle Master maneuvers, Totem animals, etc.)
+  const clc = CLASS_LEVEL_CHOICES[cls.name] || {};
+  Object.keys(clc).map(Number).filter(lvl=>lvl<=char.level).sort((a,b)=>a-b).forEach(lvl=>{
+    (clc[lvl]||[]).forEach((ch, chi)=>{
+      if(ch.condition && !ch.condition(char)) return;   // subclass-gated, etc.
+      if(logged(lvl, ch.label)) return;                 // already chosen
+      const rawOpts = typeof ch.options==='function' ? ch.options(char) : (ch.options||[]);
+      if(!rawOpts.length) return;
+      result.choices.push({
+        id:`clc_${lvl}_${chi}`, source:'class', level:lvl, label:ch.label,
+        icon:ch.icon||'◆', note:ch.note||'', count:ch.count||1, type:ch.type||'pick',
+        options: rawOpts.map(o=> typeof o==='string'?{value:o,label:o}:o)
+      });
+    });
+  });
+
+  // De-dupe: drop the plain base-class Fighting Style if CLASS_LEVEL_CHOICES
+  // already offers a (richer) fighting-style choice at the same level.
+  const clcFSLevels = new Set(result.choices.filter(c=>c.source==='class' && /fighting style/i.test(c.label)).map(c=>c.level));
+  result.choices = result.choices.filter(c=> !(c.source==='fightingStyle' && clcFSLevels.has(c.level)));
+
+  result.choices.sort((a,b)=>a.level-b.level);
+  return result;
+}
+
+// Build the Backfill panel HTML (empty string when nothing is pending).
+function renderBackfillPanel(char, cls){
+  if(!cls) return '';
+  const p = computePendingChoices(char, cls);
+  if(!p.needsSubclass && !p.choices.length) return '';
+  const cc = cls.color;
+  const card = inner => `<div style="background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px">${inner}</div>`;
+
+  let h = `<div style="background:var(--purple-dim);border:1px solid var(--purple);border-radius:13px;padding:14px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="font-size:18px">↻</span>
+      <span style="font-family:'Cinzel',serif;font-size:13px;color:var(--purple);letter-spacing:0.5px">Backfill Choices</span>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5">${esc(char.name)} is Level ${char.level} but has unmade choices from earlier levels. Select and apply them below.</div>`;
+
+  if(p.needsSubclass){
+    h += card(`
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);letter-spacing:0.5px;margin-bottom:6px">⚡ Subclass <span style="color:var(--muted);font-weight:normal">(unlocked at level ${p.subclassLevel})</span></div>
+      <div style="display:flex;gap:6px">
+        <select id="bf_subclass" style="flex:1;background:var(--surface2);border:1px solid ${cc};border-radius:7px;padding:8px 10px;color:var(--text);font-size:12px">
+          <option value="">— Select subclass —</option>
+          ${p.subclassOptions.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}
+        </select>
+        <button class="btn btn-primary" style="width:auto;margin:0;padding:8px 14px;font-size:12px" onclick="backfillSetSubclass(${char.id})">Set</button>
+      </div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px;font-style:italic">Set your subclass to reveal its feature choices for backfilling.</div>`);
+  }
+
+  p.choices.forEach(ch=>{
+    const selects = Array.from({length:ch.count}).map((_,i)=>`
+      <select id="bf_${ch.id}_${i}" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:8px 10px;color:var(--text);font-size:12px;margin-bottom:6px">
+        <option value="">— ${ch.count>1?('Pick '+(i+1)):'Select'} —</option>
+        ${ch.options.map(o=>`<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('')}
+      </select>`).join('');
+    h += card(`
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:${cc};letter-spacing:0.5px;margin-bottom:6px">${ch.icon} <span style="color:var(--gold)">L${ch.level}</span> · ${esc(ch.label)}</div>
+      ${ch.note?`<div style="font-size:10px;color:var(--muted);margin-bottom:8px;font-style:italic;line-height:1.5">${esc(ch.note)}</div>`:''}
+      ${selects}
+      <button class="btn btn-outline" style="width:100%;margin:4px 0 0;padding:8px;font-size:12px;border-color:${cc};color:${cc}" onclick="backfillApplyChoice(${char.id},'${ch.id}')">Apply</button>`);
+  });
+
+  h += `</div>`;
+  return h;
+}
+
+// Set a retroactive subclass and seed its choice slots.
+function backfillSetSubclass(charId){
+  const chars = getChars();
+  const ci = chars.findIndex(c=>c.id===charId);
+  if(ci<0) return;
+  const char = chars[ci];
+  const val = document.getElementById('bf_subclass')?.value;
+  if(!val){ toast('Pick a subclass first','var(--red)'); return; }
+  char.subclass = val;
+  const sf = SUBCLASS_FEATURES[cleanSub(val)] || {};
+  const choiceNames = Object.values(sf).flat().filter(ft=>ft && ft.choice).map(ft=>ft.n);
+  char.subclassChoices = char.subclassChoices || {};
+  choiceNames.forEach(n=>{ if(!(n in char.subclassChoices)) char.subclassChoices[n]=''; });
+  saveChars(chars);
+  toast(`Subclass set: ${cleanSub(val)}`,'var(--purple)');
+  _backfillRefresh(charId);
+}
+
+// Apply a single backfilled feature choice.
+function backfillApplyChoice(charId, choiceId){
+  const chars = getChars();
+  const ci = chars.findIndex(c=>c.id===charId);
+  if(ci<0) return;
+  const char = chars[ci];
+  const cls  = CLASSES[char.classIdx];
+  const ch   = computePendingChoices(char, cls).choices.find(c=>c.id===choiceId);
+  if(!ch){ _backfillRefresh(charId); return; }
+
+  const picks = [];
+  for(let i=0;i<ch.count;i++){
+    const v = document.getElementById(`bf_${choiceId}_${i}`)?.value;
+    if(v) picks.push(v);
+  }
+  const uniq = [...new Set(picks.filter(Boolean))];
+  if(!uniq.length){ toast('Make a selection first','var(--red)'); return; }
+  if(ch.count>1 && uniq.length < ch.count){ toast(`Pick ${ch.count} different options`,'var(--red)'); return; }
+
+  const logChoice = ()=>{ char.featureChoiceLog = char.featureChoiceLog||[]; char.featureChoiceLog.push({level:ch.level, choice:ch.label, picks:uniq}); };
+
+  if(ch.type==='subchoice'){
+    char.subclassChoices = char.subclassChoices||{};
+    char.subclassChoices[ch.subName] = uniq[0];
+    logChoice();
+  } else if(ch.type==='fightingStyle' || /fighting style/i.test(ch.label)){
+    char.fightingStyle = uniq[0];
+    char.equipment = char.equipment||[];
+    if(!char.equipment.some(e=>/^Fighting Style:/i.test(e))) char.equipment.push('Fighting Style: '+uniq[0]);
+    if(ch.source!=='fightingStyle') logChoice();
+  } else if(ch.type==='expertise'){
+    char.expertiseSkills = char.expertiseSkills||[];
+    uniq.forEach(p=>{ if(!char.expertiseSkills.includes(p)) char.expertiseSkills.push(p); });
+    char.equipment = char.equipment||[]; char.equipment.push('Expertise: '+uniq.join(', '));
+    logChoice();
+  } else if(/metamagic/i.test(ch.label)){
+    char.metamagic = char.metamagic||[];
+    uniq.forEach(p=>{ if(!char.metamagic.includes(p)) char.metamagic.push(p); });
+    logChoice();
+  } else if(/invocation/i.test(ch.label)){
+    char.invocations = char.invocations||[];
+    uniq.forEach(p=>{ if(!char.invocations.includes(p)) char.invocations.push(p); });
+    logChoice();
+  } else {
+    const label = uniq.length===1 ? uniq[0] : uniq.join(' / ');
+    char.equipment = char.equipment||[]; char.equipment.push(`${ch.label}: ${label}`);
+    logChoice();
+  }
+
+  saveChars(chars);
+  toast('✦ Backfilled: '+ch.label,'var(--gold)');
+  _backfillRefresh(charId);
+}
+
+// Re-render the open sheet so backfilled data shows immediately.
+function _backfillRefresh(charId){
+  const char = getChars().find(c=>c.id===charId);
+  if(!char) return;
+  const cls = CLASSES[char.classIdx];
+  try{ renderProgressTab(char, cls); }catch(e){}
+  try{ if(document.getElementById('stab-skills')) renderSkillsTab(char, cls, 'stab-skills'); }catch(e){}
+  try{ if(document.getElementById('stab-combat'))  renderCombatTab(char, cls, 'stab-combat', true); }catch(e){}
+  try{ if(document.getElementById('sheetHero'))    renderSheetHero(char, cls, 'sheetHero'); }catch(e){}
+}
+
 function renderProgressTab(char, cls){
   const el = document.getElementById('stab-progress');
   if(!el) return;
@@ -5063,6 +5286,9 @@ function renderProgressTab(char, cls){
   const effects = char.effects || {};
 
   let html = '';
+
+  // ── BACKFILL: retroactive subclass & earlier feature choices ──
+  html += renderBackfillPanel(char, cls);
 
   // ── DM CONTROLS (DM only) ──
   if(isDM){
@@ -5233,7 +5459,7 @@ function renderProgressTab(char, cls){
   const clsFeatureLog = [];
   for(let lvl = 1; lvl <= char.level; lvl++){
     const ld = (LEVEL_FEATURES[cls.name]||{})[lvl]||{};
-    const subFts = char.subclass ? (SUBCLASS_FEATURES[char.subclass]||{})[lvl]||[] : [];
+    const subFts = char.subclass ? (SUBCLASS_FEATURES[cleanSub(char.subclass)]||{})[lvl]||[] : [];
     const allFts = [...(ld.features||[]).filter(f=>!String(f).includes('ASI or Feat')), ...subFts.map(f=>f.n)];
     if(allFts.length) clsFeatureLog.push({level:lvl, features:allFts});
   }
@@ -6495,7 +6721,7 @@ function renderLevelUpTab(char, cls){
 
   // Build feature list: use SUBCLASS_FEATURES lookup for actual descriptions,
   // fall back to generic resolution for base class features
-  const subFeatures = char.subclass ? (SUBCLASS_FEATURES[char.subclass]||{})[newLevel]||[] : [];
+  const subFeatures = char.subclass ? (SUBCLASS_FEATURES[cleanSub(char.subclass)]||{})[newLevel]||[] : [];
   const genericPlaceholders = ['Path Feature','Subclass Feature','Bard College Feature','Martial Archetype Feature',
     'Divine Domain Feature','Sacred Oath Feature','Ranger Archetype Feature','Roguish Archetype Feature',
     'Sorcerous Origin Feature','Otherworldly Patron Feature','Arcane Tradition Feature',
@@ -7364,7 +7590,7 @@ function buildLevelUpHTML(char, cls, newLevel, ld, avgHP, conMod){
   const cc = `var(--gold)`;
   // Resolve raw feature strings into {name, desc} objects using same logic as renderLevelUpTab
   const rawFeatures = (ld.features||[]).filter(f=>!String(f).startsWith('ASI'));
-  const subFeaturesBL = char.subclass ? (SUBCLASS_FEATURES[char.subclass]||{})[newLevel]||[] : [];
+  const subFeaturesBL = char.subclass ? (SUBCLASS_FEATURES[cleanSub(char.subclass)]||{})[newLevel]||[] : [];
   const genericPlaceholdersBL = ['Path Feature','Subclass Feature','Bard College Feature','Martial Archetype Feature',
     'Divine Domain Feature','Sacred Oath Feature','Ranger Archetype Feature','Roguish Archetype Feature',
     'Sorcerous Origin Feature','Otherworldly Patron Feature','Arcane Tradition Feature',
@@ -13110,7 +13336,7 @@ function renderCharProgressTab(char, cls){
   const ld = (LEVEL_FEATURES[cls.name]||{})[level]||{};
 
   // ── Subclass Choices ──
-  const subFeatures = char.subclass ? (SUBCLASS_FEATURES[char.subclass]||{}) : {};
+  const subFeatures = char.subclass ? (SUBCLASS_FEATURES[cleanSub(char.subclass)]||{}) : {};
   const choices = char.subclassChoices || {};
   Object.values(subFeatures).flat().filter(ft=>ft.choice).forEach(ft=>{
     h += `<div style="margin-bottom:12px">
