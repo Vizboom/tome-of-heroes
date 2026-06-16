@@ -13422,19 +13422,21 @@ function isOffhandBlocked(char){
 
 function getEquippedItems(char){
   const slots = (char && char.equippedSlots) || {};
-  // Normalize so a malformed equipped item can't crash renders. Leave the
-  // special two-handed lock placeholder ({_2hBlocked:true}) intact.
+  // Drop empty entries AND legacy two-handed lock placeholders so no renderer
+  // can ever try to read .name/.match off them. The "off-hand blocked" state is
+  // derived at render time from the main-hand weapon (see isOffhandBlocked).
   const out = {};
   for(const k in slots){
     const it = slots[k];
-    out[k] = (it && it._2hBlocked) ? it : (it ? normalizeItem(it) : it);
+    if(!it || it._2hBlocked) continue;
+    out[k] = normalizeItem(it);
   }
   return out;
 }
 
 function saveEquippedItems(charId, slots){
   const chars = getChars();
-  const ci = chars.findIndex(c => c.id === charId);
+  const ci = chars.findIndex(c => String(c.id) === String(charId));
   if(ci < 0) return;
   chars[ci].equippedSlots = slots;
   saveChars(chars);
@@ -14214,14 +14216,16 @@ function renderPaperdoll(char, cls){
     + getClassDollSVG(cls.name, cc)
     + '</div>';
 
+  const offhandLocked = isOffhandBlocked(char);
   EQUIP_SLOTS.forEach(function(slot){
     const item = slots[slot.id];
-    // Two-handed lock placeholder — render a dimmed "locked" slot, skip item render
-    if(item && item._2hBlocked){
+    // Off hand shows a dimmed "locked" state while a 2H weapon is in the main hand
+    if(slot.id==='offhand' && offhandLocked && !item){
       const gp = 'grid-column:'+slot.col+';grid-row:'+slot.row+';';
-      html += '<div class="equip-slot locked-2h" id="eslot-'+slot.id+'" data-slot="'+slot.id+'" style="'+gp+'opacity:0.55" title="Occupied by two-handed weapon">'
+      const by = (slots['mainhand'] && slots['mainhand'].name) || 'two-handed weapon';
+      html += '<div class="equip-slot locked-2h" id="eslot-'+slot.id+'" data-slot="'+slot.id+'" style="'+gp+'opacity:0.55" onclick="handleSlotClick(\'offhand\')" title="Occupied by two-handed weapon">'
         + '<div class="slot-icon" style="opacity:0.5">🔒</div>'
-        + '<div class="slot-label" style="font-size:9px">2H — '+esc(item._lockedBy||'Both hands')+'</div>'
+        + '<div class="slot-label" style="font-size:9px">2H — '+esc(by)+'</div>'
         + '</div>';
       return;
     }
@@ -14471,13 +14475,15 @@ function _doEquipItem(slotId, itemId){
     slotId='mainhand';
     toast(item.name+' needs both hands — equipped to Main Hand','var(--muted)');
   }
-  slots[slotId]=item;
-  // 2H weapon in mainhand locks offhand
+  // Can't fill the off-hand while a two-handed weapon occupies the main hand
+  if(slotId==='offhand' && isTwoHandedWeapon(slots['mainhand'])){
+    toast('Off hand is occupied by a two-handed weapon','var(--red)'); return;
+  }
+  // Store a shallow copy so equipped gear never shares a reference with the loot store
+  slots[slotId]=Object.assign({},item);
+  // A two-handed weapon in the main hand frees (empties) the off-hand
   if(slotId==='mainhand' && isTwoHandedWeapon(item)){
-    slots['offhand'] = {_2hBlocked:true, _lockedBy: item.name};
-  } else if(slotId==='mainhand'){
-    // Clear 2H lock if replacing with 1H
-    if(slots['offhand'] && slots['offhand']._2hBlocked) delete slots['offhand'];
+    delete slots['offhand'];
   }
   saveEquippedItems(charScreenId,slots);
   toast(item.name+' equipped!','var(--green)');
@@ -14491,10 +14497,6 @@ function unequipSlot(slotId){
   const slots=Object.assign({},getEquippedItems(char));
   const item=slots[slotId];
   delete slots[slotId];
-  // If removing 2H mainhand, free the offhand too
-  if(slotId==='mainhand' && slots['offhand'] && slots['offhand']._2hBlocked){
-    delete slots['offhand'];
-  }
   saveEquippedItems(charScreenId,slots);
   if(item) toast(item.name+' unequipped','var(--muted)');
   _refreshCharScreen();
@@ -14515,7 +14517,8 @@ function handleSlotClick(slotId){
   const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
   if(!char) return;
   const slots=getEquippedItems(char);
-  if(slots[slotId] && slots[slotId]._2hBlocked){
+  // Off hand is blocked while a two-handed weapon occupies the main hand
+  if(slotId==='offhand' && isOffhandBlocked(char)){
     toast('Unequip the two-handed weapon first','var(--muted)'); return;
   }
   if(slots[slotId]) unequipSlot(slotId); else openSlotPicker(slotId);
