@@ -3751,10 +3751,8 @@ function renderCombatTab(char,cls,elId,editable){
   }
   html+=`<div class="divider"><span>Class Features</span></div>`;
   cls.features.forEach(f=>{html+=`<div class="feature-card" style="--cc:${cls.color}"><div class="feature-name">${f.n}</div><div class="feature-desc">${f.d}</div></div>`;});
-  if(char.subclass){
-    html+=`<div class="feature-card" style="--cc:var(--purple);border-color:var(--purple)"><div class="feature-name" style="color:var(--purple)">⚡ ${cleanSub(char.subclass)}</div><div class="feature-desc">Subclass — features and your chosen options are listed below.</div></div>`;
-  }
-  // Resolved subclass features + the character's specific selections (detailed)
+  // Resolved subclass features + the character's specific selections (detailed,
+  // level-gated). The resolver includes the subclass identity card itself.
   getResolvedSelections(char, cls).forEach(s=>{
     html+=`<div class="feature-card" style="--cc:${s.color};border-color:${s.color}33"><div class="feature-name" style="color:${s.color}">${s.level?('L'+s.level+' · '):''}${esc(s.title)}</div>${s.desc?`<div class="feature-desc">${esc(s.desc)}</div>`:''}</div>`;
   });
@@ -5283,13 +5281,29 @@ function _backfillRefresh(charId){
   try{ if(document.getElementById('diceCharPanel')) renderDiceCharPanel(); }catch(e){}
 }
 
-// Resolve a character's actual subclass features and the specific choices they
-// have made (subclass options, metamagic, invocations, expertise, fighting
-// style, maneuvers, favored enemy, etc.) into displayable cards. Used by the
-// combat/class-features view and the dice quick-reference panel.
+// The character's level in a specific class (multiclass-aware). Mirrors how
+// spells are gated: features unlock against the level in THAT class, not the
+// character's total level.
+function getClassLevelFor(char, classIdx){
+  if(Array.isArray(char.multiclasses) && char.multiclasses.length){
+    const mc = char.multiclasses.find(m=>m.classIdx===classIdx);
+    if(mc && mc.level) return mc.level;
+  }
+  return char.level;
+}
+
+// Resolve a character's subclass features and the specific choices they have
+// made (subclass options, metamagic, invocations, expertise, fighting style,
+// maneuvers, favored enemy, etc.) into displayable cards. Subclass features are
+// gated by the character's level in that class, just like spells. Choices that
+// have already been made are always shown. Used by the combat/class-features
+// view and the dice quick-reference panel.
 function getResolvedSelections(char, cls){
   const out = [];
   if(!char || !cls) return out;
+  const classIdx = CLASSES.indexOf(cls);
+  const clsLevel = getClassLevelFor(char, classIdx>=0?classIdx:char.classIdx);
+
   const seen = new Set();
   const add = (level, title, desc, color)=>{
     const key = (title+'|'+(desc||'')).toLowerCase();
@@ -5300,26 +5314,51 @@ function getResolvedSelections(char, cls){
 
   const subName = cleanSub(char.subclass);
   const sf = subName ? (SUBCLASS_FEATURES[subName]||{}) : {};
+  const hasDetail = Object.keys(sf).length > 0;
   const subChoiceNames = new Set(Object.values(sf).flat().filter(ft=>ft&&ft.choice).map(ft=>ft.n));
 
-  // 1) Subclass features per level (with chosen-option detail where applicable)
-  Object.keys(sf).map(Number).filter(l=>l<=char.level).sort((a,b)=>a-b).forEach(lvl=>{
-    (sf[lvl]||[]).forEach(ft=>{
-      if(ft.choice && Array.isArray(ft.options)){
-        const chosen = (char.subclassChoices||{})[ft.n];
-        const opt = ft.options.find(o=>o.value===chosen);
-        add(lvl, ft.n + (opt?(': '+opt.label):''), opt ? (opt.desc||'') : '⚠ Not yet chosen — set it on the Progress tab.', 'var(--purple)');
-      } else {
-        add(lvl, ft.n, ft.d||'', 'var(--purple)');
-      }
-    });
-  });
+  // 0) Subclass identity (always shown so the section appears even when the
+  //    subclass has no detailed feature data in the tables)
+  if(subName){
+    const subLvl = getSubclassLevelFor(cls.name) || 0;
+    add(subLvl, '⚜ '+subName,
+        hasDetail ? 'Subclass — features and your chosen options are listed below.'
+                  : 'Subclass — see your sourcebook for full feature details.',
+        'var(--purple)');
+  }
 
-  // 2) Logged choices — picks already contain descriptive text
+  // 1) Detailed subclass features per level (gated by class level)
+  if(hasDetail){
+    Object.keys(sf).map(Number).filter(l=>l<=clsLevel).sort((a,b)=>a-b).forEach(lvl=>{
+      (sf[lvl]||[]).forEach(ft=>{
+        if(ft.choice && Array.isArray(ft.options)){
+          const chosen = (char.subclassChoices||{})[ft.n];
+          const opt = ft.options.find(o=>o.value===chosen);
+          add(lvl, ft.n + (opt?(': '+opt.label):''), opt ? (opt.desc||'') : '⚠ Not yet chosen — set it on the Progress tab.', 'var(--purple)');
+        } else {
+          add(lvl, ft.n, ft.d||'', 'var(--purple)');
+        }
+      });
+    });
+  } else if(subName){
+    // Fallback for subclasses without detailed data: surface the generic
+    // subclass-feature slots from LEVEL_FEATURES, still gated by class level.
+    const lf = LEVEL_FEATURES[cls.name]||{};
+    Object.keys(lf).map(Number).filter(l=>l<=clsLevel).sort((a,b)=>a-b).forEach(lvl=>{
+      (lf[lvl].features||[]).forEach(f=>{
+        const s = String(f);
+        if(/ Feature$/.test(s)){
+          add(lvl, subName+' Feature', `A ${subName} feature is gained at level ${lvl} — see sourcebook.`, 'var(--purple)');
+        }
+      });
+    });
+  }
+
+  // 2) Logged choices — picks already contain descriptive text (always shown)
   const loggedPicks = new Set();
   (char.featureChoiceLog||[]).forEach(e=>{
     (e.picks||[]).forEach(p=>loggedPicks.add(String(p).toLowerCase()));
-    if(subChoiceNames.has(e.choice)) return;            // shown via subclass features
+    if(subChoiceNames.has(e.choice)) return;            // already shown via subclass features
     const picks = (e.picks||[]).filter(Boolean);
     if(!picks.length) return;
     add(e.level, e.choice, picks.join(' · '), 'var(--gold)');
