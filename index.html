@@ -1339,7 +1339,10 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
         <div class="char-main-layout">
           <div class="char-left-pane">
             <div class="paperdoll-section">
-              <div class="paperdoll-section-label">EQUIPMENT SLOTS</div>
+              <div class="paperdoll-section-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                <span>EQUIPMENT SLOTS</span>
+                <button onclick="resetCharEquipment()" title="Unequip everything" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">↺ Reset</button>
+              </div>
               <div id="paperdollGrid" class="paperdoll-grid"></div>
             </div>
             <div class="inv-bag-section">
@@ -1789,6 +1792,7 @@ async function dbGetChars(){
     return c;
   }), 'character');
   _db.chars.forEach(c=>_normalizeOwnCharTags(c));
+  _db.chars.forEach(c=>_repairCharEquip(c));
   return _db.chars;
 }
 
@@ -1931,6 +1935,9 @@ async function pullAll(campId){
       (cr.data||[]).map(r=>{ const c=r.data||r; c._rowId=r.id; c._campaignId=r.campaign_id; return c; })
         .filter(c=>c && c.id), 'character');
     _db.chars.forEach(c=>_normalizeOwnCharTags(c));
+    // Auto-repair any character whose equipped gear was left in a bad state by
+    // an older version, then persist just the ones that changed.
+    _db.chars.forEach(c=>{ if(_repairCharEquip(c)){ try{ dbSaveChar(c); }catch(e){} } });
 
     if(campId){
       const { data: loot } = await supa.from('loot').select('*').eq('campaign_id', campId).maybeSingle();
@@ -2780,6 +2787,31 @@ function getItems(){
   // Guard against malformed entries (missing name/rarity/type/qty) so a single
   // bad item can't crash inventory rendering or hide the whole loot list.
   return list.map(normalizeItem).filter(Boolean);
+}
+
+// One-time data repair for a character's equipped gear. Removes legacy
+// two-handed lock placeholders, fixes malformed items, and resets a corrupt
+// equippedSlots structure. Returns true if anything changed (so the caller can
+// persist the cleaned record). Idempotent — a clean character is left untouched.
+function _repairCharEquip(c){
+  if(!c) return false;
+  // equippedSlots must be a plain object; reset arrays/garbage to empty
+  if(c.equippedSlots && (typeof c.equippedSlots !== 'object' || Array.isArray(c.equippedSlots))){
+    c.equippedSlots = {};
+    return true;
+  }
+  if(!c.equippedSlots) return false;
+  let changed = false;
+  const clean = {};
+  for(const k in c.equippedSlots){
+    const it = c.equippedSlots[k];
+    if(!it || typeof it !== 'object' || it._2hBlocked){ changed = true; continue; } // drop empties, garbage, legacy 2H locks
+    const fixed = normalizeItem(it);
+    if(fixed !== it) changed = true;
+    clean[k] = fixed;
+  }
+  if(changed) c.equippedSlots = clean;
+  return changed;
 }
 function getWealth(){
   const campId = getActiveCampId();
@@ -14504,6 +14536,22 @@ function unequipSlot(slotId){
 }
 
 function equipItem(slotId, itemId){ _doEquipItem(slotId, itemId); closeSlotPicker(); }
+
+// One-tap fix: fully clear a character's equipped gear (e.g. to repair a
+// character whose equipped slots were left in a bad state). Loot items stay
+// in the bag — only the equipped slots are emptied.
+function resetCharEquipment(){
+  const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
+  if(!char){ toast('No character selected','var(--red)'); return; }
+  if(!confirm('Unequip and clear ALL equipped gear for '+(char.name||'this character')+'?\n\nYour loot items stay in the bag — only the equipped slots are emptied.')) return;
+  const chars=getChars();
+  const ci=chars.findIndex(function(c){return String(c.id)===String(char.id);});
+  if(ci<0){ toast('Character not found','var(--red)'); return; }
+  chars[ci].equippedSlots={};
+  saveChars(chars);
+  toast('✦ Equipment cleared','var(--green)');
+  _refreshCharScreen();
+}
 
 function _refreshCharScreen(){
   const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
