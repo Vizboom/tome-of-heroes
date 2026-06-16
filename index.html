@@ -2655,6 +2655,174 @@ const DND_ITEMS = [
   {name:'Alchemy Jug',type:'misc',rarity:'uncommon',weight:12,value:6000,attune:'none',desc:'Pours a limited amount of specific liquid per day: water (8 gallons), beer (4 gallons), vinegar, wine, oil (1 qt), salt water (2 gallons), aqua regia, mayonnaise, honey (1 lb), poison (a few drops).'},
   {name:'Driftglobe',type:'wondrous',rarity:'uncommon',weight:1,value:750,attune:'none',desc:'Command: glows (bright 20 ft, dim 20 ft). Second command: hovers and follows you 60 ft. Third command: cast Daylight (once per day).'},
   {name:'Eversmoking Bottle',type:'misc',rarity:'uncommon',weight:1,value:1000,attune:'none',desc:'Unstop: billows smoke (20 ft radius, heavily obscured). Expands 10 ft per turn up to 60 ft. Dissipates in 10 minutes (or strong wind).'},
+
+  // ══ EXPANDED LOOT: wider 5e universe (XGE/TCE/Fizban/artifacts/adventure/gear) ══
+  {name:'Battleaxe +1',type:'weapon',rarity:'uncommon',weight:4,value:1000,attune:'none',hands:'v',desc:'+1 to attack and damage. Versatile (1d10). 1d8 slashing.'},
+  {name:'Battleaxe +2',type:'weapon',rarity:'rare',weight:4,value:4000,attune:'none',hands:'v',desc:'+2 to attack and damage. Versatile (1d10). 1d8 slashing.'},
+  {name:'Warhammer +1',type:'weapon',rarity:'uncommon',weight:2,value:1000,attune:'none',hands:'v',desc:'+1 to attack and damage. Versatile (1d10). 1d8 bludgeoning.'},
+  {name:'Warhammer +2',type:'weapon',rarity:'rare',weight:2,value:4000,attune:'none',hands:'v',desc:'+2 to attack and damage. Versatile (1d10). 1d8 bludgeoning.'},
+  {name:'Mace +1',type:'weapon',rarity:'uncommon',weight:4,value:1000,attune:'none',hands:'1',desc:'+1 to attack and damage. 1d6 bludgeoning.'},
+  {name:'Mace +2',type:'weapon',rarity:'rare',weight:4,value:4000,attune:'none',hands:'1',desc:'+2 to attack and damage. 1d6 bludgeoning.'},
+  {name:'Greatsword +1',type:'weapon',rarity:'uncommon',weight:6,value:1000,attune:'none',hands:'2',desc:'+1 to attack and damage. Heavy, two-handed. 2d6 slashing.'},
+  {name:'Greatsword +2',type:'weapon',rarity:'rare',weight:6,value:4000,attune:'none',hands:'2',desc:'+2 to attack and damage. Heavy, two-handed. 2d6 slashing.'},
+  {name:'Greatsword +3',type:'weapon',rarity:'very-rare',weight:6,value:16000,attune:'none',hands:'2',desc:'+3 to attack and damage. Heavy, two-handed. 2d6 slashing.'},
+  {name:'Greataxe +2',type:'weapon',rarity:'rare',weight:7,value:4000,attune:'none',hands:'2',desc:'+2 to attack and damage. Heavy, two-handed. 1d12 slashing.'},
+  {name:'Maul +1',type:'weapon',rarity:'uncommon',weight:10,value:1000,attune:'none',hands:'2',desc:'+1 to attack and damage. Heavy, two-handed. 2d6 bludgeoning.'},
+  {name:'Maul +2',type:'weapon',rarity:'rare',weight:10,value:4000,attune:'none',hands:'2',desc:'+2 to attack and damage. Heavy, two-handed. 2d6 bludgeoning.'},
+  {name:'Glaive +1',type:'weapon',rarity:'uncommon',weight:6,value:1000,attune:'none',hands:'2',desc:'+1 to attack and damage. Heavy, reach, two-handed. 1d10 slashing.'},
+  {name:'Halberd +1',type:'weapon',rarity:'uncommon',weight:6,value:1000,attune:'none',hands:'2',desc:'+1 to attack and damage. Heavy, reach, two-handed. 1d10 slashing.'},
+  {name:'Spear +1',type:'weapon',rarity:'uncommon',weight:3,value:1000,attune:'none',hands:'v',desc:'+1 to attack and damage. Thrown (20/60), versatile (1d8). 1d6 piercing.'},
+  {name:'Quarterstaff +1',type:'weapon',rarity:'uncommon',weight:4,value:1000,attune:'none',hands:'v',desc:'+1 to attack and damage. Versatile (1d8). 1d6 bludgeoning.'},
+  {name:'Scimitar +1',type:'weapon',rarity:'uncommon',weight:3,value:1000,attune:'none',hands:'off',desc:'+1 to attack and damage. Finesse, light. 1d6 slashing.'},
+  {name:'Scimitar +2',type:'weapon',rarity:'rare',weight:3,value:4000,attune:'none',hands:'off',desc:'+2 to attack and damage. Finesse, light. 1d6 slashing.'},
+  {name:'Handaxe +1',type:'weapon',rarity:'uncommon',weight:2,value:1000,attune:'none',hands:'off',desc:'+1 to attack and damage. Light, thrown (20/60). 1d6 slashing.'},
+  {name:'Morningstar +1',type:'weapon',rarity:'uncommon',weight:4,value:1000,attune:'none',hands:'1',desc:'+1 to attack and damage. 1d8 piercing.'},
+  {name:'Trident +1',type:'weapon',rarity:'uncommon',weight:4,value:1000,attune:'none',hands:'v',desc:'+1 to attack and damage. Thrown (20/60), versatile (1d8). 1d6 piercing.'},
+  {name:'Whip +1',type:'weapon',rarity:'uncommon',weight:3,value:1000,attune:'none',hands:'1',desc:'+1 to attack and damage. Finesse, reach. 1d4 slashing.'},
+  {name:'Rapier +3',type:'weapon',rarity:'very-rare',weight:2,value:16000,attune:'none',hands:'1',desc:'+3 to attack and damage. Finesse. 1d8 piercing.'},
+  {name:'Shortsword +3',type:'weapon',rarity:'very-rare',weight:2,value:16000,attune:'none',hands:'off',desc:'+3 to attack and damage. Finesse, light. 1d6 piercing.'},
+  {name:'Dagger +3',type:'weapon',rarity:'very-rare',weight:1,value:16000,attune:'none',hands:'off',desc:'+3 to attack and damage. Finesse, light, thrown (20/60). 1d4 piercing.'},
+  {name:'Longbow +1',type:'weapon',rarity:'uncommon',weight:2,value:1000,attune:'none',hands:'2',desc:'+1 to attack and damage. Ammunition, heavy, two-handed (150/600). 1d8 piercing.'},
+  {name:'Longbow +2',type:'weapon',rarity:'rare',weight:2,value:4000,attune:'none',hands:'2',desc:'+2 to attack and damage. Ammunition, heavy, two-handed (150/600). 1d8 piercing.'},
+  {name:'Longbow +3',type:'weapon',rarity:'very-rare',weight:2,value:16000,attune:'none',hands:'2',desc:'+3 to attack and damage. Ammunition, heavy, two-handed (150/600). 1d8 piercing.'},
+  {name:'Shortbow +1',type:'weapon',rarity:'uncommon',weight:2,value:1000,attune:'none',hands:'2',desc:'+1 to attack and damage. Ammunition, two-handed (80/320). 1d6 piercing.'},
+  {name:'Heavy Crossbow +1',type:'weapon',rarity:'uncommon',weight:18,value:1000,attune:'none',hands:'2',desc:'+1 to attack and damage. Ammunition, heavy, loading, two-handed (100/400). 1d10 piercing.'},
+  {name:'Hand Crossbow +1',type:'weapon',rarity:'uncommon',weight:3,value:1000,attune:'none',hands:'1',desc:'+1 to attack and damage. Ammunition, light, loading (30/120). 1d6 piercing.'},
+  {name:'Dragon Slayer',type:'weapon',rarity:'rare',weight:3,value:8000,attune:'none',hands:'v',desc:'Sword. +1 to attack and damage. +3d6 damage vs dragons (and wyverns, dragon turtles, etc.).'},
+  {name:'Giant Slayer',type:'weapon',rarity:'rare',weight:6,value:8000,attune:'none',hands:'2',desc:'Axe or sword. +1 to attack and damage. +2d6 damage vs giants; on a hit a giant must save (DC 15) or fall prone.'},
+  {name:'Dagger of Venom',type:'weapon',rarity:'rare',weight:1,value:2500,attune:'none',hands:'off',desc:'+1 to attack and damage. Once per day, coat the blade in poison: next hit deals +2d10 poison and the target must save (DC 15) or be poisoned 1 min.'},
+  {name:'Sword of Vengeance',type:'weapon',rarity:'uncommon',weight:3,value:1000,attune:'required',hands:'v',desc:'+1 to attack and damage. Cursed: while attuned you have disadvantage on attacks with other weapons and are reluctant to part with it.'},
+  {name:'Sword of Answering',type:'weapon',rarity:'legendary',weight:3,value:50000,attune:'required',hands:'1',desc:'Longsword. +3 to attack and damage. Reaction (Riposte): when a creature you can see hits you with an attack, make a melee attack against it.'},
+  {name:'Hammer of Thunderbolts',type:'weapon',rarity:'legendary',weight:15,value:50000,attune:'required',hands:'2',desc:'Maul. +1 to attack and damage; double damage vs giants. With a belt and gauntlets of giant strength: STR 20, +20 ft thrown range, and a thunderclap that can slay giants (DC 17 CON or die).'},
+  {name:'Moon-Touched Sword',type:'weapon',rarity:'common',weight:3,value:200,attune:'none',hands:'v',desc:'In darkness, the blade sheds dim light in a 15-ft radius. Otherwise a standard sword.'},
+  {name:'Sunsword',type:'weapon',rarity:'legendary',weight:3,value:50000,attune:'required',hands:'1',desc:'Longsword (sentient). +2 to attack and damage. Blade of pure radiance deals an extra 1d8 radiant (2d8 vs undead) and sheds sunlight in a 15-ft radius (30 ft dim beyond).'},
+  {name:'Blackrazor',type:'weapon',rarity:'legendary',weight:3,value:60000,attune:'required',hands:'v',desc:'Greatsword (sentient). +3 to attack and damage. Devours the soul of a creature it reduces to 0 HP, granting you temp HP and haste for 10 min. Hungers for souls.'},
+  {name:'Wave',type:'weapon',rarity:'legendary',weight:4,value:60000,attune:'required',hands:'v',desc:'Trident (sentient). +3 to attack and damage. Returns when thrown; deals +1d6 necrotic and on a hit the target makes a DC 15 CON save or takes extra damage. Grants water breathing and command over water.'},
+  {name:'Whelm',type:'weapon',rarity:'legendary',weight:15,value:60000,attune:'required',hands:'1',desc:'Dwarven warhammer (sentient). +3 to attack and damage. +1d8 vs goblinoids/giants. Can be thrown and returns; can emit a shockwave or detect creatures. Cursed with agoraphobia.'},
+  {name:'Dragonlance',type:'weapon',rarity:'very-rare',weight:6,value:20000,attune:'required',hands:'1',desc:'Lance. +3 to attack and damage while mounted. Reach, special. A potent weapon against dragons in the hands of a worthy rider.'},
+  {name:'Magic Ammunition +1',type:'misc',rarity:'uncommon',qty:20,weight:0,value:50,attune:'none',desc:'20 pieces of +1 ammunition (arrows, bolts, or bullets). Breaks after use unless recovered.'},
+  {name:'Silvered Weapon',type:'weapon',rarity:'common',weight:3,value:100,attune:'none',hands:'1',desc:'A weapon coated in silver — overcomes the damage resistances of were-creatures and some fiends/undead.'},
+  {name:'Animated Shield',type:'armor',rarity:'very-rare',weight:6,value:20000,attune:'required',desc:'Bonus action: animate the shield to float and protect you (+2 AC) for 1 min with no hand needed. Once per long rest.'},
+  {name:'Arrow-Catching Shield',type:'armor',rarity:'rare',weight:6,value:5000,attune:'required',desc:'+2 AC vs ranged attacks. Reaction: become the target of a ranged attack aimed at a creature within 5 ft.'},
+  {name:"Mariner's Armor",type:'armor',rarity:'uncommon',weight:20,value:1500,attune:'none',desc:'Light/medium/heavy variants. Grants a swimming speed equal to your walking speed; if you start your turn underwater with 0 HP you do not suffer a death save.'},
+  {name:'Cast-Off Armor',type:'armor',rarity:'common',weight:20,value:500,attune:'none',desc:'As an action you can doff this armor, even if it would normally take longer.'},
+  {name:'Smoldering Armor',type:'armor',rarity:'common',weight:20,value:500,attune:'none',desc:'Wisps of harmless smoke rise from this armor whenever you take fire damage.'},
+  {name:'Breastplate +1',type:'armor',rarity:'rare',weight:20,value:1500,attune:'none',desc:'+1 bonus to AC over base breastplate (AC 15 base).'},
+  {name:'Half Plate +1',type:'armor',rarity:'rare',weight:40,value:5000,attune:'none',desc:'+1 bonus to AC over base half plate (AC 15 + Dex max 2).'},
+  {name:'Scale Mail +1',type:'armor',rarity:'rare',weight:45,value:1500,attune:'none',desc:'+1 bonus to AC over base scale mail (AC 14 + Dex max 2).'},
+  {name:'Splint Armor +1',type:'armor',rarity:'rare',weight:60,value:5000,attune:'none',desc:'+1 bonus to AC over base splint (AC 17).'},
+  {name:'Ring Mail +1',type:'armor',rarity:'rare',weight:40,value:1500,attune:'none',desc:'+1 bonus to AC over base ring mail (AC 14).'},
+  {name:'Hide Armor +1',type:'armor',rarity:'rare',weight:12,value:1500,attune:'none',desc:'+1 bonus to AC over base hide (AC 12 + Dex max 2).'},
+  {name:'Chain Shirt +1',type:'armor',rarity:'rare',weight:20,value:1500,attune:'none',desc:'+1 bonus to AC over base chain shirt (AC 13 + Dex max 2).'},
+  {name:'Studded Leather +2',type:'armor',rarity:'rare',weight:13,value:4000,attune:'none',desc:'+2 bonus to AC over base studded leather (AC 12 + Dex).'},
+  {name:'Studded Leather +3',type:'armor',rarity:'very-rare',weight:13,value:16000,attune:'none',desc:'+3 bonus to AC over base studded leather (AC 12 + Dex).'},
+  {name:'Scale Mail +2',type:'armor',rarity:'very-rare',weight:45,value:4000,attune:'none',desc:'+2 bonus to AC over base scale mail.'},
+  {name:'Splint Armor +2',type:'armor',rarity:'very-rare',weight:60,value:16000,attune:'none',desc:'+2 bonus to AC over base splint.'},
+  {name:'Bag of Beans',type:'wondrous',rarity:'rare',weight:0.5,value:5000,attune:'none',desc:'Heavy magic beans. Plant one and a random wondrous (often dangerous) effect erupts.'},
+  {name:'Bead of Force',type:'wondrous',rarity:'rare',weight:0,value:1000,attune:'none',desc:'Thrown up to 60 ft, detonates in a 10-ft sphere: 5d4 force (DC 15 Dex) and failed saves trap creatures in a force globe for 1 min.'},
+  {name:'Belt of Dwarvenkind',type:'wondrous',rarity:'rare',weight:1,value:5000,attune:'required',desc:'+2 CON (max 20), advantage on saves vs poison and resistance to poison, understand/speak Dwarvish, and a chance to grow a beard.'},
+  {name:'Boots of Levitation',type:'wondrous',rarity:'rare',weight:1,value:5000,attune:'required',desc:'Action: cast Levitate on yourself at will.'},
+  {name:'Winged Boots',type:'wondrous',rarity:'uncommon',weight:1,value:1500,attune:'required',desc:'Flying speed equal to your walking speed for up to 4 hours (in 1-min increments), recharging on rest.'},
+  {name:'Candle of Invocation',type:'wondrous',rarity:'very-rare',weight:0,value:25000,attune:'required',desc:'Aligned candle. When lit it grants bonuses to matching creatures and lets you cast Gate once while it burns (lasts 4 hours).'},
+  {name:'Cap of Water Breathing',type:'wondrous',rarity:'uncommon',weight:0,value:1000,attune:'none',desc:'Underwater, an air bubble lets you breathe normally; you can also let others breathe by sharing.'},
+  {name:'Chime of Opening',type:'wondrous',rarity:'rare',weight:1,value:2500,attune:'none',desc:'10 charges. Action: strike to open one lock, lid, door, or shackle within 120 ft (as Knock).'},
+  {name:'Cloak of Arachnida',type:'wondrous',rarity:'very-rare',weight:1,value:20000,attune:'required',desc:'Resistance to poison, spider-climb, immunity to web movement penalties, and the ability to cast Web once per day.'},
+  {name:'Cloak of Invisibility',type:'wondrous',rarity:'legendary',weight:1,value:50000,attune:'required',desc:'Pull the hood up to become invisible for up to 2 hours total (in increments), recharging daily.'},
+  {name:'Cloak of Many Fashions',type:'wondrous',rarity:'common',weight:0,value:200,attune:'none',desc:'Bonus action: change the cloak\'s color, pattern, and cut to any style you imagine.'},
+  {name:'Cloak of Billowing',type:'wondrous',rarity:'common',weight:0,value:200,attune:'none',desc:'Bonus action: make the cloak billow dramatically.'},
+  {name:'Decanter of Endless Water',type:'wondrous',rarity:'uncommon',weight:2,value:2000,attune:'none',desc:'Command word produces fresh or salt water: a stream (1 gal), fountain (5 gal), or geyser (30 gal forceful spout).'},
+  {name:'Dimensional Shackles',type:'wondrous',rarity:'rare',weight:0,value:2500,attune:'none',desc:'Lock onto a creature to prevent it from teleporting or traveling planes (as Dimensional Anchor).'},
+  {name:'Dust of Disappearance',type:'wondrous',rarity:'uncommon',weight:0,value:300,attune:'none',desc:'Toss into the air: you and creatures/objects within 10 ft become invisible for 2d4 minutes.'},
+  {name:'Dust of Dryness',type:'wondrous',rarity:'uncommon',weight:0,value:300,attune:'none',desc:'One pinch absorbs a cube of water up to 15 ft, turning it into a marble-sized pellet that releases the water when broken.'},
+  {name:'Dust of Sneezing and Choking',type:'wondrous',rarity:'uncommon',weight:0,value:300,attune:'none',desc:'Released into the air, each creature within 30 ft must save (DC 15 CON) or be incapacitated by sneezing/choking.'},
+  {name:'Elemental Gem',type:'wondrous',rarity:'uncommon',weight:0,value:500,attune:'none',desc:'Break the gem to summon an elemental of the matching type (as Conjure Elemental).'},
+  {name:'Feather Token',type:'wondrous',rarity:'rare',weight:0,value:1500,attune:'none',desc:'A single-use token (anchor, bird, fan, swan boat, tree, or whip) that triggers its named effect.'},
+  {name:'Gloves of Thievery',type:'wondrous',rarity:'uncommon',weight:0,value:1000,attune:'none',desc:'+5 bonus to Sleight of Hand checks and to DEX checks made to pick locks.'},
+  {name:'Hat of Vermin',type:'wondrous',rarity:'common',weight:0,value:200,attune:'none',desc:'3 charges. Action: summon a bat, frog, or rat that obeys simple commands for 1 hour.'},
+  {name:'Hat of Wizardry',type:'wondrous',rarity:'common',weight:0,value:200,attune:'required',desc:'For wizards: store one wizard cantrip you don\'t know and cast it; also serves as a spellcasting focus.'},
+  {name:"Heward's Handy Spice Pouch",type:'wondrous',rarity:'uncommon',weight:0,value:1000,attune:'none',desc:'Reach in to produce a pinch of any nonmagical spice; helps create rations or season food (10 charges/day).'},
+  {name:'Horn of Blasting',type:'wondrous',rarity:'rare',weight:2,value:5000,attune:'none',desc:'Action: emit a 30-ft cone thunderous blast — 5d6 thunder (DC 15 CON, half) and deafened; may shatter objects. Risk of exploding on a roll of 6.'},
+  {name:'Horn of Valhalla',type:'wondrous',rarity:'rare',weight:2,value:5000,attune:'none',desc:'Summon spectral warriors to fight for you for 1 hour (silver/brass/bronze/iron tiers, increasing requirements).'},
+  {name:'Horseshoes of Speed',type:'wondrous',rarity:'rare',weight:0,value:2500,attune:'none',desc:'A set of four; a creature wearing them gains +30 ft to walking speed.'},
+  {name:'Instrument of the Bards',type:'wondrous',rarity:'uncommon',weight:3,value:3000,attune:'required',desc:'A magical lute/harp (Doss, Canaith, Cli, etc.). Spellcasting focus that can cast several utility spells; misuse deals thunder damage.'},
+  {name:'Mantle of Spell Resistance',type:'wondrous',rarity:'rare',weight:1,value:2500,attune:'required',desc:'Advantage on saving throws against spells.'},
+  {name:'Mystery Key',type:'wondrous',rarity:'common',weight:0,value:200,attune:'none',desc:'A weathered key. Once it opens one lock (as if a normal key), then never again.'},
+  {name:'Quiver of Ehlonna',type:'wondrous',rarity:'uncommon',weight:2,value:2000,attune:'none',desc:'Three compartments holding up to 60 arrows/bolts, 18 javelins, and 6 staffs/bows — yet weighs only 2 lb.'},
+  {name:'Rope of Mending',type:'wondrous',rarity:'common',weight:3,value:200,attune:'none',desc:'Cut this rope into pieces, then command it to knit back together into one length.'},
+  {name:'Ruby of the War Mage',type:'wondrous',rarity:'common',weight:0,value:200,attune:'required',desc:'Affix to a weapon so a spellcaster can use it as a spellcasting focus.'},
+  {name:'Talisman of Pure Good',type:'wondrous',rarity:'legendary',weight:0,value:50000,attune:'required',desc:'For the pure of heart: 7 charges to deal radiant damage / open holy fissures that swallow evil creatures. Burns the wicked who hold it.'},
+  {name:'Talisman of Ultimate Evil',type:'wondrous',rarity:'legendary',weight:0,value:50000,attune:'required',desc:'For the truly evil: 6 charges to open fissures that swallow good creatures. Burns the good who hold it.'},
+  {name:'Talisman of the Sphere',type:'wondrous',rarity:'legendary',weight:0,value:50000,attune:'required',desc:'Doubles your INT check bonus when controlling a Sphere of Annihilation, and grants a measure of safety in doing so.'},
+  {name:'Wind Fan',type:'wondrous',rarity:'uncommon',weight:0,value:1000,attune:'none',desc:'Wave the fan to cast Gust of Wind (no components). Risk of the fan tearing on repeated use.'},
+  {name:'Wings of Flying',type:'wondrous',rarity:'rare',weight:0,value:5000,attune:'required',desc:'Bat-like wings appear on command, granting a flying speed of 60 ft for up to 1 hour, recharging on rest.'},
+  {name:'Apparatus of the Crab',type:'wondrous',rarity:'legendary',weight:500,value:50000,attune:'none',desc:'An iron barrel that unfolds into a crab-like submersible vehicle with levers controlling movement, claws, and lights.'},
+  {name:'Cubic Gate',type:'wondrous',rarity:'legendary',weight:0,value:50000,attune:'none',desc:'A cube keyed to six planes. Press a face to open a gate to (or banish creatures to) the matching plane.'},
+  {name:'Iron Flask',type:'wondrous',rarity:'legendary',weight:1,value:50000,attune:'none',desc:'Command word traps an extraplanar creature (DC 17 WIS) inside; later release it to obey you for 1 hour.'},
+  {name:'Well of Many Worlds',type:'wondrous',rarity:'legendary',weight:0,value:50000,attune:'none',desc:'A black cloth that, when unfolded, opens a two-way portal to another random plane or world.'},
+  {name:'Clockwork Amulet',type:'wondrous',rarity:'common',weight:0,value:200,attune:'none',desc:'Once per day, forgo rolling an attack and treat the d20 as a 10.'},
+  {name:'Charlatan\'s Die',type:'wondrous',rarity:'common',weight:0,value:200,attune:'required',desc:'A loaded-feeling die you can will to land on any chosen number.'},
+  {name:'Dread Helm',type:'wondrous',rarity:'common',weight:3,value:200,attune:'none',desc:'A fearsome helm that makes the wearer\'s eyes glow red in shadow. Otherwise mundane.'},
+  {name:'Enduring Spellbook',type:'wondrous',rarity:'common',weight:3,value:200,attune:'none',desc:'This spellbook (and its contents) is immune to fire and water damage and cannot rot or age.'},
+  {name:'Perfume of Bewitching',type:'wondrous',rarity:'common',weight:0,value:200,attune:'none',desc:'One application: advantage on CHA checks vs humanoids for 1 hour (CR 1 or lower more affected).'},
+  {name:'Pole of Collapsing',type:'wondrous',rarity:'common',weight:1,value:200,attune:'none',desc:'A 10-ft pole that collapses to 1 ft (and back) with a command word.'},
+  {name:'Tankard of Sobriety',type:'wondrous',rarity:'common',weight:1,value:200,attune:'none',desc:'You can never become drunk from drinks consumed from this tankard.'},
+  {name:'Ear Horn of Hearing',type:'wondrous',rarity:'common',weight:1,value:200,attune:'none',desc:'While held to the ear, this horn negates the effects of deafness for the user.'},
+  {name:'Bottled Breath',type:'wondrous',rarity:'uncommon',weight:0,value:500,attune:'none',desc:'Inhale to hold air for breathing, or exhale forcefully as a Gust of Wind. Single use.'},
+  {name:'Ioun Stone (Absorption)',type:'wondrous',rarity:'very-rare',weight:0,value:20000,attune:'required',desc:'Orbits your head. Reaction to a spell targeting only you: cancel it (4 charges of absorbed spell levels).'},
+  {name:'Ioun Stone (Agility)',type:'wondrous',rarity:'very-rare',weight:0,value:20000,attune:'required',desc:'+2 DEX (max 20) while it orbits your head.'},
+  {name:'Ioun Stone (Strength)',type:'wondrous',rarity:'very-rare',weight:0,value:20000,attune:'required',desc:'+2 STR (max 20) while it orbits your head.'},
+  {name:'Ioun Stone (Intellect)',type:'wondrous',rarity:'very-rare',weight:0,value:20000,attune:'required',desc:'+2 INT (max 20) while it orbits your head.'},
+  {name:'Ioun Stone (Leadership)',type:'wondrous',rarity:'very-rare',weight:0,value:20000,attune:'required',desc:'+2 CHA (max 20) while it orbits your head.'},
+  {name:'Ioun Stone (Insight)',type:'wondrous',rarity:'very-rare',weight:0,value:20000,attune:'required',desc:'+2 WIS (max 20) while it orbits your head.'},
+  {name:'Ioun Stone (Protection)',type:'wondrous',rarity:'rare',weight:0,value:5000,attune:'required',desc:'+1 bonus to AC while it orbits your head.'},
+  {name:'Ioun Stone (Sustenance)',type:'wondrous',rarity:'rare',weight:0,value:5000,attune:'required',desc:'You need no food or water while it orbits your head.'},
+  {name:'Ioun Stone (Greater Absorption)',type:'wondrous',rarity:'legendary',weight:0,value:50000,attune:'required',desc:'As Ioun Stone of Absorption, but stores up to 8 levels of spells.'},
+  {name:'Potion of Hill Giant Strength',type:'potion',rarity:'uncommon',weight:0.5,value:1000,attune:'none',desc:'Your STR becomes 21 for 1 hour.'},
+  {name:'Potion of Stone Giant Strength',type:'potion',rarity:'rare',weight:0.5,value:2000,attune:'none',desc:'Your STR becomes 23 for 1 hour.'},
+  {name:'Potion of Frost Giant Strength',type:'potion',rarity:'rare',weight:0.5,value:2000,attune:'none',desc:'Your STR becomes 23 for 1 hour.'},
+  {name:'Potion of Cloud Giant Strength',type:'potion',rarity:'very-rare',weight:0.5,value:5000,attune:'none',desc:'Your STR becomes 27 for 1 hour.'},
+  {name:'Potion of Frost Resistance',type:'potion',rarity:'uncommon',weight:0.5,value:300,attune:'none',desc:'Resistance to cold damage for 1 hour.'},
+  {name:'Potion of Fire Breath',type:'potion',rarity:'uncommon',weight:0.5,value:300,attune:'none',desc:'For 1 hour (up to 3 times), use a bonus action to exhale fire at a creature within 30 ft for 4d6 fire (DC 13 Dex, half).'},
+  {name:'Ring of Elemental Command',type:'ring',rarity:'legendary',weight:0,value:50000,attune:'required',desc:'Keyed to one element. Resistance to that element, command of its elementals, plus scaling powers and bonus elemental spells as you bond with it.'},
+  {name:'Rod of the Pact Keeper +1',type:'rod',rarity:'uncommon',weight:2,value:1500,attune:'required',desc:'For warlocks: +1 to spell attack rolls and spell save DC; regain one expended warlock slot once per long rest.'},
+  {name:'Rod of the Pact Keeper +2',type:'rod',rarity:'rare',weight:2,value:6000,attune:'required',desc:'For warlocks: +2 to spell attack rolls and spell save DC; regain one expended warlock slot once per long rest.'},
+  {name:'Rod of the Pact Keeper +3',type:'rod',rarity:'very-rare',weight:2,value:24000,attune:'required',desc:'For warlocks: +3 to spell attack rolls and spell save DC; regain one expended warlock slot once per long rest.'},
+  {name:'Tentacle Rod',type:'rod',rarity:'rare',weight:2,value:5000,attune:'required',desc:'Action: lash up to three rubbery tentacles at targets within 15 ft (+9 to hit, 1d6 bludgeoning each). All three hits restrain and slow the target.'},
+  {name:'Staff of Withering',type:'staff',rarity:'rare',weight:4,value:8000,attune:'required',desc:'3 charges. On a hit, expend a charge to deal +2d10 necrotic and force a CON save or the target has disadvantage on STR/CON checks and saves for 1 hour.'},
+  {name:'Staff of the Adder',type:'staff',rarity:'uncommon',weight:4,value:1500,attune:'required',desc:'Bonus action: turn the head into an animated venomous snake (+ to hit, 1d6 piercing + 3d6 poison) for 1 minute.'},
+  {name:'Wand of Binding',type:'wand',rarity:'rare',weight:1,value:8000,attune:'required',desc:'7 charges. Cast Hold Monster or Hold Person; or expend charges for a reaction bonus on saves vs paralysis/restraint.'},
+  {name:'Eye of Vecna',type:'wondrous',rarity:'artifact',weight:0,value:0,attune:'required',desc:'Replace your own eye with this artifact: truesight 120 ft, see invisibility, and cast powerful divination/clairvoyance — at terrible cost to your soul.'},
+  {name:'Hand of Vecna',type:'wondrous',rarity:'artifact',weight:1,value:0,attune:'required',desc:'Graft this withered hand onto your wrist: a deathly touch (5d6 cold), bonus spells, and dread power — corrupting the bearer.'},
+  {name:'Sword of Kas',type:'weapon',rarity:'artifact',weight:3,value:0,attune:'required',hands:'1',desc:'Longsword forged to slay Vecna. +3 to attack and damage, +2d10 vs undead, devastating crits, and malevolent sentience that craves conquest.'},
+  {name:'Book of Vile Darkness',type:'wondrous',rarity:'artifact',weight:5,value:0,attune:'required',desc:'A tome of ultimate evil. Studying it grants dark boons and spells while corrupting and damning the reader.'},
+  {name:'Book of Exalted Deeds',type:'wondrous',rarity:'artifact',weight:5,value:0,attune:'required',desc:'A radiant tome of ultimate good. The truly virtuous gain holy boons and spells from its pages.'},
+  {name:'Axe of the Dwarvish Lords',type:'weapon',rarity:'artifact',weight:7,value:0,attune:'required',hands:'v',desc:'Battleaxe of dwarven legend. +3 to attack/damage, dwarven boons (darkvision, tremorsense, resistances) and the power to summon earth elementals.'},
+  {name:'Wand of Orcus',type:'wand',rarity:'artifact',weight:3,value:0,attune:'required',desc:'Skull-topped wand of the Demon Prince of Undeath. +3 mace, raises undead, casts deadly necromancy, and curses any who wield it without Orcus\'s favor.'},
+  {name:'Holy Symbol of Ravenkind',type:'wondrous',rarity:'legendary',weight:1,value:25000,attune:'required',desc:'A holy relic vs vampires. 10 charges: turn undead with advantage, emit sunlight, or paralyze a vampire that fails a save.'},
+  {name:'Tome of Strahd',type:'wondrous',rarity:'legendary',weight:3,value:0,attune:'none',desc:'Strahd von Zarovich\'s personal journal — reveals secrets of his curse and of Barovia.'},
+  {name:'Icon of Ravenloft',type:'wondrous',rarity:'legendary',weight:5,value:25000,attune:'required',desc:'A jeweled raven idol. Charges to cast healing/protective magic and shed sunlight against the undead.'},
+  {name:'Backpack',type:'misc',rarity:'common',qty:1,weight:5,value:2,attune:'none',desc:'Holds 1 cubic foot / 30 lb of gear.'},
+  {name:'Bedroll',type:'misc',rarity:'common',qty:1,weight:7,value:1,attune:'none',desc:'For sleeping while on the road.'},
+  {name:'Waterskin',type:'misc',rarity:'common',qty:1,weight:5,value:0.2,attune:'none',desc:'Holds 4 pints of liquid (full).'},
+  {name:'Tinderbox',type:'misc',rarity:'common',qty:1,weight:1,value:0.5,attune:'none',desc:'Flint, steel, and tinder for lighting fires.'},
+  {name:'Mess Kit',type:'misc',rarity:'common',qty:1,weight:1,value:0.2,attune:'none',desc:'Tin box with cup and utensils for eating.'},
+  {name:'Piton',type:'misc',rarity:'common',qty:10,weight:0.25,value:0.05,attune:'none',desc:'Iron spikes for climbing and securing rope.'},
+  {name:'Hammer',type:'tool',rarity:'common',qty:1,weight:3,value:1,attune:'none',desc:'A simple hammer for pitons and repairs.'},
+  {name:'Ten-Foot Pole',type:'misc',rarity:'common',qty:1,weight:7,value:0.05,attune:'none',desc:'For probing traps and pressure plates from a safe distance.'},
+  {name:'Hunting Trap',type:'misc',rarity:'common',qty:1,weight:25,value:5,attune:'none',desc:'A steel jaw trap. A creature stepping on it is restrained (DC 13 to free); 1d4 piercing.'},
+  {name:'Signal Whistle',type:'misc',rarity:'common',qty:1,weight:0,value:0.05,attune:'none',desc:'A loud whistle for signaling allies.'},
+  {name:'Whetstone',type:'misc',rarity:'common',qty:1,weight:1,value:0.01,attune:'none',desc:'For sharpening blades.'},
+  {name:'Component Pouch',type:'misc',rarity:'common',qty:1,weight:2,value:25,attune:'none',desc:'A watertight pouch holding spell material components.'},
+  {name:'Spellbook',type:'misc',rarity:'common',qty:1,weight:3,value:50,attune:'none',desc:'A leather-bound book with 100 blank pages for recording wizard spells.'},
+  {name:'Arcane Focus',type:'misc',rarity:'common',qty:1,weight:1,value:10,attune:'none',desc:'An orb, rod, staff, wand, or crystal used as a spellcasting focus.'},
+  {name:'Holy Symbol',type:'misc',rarity:'common',qty:1,weight:1,value:5,attune:'none',desc:'An amulet, emblem, or reliquary used as a divine spellcasting focus.'},
+  {name:'Arrows (20)',type:'misc',rarity:'common',qty:1,weight:1,value:1,attune:'none',desc:'A quiver of 20 arrows for bows.'},
+  {name:'Crossbow Bolts (20)',type:'misc',rarity:'common',qty:1,weight:1.5,value:1,attune:'none',desc:'A case of 20 bolts for crossbows.'},
+  {name:'Sling Bullets (20)',type:'misc',rarity:'common',qty:1,weight:1.5,value:0.04,attune:'none',desc:'20 lead bullets for a sling.'},
+  {name:'Chain (10 ft)',type:'misc',rarity:'common',qty:1,weight:10,value:5,attune:'none',desc:'10 feet of iron chain (AC 19, 10 HP).'},
+  {name:'Iron Pot',type:'misc',rarity:'common',qty:1,weight:10,value:2,attune:'none',desc:'A cooking pot that holds 1 gallon.'},
+  {name:'Oil (flask)',type:'misc',rarity:'common',qty:1,weight:1,value:0.1,attune:'none',desc:'Burns 6 hrs in a lamp, or throw to splash and ignite (5 fire damage).'},
+  {name:'Tent (two-person)',type:'misc',rarity:'common',qty:1,weight:20,value:2,attune:'none',desc:'A simple canvas shelter for two.'},
 ];
 
 /* ══ STORAGE ══ */
@@ -5116,6 +5284,26 @@ function getASILevels(className){
 // resolve against SUBCLASS_FEATURES (which is keyed by clean names).
 function cleanSub(name){ return String(name||'').replace(/\s*\(.*?\)\s*$/,'').trim(); }
 
+// Resolve a character's subclass name (which may be "School of Chronurgy (EGtW)"
+// from the builder, while the data is keyed "Chronurgy") to its SUBCLASS_FEATURES
+// entry. Tries the cleaned name, with/without a "School of " or
+// "Arcane Tradition:" prefix, so naming styles can't hide a subclass's features.
+function _subKeyCandidates(name){
+  const base = cleanSub(name);
+  const noPrefix = base.replace(/^School of\s+/i,'').replace(/^Arcane Tradition:\s*/i,'').trim();
+  return [base, noPrefix, 'School of '+noPrefix];
+}
+function resolveSubKey(name){
+  if(!name) return '';
+  for(const c of _subKeyCandidates(name)){
+    if(SUBCLASS_FEATURES[c]) return c;
+  }
+  return cleanSub(name);
+}
+function getSubFeatures(name){
+  return (name ? (SUBCLASS_FEATURES[resolveSubKey(name)] || {}) : {});
+}
+
 // Canonical level at which each class chooses its subclass.
 const SUBCLASS_LEVEL = {Cleric:1, Sorcerer:1, Warlock:1, Druid:2, Wizard:2,
   Barbarian:3, Bard:3, Fighter:3, Monk:3, Paladin:3, Ranger:3, Rogue:3};
@@ -5145,7 +5333,7 @@ function computePendingChoices(char, cls){
 
   // 2) Subclass "choice:true" features (Totem Spirit, Aspect of the Beast, …)
   if(char.subclass){
-    const sf = SUBCLASS_FEATURES[cleanSub(char.subclass)] || {};
+    const sf = getSubFeatures(char.subclass);
     Object.keys(sf).map(Number).filter(lvl=>lvl<=char.level).sort((a,b)=>a-b).forEach(lvl=>{
       (sf[lvl]||[]).forEach((ft,fi)=>{
         if(ft && ft.choice && Array.isArray(ft.options)){
@@ -5256,7 +5444,7 @@ function backfillSetSubclass(charId){
   const val = document.getElementById('bf_subclass')?.value;
   if(!val){ toast('Pick a subclass first','var(--red)'); return; }
   char.subclass = val;
-  const sf = SUBCLASS_FEATURES[cleanSub(val)] || {};
+  const sf = getSubFeatures(val);
   const choiceNames = Object.values(sf).flat().filter(ft=>ft && ft.choice).map(ft=>ft.n);
   char.subclassChoices = char.subclassChoices || {};
   choiceNames.forEach(n=>{ if(!(n in char.subclassChoices)) char.subclassChoices[n]=''; });
@@ -5364,7 +5552,7 @@ function getResolvedSelections(char, cls){
   };
 
   const subName = cleanSub(char.subclass);
-  const sf = subName ? (SUBCLASS_FEATURES[subName]||{}) : {};
+  const sf = getSubFeatures(char.subclass);
   const hasDetail = Object.keys(sf).length > 0;
   const subChoiceNames = new Set(Object.values(sf).flat().filter(ft=>ft&&ft.choice).map(ft=>ft.n));
 
@@ -5614,7 +5802,7 @@ function renderProgressTab(char, cls){
   const clsFeatureLog = [];
   for(let lvl = 1; lvl <= char.level; lvl++){
     const ld = (LEVEL_FEATURES[cls.name]||{})[lvl]||{};
-    const subFts = char.subclass ? (SUBCLASS_FEATURES[cleanSub(char.subclass)]||{})[lvl]||[] : [];
+    const subFts = char.subclass ? (getSubFeatures(char.subclass))[lvl]||[] : [];
     const allFts = [...(ld.features||[]).filter(f=>!String(f).includes('ASI or Feat')), ...subFts.map(f=>f.n)];
     if(allFts.length) clsFeatureLog.push({level:lvl, features:allFts});
   }
@@ -6683,6 +6871,87 @@ const SUBCLASS_FEATURES = {
     10: [{n:'Shapechanger',d:'Add Polymorph to your spellbook. You can cast it on yourself (no slot) to become a CR 1 beast. Once per short/long rest.'}],
     14: [{n:'Master Transmuter',d:'Action: consume your Transmuter\'s Stone for one major effect — Major Transformation, Panacea, Restore Youth, or Restore Life (as Raise Dead).'}],
   },
+
+  // ── DRUID (added) ─────────────────────────────────────────────────────────
+  'Circle of the Sea': {
+    2:  [{n:'Wrath of the Sea',d:'Channel Wild Shape (bonus action) to manifest a 5-ft watery aura for 1 min. When you do, and as a bonus action after, force a creature within 5 ft (CON save) to take cold damage (scales with level) and be pushed up to 15 ft.'}],
+    6:  [{n:'Aquatic Affinity',d:'Your watery aura grows to a 10-ft emanation. You gain a swimming speed equal to your walking speed and can breathe underwater.'}],
+    10: [{n:'Stormborn',d:'While your aura is active and you are not underground or indoors, you gain a flying speed equal to your walking speed and resistance to cold, lightning, and thunder damage.'}],
+    14: [{n:'Oceanic Gift',d:'You can manifest Wrath of the Sea on a willing creature instead of yourself, and its damage increases.'}],
+  },
+
+  // ── FIGHTER (added) ───────────────────────────────────────────────────────
+  'Purple Dragon Knight': {
+    3:  [{n:'Rallying Cry',d:'When you use Second Wind, choose up to three creatures within 60 ft; each regains hit points equal to your fighter level.'}],
+    7:  [{n:'Royal Envoy',d:'Gain proficiency and expertise (double proficiency) in Persuasion, plus proficiency in one additional skill or one extra language.'}],
+    10: [{n:'Inspiring Surge',d:'When you use Action Surge, choose one ally within 60 ft; it can use its reaction to make one weapon attack (two attacks at 18th level).'}],
+    15: [{n:'Bulwark',d:'When you use Indomitable to reroll a failed INT, WIS, or CHA save, one ally within 60 ft who also failed the same save can reroll their save too.'}],
+    18: [{n:'Inspiring Surge (Improved)',d:'The ally chosen by your Inspiring Surge can make two weapon attacks with its reaction instead of one.'}],
+  },
+
+  // ── MONK (added) ──────────────────────────────────────────────────────────
+  'Way of the Long Death': {
+    3:  [{n:'Touch of Death',d:'When you reduce a creature within 5 ft to 0 HP, you gain temporary HP equal to your WIS modifier + monk level (minimum 1).'}],
+    6:  [{n:'Hour of Reaping',d:'Action: each creature within 30 ft that can see you must succeed on a WIS save or be frightened of you until the end of your next turn.'}],
+    11: [{n:'Mastery of Death',d:'When you are reduced to 0 HP, you can spend 1 ki point to drop to 1 HP instead (as long as you have ki remaining).'}],
+    17: [{n:'Touch of the Long Death',d:'Action: spend 1–10 ki and touch a creature; it takes 2d10 necrotic damage per ki point spent (CON save for half).'}],
+  },
+  'Way of the Cobalt Soul': {
+    3:  [{n:'Mystical Erudition',d:'Learn additional languages and gain proficiency in one of History, Insight, Investigation, or Religion (more at higher levels).'},{n:'Extract Aspects',d:'When you hit with Flurry of Blows, learn one fact about the target (immunities, resistances, vulnerabilities) and it can\'t benefit from invisibility/cover against you for 1 min.'}],
+    6:  [{n:'Extort Truth',d:'A creature you damaged with Extract Aspects must succeed on a CHA save or be unable to speak deliberate lies and answer truthfully for 10 min (charmed).'}],
+    11: [{n:'Mind of Mercury',d:'Spend 1 ki to take an additional reaction on a turn (up to your INT modifier of extra reactions per round).'}],
+    17: [{n:'Debilitating Barrage',d:'When you hit a creature with Flurry of Blows, spend 3 ki to make it vulnerable to one damage type of your choice until the end of your next turn.'}],
+  },
+
+  // ── PALADIN (added) ───────────────────────────────────────────────────────
+  'Oath of the Crown': {
+    3:  [{n:'Channel Divinity: Champion Challenge',d:'Force creatures of your choice within 30 ft (WIS save) to be unable to willingly move more than 30 ft away from you.'},{n:'Channel Divinity: Turn the Tide',d:'Bonus action: each creature of your choice within 30 ft below half HP regains 1d6 + CHA modifier hit points.'}],
+    7:  [{n:'Divine Allegiance',d:'When a creature within 5 ft takes damage, you can use your reaction to take that damage instead (it cannot be reduced).'}],
+    15: [{n:'Unyielding Spirit',d:'You have advantage on saving throws to avoid becoming paralyzed or stunned.'}],
+    20: [{n:'Exalted Champion',d:'For 1 hour: resistance to nonmagical bludgeoning, piercing, and slashing; you and allies within 30 ft have advantage on WIS saves and death saves. Once per long rest.'}],
+  },
+  'Oath of the Open Sea': {
+    3:  [{n:'Channel Divinity: Marine Layer',d:'Conjure a 30-ft sphere of fog (heavily obscured) that you can see through dimly; move it on your turns.'},{n:'Channel Divinity: Fury of the Tides',d:'Bonus action: for 1 min, once per turn when you hit a creature deal +1d8 damage and push it up to 10 ft.'}],
+    7:  [{n:'Aura of Liberation',d:'You and allies within 10 ft can\'t be grappled or restrained and ignore the movement penalties of nonmagical difficult terrain (30 ft at 18th level).'}],
+    15: [{n:'Stormy Waters',d:'Reaction: when a creature enters or leaves your reach, deal 1d12 bludgeoning damage and possibly knock it prone (STR save).'}],
+    20: [{n:'Mythic Swashbuckler',d:'For 1 min: gain climb/swim speeds, advantage on Athletics and Acrobatics, an extra reaction each round, and you can Dash or Disengage as a bonus action. Once per long rest.'}],
+  },
+
+  // ── SORCERER (added) ──────────────────────────────────────────────────────
+  'Lunar Sorcery': {
+    1:  [{n:'Moon Bolt & Lunar Embodiment',d:'Learn the Moon Bolt cantrip. You always have phase spells prepared based on the Full, New, or Crescent Moon; change phase as a bonus action by spending 1 sorcery point.'}],
+    6:  [{n:'Lunar Empowerment',d:'Each phase grants a benefit: Full Moon (your light-based spells gain radiant power and you resist radiant), New Moon (move stealthily in dim light/darkness), Crescent Moon (extend a spell\'s range).'}],
+    14: [{n:'Lunar Boons',d:'Recover sorcery points when you change phases, and your phase benefits grow stronger.'}],
+    18: [{n:'Lunar Phenomenon',d:'Bonus action: unleash a powerful phase effect (radiant burst, obscuring darkness, or a short teleport). Once per phase between long rests.'}],
+  },
+
+  // ── WARLOCK (added) ───────────────────────────────────────────────────────
+  'The Undead': {
+    1:  [{n:'Expanded Spells (Undead)',d:'Bane, false life, ray of sickness, blindness/deafness, speak with dead, phantom steed, death ward, etc. are added to your spell list.'},{n:'Form of Dread',d:'Bonus action: transform for 1 min — gain temp HP, immunity to the frightened condition, and once per turn when you hit force a CON save or frighten the target. Prof-bonus times per long rest.'}],
+    6:  [{n:'Grave Touched',d:'You no longer need food, drink, or air. Once per turn you can deal necrotic damage instead of a hit\'s normal type, and your attacks ignore necrotic resistance.'}],
+    10: [{n:'Necrotic Husk',d:'You gain resistance to necrotic damage. While in Form of Dread, when reduced to 0 HP you can explode in necrotic energy (damaging nearby creatures) and drop to 1 HP instead. Once per long rest.'}],
+    14: [{n:'Spirit Projection',d:'Action: project a spectral form for 1 hour — you can move through creatures/objects, gain resistance to all damage, and cast your spells and make attacks from it. Once per long rest (or by spending a 5th-level slot).'}],
+  },
+  'The Undying': {
+    1:  [{n:'Expanded Spells (Undying)',d:'False life, ray of sickness, blindness/deafness, silence, feign death, speak with dead, aura of life, death ward, etc. are added to your spell list.'},{n:'Among the Dead',d:'You learn the Spare the Dying cantrip (range 30 ft, bonus action). Undead have disadvantage on attack rolls against you unless they have advantage, and you have advantage on saves vs disease.'}],
+    6:  [{n:'Defy Death',d:'When you succeed on a death saving throw or stabilize a creature with Spare the Dying, you regain 1d8 + CON modifier hit points. Once per long rest.'}],
+    10: [{n:'Undying Nature',d:'You can hold your breath indefinitely, you don\'t need to sleep or eat (a short rest suffices), you age slowly, and you have advantage on saves vs disease and poison.'}],
+    14: [{n:'Indestructible Life',d:'Bonus action: regain hit points equal to 1d8 + warlock level and reattach or regrow severed body parts. Once per short or long rest.'}],
+  },
+
+  // ── WIZARD (added) ────────────────────────────────────────────────────────
+  'War Magic': {
+    2:  [{n:'Arcane Deflection',d:'Reaction when you are hit by an attack or fail a Dex/Con save: gain +2 AC against that attack, or +4 to that save. Until your next turn you can only cast cantrips.'},{n:'Tactical Wit',d:'Add your INT modifier to your initiative rolls.'}],
+    6:  [{n:'Power Surge',d:'Store power surges (max = INT modifier) by countering or dispelling spells, or one per long rest. Once per turn when you deal spell damage, expend a surge to deal extra force damage equal to half your wizard level.'}],
+    10: [{n:'Durable Magic',d:'While concentrating on a spell, you gain +2 to AC and +2 to all saving throws.'}],
+    14: [{n:'Deflecting Shroud',d:'When you use Arcane Deflection, force energy arcs to up to three creatures within 60 ft, dealing force damage equal to half your wizard level to each.'}],
+  },
+  'Lore Mastery': {
+    2:  [{n:'Lore Master',d:'When you cast a spell of 1st level or higher, you can change its saving-throw ability or its damage type to a related one (Intelligence modifier times per long rest). [Unearthed Arcana]'}],
+    6:  [{n:'Spell Secrets',d:'Choose two spells (one you can cast); you can permanently swap their damage type and saving throw when you cast them. [Unearthed Arcana]'}],
+    10: [{n:'Alchemical Casting',d:'When you cast a spell that deals damage or restores HP, you can add to its effect by expending additional resources. [Unearthed Arcana]'}],
+    14: [{n:'Master of Magic',d:'Once per long rest, cast a spell from your spellbook without expending a spell slot. [Unearthed Arcana]'}],
+  },
 };
 
 // Spells known/prepared to pick at level-up + class spell lists by spell level
@@ -7043,7 +7312,7 @@ function renderLevelUpTab(char, cls){
 
   // Build feature list: use SUBCLASS_FEATURES lookup for actual descriptions,
   // fall back to generic resolution for base class features
-  const subFeatures = char.subclass ? (SUBCLASS_FEATURES[cleanSub(char.subclass)]||{})[newLevel]||[] : [];
+  const subFeatures = char.subclass ? (getSubFeatures(char.subclass))[newLevel]||[] : [];
   const genericPlaceholders = ['Path Feature','Subclass Feature','Bard College Feature','Martial Archetype Feature',
     'Divine Domain Feature','Sacred Oath Feature','Ranger Archetype Feature','Roguish Archetype Feature',
     'Sorcerous Origin Feature','Otherworldly Patron Feature','Arcane Tradition Feature',
@@ -7709,7 +7978,7 @@ function confirmPartySheetLevelUp(){
     const sel = document.getElementById('lvlupSubclass')?.value;
     if(!sel){ toast('Choose a subclass first','var(--red)'); return; }
     char.subclass = sel;
-    const subFeatures = SUBCLASS_FEATURES[sel]||{};
+    const subFeatures = getSubFeatures(sel);
     const choiceNames = Object.values(subFeatures).flat().filter(ft=>ft.choice).map(ft=>ft.n);
     char.subclassChoices = Object.fromEntries(choiceNames.map(n=>[n,'']));
   }
@@ -7912,7 +8181,7 @@ function buildLevelUpHTML(char, cls, newLevel, ld, avgHP, conMod){
   const cc = `var(--gold)`;
   // Resolve raw feature strings into {name, desc} objects using same logic as renderLevelUpTab
   const rawFeatures = (ld.features||[]).filter(f=>!String(f).startsWith('ASI'));
-  const subFeaturesBL = char.subclass ? (SUBCLASS_FEATURES[cleanSub(char.subclass)]||{})[newLevel]||[] : [];
+  const subFeaturesBL = char.subclass ? (getSubFeatures(char.subclass))[newLevel]||[] : [];
   const genericPlaceholdersBL = ['Path Feature','Subclass Feature','Bard College Feature','Martial Archetype Feature',
     'Divine Domain Feature','Sacred Oath Feature','Ranger Archetype Feature','Roguish Archetype Feature',
     'Sorcerous Origin Feature','Otherworldly Patron Feature','Arcane Tradition Feature',
@@ -13694,7 +13963,7 @@ function renderCharProgressTab(char, cls){
   const ld = (LEVEL_FEATURES[cls.name]||{})[level]||{};
 
   // ── Subclass Choices ──
-  const subFeatures = char.subclass ? (SUBCLASS_FEATURES[cleanSub(char.subclass)]||{}) : {};
+  const subFeatures = char.subclass ? (getSubFeatures(char.subclass)) : {};
   const choices = char.subclassChoices || {};
   Object.values(subFeatures).flat().filter(ft=>ft.choice).forEach(ft=>{
     h += `<div style="margin-bottom:12px">
