@@ -1250,13 +1250,11 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <button class="tab-btn" onclick="partySheetTab('skills')">Skills</button>
       <button class="tab-btn" onclick="partySheetTab('spells')">Spells</button>
       <button class="tab-btn" onclick="partySheetTab('lore')">Lore</button>
-      <button class="tab-btn" id="pstab-levelup-btn" onclick="partySheetTab('levelup')" style="color:var(--gold);display:none">⬆ Level Up</button>
     </div>
     <div class="tab-pane active" id="pstab-combat"></div>
     <div class="tab-pane" id="pstab-skills"></div>
     <div class="tab-pane" id="pstab-spells"></div>
     <div class="tab-pane" id="pstab-lore"></div>
-    <div class="tab-pane" id="pstab-levelup"></div>
     <button class="btn btn-outline" onclick="nav('party')">← Party</button>
   </div>
 
@@ -4480,14 +4478,11 @@ function openPartySheet(id){
     <div class="sheet-charname" style="font-size:18px">${esc(char.name)}</div>
     <div class="sheet-meta">Level ${char.level} ${esc(char.race)} ${cls.name}</div>
     <div class="sheet-badges"><span class="sheet-badge">${esc(char.background)}</span></div>`;
-  // Show Level Up tab only for DM and char below max level
-  const lvlBtn = document.getElementById('pstab-levelup-btn');
-  if(lvlBtn) lvlBtn.style.display = (char.level < 20) ? '' : 'none';
   partySheetTab('combat');
 }
 
 function partySheetTab(t){
-  const tabs = ['combat','skills','spells','lore','levelup'];
+  const tabs = ['combat','skills','spells','lore'];
   document.querySelectorAll('#scr-partysheet .tab-btn').forEach((b,i)=>b.classList.toggle('active', tabs[i]===t));
   document.querySelectorAll('#scr-partysheet .tab-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('pstab-'+t).classList.add('active');
@@ -4498,7 +4493,6 @@ function partySheetTab(t){
   if(t==='skills')renderSkillsTab(char,cls,'pstab-skills');
   if(t==='spells')renderSpellsTab(char,cls,'pstab-spells',true);
   if(t==='lore')renderLoreTab(char,cls,'pstab-lore',false);
-  if(t==='levelup')renderLevelUpTab(char,cls);
 }
 
 /* ══ PARTY OVERVIEW ══ */
@@ -7281,15 +7275,35 @@ const CLASS_LEVEL_CHOICES = {
 
 // ══ LEVEL-UP MODAL ═══════════════════════════════════════════════════════════
 
-// DM quick-grant from roster: opens party sheet on level up tab
+// Resolve the character the level-up flow is acting on. The flow is shared by
+// the Character screen's Level tab; partySheetCharId is repurposed as the
+// "level-up target" id. Fall back across the various char pools so it works
+// regardless of which screen invoked it.
+function _lvlupResolveChar(){
+  const id = partySheetCharId;
+  return getFullParty().find(c=>String(c.id)===String(id))
+      || getVisibleChars().find(c=>String(c.id)===String(id))
+      || getChars().find(c=>String(c.id)===String(id))
+      || null;
+}
+
+// DM quick-grant from roster: open the Character screen on the Level tab,
+// scrolled to the guided level-up panel at the bottom.
 function grantLevelUp(charId){
-  openPartySheet(charId);
-  setTimeout(()=>partySheetTab('levelup'), 50);
+  nav('character');
+  charScreenId = charId;
+  renderCharacterScreen();
+  charTab('progress');
+  setTimeout(()=>{
+    document.getElementById('cstab-levelup-inline')
+      ?.scrollIntoView({behavior:'smooth',block:'start'});
+  }, 100);
 }
 
 // Render the full Level Up tab inside the party sheet
-function renderLevelUpTab(char, cls){
-  const el = document.getElementById('pstab-levelup');
+function renderLevelUpTab(char, cls, targetId){
+  const el = document.getElementById(targetId || 'pstab-levelup');
+  if(!el) return;
   const newLevel = char.level + 1;
   if(char.level >= 20){
     el.innerHTML = `<div class="empty-state"><div class="es-icon">✦</div><p>${esc(char.name)} is already at max level.</p></div>`;
@@ -7576,7 +7590,7 @@ function renderLevelUpTab(char, cls){
 }
 
 function selectLvlHP(mode){
-  const char = getFullParty().find(c=>c.id===partySheetCharId);
+  const char = _lvlupResolveChar();
   if(!char) return;
   const cls = CLASSES[char.classIdx];
   const conMod = parseInt(getMod(char.abilities?.CON||10))||0;
@@ -7964,10 +7978,15 @@ function confirmSpellPick(){
   // Refresh the spells tab if open
   const char = chars[ci];
   renderSpellsTab(char, cls, 'pstab-spells', true);
+  // Keep the Character screen in sync when spells were picked from there
+  if(document.getElementById('scr-character')?.classList.contains('active')){
+    if(document.getElementById('cstab-spells')) renderSpellsTab(char, cls, 'cstab-spells', true);
+    if(typeof _charTab !== 'undefined' && _charTab === 'progress') renderCharProgressTab(char, cls);
+  }
 }
 
 function confirmPartySheetLevelUp(){
-  const char = getFullParty().find(c=>c.id===partySheetCharId);
+  const char = _lvlupResolveChar();
   if(!char) return;
   const cls = CLASSES[char.classIdx];
   const newLevel = char.level + 1;
@@ -8050,10 +8069,16 @@ function confirmPartySheetLevelUp(){
   saveChar(char);
   toast(`✦ ${char.name} is now Level ${newLevel}!`, 'var(--gold)');
 
-  // Refresh all affected UI
-  openPartySheet(char.id);
-  partySheetTab('combat');
-  renderRoster();
+  // Refresh all affected UI — return to wherever the level-up was launched from.
+  if(window._lvlupSource === 'character'){
+    renderRoster();
+    renderCharacterScreen();
+    charTab('progress');
+  } else {
+    openPartySheet(char.id);
+    partySheetTab('combat');
+    renderRoster();
+  }
   // Refresh dice panel so roll modifiers reflect new ability scores
   if(document.getElementById('diceCharPanel')) renderDiceCharPanel();
 }
@@ -14012,7 +14037,21 @@ function renderCharProgressTab(char, cls){
     <button onclick="csRollHP('${char.id}',${cls.hit},${conMod2})" style="padding:6px 12px;background:var(--surface);border:1px solid ${cc};border-radius:8px;color:${cc};font-size:11px;cursor:pointer">Roll d${cls.hit}</button>
   </div>`;
 
+  // ── Guided Level-Up (moved here from the Party sheet) ──
+  h += `<div style="margin:24px 0 12px;border-top:1px solid var(--border);padding-top:18px">
+    <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);letter-spacing:1.5px;margin-bottom:3px">⬆ LEVEL UP</div>
+    <div style="font-size:11px;color:var(--muted);line-height:1.5">Step through new features, ASI / feat, spells and HP for your next level.</div>
+  </div>
+  <div id="cstab-levelup-inline"></div>`;
+
   el.innerHTML = h;
+
+  // Render the guided level-up flow into the container at the bottom of this tab.
+  // Point the shared level-up helpers at this character and flag the source so
+  // confirming returns to the Character screen (not the Party sheet).
+  partySheetCharId = char.id;
+  window._lvlupSource = 'character';
+  renderLevelUpTab(char, cls, 'cstab-levelup-inline');
 }
 
 /* ══ CHAR SCREEN — PROFICIENCIES & FEATS TAB ══ */
