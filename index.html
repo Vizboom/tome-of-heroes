@@ -13973,16 +13973,13 @@ function renderCharProgressTab(char, cls){
     </select>`;
   }
 
-  // ── Level controls ──
-  h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:10px">TOTAL LEVEL</div>`;
-  h += `<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px">
-    <button onclick="csAdjustLevel('${char.id}',-1)" style="width:36px;height:36px;border-radius:50%;background:var(--surface);border:1px solid var(--border);color:var(--text);font-size:20px;cursor:pointer">−</button>
-    <div style="flex:1;text-align:center">
-      <div style="font-family:'Cinzel',serif;font-size:32px;font-weight:700;color:${cc}">${level}</div>
-      <div style="font-size:10px;color:var(--muted)">Prof Bonus +${getPB(level)}</div>
-    </div>
-    <button onclick="csAdjustLevel('${char.id}',1)" style="width:36px;height:36px;border-radius:50%;background:${cc};border:none;color:#fff;font-size:20px;cursor:pointer;${level>=20?'opacity:0.4;cursor:not-allowed':''}">+</button>
-  </div>`;
+  // ── Undo last level ── (level-ups now happen via the guided panel below)
+  if(level > 1){
+    h += `<div style="margin-bottom:18px;text-align:right">
+      <button onclick="csAdjustLevel('${char.id}',-1)" title="Step total level down by one"
+        style="background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:11px;letter-spacing:0.5px;padding:6px 12px;cursor:pointer">↓ Undo last level</button>
+    </div>`;
+  }
 
   // ── Features at current level ──
   const ld = (LEVEL_FEATURES[cls.name]||{})[level]||{};
@@ -14026,16 +14023,6 @@ function renderCharProgressTab(char, cls){
       </div>`;
     });
   }
-
-  // ── HP calculator ──
-  h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-top:14px;margin-bottom:8px">HP ROLL FOR LEVEL ${level}</div>`;
-  const conMod2 = Math.floor(((char.abilities?.CON||10)-10)/2);
-  const avg = Math.floor(cls.hit/2)+1+conMod2;
-  h += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;align-items:center;gap:12px">
-    <div style="flex:1;font-size:12px;color:var(--muted)">d${cls.hit} + CON (${conMod2>=0?'+':''}${conMod2}) = avg <strong style="color:${cc}">${avg}</strong></div>
-    <button onclick="csTakeAvgHP('${char.id}',${avg})" style="padding:6px 12px;background:${cc};border:none;border-radius:8px;color:#fff;font-size:11px;cursor:pointer">Take Avg (+${avg})</button>
-    <button onclick="csRollHP('${char.id}',${cls.hit},${conMod2})" style="padding:6px 12px;background:var(--surface);border:1px solid ${cc};border-radius:8px;color:${cc};font-size:11px;cursor:pointer">Roll d${cls.hit}</button>
-  </div>`;
 
   // ── Guided Level-Up (moved here from the Party sheet) ──
   h += `<div style="margin:24px 0 12px;border-top:1px solid var(--border);padding-top:18px">
@@ -14237,22 +14224,6 @@ function csAdjustLevel(id, delta){
       primary.level = Math.max(1, newLevel - secTotal);
     }
   });
-  const chars = getVisibleChars();
-  const char = chars.find(c=>String(c.id)===String(id));
-  if(char) renderCharProgressTab(char, CLASSES[char.classIdx]);
-}
-function csTakeAvgHP(id, avg){
-  _csSaveChar(id, c=>{ c.maxHP=(c.maxHP||1)+avg; c.currentHP=Math.min(c.currentHP||1, c.maxHP); });
-  toast('+'+(avg)+' HP added!','var(--green)');
-  const chars = getVisibleChars();
-  const char = chars.find(c=>String(c.id)===String(id));
-  if(char) renderCharProgressTab(char, CLASSES[char.classIdx]);
-}
-function csRollHP(id, die, conMod){
-  const roll = Math.ceil(Math.random()*die);
-  const total = roll + conMod;
-  _csSaveChar(id, c=>{ c.maxHP=(c.maxHP||1)+total; c.currentHP=Math.min(c.currentHP||1, c.maxHP); });
-  toast('Rolled '+roll+' + '+conMod+' CON = +'+total+' HP','var(--gold)');
   const chars = getVisibleChars();
   const char = chars.find(c=>String(c.id)===String(id));
   if(char) renderCharProgressTab(char, CLASSES[char.classIdx]);
