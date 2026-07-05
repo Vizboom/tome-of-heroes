@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v6.3 portraits 2026-07-05 -->
+<!-- Tome of Heroes v6.4 generated-portraits 2026-07-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -3707,6 +3707,8 @@ function saveCharacter(){
     allies:document.getElementById('bAllies').value,
     attacks:[], spells:[], equipment:[],
   };
+  // Auto-generate a portrait from the details just entered (race/class/hair/eyes)
+  try{ char.portrait=generateCharPortrait(char); char.portraitGen=true; }catch(e){}
   // ── Campaign scoping: a forged character belongs to the campaign that
   // was active at forge time. Assign BEFORE saveChars so dbSaveChar's
   // publish loop sees the membership immediately.
@@ -8887,9 +8889,12 @@ function showCharImport(){
       </div>
 
       <div id="importPaneCode" style="display:none">
-        <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Paste a Tome of Heroes export code, raw JSON, or <strong style="color:var(--gold)">D&D Beyond JSON</strong> (schema_version: 1).</p>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5">Paste a Tome of Heroes export code, raw JSON, <strong style="color:var(--gold)">D&D Beyond JSON</strong>, or <strong style="color:var(--gold)">D&D Character Builder JSON</strong>.</p>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:var(--muted);line-height:1.6">
+          🛠 Build a character free at <strong style="color:var(--gold)">fullo.github.io/dnd-character-builder</strong> — 9-step wizard or one-click random — then use its <strong>Export JSON</strong> button and paste the result here.
+        </div>
         <div class="field"><label>Export Code or JSON</label>
-          <textarea id="charImportData" placeholder="Paste export code, JSON, or D&D Beyond JSON here…" style="min-height:120px;font-size:12px;word-break:break-all"></textarea>
+          <textarea id="charImportData" placeholder="Paste export code or JSON here…" style="min-height:120px;font-size:12px;word-break:break-all"></textarea>
         </div>
         <button class="btn btn-gold" onclick="doCharImport()">Import Character</button>
       </div>
@@ -9728,6 +9733,132 @@ function parseDDBJson(data){
   return char;
 }
 
+/* ══ D&D CHARACTER BUILDER IMPORT (fullo/dnd-character-builder) ═══════════════
+   Players build a character at https://fullo.github.io/dnd-character-builder/
+   and export it as JSON; this converts that format into a Tome of Heroes
+   character. The builder stores kebab-case ids ('fire-bolt', 'half-elf'),
+   base ability scores with racial bonuses kept separately, and two-letter
+   alignment codes — all mapped below. */
+
+const CB_SPELL_MAP = {"acid-splash":["Acid Splash",0],"blade-ward":["Blade Ward",0],"chill-touch":["Chill Touch",0],"dancing-lights":["Dancing Lights",0],"druidcraft":["Druidcraft",0],"eldritch-blast":["Eldritch Blast",0],"fire-bolt":["Fire Bolt",0],"guidance":["Guidance",0],"light":["Light",0],"mage-hand":["Mage Hand",0],"mending":["Mending",0],"message":["Message",0],"minor-illusion":["Minor Illusion",0],"poison-spray":["Poison Spray",0],"prestidigitation":["Prestidigitation",0],"produce-flame":["Produce Flame",0],"ray-of-frost":["Ray of Frost",0],"resistance":["Resistance",0],"sacred-flame":["Sacred Flame",0],"shillelagh":["Shillelagh",0],"shocking-grasp":["Shocking Grasp",0],"spare-the-dying":["Spare the Dying",0],"thaumaturgy":["Thaumaturgy",0],"true-strike":["True Strike",0],"vicious-mockery":["Vicious Mockery",0],"1-bless":["Bless",1],"1-burning-hands":["Burning Hands",1],"1-charm-person":["Charm Person",1],"1-cure-wounds":["Cure Wounds",1],"1-detect-magic":["Detect Magic",1],"1-disguise-self":["Disguise Self",1],"1-faerie-fire":["Faerie Fire",1],"1-guiding-bolt":["Guiding Bolt",1],"1-healing-word":["Healing Word",1],"1-hellish-rebuke":["Hellish Rebuke",1],"1-hex":["Hex",1],"1-hunters-mark":["Hunter's Mark",1],"1-mage-armor":["Mage Armor",1],"1-magic-missile":["Magic Missile",1],"1-shield":["Shield",1],"1-shield-of-faith":["Shield of Faith",1],"1-sleep":["Sleep",1],"1-thunderwave":["Thunderwave",1],"2-aid":["Aid",2],"2-blur":["Blur",2],"2-hold-person":["Hold Person",2],"2-invisibility":["Invisibility",2],"2-lesser-restoration":["Lesser Restoration",2],"2-misty-step":["Misty Step",2],"2-scorching-ray":["Scorching Ray",2],"2-spiritual-weapon":["Spiritual Weapon",2],"2-web":["Web",2],"3-counterspell":["Counterspell",3],"3-dispel-magic":["Dispel Magic",3],"3-fireball":["Fireball",3],"3-fly":["Fly",3],"3-haste":["Haste",3],"3-revivify":["Revivify",3],"3-spirit-guardians":["Spirit Guardians",3],"4-arcane-eye":["Arcane Eye",4],"4-banishment":["Banishment",4],"4-black-tentacles":["Black Tentacles",4],"4-blight":["Blight",4],"4-compulsion":["Compulsion",4],"4-confusion":["Confusion",4],"4-conjure-minor-elementals":["Conjure Minor Elementals",4],"4-conjure-woodland-beings":["Conjure Woodland Beings",4],"4-control-water":["Control Water",4],"4-death-ward":["Death Ward",4],"4-dimension-door":["Dimension Door",4],"4-divination":["Divination",4],"4-dominate-beast":["Dominate Beast",4],"4-fabricate":["Fabricate",4],"4-faithful-hound":["Faithful Hound",4],"4-fire-shield":["Fire Shield",4],"4-freedom-of-movement":["Freedom of Movement",4],"4-giant-insect":["Giant Insect",4],"4-greater-invisibility":["Greater Invisibility",4],"4-guardian-of-faith":["Guardian of Faith",4],"4-hallucinatory-terrain":["Hallucinatory Terrain",4],"4-ice-storm":["Ice Storm",4],"4-locate-creature":["Locate Creature",4],"4-phantasmal-killer":["Phantasmal Killer",4],"4-polymorph":["Polymorph",4],"4-private-sanctum":["Private Sanctum",4],"4-resilient-sphere":["Resilient Sphere",4],"4-secret-chest":["Secret Chest",4],"4-stone-shape":["Stone Shape",4],"4-stoneskin":["Stoneskin",4],"4-wall-of-fire":["Wall of Fire",4],"5-animate-objects":["Animate Objects",5],"5-antilife-shell":["Antilife Shell",5],"5-arcane-hand":["Arcane Hand",5],"5-awaken":["Awaken",5],"5-cloudkill":["Cloudkill",5],"5-commune":["Commune",5],"5-commune-with-nature":["Commune with Nature",5],"5-cone-of-cold":["Cone of Cold",5],"5-conjure-elemental":["Conjure Elemental",5],"5-contact-other-plane":["Contact Other Plane",5],"5-contagion":["Contagion",5],"5-creation":["Creation",5],"5-dispel-evil-and-good":["Dispel Evil and Good",5],"5-dominate-person":["Dominate Person",5],"5-dream":["Dream",5],"5-flame-strike":["Flame Strike",5],"5-geas":["Geas",5],"5-greater-restoration":["Greater Restoration",5],"5-hallow":["Hallow",5],"5-hold-monster":["Hold Monster",5],"5-insect-plague":["Insect Plague",5],"5-legend-lore":["Legend Lore",5],"5-mass-cure-wounds":["Mass Cure Wounds",5],"5-mislead":["Mislead",5],"5-modify-memory":["Modify Memory",5],"5-passwall":["Passwall",5],"5-planar-binding":["Planar Binding",5],"5-raise-dead":["Raise Dead",5],"5-reincarnate":["Reincarnate",5],"5-scrying":["Scrying",5],"5-seeming":["Seeming",5],"5-telekinesis":["Telekinesis",5],"5-teleportation-circle":["Teleportation Circle",5],"5-tree-stride":["Tree Stride",5],"5-wall-of-force":["Wall of Force",5],"5-wall-of-stone":["Wall of Stone",5],"6-blade-barrier":["Blade Barrier",6],"6-chain-lightning":["Chain Lightning",6],"6-circle-of-death":["Circle of Death",6],"6-conjure-fey":["Conjure Fey",6],"6-contingency":["Contingency",6],"6-create-undead":["Create Undead",6],"6-disintegrate":["Disintegrate",6],"6-eyebite":["Eyebite",6],"6-find-the-path":["Find the Path",6],"6-flesh-to-stone":["Flesh to Stone",6],"6-forbiddance":["Forbiddance",6],"6-freezing-sphere":["Freezing Sphere",6],"6-globe-of-invulnerability":["Globe of Invulnerability",6],"6-guards-and-wards":["Guards and Wards",6],"6-harm":["Harm",6],"6-heal":["Heal",6],"6-heroes-feast":["Heroes' Feast",6],"6-instant-summons":["Instant Summons",6],"6-irresistible-dance":["Irresistible Dance",6],"6-magic-jar":["Magic Jar",6],"6-mass-suggestion":["Mass Suggestion",6],"6-move-earth":["Move Earth",6],"6-planar-ally":["Planar Ally",6],"6-programmed-illusion":["Programmed Illusion",6],"6-sunbeam":["Sunbeam",6],"6-transport-via-plants":["Transport via Plants",6],"6-true-seeing":["True Seeing",6],"6-wall-of-ice":["Wall of Ice",6],"6-wall-of-thorns":["Wall of Thorns",6],"6-wind-walk":["Wind Walk",6],"6-word-of-recall":["Word of Recall",6],"7-arcane-sword":["Arcane Sword",7],"7-conjure-celestial":["Conjure Celestial",7],"7-delayed-blast-fireball":["Delayed Blast Fireball",7],"7-divine-word":["Divine Word",7],"7-etherealness":["Etherealness",7],"7-finger-of-death":["Finger of Death",7],"7-fire-storm":["Fire Storm",7],"7-forcecage":["Forcecage",7],"7-magnificent-mansion":["Magnificent Mansion",7],"7-mirage-arcane":["Mirage Arcane",7],"7-plane-shift":["Plane Shift",7],"7-prismatic-spray":["Prismatic Spray",7],"7-project-image":["Project Image",7],"7-regenerate":["Regenerate",7],"7-resurrection":["Resurrection",7],"7-reverse-gravity":["Reverse Gravity",7],"7-sequester":["Sequester",7],"7-simulacrum":["Simulacrum",7],"7-symbol":["Symbol",7],"7-teleport":["Teleport",7],"8-animal-shapes":["Animal Shapes",8],"8-antimagic-field":["Antimagic Field",8],"8-antipathy-sympathy":["Antipathy/Sympathy",8],"8-clone":["Clone",8],"8-control-weather":["Control Weather",8],"8-demiplane":["Demiplane",8],"8-dominate-monster":["Dominate Monster",8],"8-earthquake":["Earthquake",8],"8-feeblemind":["Feeblemind",8],"8-glibness":["Glibness",8],"8-holy-aura":["Holy Aura",8],"8-incendiary-cloud":["Incendiary Cloud",8],"8-maze":["Maze",8],"8-mind-blank":["Mind Blank",8],"8-power-word-stun":["Power Word Stun",8],"8-sunburst":["Sunburst",8],"9-astral-projection":["Astral Projection",9],"9-foresight":["Foresight",9],"9-gate":["Gate",9],"9-imprisonment":["Imprisonment",9],"9-mass-heal":["Mass Heal",9],"9-meteor-swarm":["Meteor Swarm",9],"9-power-word-kill":["Power Word Kill",9],"9-prismatic-wall":["Prismatic Wall",9],"9-shapechange":["Shapechange",9],"9-storm-of-vengeance":["Storm of Vengeance",9],"9-time-stop":["Time Stop",9],"9-true-polymorph":["True Polymorph",9],"9-true-resurrection":["True Resurrection",9],"9-weird":["Weird",9],"9-wish":["Wish",9]};
+
+const CB_ALIGNMENTS = {lg:'Lawful Good',ng:'Neutral Good',cg:'Chaotic Good',ln:'Lawful Neutral',tn:'True Neutral',cn:'Chaotic Neutral',le:'Lawful Evil',ne:'Neutral Evil',ce:'Chaotic Evil'};
+
+function _kebabToTitle(s){
+  return String(s||'').split(/[-\s]+/).map(function(w){return w?w.charAt(0).toUpperCase()+w.slice(1):w;}).join(' ').trim();
+}
+
+function parseCharBuilderJson(p){
+  if(!p || typeof p!=='object' || Array.isArray(p)) return null;
+  const ab=p.abilityScores;
+  // Signature: lowercase ability-score object + builder fields (ToH JSON uses `abilities`, DDB has neither)
+  if(!ab || typeof ab!=='object' || typeof ab.str!=='number') return null;
+  if(p.className===undefined && p.race===undefined && p.variant===undefined) return null;
+
+  const notes=[];
+  if(p.variant && p.variant!=='dnd5e') notes.push(p.variant+' character — some content may not map to 5e');
+
+  // Total scores = base + racial bonuses (stored separately in the builder)
+  const rb=p.racialBonuses||{};
+  const abilities={};
+  ['str','dex','con','int','wis','cha'].forEach(function(k){
+    abilities[k.toUpperCase()]=Math.max(1,Math.min(30,(parseInt(ab[k])||10)+(parseInt(rb[k])||0)));
+  });
+
+  const clsName=_kebabToTitle(p.className);
+  let classIdx=CLASSES.findIndex(function(c){return c.name.toLowerCase()===clsName.toLowerCase();});
+  if(classIdx<0){
+    if(clsName) notes.push('class "'+clsName+'" not recognised — set to '+CLASSES[0].name);
+    classIdx=0;
+  }
+
+  const level=Math.max(1,Math.min(20,parseInt(p.level)||1));
+
+  // Multiclass entries ({classId, subclass, level}) — primary = most levels
+  let multiclasses=[];
+  if(Array.isArray(p.classes) && p.classes.length>1){
+    multiclasses=p.classes.map(function(mc){
+      const mn=_kebabToTitle(mc&&mc.classId);
+      const mi=CLASSES.findIndex(function(c){return c.name.toLowerCase()===mn.toLowerCase();});
+      return {classIdx:mi>=0?mi:classIdx, level:Math.max(1,parseInt(mc&&mc.level)||1), subclass:_kebabToTitle(mc&&mc.subclass)};
+    });
+    const prim=multiclasses.slice().sort(function(a,b){return b.level-a.level;})[0];
+    if(prim) classIdx=prim.classIdx;
+  }
+
+  // Spells arrive as ids; CB_SPELL_MAP gives exact name + level, with a
+  // best-effort fallback for ids outside the map (level prefixes stripped)
+  const prepSet={};
+  (Array.isArray(p.spellsPrepared)?p.spellsPrepared:[]).forEach(function(id){prepSet[id]=true;});
+  const spells=[];
+  function addCbSpell(id,isCantrip){
+    const hit=CB_SPELL_MAP[id];
+    const name=hit?hit[0]:_kebabToTitle(String(id).replace(/^\d+-/,''));
+    if(!name) return;
+    const lvl=hit?(hit[1]===0?'cantrip':String(hit[1])):(isCantrip?'cantrip':'1');
+    spells.push({name:name, level:lvl, prepared:isCantrip||!!prepSet[id]});
+  }
+  (Array.isArray(p.cantrips)?p.cantrips:[]).forEach(function(id){addCbSpell(id,true);});
+  (Array.isArray(p.spellsKnown)?p.spellsKnown:[]).forEach(function(id){addCbSpell(id,false);});
+
+  // Weapons -> attacks
+  const attacks=(Array.isArray(p.weapons)?p.weapons:[]).filter(function(w){return w&&w.name;}).map(function(w){
+    return {name:String(w.name), icon:'⚔',
+      atk:(typeof w.attackBonus==='number'?((w.attackBonus>=0?'+':'')+w.attackBonus):String(w.attackBonus||'')),
+      dmg:String(w.damage||''), type:''};
+  });
+
+  // Equipment, armor/shield, coins, treasure -> equipment list
+  const equipment=(Array.isArray(p.equipment)?p.equipment:[]).map(String);
+  if(p.shield) equipment.unshift('Shield');
+  if(p.armor) equipment.unshift('Armor: '+_kebabToTitle(String(p.armor)));
+  const coins=p.coins||{};
+  const coinStr=['pp','gp','ep','sp','cp'].filter(function(k){return parseInt(coins[k])>0;}).map(function(k){return coins[k]+' '+k;}).join(', ');
+  if(coinStr) equipment.push('💰 Coins: '+coinStr);
+  if(p.treasure) equipment.push('Treasure: '+String(p.treasure));
+
+  // Languages + other proficiencies -> otherProfs text
+  const otherBits=[];
+  if(Array.isArray(p.languages)&&p.languages.length) otherBits.push('Languages: '+p.languages.map(_kebabToTitle).join(', '));
+  if(Array.isArray(p.proficienciesOther)&&p.proficienciesOther.length) otherBits.push(p.proficienciesOther.map(_kebabToTitle).join(', '));
+
+  let saves=(Array.isArray(p.savingThrowProficiencies)?p.savingThrowProficiencies:[])
+    .map(function(s){return String(s).toUpperCase();})
+    .filter(function(s){return ['STR','DEX','CON','INT','WIS','CHA'].indexOf(s)>=0;});
+  if(!saves.length) saves=[].concat((CLASSES[classIdx]||{}).saves||[]);
+
+  const maxHP=Math.max(1,parseInt(p.maxHp)||getMaxHP(CLASSES[classIdx],level,abilities.CON));
+
+  const char={
+    name:String(p.name||'').trim()||'Imported Hero',
+    race:_kebabToTitle(p.race)+(p.subrace?(' — '+_kebabToTitle(p.subrace)):''),
+    background:_kebabToTitle(p.background)||'Adventurer',
+    alignment:CB_ALIGNMENTS[p.alignment]||_kebabToTitle(p.alignment)||'',
+    level:level, classIdx:classIdx,
+    subclass:_kebabToTitle(p.subclass),
+    multiclasses:multiclasses,
+    abilities:abilities,
+    savingThrowProfs:saves,
+    proficiencies:(Array.isArray(p.skillProficiencies)?p.skillProficiencies:[]).map(_kebabToTitle),
+    feats:[], otherProfs:otherBits.join('\n'),
+    equippedSlots:{},
+    ac:10+Math.floor((abilities.DEX-10)/2),
+    maxHP:maxHP,
+    currentHP:Math.max(0,Math.min(maxHP,parseInt(p.currentHp)||maxHP)),
+    speed:Math.max(0,parseInt(p.speed)||30),
+    statuses:[],
+    age:String(p.age||''), height:String(p.height||''), weight:String(p.weight||''),
+    eyes:String(p.eyes||''), hair:String(p.hair||''),
+    traits:String(p.personalityTraits||''), ideals:String(p.ideals||''),
+    bonds:String(p.bonds||''), flaws:String(p.flaws||''),
+    backstory:String(p.backstory||''), allies:String(p.allies||''),
+    xp:Math.max(0,parseInt(p.experiencePoints)||0),
+    attacks:attacks, spells:spells, equipment:equipment,
+  };
+  char._cbNotes=notes;
+  return char;
+}
+
 function doCharImport(){
   const raw = document.getElementById('charImportData')?.value.trim();
   if(!raw){toast('Paste some data first','var(--red)');return;}
@@ -9740,6 +9871,17 @@ function doCharImport(){
     if(parsed.schema_version || parsed.character || (Array.isArray(parsed) && parsed[0]?.character_name)){
       char = parseDDBJson(parsed);
       if(char) { _finishCharImport(char, 'D&D Beyond'); return; }
+    }
+  } catch(e){}
+
+  // 1b. Try D&D Character Builder JSON (fullo/dnd-character-builder)
+  try {
+    const cb = parseCharBuilderJson(JSON.parse(raw));
+    if(cb){
+      const notes = cb._cbNotes||[]; delete cb._cbNotes;
+      if(notes.length) setTimeout(function(){ toast('⚠ '+notes.join(' · '),'var(--gold)'); }, 1800);
+      _finishCharImport(cb, 'D&D Character Builder');
+      return;
     }
   } catch(e){}
 
@@ -14945,6 +15087,293 @@ function equipItem(slotId, itemId){ _doEquipItem(slotId, itemId); closeSlotPicke
    then upload or paste it here. The image is downscaled + compressed client-side
    so it syncs safely with the rest of the character data. */
 
+/* ══ PROCEDURAL PORTRAIT GENERATOR ════════════════════════════════════════════
+   Builds a fixed-size (320×400) SVG bust portrait from the character's own
+   creation data: race → facial features & skin palette, hair/eyes fields →
+   colours, class → attire & headwear, name+seed → deterministic variation.
+   Free, instant, offline, and only a few KB when stored as a data URL. */
+
+function _hashStr(s){
+  let h=2166136261;
+  for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); }
+  return h>>>0;
+}
+function _makeRng(seed){
+  let a=seed>>>0;
+  return function(){
+    a|=0; a=(a+0x6D2B79F5)|0;
+    let t=Math.imul(a^(a>>>15),1|a);
+    t=(t+Math.imul(t^(t>>>7),61|t))^t;
+    return ((t^(t>>>14))>>>0)/4294967296;
+  };
+}
+function _pick(rng,arr){ return arr[Math.floor(rng()*arr.length)]; }
+function _shade(hex,amt){
+  const n=parseInt(hex.slice(1),16);
+  const r=Math.max(0,Math.min(255,(n>>16)+amt)), g=Math.max(0,Math.min(255,((n>>8)&255)+amt)), b=Math.max(0,Math.min(255,(n&255)+amt));
+  return '#'+((r<<16)|(g<<8)|b).toString(16).padStart(6,'0');
+}
+
+const _HAIR_WORDS={black:'#1e1c24',ebony:'#1e1c24',brown:'#5b3a24',brunette:'#4a2f1d',chestnut:'#6b4226',auburn:'#7a3b1e',red:'#a83c1e',ginger:'#b5561f',crimson:'#8e2418',scarlet:'#a02a1a',copper:'#a85a2a',blonde:'#d9b45b',blond:'#d9b45b',golden:'#cfa53f',gold:'#cfa53f',yellow:'#d4b04a',sandy:'#c9a26b',platinum:'#e8e2d0',white:'#ece9e2',snow:'#f0eee8',grey:'#b8b8c2',gray:'#b8b8c2',silver:'#c8c8d4',blue:'#3a5ab0',navy:'#2a3f7d',green:'#2e7d4f',emerald:'#2a8e58',purple:'#6a3d9e',violet:'#7a4ab5',lavender:'#9a7ac5',pink:'#c95b8e',rose:'#c06a85',teal:'#2a8e8e',cyan:'#3aa0b5',orange:'#c96b2e',dark:'#2a2430'};
+const _EYE_WORDS={blue:'#4a7ab5',sapphire:'#3a5ab5',green:'#3f8e5a',emerald:'#2fa060',brown:'#6b4226',dark:'#3a2a1c',black:'#24202a',hazel:'#8a6b32',amber:'#c98a2e',grey:'#9aa0ae',gray:'#9aa0ae',silver:'#b5bac5',red:'#b03a3a',crimson:'#a02a2a',violet:'#7a4ab5',purple:'#6a3d9e',gold:'#c9a227',golden:'#c9a227',yellow:'#c9b02e',orange:'#c9762e',white:'#e8e8ee',pink:'#c56b9a',teal:'#2a9e9e'};
+
+function _parseColorWord(text,map,fallback){
+  const words=String(text||'').toLowerCase().split(/[^a-z]+/);
+  for(let i=0;i<words.length;i++){ if(map[words[i]]) return map[words[i]]; }
+  return fallback;
+}
+
+const _SKIN={
+  human:['#f2cfa5','#e8b98a','#d29b6c','#b07b50','#8d5a3a','#6b4226'],
+  pale:['#f2e4d0','#ecd8c5','#e5d5ce'],
+  drow:['#7d6a9e','#6a5a8e','#5b4d7d'],
+  orc:['#7d9f5e','#6b8e4e','#59753f','#8aa66b'],
+  goblin:['#8ab54a','#7aa53f','#96c05a'],
+  hobgoblin:['#c05a3a','#b04e30','#a85a45'],
+  tiefling:['#b04a4a','#9e3d5c','#7d3d9e','#a85555','#8e3a6a'],
+  dragon:['#b03a3a','#3a6ab0','#3aa05a','#c9a227','#a8a8bc','#8a5a3a','#e8e4da','#2a2a35'],
+  grey:['#9a9aa5','#8a8a96','#a8a8b2'],
+  firbolg:['#c9a5b5','#b5a5c9','#c9b5a5'],
+  fur:['#c99a5a','#b5854a','#8a6a3f','#d4b075','#5a4530'],
+  feather:['#3a3a45','#4a5a8e','#8e4a3a','#4a8e5a','#8e8a3a'],
+  metal:['#8a8e9a','#7a7e8a','#9a9ea8'],
+  genasiAir:['#c5d5e8','#b5cce5','#d0e0ee'],
+  genasiFire:['#c05a3a','#a83c28','#8e2e2e'],
+  genasiEarth:['#8a6a4a','#7a5c3f','#96755a'],
+  genasiWater:['#4a8ea5','#3f7d96','#5a9eb5'],
+  teal:['#4a9e96','#3f8e8a','#5aaea5'],
+  gith:['#b5b54a','#a5a545','#c0c05f'],
+  vedalken:['#5a7ab5','#4a6aa5','#6a8ac0'],
+  changeling:['#dcdce2','#d0d0da','#e5e5ea'],
+  yuanti:['#c0b58a','#a5a56b','#b5c08a'],
+};
+
+// Race → feature flags. First keyword match wins; default = human.
+const _RACE_FEATURES=[
+  {k:['drow'],            skin:'drow', ears:'long', face:'slim', hairDef:'#ece9e2'},
+  {k:['pallid'],          skin:'pale', ears:'long', face:'slim'},
+  {k:['sea elf','triton'],skin:'teal', ears:'fin', face:'slim'},
+  {k:['eladrin','elf'],   skin:'human', ears:'long', face:'slim'},
+  {k:['half-elf'],        skin:'human', ears:'point'},
+  {k:['duergar'],         skin:'grey', face:'broad', beard:'always'},
+  {k:['dwarf'],           skin:'human', face:'broad', beard:'always'},
+  {k:['halfling'],        skin:'human', face:'round', bigEyes:true},
+  {k:['deep gnome','svirfneblin'],skin:'grey', face:'round', bigEyes:true, ears:'point'},
+  {k:['gnome'],           skin:'human', face:'round', bigEyes:true, ears:'point'},
+  {k:['half-orc'],        skin:'orc', face:'heavy', tusks:true, ears:'point'},
+  {k:['hobgoblin'],       skin:'hobgoblin', face:'heavy', ears:'long'},
+  {k:['bugbear'],         skin:'fur', face:'heavy', tusks:true, ears:'animal', furJaw:true},
+  {k:['goblin'],          skin:'goblin', face:'round', ears:'huge', bigEyes:true},
+  {k:['orc'],             skin:'orc', face:'heavy', tusks:true, ears:'point'},
+  {k:['tiefling'],        skin:'tiefling', horns:'curved', eyes:'glow'},
+  {k:['dragonborn','lizardfolk'],skin:'dragon', horns:'ridge', eyes:'slit', noHair:true, scales:true},
+  {k:['kobold'],          skin:'dragon', horns:'ridge', eyes:'slit', noHair:true, scales:true, face:'round', bigEyes:true},
+  {k:['aasimar'],         skin:'pale', halo:true},
+  {k:['goliath'],         skin:'grey', face:'heavy', baldBias:true},
+  {k:['firbolg'],         skin:'firbolg', face:'broad', ears:'long', bigNose:true},
+  {k:['tabaxi','leonin'], skin:'fur', ears:'cat', eyes:'slit', furJaw:true, noHairStyleLong:true},
+  {k:['kenku','aarakocra'],skin:'feather', beak:true, noHair:true, crest:true},
+  {k:['warforged'],       skin:'metal', eyes:'glowdot', noHair:true, plates:true},
+  {k:['genasi (air)'],    skin:'genasiAir'},
+  {k:['genasi (fire)'],   skin:'genasiFire', hairDef:'#e06a2a', eyes:'glow'},
+  {k:['genasi (earth)'],  skin:'genasiEarth', baldBias:true},
+  {k:['genasi (water)'],  skin:'genasiWater', ears:'fin'},
+  {k:['gith'],            skin:'gith', ears:'point', face:'slim', baldBias:true},
+  {k:['vedalken'],        skin:'vedalken', face:'slim', baldBias:true},
+  {k:['changeling'],      skin:'changeling', hairDef:'#f0eee8', eyes:'blank'},
+  {k:['yuan-ti'],         skin:'yuanti', eyes:'slit', scales:true},
+  {k:['shifter'],         skin:'human', furJaw:true, fangs:true},
+  {k:['minotaur'],        skin:'fur', horns:'bull', ears:'animal', face:'heavy', furJaw:true},
+  {k:['loxodon'],         skin:'grey', ears:'huge', face:'heavy', bigNose:true, baldBias:true},
+  {k:['satyr'],           skin:'human', horns:'curl'},
+  {k:['leonin'],          skin:'fur', ears:'cat', eyes:'slit', furJaw:true},
+];
+
+function _raceFeatures(race){
+  const r=String(race||'').toLowerCase();
+  for(let i=0;i<_RACE_FEATURES.length;i++){
+    const f=_RACE_FEATURES[i];
+    for(let j=0;j<f.k.length;j++){ if(r.indexOf(f.k[j])>=0) return f; }
+  }
+  return {k:[],skin:'human'};
+}
+
+function generateCharPortrait(char){
+  const cls=CLASSES[char.classIdx]||{name:'Fighter',color:'#7b5ea7'};
+  const F=_raceFeatures(char.race);
+  const seed=_hashStr(String(char.name||'hero')+'|'+String(char.id||'')+'|'+String(char.portraitSeed||0));
+  const rng=_makeRng(seed);
+
+  const skin=_pick(rng,_SKIN[F.skin]||_SKIN.human);
+  const skinD=_shade(skin,-34), skinL=_shade(skin,26);
+  const hairC=_parseColorWord(char.hair,_HAIR_WORDS, F.hairDef||_pick(rng,['#1e1c24','#5b3a24','#7a3b1e','#d9b45b','#b8b8c2','#3d2718']));
+  const hairD=_shade(hairC,-28);
+  const eyeC=_parseColorWord(char.eyes,_EYE_WORDS, _pick(rng,['#4a7ab5','#3f8e5a','#6b4226','#8a6b32','#9aa0ae']));
+  const cc=cls.color||'#7b5ea7';
+  const ccD=_shade(cc,-50), ccL=_shade(cc,40);
+
+  // Geometry by face type
+  const face=F.face||'std';
+  const HR = face==='broad'?66 : face==='heavy'?68 : face==='round'?60 : face==='slim'?54 : 60;   // head rx
+  const HV = face==='round'?64 : face==='slim'?76 : 72;                                            // head ry
+  const CX=160, CY=170;
+  const jawW = face==='heavy'?1.12 : face==='broad'?1.08 : 1;
+
+  // Hair style
+  let hairStyle;
+  if(F.noHair) hairStyle='none';
+  else if(F.baldBias && rng()<0.6) hairStyle='bald';
+  else hairStyle=_pick(rng, F.noHairStyleLong?['short','crop','mohawk']:['short','long','ponytail','curly','crop','braids','long','short']);
+  const hasBeard = F.beard==='always' || (!F.noHair && !F.beak && rng()<0.22);
+  const beardStyle = F.beard==='always' ? _pick(rng,['full','full','braided']) : _pick(rng,['short','goatee']);
+
+  let s='';
+  const P=[]; // svg parts
+
+  // ── Background ──
+  P.push('<defs>'
+    +'<radialGradient id="pgBG" cx="50%" cy="38%" r="75%">'
+    +'<stop offset="0%" stop-color="'+_shade(cc,-10)+'" stop-opacity="0.55"/>'
+    +'<stop offset="55%" stop-color="#1c1838"/>'
+    +'<stop offset="100%" stop-color="#0d0a1a"/>'
+    +'</radialGradient>'
+    +'<linearGradient id="pgCloth" x1="0" y1="0" x2="0" y2="1">'
+    +'<stop offset="0%" stop-color="'+cc+'"/><stop offset="100%" stop-color="'+ccD+'"/>'
+    +'</linearGradient>'
+    +'</defs>');
+  P.push('<rect x="0" y="0" width="320" height="400" rx="18" fill="url(#pgBG)"/>');
+  if(F.halo) P.push('<ellipse cx="160" cy="86" rx="58" ry="14" fill="none" stroke="#f0e6b5" stroke-width="5" opacity="0.85"/><ellipse cx="160" cy="86" rx="58" ry="14" fill="none" stroke="#fff8d5" stroke-width="2" opacity="0.9"/>');
+
+  // ── Back hair ──
+  if(hairStyle==='long') P.push('<path d="M'+(CX-HR-12)+' 150 Q'+(CX-HR-22)+' 260 '+(CX-HR+4)+' 330 L'+(CX+HR-4)+' 330 Q'+(CX+HR+22)+' 260 '+(CX+HR+12)+' 150 Q'+CX+' 70 '+(CX-HR-12)+' 150 Z" fill="'+hairD+'"/>');
+  if(hairStyle==='ponytail') P.push('<path d="M'+(CX+HR-8)+' 130 Q'+(CX+HR+40)+' 180 '+(CX+HR+22)+' 290 Q'+(CX+HR+8)+' 300 '+(CX+HR)+' 288 Q'+(CX+HR+16)+' 190 '+(CX+HR-18)+' 132 Z" fill="'+hairD+'"/>');
+  if(hairStyle==='braids'){ P.push('<path d="M'+(CX-HR+2)+' 150 Q'+(CX-HR-14)+' 230 '+(CX-HR+2)+' 300 L'+(CX-HR+20)+' 300 Q'+(CX-HR+8)+' 230 '+(CX-HR+18)+' 152 Z" fill="'+hairD+'"/>'); P.push('<path d="M'+(CX+HR-2)+' 150 Q'+(CX+HR+14)+' 230 '+(CX+HR-2)+' 300 L'+(CX+HR-20)+' 300 Q'+(CX+HR-8)+' 230 '+(CX+HR-18)+' 152 Z" fill="'+hairD+'"/>'); }
+
+  // ── Horns (behind head) ──
+  if(F.horns==='curved') P.push('<path d="M'+(CX-HR+14)+' 116 Q'+(CX-HR-26)+' 92 '+(CX-HR-16)+' 46 Q'+(CX-HR-12)+' 84 '+(CX-HR+30)+' 104 Z" fill="#3a3040"/><path d="M'+(CX+HR-14)+' 116 Q'+(CX+HR+26)+' 92 '+(CX+HR+16)+' 46 Q'+(CX+HR+12)+' 84 '+(CX+HR-30)+' 104 Z" fill="#3a3040"/>');
+  if(F.horns==='bull') P.push('<path d="M'+(CX-HR+8)+' 128 Q'+(CX-HR-42)+' 118 '+(CX-HR-34)+' 70 Q'+(CX-HR-20)+' 106 '+(CX-HR+26)+' 116 Z" fill="#d8d0c0"/><path d="M'+(CX+HR-8)+' 128 Q'+(CX+HR+42)+' 118 '+(CX+HR+34)+' 70 Q'+(CX+HR+20)+' 106 '+(CX+HR-26)+' 116 Z" fill="#d8d0c0"/>');
+  if(F.horns==='curl') P.push('<path d="M'+(CX-HR+12)+' 112 Q'+(CX-HR-22)+' 104 '+(CX-HR-14)+' 76 Q'+(CX-HR-30)+' 96 '+(CX-HR-4)+' 122 Z" fill="#8a7250"/><path d="M'+(CX+HR-12)+' 112 Q'+(CX+HR+22)+' 104 '+(CX+HR+14)+' 76 Q'+(CX+HR+30)+' 96 '+(CX+HR+4)+' 122 Z" fill="#8a7250"/>');
+  if(F.horns==='ridge'){ const rTop=CY-HV+6; P.push('<path d="M'+(CX-HR+16)+' '+(rTop+22)+' L'+(CX-HR+2)+' '+(rTop-8)+' L'+(CX-HR+34)+' '+(rTop+10)+' Z" fill="'+_shade(skin,-46)+'"/><path d="M'+(CX+HR-16)+' '+(rTop+22)+' L'+(CX+HR-2)+' '+(rTop-8)+' L'+(CX+HR-34)+' '+(rTop+10)+' Z" fill="'+_shade(skin,-46)+'"/><path d="M'+(CX-14)+' '+(rTop+8)+' L'+CX+' '+(rTop-14)+' L'+(CX+14)+' '+(rTop+8)+' Z" fill="'+_shade(skin,-46)+'"/>'); }
+
+  // ── Ears (behind/side) ──
+  const earY=CY+4;
+  if(F.ears==='long'){ P.push('<path d="M'+(CX-HR+6)+' '+earY+' L'+(CX-HR-26)+' '+(earY-30)+' Q'+(CX-HR-14)+' '+(earY+6)+' '+(CX-HR+8)+' '+(earY+16)+' Z" fill="'+skin+'"/>'); P.push('<path d="M'+(CX+HR-6)+' '+earY+' L'+(CX+HR+26)+' '+(earY-30)+' Q'+(CX+HR+14)+' '+(earY+6)+' '+(CX+HR-8)+' '+(earY+16)+' Z" fill="'+skin+'"/>'); }
+  if(F.ears==='point'){ P.push('<path d="M'+(CX-HR+6)+' '+earY+' L'+(CX-HR-14)+' '+(earY-16)+' Q'+(CX-HR-8)+' '+(earY+8)+' '+(CX-HR+8)+' '+(earY+14)+' Z" fill="'+skin+'"/>'); P.push('<path d="M'+(CX+HR-6)+' '+earY+' L'+(CX+HR+14)+' '+(earY-16)+' Q'+(CX+HR+8)+' '+(earY+8)+' '+(CX+HR-8)+' '+(earY+14)+' Z" fill="'+skin+'"/>'); }
+  if(F.ears==='huge'){ P.push('<path d="M'+(CX-HR+8)+' '+earY+' L'+(CX-HR-36)+' '+(earY-26)+' Q'+(CX-HR-22)+' '+(earY+14)+' '+(CX-HR+10)+' '+(earY+20)+' Z" fill="'+skin+'"/>'); P.push('<path d="M'+(CX+HR-8)+' '+earY+' L'+(CX+HR+36)+' '+(earY-26)+' Q'+(CX+HR+22)+' '+(earY+14)+' '+(CX+HR-10)+' '+(earY+20)+' Z" fill="'+skin+'"/>'); }
+  if(F.ears==='fin'){ P.push('<path d="M'+(CX-HR+6)+' '+(earY-14)+' Q'+(CX-HR-22)+' '+(earY-10)+' '+(CX-HR-16)+' '+(earY+18)+' Q'+(CX-HR-2)+' '+(earY+10)+' '+(CX-HR+8)+' '+(earY+14)+' Z" fill="'+skinD+'"/>'); P.push('<path d="M'+(CX+HR-6)+' '+(earY-14)+' Q'+(CX+HR+22)+' '+(earY-10)+' '+(CX+HR+16)+' '+(earY+18)+' Q'+(CX+HR+2)+' '+(earY+10)+' '+(CX+HR-8)+' '+(earY+14)+' Z" fill="'+skinD+'"/>'); }
+  if(F.ears==='cat'||F.ears==='animal'){ const eyTop=CY-HV+10; P.push('<path d="M'+(CX-HR+10)+' '+(eyTop+16)+' L'+(CX-HR-6)+' '+(eyTop-26)+' L'+(CX-HR+40)+' '+(eyTop+2)+' Z" fill="'+skin+'"/><path d="M'+(CX-HR+14)+' '+(eyTop+10)+' L'+(CX-HR+4)+' '+(eyTop-14)+' L'+(CX-HR+32)+' '+(eyTop+2)+' Z" fill="'+skinD+'"/>'); P.push('<path d="M'+(CX+HR-10)+' '+(eyTop+16)+' L'+(CX+HR+6)+' '+(eyTop-26)+' L'+(CX+HR-40)+' '+(eyTop+2)+' Z" fill="'+skin+'"/><path d="M'+(CX+HR-14)+' '+(eyTop+10)+' L'+(CX+HR-4)+' '+(eyTop-14)+' L'+(CX+HR-32)+' '+(eyTop+2)+' Z" fill="'+skinD+'"/>'); }
+  if(!F.ears&&!F.beak&&!F.plates){ P.push('<ellipse cx="'+(CX-HR+2)+'" cy="'+earY+'" rx="10" ry="15" fill="'+skin+'"/><ellipse cx="'+(CX+HR-2)+'" cy="'+earY+'" rx="10" ry="15" fill="'+skin+'"/>'); }
+
+  // ── Shoulders / attire ──
+  P.push('<path d="M28 400 Q34 306 106 282 L108 254 L212 254 L214 282 Q286 306 292 400 Z" fill="url(#pgCloth)"/>');
+  P.push('<path d="M108 254 L212 254 L214 282 Q160 300 106 282 Z" fill="'+ccD+'" opacity="0.55"/>');
+  const cn=cls.name||'';
+  if(cn==='Fighter'||cn==='Paladin'){ const trim=cn==='Paladin'?'#e8d48a':'#c5cad5'; P.push('<path d="M30 400 Q36 310 108 286 L120 316 Q64 330 52 400 Z" fill="#7a7e8a" stroke="'+trim+'" stroke-width="3"/><path d="M290 400 Q284 310 212 286 L200 316 Q256 330 268 400 Z" fill="#7a7e8a" stroke="'+trim+'" stroke-width="3"/>'); if(cn==='Paladin') P.push('<circle cx="160" cy="330" r="16" fill="#e8d48a"/><path d="M160 318 L164 328 L174 330 L164 334 L160 344 L156 334 L146 330 L156 328 Z" fill="'+ccD+'"/>'); }
+  if(cn==='Barbarian'){ P.push('<path d="M30 400 Q40 300 112 280 Q100 316 108 400 Z" fill="#6b4a32"/><path d="M290 400 Q280 300 208 280 Q220 316 212 400 Z" fill="#6b4a32"/>'); for(let i=0;i<8;i++){ const fx=44+i*10; P.push('<path d="M'+fx+' '+(316-i%3*6)+' l4 -18 l4 18 Z" fill="#8a6245"/>'); const gx=276-i*10; P.push('<path d="M'+gx+' '+(316-i%3*6)+' l-4 -18 l-4 18 Z" fill="#8a6245"/>'); } }
+  if(cn==='Ranger'||cn==='Rogue') P.push('<path d="M104 288 L228 368 L216 386 L96 306 Z" fill="'+_shade('#6b4a32',-10)+'"/><circle cx="118" cy="300" r="7" fill="#c5a55a"/>');
+  if(cn==='Cleric') P.push('<path d="M160 268 L160 322" stroke="#e8d48a" stroke-width="5"/><path d="M144 288 L176 288" stroke="#e8d48a" stroke-width="5"/>');
+  if(cn==='Druid'){ for(let i=0;i<6;i++){ const lx=112+i*20; P.push('<path d="M'+lx+' '+(286+((i%2)*8))+' q10 -20 20 0 q-10 14 -20 0 Z" fill="'+_shade('#2e7d4f',(i%3)*14)+'"/>'); } }
+  if(cn==='Monk') P.push('<path d="M110 258 L160 300 L210 258 L214 276 L160 316 L106 276 Z" fill="'+ccL+'" opacity="0.85"/>');
+  if(cn==='Bard') P.push('<path d="M120 282 Q160 262 200 282 L196 296 Q160 278 124 296 Z" fill="'+ccL+'"/>');
+  if(cn==='Sorcerer'||cn==='Warlock'||cn==='Wizard') P.push('<path d="M118 268 Q160 250 202 268 L206 292 Q160 272 114 292 Z" fill="'+ccD+'"/><circle cx="160" cy="300" r="8" fill="'+ccL+'"><animate attributeName="opacity" values="0.6;1;0.6" dur="3s" repeatCount="indefinite"/></circle>');
+
+  // ── Neck & head ──
+  if(!F.plates) P.push('<path d="M142 216 L178 216 L182 262 L138 262 Z" fill="'+skinD+'"/>');
+  else P.push('<path d="M142 216 L178 216 L182 262 L138 262 Z" fill="'+skin+'" stroke="#5a5e6a" stroke-width="3"/>');
+  const jawRX=HR*jawW;
+  P.push('<path d="M'+(CX-HR)+' '+(CY-14)+' Q'+(CX-HR)+' '+(CY-HV)+' '+CX+' '+(CY-HV)+' Q'+(CX+HR)+' '+(CY-HV)+' '+(CX+HR)+' '+(CY-14)+' Q'+(CX+jawRX*0.98)+' '+(CY+HV*0.62)+' '+CX+' '+(CY+HV)+' Q'+(CX-jawRX*0.98)+' '+(CY+HV*0.62)+' '+(CX-HR)+' '+(CY-14)+' Z" fill="'+skin+'"/>');
+  P.push('<path d="M'+(CX-HR)+' '+(CY-14)+' Q'+(CX-jawRX*0.98)+' '+(CY+HV*0.62)+' '+CX+' '+(CY+HV)+' L'+CX+' '+(CY+HV-10)+' Q'+(CX-jawRX*0.8)+' '+(CY+HV*0.5)+' '+(CX-HR+8)+' '+(CY-14)+' Z" fill="'+skinD+'" opacity="0.35"/>');
+  if(F.plates){ P.push('<path d="M'+(CX-HR)+' '+(CY-10)+' L'+(CX+HR)+' '+(CY-10)+'" stroke="#5a5e6a" stroke-width="3"/><path d="M'+CX+' '+(CY-HV)+' L'+CX+' '+(CY+HV)+'" stroke="#5a5e6a" stroke-width="3"/><circle cx="'+(CX-HR+16)+'" cy="'+(CY+30)+'" r="4" fill="#5a5e6a"/><circle cx="'+(CX+HR-16)+'" cy="'+(CY+30)+'" r="4" fill="#5a5e6a"/>'); }
+  if(F.scales){ for(let i=0;i<5;i++){ P.push('<path d="M'+(CX-HR+14+i*8)+' '+(CY-HV+26)+' q4 6 8 0" stroke="'+skinD+'" stroke-width="2" fill="none"/>'); P.push('<path d="M'+(CX+HR-54+i*8)+' '+(CY+HV*0.45)+' q4 6 8 0" stroke="'+skinD+'" stroke-width="2" fill="none"/>'); } }
+  if(F.furJaw){ P.push('<path d="M'+(CX-jawRX*0.9)+' '+(CY+18)+' q6 16 -2 30 q14 -4 18 10 q8 -10 16 2 L'+CX+' '+(CY+HV)+' Q'+(CX-jawRX*0.98)+' '+(CY+HV*0.62)+' '+(CX-jawRX*0.9)+' '+(CY+18)+' Z" fill="'+skinD+'" opacity="0.7"/>'); P.push('<path d="M'+(CX+jawRX*0.9)+' '+(CY+18)+' q-6 16 2 30 q-14 -4 -18 10 q-8 -10 -16 2 L'+CX+' '+(CY+HV)+' Q'+(CX+jawRX*0.98)+' '+(CY+HV*0.62)+' '+(CX+jawRX*0.9)+' '+(CY+18)+' Z" fill="'+skinD+'" opacity="0.7"/>'); }
+
+  // ── Eyes ──
+  const eyeY=CY-6, eyeDX=HR*0.44, eyeW=F.bigEyes?15:11, eyeH=F.bigEyes?11:7.5;
+  ['-1','1'].forEach(function(sgn){
+    const ex=CX+sgn*eyeDX;
+    if(F.eyes==='glowdot'){ P.push('<circle cx="'+ex+'" cy="'+eyeY+'" r="6" fill="'+eyeC+'"><animate attributeName="opacity" values="0.7;1;0.7" dur="2.5s" repeatCount="indefinite"/></circle>'); return; }
+    if(F.eyes==='blank'){ P.push('<ellipse cx="'+ex+'" cy="'+eyeY+'" rx="'+eyeW+'" ry="'+eyeH+'" fill="#f0f0f4"/><ellipse cx="'+ex+'" cy="'+eyeY+'" rx="'+eyeW+'" ry="'+eyeH+'" fill="none" stroke="'+skinD+'" stroke-width="1.5"/>'); return; }
+    P.push('<ellipse cx="'+ex+'" cy="'+eyeY+'" rx="'+eyeW+'" ry="'+eyeH+'" fill="#f4f0ea"/>');
+    if(F.eyes==='slit'){ P.push('<ellipse cx="'+ex+'" cy="'+eyeY+'" rx="'+(eyeW*0.72)+'" ry="'+(eyeH*0.9)+'" fill="'+eyeC+'"/><ellipse cx="'+ex+'" cy="'+eyeY+'" rx="2" ry="'+(eyeH*0.85)+'" fill="#181420"/>'); }
+    else if(F.eyes==='glow'){ P.push('<ellipse cx="'+ex+'" cy="'+eyeY+'" rx="'+(eyeW*0.72)+'" ry="'+(eyeH*0.9)+'" fill="'+eyeC+'"/><circle cx="'+ex+'" cy="'+eyeY+'" r="2.5" fill="#fff" opacity="0.9"/>'); }
+    else { P.push('<circle cx="'+ex+'" cy="'+eyeY+'" r="'+(eyeH*0.82)+'" fill="'+eyeC+'"/><circle cx="'+ex+'" cy="'+eyeY+'" r="'+(eyeH*0.4)+'" fill="#181420"/><circle cx="'+(ex-2)+'" cy="'+(eyeY-2)+'" r="1.6" fill="#fff" opacity="0.85"/>'); }
+    P.push('<path d="M'+(ex-eyeW)+' '+(eyeY-2)+' Q'+ex+' '+(eyeY-eyeH-4)+' '+(ex+eyeW)+' '+(eyeY-2)+'" stroke="'+skinD+'" stroke-width="2" fill="none"/>');
+  });
+  // Brows
+  if(!F.beak&&!F.plates){ const by=eyeY-eyeH-8, bw=eyeW+2; P.push('<path d="M'+(CX-eyeDX-bw)+' '+(by+3)+' Q'+(CX-eyeDX)+' '+(by-4)+' '+(CX-eyeDX+bw)+' '+(by+2)+'" stroke="'+(F.noHair?skinD:hairD)+'" stroke-width="5" fill="none" stroke-linecap="round"/>'); P.push('<path d="M'+(CX+eyeDX-bw)+' '+(by+2)+' Q'+(CX+eyeDX)+' '+(by-4)+' '+(CX+eyeDX+bw)+' '+(by+3)+'" stroke="'+(F.noHair?skinD:hairD)+'" stroke-width="5" fill="none" stroke-linecap="round"/>'); }
+
+  // ── Nose / beak / mouth ──
+  const noseY=CY+HV*0.28;
+  if(F.beak){ P.push('<path d="M'+(CX-16)+' '+(CY+6)+' Q'+CX+' '+(CY-2)+' '+(CX+16)+' '+(CY+6)+' L'+CX+' '+(CY+HV*0.52)+' Z" fill="#c9a03a"/><path d="M'+(CX-16)+' '+(CY+6)+' L'+CX+' '+(CY+HV*0.52)+' L'+CX+' '+(CY+14)+' Z" fill="#a8842e"/>'); }
+  else if(F.bigNose){ P.push('<path d="M'+(CX-9)+' '+(noseY-18)+' Q'+(CX-13)+' '+noseY+' '+(CX-8)+' '+(noseY+6)+' Q'+CX+' '+(noseY+13)+' '+(CX+8)+' '+(noseY+6)+' Q'+(CX+13)+' '+noseY+' '+(CX+9)+' '+(noseY-18)+'" fill="'+skinD+'" opacity="0.55"/>'); }
+  else if(!F.plates){ P.push('<path d="M'+(CX-3)+' '+(eyeY+6)+' Q'+(CX-7)+' '+noseY+' '+(CX-6)+' '+(noseY+3)+' Q'+CX+' '+(noseY+8)+' '+(CX+6)+' '+(noseY+3)+'" stroke="'+skinD+'" stroke-width="2.5" fill="none" stroke-linecap="round"/>'); }
+  const mouthY=CY+HV*0.58;
+  if(!F.beak){
+    const smile=rng()<0.55;
+    P.push('<path d="M'+(CX-15)+' '+mouthY+' Q'+CX+' '+(mouthY+(smile?8:2))+' '+(CX+15)+' '+mouthY+'" stroke="'+_shade(skinD,-16)+'" stroke-width="3" fill="none" stroke-linecap="round"/>');
+    if(F.tusks){ P.push('<path d="M'+(CX-16)+' '+(mouthY+2)+' l-3 -14 l8 4 Z" fill="#e8e2d0"/><path d="M'+(CX+16)+' '+(mouthY+2)+' l3 -14 l-8 4 Z" fill="#e8e2d0"/>'); }
+    if(F.fangs){ P.push('<path d="M'+(CX-8)+' '+(mouthY+1)+' l2 8 l3 -8 Z" fill="#e8e2d0"/><path d="M'+(CX+8)+' '+(mouthY+1)+' l-2 8 l-3 -8 Z" fill="#e8e2d0"/>'); }
+  }
+
+  // ── Beard ──
+  if(hasBeard&&!F.beak&&!F.plates){
+    if(beardStyle==='full'||beardStyle==='braided'){
+      P.push('<path d="M'+(CX-jawRX*0.86)+' '+(CY+14)+' Q'+(CX-jawRX*0.9)+' '+(CY+HV+34)+' '+CX+' '+(CY+HV+44)+' Q'+(CX+jawRX*0.9)+' '+(CY+HV+34)+' '+(CX+jawRX*0.86)+' '+(CY+14)+' Q'+(CX+jawRX*0.7)+' '+(CY+HV*0.6)+' '+(CX+18)+' '+(mouthY-4)+' L'+(CX-18)+' '+(mouthY-4)+' Q'+(CX-jawRX*0.7)+' '+(CY+HV*0.6)+' '+(CX-jawRX*0.86)+' '+(CY+14)+' Z" fill="'+hairC+'"/>');
+      if(beardStyle==='braided') P.push('<rect x="'+(CX-10)+'" y="'+(CY+HV+20)+'" width="8" height="8" rx="2" fill="'+hairD+'"/><rect x="'+(CX+2)+'" y="'+(CY+HV+20)+'" width="8" height="8" rx="2" fill="'+hairD+'"/>');
+    } else if(beardStyle==='goatee'){ P.push('<path d="M'+(CX-12)+' '+(mouthY+4)+' Q'+CX+' '+(CY+HV+18)+' '+(CX+12)+' '+(mouthY+4)+' Q'+CX+' '+(mouthY+12)+' '+(CX-12)+' '+(mouthY+4)+' Z" fill="'+hairC+'"/>'); }
+    else { P.push('<path d="M'+(CX-jawRX*0.8)+' '+(CY+26)+' Q'+CX+' '+(CY+HV+12)+' '+(CX+jawRX*0.8)+' '+(CY+26)+' Q'+CX+' '+(CY+HV*0.86)+' '+(CX-jawRX*0.8)+' '+(CY+26)+' Z" fill="'+hairC+'" opacity="0.85"/>'); }
+  }
+
+  // ── Front hair / crest ──
+  const hTop=CY-HV;
+  if(F.crest) P.push('<path d="M'+(CX-24)+' '+(hTop+18)+' Q'+CX+' '+(hTop-26)+' '+(CX+24)+' '+(hTop+18)+' Q'+CX+' '+(hTop+2)+' '+(CX-24)+' '+(hTop+18)+' Z" fill="'+skinD+'"/>');
+  if(hairStyle!=='none'&&hairStyle!=='bald'){
+    if(hairStyle==='curly') P.push('<path d="M'+(CX-HR-6)+' '+(CY-24)+' Q'+(CX-HR-16)+' '+(hTop+10)+' '+(CX-HR*0.5)+' '+(hTop-8)+' Q'+CX+' '+(hTop-22)+' '+(CX+HR*0.5)+' '+(hTop-8)+' Q'+(CX+HR+16)+' '+(hTop+10)+' '+(CX+HR+6)+' '+(CY-24)+' Q'+(CX+HR-4)+' '+(hTop+30)+' '+(CX+HR*0.4)+' '+(hTop+26)+' Q'+CX+' '+(hTop+38)+' '+(CX-HR*0.4)+' '+(hTop+26)+' Q'+(CX-HR+4)+' '+(hTop+30)+' '+(CX-HR-6)+' '+(CY-24)+' Z" fill="'+hairC+'"/>');
+    else if(hairStyle==='mohawk') P.push('<path d="M'+(CX-10)+' '+(hTop+16)+' Q'+CX+' '+(hTop-34)+' '+(CX+10)+' '+(hTop+16)+' L'+(CX+8)+' '+(hTop+26)+' L'+(CX-8)+' '+(hTop+26)+' Z" fill="'+hairC+'"/>');
+    else {
+      // universal fringe cap
+      P.push('<path d="M'+(CX-HR-2)+' '+(CY-16)+' Q'+(CX-HR-4)+' '+(hTop+2)+' '+CX+' '+(hTop-4)+' Q'+(CX+HR+4)+' '+(hTop+2)+' '+(CX+HR+2)+' '+(CY-16)+' L'+(CX+HR-10)+' '+(CY-20)+' Q'+(CX+HR-14)+' '+(hTop+22)+' '+(CX+HR*0.3)+' '+(hTop+20)+' Q'+(CX-HR*0.55)+' '+(hTop+16)+' '+(CX-HR+12)+' '+(hTop+34)+' Z" fill="'+hairC+'"/>');
+      if(hairStyle==='long') P.push('<path d="M'+(CX-HR-2)+' '+(CY-16)+' Q'+(CX-HR-10)+' '+(CY+40)+' '+(CX-HR+6)+' '+(CY+70)+' L'+(CX-HR+18)+' '+(CY+64)+' Q'+(CX-HR+4)+' '+(CY+20)+' '+(CX-HR+10)+' '+(CY-18)+' Z" fill="'+hairC+'"/>');
+    }
+  }
+
+  // ── Class headwear ──
+  if(cn==='Wizard') P.push('<path d="M'+(CX-HR-16)+' '+(hTop+22)+' L'+(CX+HR+16)+' '+(hTop+22)+' L'+(CX+HR-6)+' '+(hTop+6)+' L'+(CX+16)+' '+(hTop-78)+' L'+(CX-30)+' '+(hTop+2)+' L'+(CX-HR+6)+' '+(hTop+6)+' Z" fill="'+ccD+'"/><path d="M'+(CX-HR-16)+' '+(hTop+22)+' L'+(CX+HR+16)+' '+(hTop+22)+' L'+(CX+HR+8)+' '+(hTop+32)+' L'+(CX-HR-8)+' '+(hTop+32)+' Z" fill="'+cc+'"/><circle cx="'+(CX+12)+'" cy="'+(hTop-60)+'" r="5" fill="'+ccL+'"/>');
+  if(cn==='Warlock') P.push('<path d="M'+(CX-HR-18)+' '+(CY+30)+' Q'+(CX-HR-20)+' '+(hTop-20)+' '+CX+' '+(hTop-26)+' Q'+(CX+HR+20)+' '+(hTop-20)+' '+(CX+HR+18)+' '+(CY+30)+' L'+(CX+HR-2)+' '+(CY+26)+' Q'+(CX+HR+2)+' '+(hTop+4)+' '+CX+' '+(hTop)+' Q'+(CX-HR-2)+' '+(hTop+4)+' '+(CX-HR+2)+' '+(CY+26)+' Z" fill="'+ccD+'"/>');
+  if(cn==='Monk') P.push('<path d="M'+(CX-HR+2)+' '+(hTop+34)+' L'+(CX+HR-2)+' '+(hTop+34)+' L'+(CX+HR-4)+' '+(hTop+44)+' L'+(CX-HR+4)+' '+(hTop+44)+' Z" fill="'+cc+'"/>');
+  if(cn==='Bard') P.push('<path d="M'+(CX-HR+2)+' '+(hTop+18)+' Q'+CX+' '+(hTop-14)+' '+(CX+HR-2)+' '+(hTop+18)+' L'+(CX+HR+18)+' '+(hTop+14)+' L'+(CX+HR-6)+' '+(hTop+30)+' L'+(CX-HR+6)+' '+(hTop+30)+' Z" fill="'+ccD+'"/><path d="M'+(CX+HR+2)+' '+(hTop+12)+' q26 -30 14 -46 q-4 24 -22 34 Z" fill="#c05a3a"/>');
+  if(cn==='Druid') P.push('<path d="M'+(CX-HR+8)+' '+(hTop+26)+' Q'+CX+' '+(hTop+12)+' '+(CX+HR-8)+' '+(hTop+26)+'" stroke="#8a7250" stroke-width="5" fill="none"/><path d="M'+(CX-30)+' '+(hTop+18)+' q-6 -16 4 -24 q2 14 8 20 Z" fill="#2e7d4f"/><path d="M'+(CX+30)+' '+(hTop+18)+' q6 -16 -4 -24 q-2 14 -8 20 Z" fill="#2e7d4f"/>');
+  if(cn==='Artificer') P.push('<rect x="'+(CX-34)+'" y="'+(hTop+12)+'" width="68" height="10" rx="5" fill="#6b4a32"/><circle cx="'+(CX-14)+'" cy="'+(hTop+17)+'" r="11" fill="#3a3a45" stroke="#c5a55a" stroke-width="3"/><circle cx="'+(CX+14)+'" cy="'+(hTop+17)+'" r="11" fill="#3a3a45" stroke="#c5a55a" stroke-width="3"/>');
+  if(cn==='Barbarian') P.push('<path d="M'+(CX-eyeDX-14)+' '+(eyeY+14)+' L'+(CX-eyeDX+14)+' '+(eyeY-16)+'" stroke="'+cc+'" stroke-width="6" opacity="0.7" stroke-linecap="round"/>');
+
+  // ── Frame + class emblem ──
+  P.push('<rect x="4" y="4" width="312" height="392" rx="15" fill="none" stroke="'+cc+'" stroke-width="2" opacity="0.5"/>');
+  P.push('<circle cx="286" cy="366" r="20" fill="#0d0a1a" stroke="'+cc+'" stroke-width="2"/><text x="286" y="374" text-anchor="middle" font-size="20">'+(cls.icon||'⚔')+'</text>');
+
+  s='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 400" width="320" height="400">'+P.join('')+'</svg>';
+  return 'data:image/svg+xml;utf8,'+encodeURIComponent(s);
+}
+
+function genPortraitFromChar(){
+  const chars=getChars();
+  const ci=chars.findIndex(function(c){return String(c.id)===String(charScreenId||'');});
+  if(ci<0){ toast('Character not found','var(--red)'); return; }
+  // First click = deterministic base look; further clicks reroll variation
+  chars[ci].portraitSeed = (chars[ci].portraitGen && chars[ci].portrait) ? (chars[ci].portraitSeed||0)+1 : (chars[ci].portraitSeed||0);
+  try{
+    chars[ci].portrait = generateCharPortrait(chars[ci]);
+    chars[ci].portraitGen = true;
+  }catch(err){ toast('Could not generate portrait','var(--red)'); return; }
+  saveChars(chars);
+  toast('✦ Portrait generated!','var(--green)');
+  _refreshCharScreen();
+  if(document.getElementById('sheetHero') && typeof sheetCharId!=='undefined' && String(sheetCharId)===String(charScreenId)){
+    renderSheetHero(chars[ci], CLASSES[chars[ci].classIdx], 'sheetHero');
+  }
+  // Refresh the modal preview in place
+  closePortraitModal(); openPortraitModal();
+}
+
 function openPortraitModal(){
   const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
   if(!char){ toast('No character selected','var(--red)'); return; }
@@ -14960,12 +15389,12 @@ function openPortraitModal(){
   }
 
   inner+='<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">'
-    +'Design your mini at <strong style="color:var(--gold)">heroforge.com</strong>, use the free '
-    +'<strong>screenshot / camera tool</strong> to save an image of it, then add it here. '
-    +'Any character art works too. It will appear on your paperdoll, character sheet, and party card.</div>'
+    +'Generate a portrait from your character\'s details — race, class, hair, and eyes from character creation shape the result. '
+    +'Tap again for a different look. Or upload/paste your own art below.</div>'
+    +'<button class="btn btn-gold" style="margin:0 0 8px;width:100%" onclick="genPortraitFromChar()">✨ Generate from Character'+(char.portrait&&char.portraitGen?' (reroll)':'')+'</button>'
     +'<input type="file" id="portraitFileInput" accept="image/*" style="display:none" onchange="if(this.files[0])handlePortraitBlob(this.files[0])">'
-    +'<button class="btn btn-gold" style="margin:0 0 8px;width:100%" onclick="document.getElementById(\'portraitFileInput\').click()">⬆ Upload Image</button>'
-    +'<div class="portrait-paste-zone" id="portraitPasteZone">…or copy a screenshot and paste it here (Ctrl/Cmd+V)</div>'
+    +'<button class="btn btn-outline" style="margin:0 0 8px;width:100%" onclick="document.getElementById(\'portraitFileInput\').click()">⬆ Upload Custom Art</button>'
+    +'<div class="portrait-paste-zone" id="portraitPasteZone">…or copy an image and paste it here (Ctrl/Cmd+V)</div>'
     +(char.portrait?'<button class="btn btn-outline" style="margin-top:10px;width:100%;border-color:var(--red);color:var(--red)" onclick="setCharPortrait(null)">🗑 Remove Portrait</button>':'')
     +'</div>';
 
@@ -15044,6 +15473,8 @@ function setCharPortrait(dataUrl){
   const ci=chars.findIndex(function(c){return String(c.id)===String(charScreenId||'');});
   if(ci<0){ toast('Character not found','var(--red)'); return; }
   if(dataUrl) chars[ci].portrait=dataUrl; else delete chars[ci].portrait;
+  delete chars[ci].portraitGen;
+  if(!dataUrl) delete chars[ci].portraitSeed;
   saveChars(chars);
   closePortraitModal();
   toast(dataUrl?'✦ Portrait set!':'Portrait removed', dataUrl?'var(--green)':'var(--muted)');
