@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v6.4 generated-portraits 2026-07-05 -->
+<!-- Tome of Heroes v6.5 ai-art-prompt 2026-07-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -15354,6 +15354,103 @@ function generateCharPortrait(char){
   return 'data:image/svg+xml;utf8,'+encodeURIComponent(s);
 }
 
+/* ══ AI ART PROMPT BUILDER ════════════════════════════════════════════════════
+   Assembles a highly detailed image-generation prompt (for ChatGPT/DALL-E,
+   Midjourney, etc.) from the character's creation data and equipped gear.
+   The player copies it, generates art externally, and pastes the image back
+   in via the upload/paste flow. */
+
+function buildPortraitPrompt(char){
+  const cls=CLASSES[char.classIdx]||{name:'adventurer'};
+  const bits=[];
+
+  // ── Subject ──
+  let classDesc;
+  if(char.multiclasses && char.multiclasses.length>1){
+    classDesc=char.multiclasses.map(function(mc){ return (CLASSES[mc.classIdx]||{}).name||'adventurer'; }).join('/');
+  } else classDesc=cls.name;
+  const sub=char.subclass?String(char.subclass).replace(/\s*\(.*?\)\s*/g,''):'';
+  bits.push('A dramatic head-and-shoulders fantasy character portrait of '+(char.name||'an adventurer')
+    +', a level '+(char.level||1)+' '+(char.race||'human')+' '+classDesc
+    +(sub?' ('+sub+')':'')
+    +(char.background?' with a '+char.background+' background':'')+'.');
+
+  // ── Physical description ──
+  const phys=[];
+  if(char.age) phys.push(char.age+' years old');
+  if(char.height) phys.push(char.height+' tall');
+  if(char.weight) phys.push('weighing '+char.weight);
+  if(char.hair) phys.push(char.hair+' hair');
+  if(char.eyes) phys.push(char.eyes+' eyes');
+  if(phys.length) bits.push('Physical details: '+phys.join(', ')+'.');
+  bits.push('Depict authentic '+(char.race||'human')+' racial features true to D&D 5e art (skin tone, ears, horns, scales, or other traits appropriate to the race).');
+
+  // ── Gear (from equipped slots) ──
+  try{
+    const slots=getEquippedItems(char)||{};
+    const seen={}, gear=[];
+    Object.keys(slots).forEach(function(k){
+      const it=slots[k];
+      if(it&&it.name&&!seen[String(it.id)]){ seen[String(it.id)]=true; gear.push(it.name+(it.type&&it.type!=='misc'?' ('+it.type+')':'')); }
+    });
+    if(gear.length) bits.push('They are equipped with: '+gear.join(', ')+' — render this gear visibly and faithfully.');
+    else bits.push('Dress them in attire befitting a '+classDesc+' of level '+(char.level||1)+'.');
+  }catch(e){}
+
+  // ── Personality / demeanor ──
+  const trim=function(s,n){ s=String(s||'').replace(/\s+/g,' ').trim(); return s.length>n?s.slice(0,n).replace(/\s\S*$/,'')+'…':s; };
+  const pers=[];
+  if(char.traits) pers.push('personality: '+trim(char.traits,140));
+  if(char.ideals) pers.push('driven by: '+trim(char.ideals,100));
+  if(char.flaws)  pers.push('a hint of their flaw shows: '+trim(char.flaws,100));
+  if(pers.length) bits.push('Expression and posture should convey their character — '+pers.join('; ')+'.');
+  if(char.backstory) bits.push('Backstory flavour to inform mood and detail: '+trim(char.backstory,220));
+
+  // ── Style directives ──
+  bits.push('Art style: painterly high-fantasy digital illustration in the style of official tabletop RPG rulebook character art. '
+    +'Composition: centered bust portrait, head and shoulders, subject facing slightly off-camera with confident eye contact. '
+    +'Lighting: dramatic rim lighting with a rich, dark atmospheric background featuring deep '+( (CLASSES[char.classIdx]||{}).theme||'fantasy')+'-themed tones. '
+    +'Square 1:1 aspect ratio, high detail on the face, painterly brushwork on clothing and background. '
+    +'No text, no watermark, no border or frame, single character only.');
+
+  return bits.join('\n\n');
+}
+
+function openPortraitPromptView(){
+  const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
+  if(!char){ toast('No character selected','var(--red)'); return; }
+  closePortraitModal();
+  const prompt=buildPortraitPrompt(char);
+
+  let inner='<div class="slot-picker-header">'
+    +'<div class="slot-picker-title">🤖 AI ART PROMPT</div>'
+    +'<button onclick="closePortraitModal()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px">✕</button>'
+    +'</div>'
+    +'<div style="padding:14px 18px 18px">'
+    +'<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px">'
+    +'Copy this prompt into <strong style="color:var(--gold)">ChatGPT</strong> (or any AI image generator), '
+    +'save the image it creates, then come back and use <strong>Upload / Paste</strong> to set it as your portrait.</div>'
+    +'<textarea id="aiPromptText" readonly style="width:100%;min-height:220px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:10px 12px;font-size:12px;line-height:1.5;resize:vertical;box-sizing:border-box">'+esc(prompt)+'</textarea>'
+    +'<button class="btn btn-gold" style="margin:10px 0 6px;width:100%" onclick="copyPortraitPrompt()">📋 Copy Prompt</button>'
+    +'<button class="btn btn-outline" style="margin:0;width:100%" onclick="closePortraitModal();openPortraitModal()">← Back to Portrait Options</button>'
+    +'</div>';
+
+  const overlay=document.createElement('div');
+  overlay.className='slot-picker-overlay'; overlay.id='portraitModalOverlay';
+  overlay.onclick=function(e){if(e.target===overlay)closePortraitModal();};
+  overlay.innerHTML='<div class="slot-picker-sheet">'+inner+'</div>';
+  document.body.appendChild(overlay);
+}
+
+function copyPortraitPrompt(){
+  const ta=document.getElementById('aiPromptText');
+  if(!ta) return;
+  const done=function(){ toast('✦ Prompt copied — paste it into ChatGPT','var(--green)'); };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(ta.value).then(done).catch(function(){ ta.select(); document.execCommand('copy'); done(); });
+  } else { ta.select(); ta.setSelectionRange(0,999999); document.execCommand('copy'); done(); }
+}
+
 function genPortraitFromChar(){
   const chars=getChars();
   const ci=chars.findIndex(function(c){return String(c.id)===String(charScreenId||'');});
@@ -15392,6 +15489,7 @@ function openPortraitModal(){
     +'Generate a portrait from your character\'s details — race, class, hair, and eyes from character creation shape the result. '
     +'Tap again for a different look. Or upload/paste your own art below.</div>'
     +'<button class="btn btn-gold" style="margin:0 0 8px;width:100%" onclick="genPortraitFromChar()">✨ Generate from Character'+(char.portrait&&char.portraitGen?' (reroll)':'')+'</button>'
+    +'<button class="btn btn-outline" style="margin:0 0 8px;width:100%;border-color:var(--purple);color:var(--purple)" onclick="openPortraitPromptView()">🤖 AI Art Prompt (for ChatGPT)</button>'
     +'<input type="file" id="portraitFileInput" accept="image/*" style="display:none" onchange="if(this.files[0])handlePortraitBlob(this.files[0])">'
     +'<button class="btn btn-outline" style="margin:0 0 8px;width:100%" onclick="document.getElementById(\'portraitFileInput\').click()">⬆ Upload Custom Art</button>'
     +'<div class="portrait-paste-zone" id="portraitPasteZone">…or copy an image and paste it here (Ctrl/Cmd+V)</div>'
