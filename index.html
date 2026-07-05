@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v6.2 private-sheets 2026-07-05 -->
+<!-- Tome of Heroes v6.3 portraits 2026-07-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -759,6 +759,20 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   pointer-events: none; position: relative;
 }
 .paperdoll-body svg { width: 96px; height: 310px; overflow: visible; }
+.paperdoll-body img.paperdoll-portrait {
+  max-width: 100%; max-height: 310px; object-fit: contain;
+  border-radius: 10px; position: relative; z-index: 1;
+  filter: drop-shadow(0 6px 16px rgba(0,0,0,0.55));
+}
+.sheet-avatar-lg img.avatar-portrait, .pm-av img.avatar-portrait {
+  width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;
+}
+.portrait-paste-zone {
+  border: 1px dashed var(--border2); border-radius: 10px; padding: 14px;
+  text-align: center; color: var(--muted); font-size: 12px; font-style: italic;
+  margin-top: 8px; transition: var(--trans);
+}
+.portrait-paste-zone.armed { border-color: var(--gold); color: var(--gold); }
 .paperdoll-body .doll-glow {
   position: absolute; inset: 0;
   border-radius: 12px;
@@ -1338,8 +1352,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
         <button class="tab-btn active" onclick="charTab('equip')">⚔ Equip</button>
         <button class="tab-btn" onclick="charTab('spells')">✨ Spells</button>
         <button class="tab-btn" onclick="charTab('progress')">⬆ Level</button>
-        <button class="tab-btn" onclick="charTab('sheet')">📋 Sheet</button>
         <button class="tab-btn" onclick="charTab('stats')">📊 Stats & Profs</button>
+        <button class="tab-btn" onclick="charTab('sheet')">📋 Sheet</button>
       </div>
       <!-- Equip tab (existing paperdoll + inventory) -->
       <div class="tab-pane active" id="cstab-equip">
@@ -1348,7 +1362,10 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
             <div class="paperdoll-section">
               <div class="paperdoll-section-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
                 <span>EQUIPMENT SLOTS</span>
-                <button onclick="resetCharEquipment()" title="Unequip everything" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">↺ Reset</button>
+                <span style="display:flex;gap:6px">
+                  <button onclick="openPortraitModal()" title="Set a character portrait (e.g. from HeroForge)" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">🖼 Portrait</button>
+                  <button onclick="resetCharEquipment()" title="Unequip everything" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">↺ Reset</button>
+                </span>
               </div>
               <div id="paperdollGrid" class="paperdoll-grid"></div>
             </div>
@@ -3884,7 +3901,7 @@ function renderSheetHero(char,cls,elId){
     ? char.multiclasses.map(mc => `${CLASSES[mc.classIdx]?.name||'?'} ${mc.level}`).join(' / ')
     : null;
   document.getElementById(elId).innerHTML=`
-    <div class="sheet-avatar-lg" style="--cc:${cls.color};--cc-dim:${cls.color}22">${cls.icon}</div>
+    <div class="sheet-avatar-lg" style="--cc:${cls.color};--cc-dim:${cls.color}22">${char.portrait?`<img class="avatar-portrait" src="${char.portrait}" alt="">`:cls.icon}</div>
     <div class="sheet-charname">${esc(char.name)}</div>
     <div class="sheet-meta">Level ${char.level} ${esc(char.race)} ${multiStr || cls.name}</div>
     ${char.subclass?('<div style="font-family:\'Cinzel\',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-top:2px">'+char.subclass.replace(/ \(.*?\)/,'')+'</div>'):''}
@@ -4567,7 +4584,7 @@ function renderPartyOverview(){
     const pb=getPB(c.level);
     return`<div class="party-member no-sheet" style="--cc:${cc};--cc-dim:${cc}22">
       <div class="pm-top">
-        <div class="pm-av">${classIcon(c.classIdx)}</div>
+        <div class="pm-av">${c.portrait?`<img class="avatar-portrait" src="${c.portrait}" alt="">`:classIcon(c.classIdx)}</div>
         <div style="flex:1"><div class="pm-name">${esc(c.name)}</div><div class="pm-meta">${esc(c.race)} ${CLASSES[c.classIdx]?.name} · Lv ${c.level}</div></div>
         <div class="pm-actions">
           <button class="icon-btn" style="color:var(--green);font-size:18px;font-weight:700" onclick="adjHP(${c.id},1)">+</button>
@@ -13811,7 +13828,7 @@ function getCurrentCharItems(){
 function charTab(t){
   if(t==='profs') t='stats';   // legacy: profs now lives inside the combined Stats & Profs tab
   _charTab = t;
-  const order = ['equip','spells','progress','sheet','stats'];
+  const order = ['equip','spells','progress','stats','sheet'];
   document.querySelectorAll('#scr-character .tab-bar .tab-btn').forEach((b,i)=>b.classList.toggle('active',order[i]===t));
   document.querySelectorAll('#scr-character .tab-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('cstab-'+t)?.classList.add('active');
@@ -14556,7 +14573,9 @@ function renderPaperdoll(char, cls){
 
   let html = '<div class="paperdoll-body" style="grid-column:2;grid-row:1/6">'
     + '<div class="doll-glow" style="background:radial-gradient(ellipse at center, '+cc+'28 0%, transparent 70%)"></div>'
-    + getClassDollSVG(cls.name, cc)
+    + (char.portrait
+        ? '<img class="paperdoll-portrait" src="'+char.portrait+'" alt="'+esc(char.name||'Character')+' portrait">'
+        : getClassDollSVG(cls.name, cc))
     + '</div>';
 
   const offhandLocked = isOffhandBlocked(char);
@@ -14920,6 +14939,120 @@ function unequipSlot(slotId){
 }
 
 function equipItem(slotId, itemId){ _doEquipItem(slotId, itemId); closeSlotPicker(); }
+
+/* ══ CHARACTER PORTRAIT (e.g. HeroForge screenshots) ══════════════════════════
+   Players design a mini at heroforge.com, save a free screenshot (camera tool),
+   then upload or paste it here. The image is downscaled + compressed client-side
+   so it syncs safely with the rest of the character data. */
+
+function openPortraitModal(){
+  const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
+  if(!char){ toast('No character selected','var(--red)'); return; }
+
+  let inner='<div class="slot-picker-header">'
+    +'<div class="slot-picker-title">🖼 CHARACTER PORTRAIT</div>'
+    +'<button onclick="closePortraitModal()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px">✕</button>'
+    +'</div>'
+    +'<div style="padding:14px 18px 18px">';
+
+  if(char.portrait){
+    inner+='<div style="text-align:center;margin-bottom:12px"><img src="'+char.portrait+'" alt="" style="max-width:140px;max-height:180px;border-radius:10px;border:1px solid var(--border2)"></div>';
+  }
+
+  inner+='<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:12px">'
+    +'Design your mini at <strong style="color:var(--gold)">heroforge.com</strong>, use the free '
+    +'<strong>screenshot / camera tool</strong> to save an image of it, then add it here. '
+    +'Any character art works too. It will appear on your paperdoll, character sheet, and party card.</div>'
+    +'<input type="file" id="portraitFileInput" accept="image/*" style="display:none" onchange="if(this.files[0])handlePortraitBlob(this.files[0])">'
+    +'<button class="btn btn-gold" style="margin:0 0 8px;width:100%" onclick="document.getElementById(\'portraitFileInput\').click()">⬆ Upload Image</button>'
+    +'<div class="portrait-paste-zone" id="portraitPasteZone">…or copy a screenshot and paste it here (Ctrl/Cmd+V)</div>'
+    +(char.portrait?'<button class="btn btn-outline" style="margin-top:10px;width:100%;border-color:var(--red);color:var(--red)" onclick="setCharPortrait(null)">🗑 Remove Portrait</button>':'')
+    +'</div>';
+
+  const overlay=document.createElement('div');
+  overlay.className='slot-picker-overlay'; overlay.id='portraitModalOverlay';
+  overlay.onclick=function(e){if(e.target===overlay)closePortraitModal();};
+  overlay.innerHTML='<div class="slot-picker-sheet">'+inner+'</div>';
+  document.body.appendChild(overlay);
+  document.addEventListener('paste', _portraitPasteHandler);
+  const pz=document.getElementById('portraitPasteZone');
+  if(pz) setTimeout(function(){pz.classList.add('armed');},150);
+}
+
+function closePortraitModal(){
+  document.removeEventListener('paste', _portraitPasteHandler);
+  const el=document.getElementById('portraitModalOverlay');
+  if(el) el.remove();
+}
+
+function _portraitPasteHandler(e){
+  const items=(e.clipboardData||{}).items||[];
+  for(let i=0;i<items.length;i++){
+    if(items[i].type && items[i].type.indexOf('image')===0){
+      const blob=items[i].getAsFile();
+      if(blob){ e.preventDefault(); handlePortraitBlob(blob); }
+      return;
+    }
+  }
+  toast('No image found in clipboard','var(--muted)');
+}
+
+function handlePortraitBlob(blob){
+  if(!blob) return;
+  if(blob.size > 12*1024*1024){ toast('Image too large (max 12 MB)','var(--red)'); return; }
+  toast('Processing image…','var(--purple)');
+  const img=new Image();
+  const objUrl=URL.createObjectURL(blob);
+  img.onload=function(){
+    try{
+      const MAX=640;
+      const scale=Math.min(1, MAX/img.naturalWidth, MAX/img.naturalHeight);
+      const w=Math.max(1,Math.round(img.naturalWidth*scale));
+      const h=Math.max(1,Math.round(img.naturalHeight*scale));
+      const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      const ctx=cv.getContext('2d');
+      ctx.drawImage(img,0,0,w,h);
+      // Keep PNG only if the source has real transparency (sampled scan)
+      let hasAlpha=false;
+      try{
+        const d=ctx.getImageData(0,0,w,h).data;
+        for(let i=3;i<d.length;i+=64){ if(d[i]<250){hasAlpha=true;break;} }
+      }catch(err){}
+      let url = hasAlpha ? cv.toDataURL('image/png') : cv.toDataURL('image/jpeg',0.82);
+      // Safety net: if still bulky, re-encode smaller/flatter
+      if(url.length > 400000){
+        if(hasAlpha){
+          url=cv.toDataURL('image/png');
+          if(url.length > 600000){ ctx.fillStyle='#13102a'; ctx.globalCompositeOperation='destination-over'; ctx.fillRect(0,0,w,h); url=cv.toDataURL('image/jpeg',0.75); }
+        } else {
+          url=cv.toDataURL('image/jpeg',0.65);
+        }
+      }
+      URL.revokeObjectURL(objUrl);
+      setCharPortrait(url);
+    }catch(err){
+      URL.revokeObjectURL(objUrl);
+      toast('Could not process image','var(--red)');
+    }
+  };
+  img.onerror=function(){ URL.revokeObjectURL(objUrl); toast('Could not read image','var(--red)'); };
+  img.src=objUrl;
+}
+
+function setCharPortrait(dataUrl){
+  const chars=getChars();
+  const ci=chars.findIndex(function(c){return String(c.id)===String(charScreenId||'');});
+  if(ci<0){ toast('Character not found','var(--red)'); return; }
+  if(dataUrl) chars[ci].portrait=dataUrl; else delete chars[ci].portrait;
+  saveChars(chars);
+  closePortraitModal();
+  toast(dataUrl?'✦ Portrait set!':'Portrait removed', dataUrl?'var(--green)':'var(--muted)');
+  _refreshCharScreen();
+  if(document.getElementById('sheetHero') && typeof sheetCharId!=='undefined' && String(sheetCharId)===String(charScreenId)){
+    const char=chars[ci];
+    renderSheetHero(char, CLASSES[char.classIdx], 'sheetHero');
+  }
+}
 
 // One-tap fix: fully clear a character's equipped gear (e.g. to repair a
 // character whose equipped slots were left in a bad state). Loot items stay
