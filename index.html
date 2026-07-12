@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v6.5 ai-art-prompt 2026-07-05 -->
+<!-- Tome of Heroes v6.5 pin-resets 2026-07-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1428,6 +1428,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
         style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-family:'Cinzel',serif;font-size:22px;letter-spacing:6px;text-align:center;box-sizing:border-box"
         onkeydown="if(event.key==='Enter')userLogin()">
       <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Your own account — sign in from any device.<br>First time with a new name creates the account.</div>
+      <div style="margin-top:8px;text-align:center"><span onclick="openForgotPinModal()" style="font-size:11px;color:var(--gold);cursor:pointer;text-decoration:underline;opacity:0.8">Forgot your PIN?</span></div>
     </div>
 
     <button class="modegate-btn" style="width:100%;max-width:320px;margin-top:16px" onclick="userLogin()">
@@ -1448,7 +1449,13 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       </button>
       <div style="font-size:10px;color:var(--muted);margin-top:5px;text-align:left">Shared keys are usable (and visible) to every member of that campaign. Leave the field blank to rely on a campaign-shared key.</div>
     </div>
-    <button onclick="clearAllData()" style="margin-top:16px;background:none;border:1px solid var(--red);border-radius:8px;color:var(--red);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.6">
+    <button onclick="openChangePinModal()" style="margin-top:16px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.75">
+      🔑 Change PIN
+    </button>
+    <button onclick="openRecoveryCodeModal()" style="margin-top:8px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.75">
+      🛟 Recovery Code
+    </button>
+    <button onclick="clearAllData()" style="margin-top:8px;background:none;border:1px solid var(--red);border-radius:8px;color:var(--red);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.6">
       🗑 Clear All Data
     </button>
     <button onclick="doLogout()" style="margin-top:8px;background:none;border:1px solid var(--muted);border-radius:8px;color:var(--muted);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.5">
@@ -4795,6 +4802,163 @@ function _showGate(){
   setTimeout(()=>document.getElementById('usernameInput')?.focus(), 50);
 }
 
+/* ══ PIN MANAGEMENT — change, recovery codes, and lockout resets ══════════════
+   PINs are Supabase Auth passwords on synthetic @tome.local emails, so email
+   recovery is impossible. Instead:
+   • Change PIN (signed in): re-verify current PIN, then auth.updateUser.
+   • Recovery Code: a one-time code whose SHA-256 hash lives in the user's
+     metadata. The "reset-pin" Edge Function (service role) verifies it and
+     sets a new PIN — the only secure lockout path without deliverable email. */
+
+async function _sha256Hex(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+}
+function _pinField(id, label, ph, type){
+  return '<div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:1.5px;margin:12px 0 6px;text-align:left">'+label+'</div>'
+    +'<input id="'+id+'" type="'+(type||'password')+'" placeholder="'+(ph||'••••••')+'" '
+    +'style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:15px;letter-spacing:2px;box-sizing:border-box">';
+}
+function _openPinModal(title, bodyHtml){
+  closePinModal();
+  const overlay=document.createElement('div');
+  overlay.className='slot-picker-overlay'; overlay.id='pinModalOverlay';
+  overlay.onclick=function(e){if(e.target===overlay)closePinModal();};
+  overlay.innerHTML='<div class="slot-picker-sheet"><div class="slot-picker-header">'
+    +'<div class="slot-picker-title">'+title+'</div>'
+    +'<button onclick="closePinModal()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px">✕</button>'
+    +'</div><div style="padding:14px 18px 18px">'+bodyHtml+'</div></div>';
+  document.body.appendChild(overlay);
+}
+function closePinModal(){ document.getElementById('pinModalOverlay')?.remove(); }
+
+/* ── Change PIN (requires an active session) ── */
+async function openChangePinModal(){
+  const { data:{ user } } = await supa.auth.getUser();
+  if(!user){ toast('Sign in first to change your PIN','var(--red)'); return; }
+  _openPinModal('🔑 CHANGE PIN',
+    _pinField('cpCurrent','CURRENT PIN')
+    +_pinField('cpNew','NEW PIN (6+ characters)')
+    +_pinField('cpConfirm','CONFIRM NEW PIN')
+    +'<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="doChangePin()" id="cpBtn">Update PIN</button>');
+}
+async function doChangePin(){
+  const cur=document.getElementById('cpCurrent')?.value||'';
+  const nw =document.getElementById('cpNew')?.value||'';
+  const cf =document.getElementById('cpConfirm')?.value||'';
+  if(nw.length<6){ toast('New PIN must be at least 6 characters','var(--red)'); return; }
+  if(nw!==cf){ toast('New PINs do not match','var(--red)'); return; }
+  const btn=document.getElementById('cpBtn'); if(btn){btn.disabled=true;btn.textContent='Updating…';}
+  try{
+    const { data:{ user } } = await supa.auth.getUser();
+    if(!user) throw new Error('Not signed in');
+    // Re-verify the current PIN before allowing the change
+    const check = await supa.auth.signInWithPassword({ email:user.email, password:cur });
+    if(check.error){ toast('Current PIN is incorrect','var(--red)'); if(btn){btn.disabled=false;btn.textContent='Update PIN';} return; }
+    const { error } = await supa.auth.updateUser({ password: nw });
+    if(error) throw error;
+    closePinModal();
+    toast('✦ PIN updated','var(--green)');
+  }catch(e){
+    toast('Could not update PIN: '+(e.message||'unknown error'),'var(--red)');
+    if(btn){btn.disabled=false;btn.textContent='Update PIN';}
+  }
+}
+
+/* ── Recovery code (view status / generate) ── */
+function _genRecoveryCode(){
+  const alpha='ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no confusables (I,L,O,0,1)
+  const rnd=new Uint8Array(12); crypto.getRandomValues(rnd);
+  let s='TOME';
+  for(let i=0;i<12;i++){ if(i%4===0)s+='-'; s+=alpha[rnd[i]%alpha.length]; }
+  return s;
+}
+async function openRecoveryCodeModal(){
+  const { data:{ user } } = await supa.auth.getUser();
+  if(!user){ toast('Sign in first to manage your recovery code','var(--red)'); return; }
+  const has=!!user.user_metadata?.recovery_hash;
+  _openPinModal('🛟 RECOVERY CODE',
+    '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:6px">'
+    +'A recovery code lets you reset your PIN if you forget it. '
+    +(has
+      ?'<span style="color:var(--green)">✓ A recovery code is set on this account.</span> Generating a new one replaces it.'
+      :'<span style="color:var(--gold)">No recovery code is set</span> — without one, only your DM can reset a forgotten PIN.')
+    +'</div>'
+    +'<div id="rcResult"></div>'
+    +'<button class="btn btn-gold" style="margin-top:12px;width:100%" onclick="doGenRecoveryCode()" id="rcBtn">'+(has?'⟳ Generate New Code':'✨ Generate Recovery Code')+'</button>');
+}
+async function doGenRecoveryCode(){
+  const btn=document.getElementById('rcBtn'); if(btn){btn.disabled=true;btn.textContent='Generating…';}
+  try{
+    const code=_genRecoveryCode();
+    const hash=await _sha256Hex(code.trim().toUpperCase());
+    const { error } = await supa.auth.updateUser({ data: { recovery_hash: hash, recovery_set_at: new Date().toISOString() } });
+    if(error) throw error;
+    const el=document.getElementById('rcResult');
+    if(el) el.innerHTML='<div style="margin-top:10px;padding:14px;background:var(--surface2);border:1px dashed var(--gold);border-radius:10px;text-align:center">'
+      +'<div style="font-family:monospace;font-size:17px;letter-spacing:1px;color:var(--gold);user-select:all">'+code+'</div>'
+      +'<div style="font-size:10px;color:var(--red);margin-top:8px">⚠ Save this somewhere safe — it will NOT be shown again.</div>'
+      +'<button class="btn btn-outline" style="margin-top:10px" onclick="navigator.clipboard?.writeText(\''+code+'\').then(()=>toast(\'Copied\',\'var(--green)\'))">📋 Copy</button>'
+      +'</div>';
+    if(btn){btn.disabled=false;btn.textContent='⟳ Generate New Code';}
+  }catch(e){
+    toast('Could not save recovery code: '+(e.message||'unknown error'),'var(--red)');
+    if(btn){btn.disabled=false;btn.textContent='✨ Generate Recovery Code';}
+  }
+}
+
+/* ── Forgot PIN (locked out — needs the reset-pin Edge Function deployed) ── */
+function openForgotPinModal(){
+  const uname=(document.getElementById('usernameInput')?.value||'');
+  _openPinModal('🛟 RESET FORGOTTEN PIN',
+    '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:2px">'
+    +'Enter your username, your saved recovery code, and a new PIN. '
+    +'No recovery code? Ask your DM to reset your PIN.</div>'
+    +_pinField('fpUser','USERNAME', 'e.g. NAROG', 'text')
+    +_pinField('fpCode','RECOVERY CODE', 'TOME-XXXX-XXXX-XXXX', 'text')
+    +_pinField('fpNew','NEW PIN (6+ characters)')
+    +_pinField('fpConfirm','CONFIRM NEW PIN')
+    +'<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="doForgotPinReset()" id="fpBtn">Reset PIN</button>');
+  const u=document.getElementById('fpUser'); if(u) u.value=uname;
+}
+async function doForgotPinReset(){
+  const username=(document.getElementById('fpUser')?.value||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,'');
+  const code=(document.getElementById('fpCode')?.value||'').trim().toUpperCase();
+  const nw=document.getElementById('fpNew')?.value||'';
+  const cf=document.getElementById('fpConfirm')?.value||'';
+  if(!username){ toast('Enter your username','var(--red)'); return; }
+  if(!code){ toast('Enter your recovery code','var(--red)'); return; }
+  if(nw.length<6){ toast('New PIN must be at least 6 characters','var(--red)'); return; }
+  if(nw!==cf){ toast('New PINs do not match','var(--red)'); return; }
+  const btn=document.getElementById('fpBtn'); if(btn){btn.disabled=true;btn.textContent='Resetting…';}
+  try{
+    if(!supa.functions||!supa.functions.invoke) throw new Error('no-functions');
+    const { data, error } = await supa.functions.invoke('reset-pin', { body:{ username, code, newPin: nw } });
+    if(error){
+      // Distinguish "not deployed" from "wrong code"
+      const status = error.context?.status;
+      if(status===404 || (error.message||'').toLowerCase().includes('failed to send')) throw new Error('no-functions');
+      let msg='Invalid username or recovery code';
+      try{ const j=await error.context?.json?.(); if(j?.error) msg=j.error; }catch(e){}
+      toast(msg,'var(--red)');
+      if(btn){btn.disabled=false;btn.textContent='Reset PIN';}
+      return;
+    }
+    if(!data?.ok) throw new Error(data?.error||'Reset failed');
+    closePinModal();
+    const u=document.getElementById('usernameInput'); if(u) u.value=username;
+    const p=document.getElementById('pinInput'); if(p) p.value='';
+    toast('✦ PIN reset! Sign in with your new PIN. Set a fresh recovery code afterwards.','var(--green)');
+  }catch(e){
+    if((e.message||'')==='no-functions'){
+      toast('Self-serve reset isn\'t set up on this server — ask your DM to reset your PIN.','var(--red)');
+    } else {
+      toast('Reset failed: '+(e.message||'unknown error'),'var(--red)');
+    }
+    if(btn){btn.disabled=false;btn.textContent='Reset PIN';}
+  }
+}
+
 async function userLogin(){
   const username = (document.getElementById('usernameInput')?.value||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,'');
   if(!username || username.length < 2){ toast('Enter a username (at least 2 characters)','var(--red)'); return; }
@@ -4815,6 +4979,14 @@ async function userLogin(){
     _reenable(); statusDiv.remove(); return;
   }
   if(auth.created) toast('✦ Account created — welcome, '+username+'!','var(--gold)');
+  // Nudge toward a recovery code so a forgotten PIN isn't a dead end
+  try{
+    const { data:{ user:_lu } } = await supa.auth.getUser();
+    if(_lu && !_lu.user_metadata?.recovery_hash && !localStorage.getItem('toh_rc_nudge_'+username)){
+      localStorage.setItem('toh_rc_nudge_'+username,'1');
+      setTimeout(function(){ toast('Tip: set a 🛟 Recovery Code in Settings in case you forget your PIN','var(--purple)'); }, 2500);
+    }
+  }catch(e){}
   // Hard-reset in-memory state: a login switch must never inherit the
   // previous user's campaigns, characters, loot, or settings cache.
   _db.chars=[]; _db.campaigns=[]; _db.items={}; _db.wealth={};
