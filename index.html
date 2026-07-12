@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v6.5 pin-resets 2026-07-05 -->
+<!-- Tome of Heroes v6.6 email-accounts 2026-07-12 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1413,29 +1413,74 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   <div class="screen" data-panel-label="SETTINGS" id="scr-modegate">
     <div class="modegate-rune">📖</div>
     <div class="modegate-title">Tome of Heroes</div>
-    <div class="modegate-sub" style="margin-bottom:24px">Enter your username to get started</div>
+    <div class="modegate-sub" style="margin-bottom:24px">Sign in with your email to get started</div>
 
-    <div style="width:100%;max-width:320px">
-      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;text-align:left">USERNAME</div>
-      <input id="usernameInput" placeholder="e.g. NAROG"
-        autocomplete="username"
-        style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-family:'Cinzel',serif;font-size:22px;letter-spacing:4px;text-align:center;text-transform:uppercase;box-sizing:border-box"
-        oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'').slice(0,20)"
-        onkeydown="if(event.key==='Enter')document.getElementById('pinInput')?.focus()">
-      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin:14px 0 8px;text-align:left">PIN <span style="opacity:.6">(6+ characters)</span></div>
-      <input id="pinInput" type="password" placeholder="••••••"
-        autocomplete="current-password"
-        style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-family:'Cinzel',serif;font-size:22px;letter-spacing:6px;text-align:center;box-sizing:border-box"
-        onkeydown="if(event.key==='Enter')userLogin()">
-      <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">Your own account — sign in from any device.<br>First time with a new name creates the account.</div>
-      <div style="margin-top:8px;text-align:center"><span onclick="openForgotPinModal()" style="font-size:11px;color:var(--gold);cursor:pointer;text-decoration:underline;opacity:0.8">Forgot your PIN?</span></div>
+    <div style="width:100%;max-width:320px" id="gateViews">
+
+      <!-- EMAIL SIGN-IN (primary) -->
+      <div id="gateEmailView">
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;text-align:left">EMAIL</div>
+        <input id="emailInput" type="email" placeholder="you@example.com"
+          autocomplete="email" autocapitalize="none"
+          style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-size:16px;text-align:center;box-sizing:border-box"
+          onkeydown="if(event.key==='Enter')document.getElementById('passwordInput')?.focus()">
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin:14px 0 8px;text-align:left">PASSWORD</div>
+        <input id="passwordInput" type="password" placeholder="••••••"
+          autocomplete="current-password"
+          style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-size:16px;letter-spacing:4px;text-align:center;box-sizing:border-box"
+          onkeydown="if(event.key==='Enter')emailLogin()">
+        <div style="margin-top:10px;text-align:center;font-size:11px">
+          <span onclick="gateView('register')" style="color:var(--gold);cursor:pointer;text-decoration:underline">Create an account</span>
+          <span style="color:var(--muted)"> · </span>
+          <span onclick="openForgotPasswordModal()" style="color:var(--gold);cursor:pointer;text-decoration:underline">Forgot password?</span>
+        </div>
+        <div style="margin-top:8px;text-align:center"><span onclick="gateView('legacy')" style="font-size:10px;color:var(--muted);cursor:pointer;text-decoration:underline;opacity:0.8">Older username-only account? Sign in with username →</span></div>
+      </div>
+
+      <!-- REGISTER -->
+      <div id="gateRegisterView" style="display:none">
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;text-align:left">USERNAME <span style="opacity:.6">(your handle at the table)</span></div>
+        <input id="regUsername" placeholder="e.g. NAROG" autocomplete="username"
+          style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px;color:var(--gold);font-family:'Cinzel',serif;font-size:18px;letter-spacing:3px;text-align:center;text-transform:uppercase;box-sizing:border-box"
+          oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'').slice(0,20)">
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin:12px 0 8px;text-align:left">EMAIL</div>
+        <input id="regEmail" type="email" placeholder="you@example.com" autocomplete="email" autocapitalize="none"
+          style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px;color:var(--gold);font-size:15px;text-align:center;box-sizing:border-box">
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin:12px 0 8px;text-align:left">PASSWORD <span style="opacity:.6">(6+ characters)</span></div>
+        <input id="regPassword" type="password" placeholder="••••••" autocomplete="new-password"
+          style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px;color:var(--gold);font-size:15px;letter-spacing:4px;text-align:center;box-sizing:border-box">
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin:12px 0 8px;text-align:left">CONFIRM PASSWORD</div>
+        <input id="regConfirm" type="password" placeholder="••••••" autocomplete="new-password"
+          style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px;color:var(--gold);font-size:15px;letter-spacing:4px;text-align:center;box-sizing:border-box"
+          onkeydown="if(event.key==='Enter')registerAccount()">
+        <div style="margin-top:10px;text-align:center"><span onclick="gateView('email')" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">← Back to sign in</span></div>
+      </div>
+
+      <!-- LEGACY USERNAME + PIN -->
+      <div id="gateLegacyView" style="display:none">
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;text-align:left">USERNAME</div>
+        <input id="usernameInput" placeholder="e.g. NAROG"
+          autocomplete="username"
+          style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-family:'Cinzel',serif;font-size:22px;letter-spacing:4px;text-align:center;text-transform:uppercase;box-sizing:border-box"
+          oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'').slice(0,20)"
+          onkeydown="if(event.key==='Enter')document.getElementById('pinInput')?.focus()">
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin:14px 0 8px;text-align:left">PIN <span style="opacity:.6">(6+ characters)</span></div>
+        <input id="pinInput" type="password" placeholder="••••••"
+          autocomplete="current-password"
+          style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-family:'Cinzel',serif;font-size:22px;letter-spacing:6px;text-align:center;box-sizing:border-box"
+          onkeydown="if(event.key==='Enter')userLogin()">
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">After signing in, register your email in Settings —<br>then use email to sign in from any device.</div>
+        <div style="margin-top:8px;text-align:center"><span onclick="openForgotPinModal()" style="font-size:11px;color:var(--gold);cursor:pointer;text-decoration:underline;opacity:0.8">Forgot your PIN?</span></div>
+        <div style="margin-top:8px;text-align:center"><span onclick="gateView('email')" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">← Back to email sign-in</span></div>
+      </div>
+
     </div>
 
-    <button class="modegate-btn" style="width:100%;max-width:320px;margin-top:16px" onclick="userLogin()">
+    <button class="modegate-btn" style="width:100%;max-width:320px;margin-top:16px" onclick="gateSubmit()">
       <span class="mb-icon">📖</span>
       <span class="mb-text">
-        <span class="mb-label">Enter Tome of Heroes</span>
-        <span class="mb-desc">Full access to all campaigns and characters</span>
+        <span class="mb-label" id="gateBtnLabel">Enter Tome of Heroes</span>
+        <span class="mb-desc" id="gateBtnDesc">Full access to all campaigns and characters</span>
       </span>
     </button>
 
@@ -1449,8 +1494,11 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       </button>
       <div style="font-size:10px;color:var(--muted);margin-top:5px;text-align:left">Shared keys are usable (and visible) to every member of that campaign. Leave the field blank to rely on a campaign-shared key.</div>
     </div>
-    <button onclick="openChangePinModal()" style="margin-top:16px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.75">
-      🔑 Change PIN
+    <button onclick="openRegisterEmailModal()" style="margin-top:16px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.85">
+      📧 Register / Change Email
+    </button>
+    <button onclick="openChangePinModal()" style="margin-top:8px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.75">
+      🔑 Change Password / PIN
     </button>
     <button onclick="openRecoveryCodeModal()" style="margin-top:8px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.75">
       🛟 Recovery Code
@@ -1602,7 +1650,8 @@ async function ensureAuthSession(){
   return false;
 }
 
-// Sign in with username+PIN; create the account on first use of a name.
+// Legacy sign-in with username+PIN. Account creation now happens through
+// email registration only — unknown usernames are rejected, not created.
 // Returns { ok, created } or { ok:false, error }.
 async function authSignIn(username, pin){
   const email = username.toLowerCase() + '@tome.local';
@@ -1610,15 +1659,7 @@ async function authSignIn(username, pin){
   if(!r.error){ _authUid = r.data.user.id; return { ok:true, created:false }; }
   const msg = (r.error.message||'').toLowerCase();
   if(msg.includes('invalid login credentials')){
-    // Either a new name (create it) or a wrong PIN on an existing name.
-    const s = await supa.auth.signUp({ email, password: pin, options: { data: { username } } });
-    if(!s.error && s.data?.session){ _authUid = s.data.user.id; return { ok:true, created:true }; }
-    if(!s.error && s.data?.user && !s.data.session){
-      return { ok:false, error:'Account created but needs email confirmation — disable "Confirm email" in Supabase Auth settings.' };
-    }
-    const smsg = (s.error?.message||'').toLowerCase();
-    if(smsg.includes('already registered')) return { ok:false, error:'Wrong PIN for this username.' };
-    return { ok:false, error: s.error?.message || 'Could not create account.' };
+    return { ok:false, error:'Wrong PIN — or no account with that username. New here? Use "Create an account" with your email.' };
   }
   return { ok:false, error: r.error.message };
 }
@@ -1683,6 +1724,12 @@ if(typeof supabase === 'undefined'){
   };
 }
 const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+// Email password-reset links land here with a recovery session — prompt for a new password
+try{
+  supa.auth.onAuthStateChange(function(event){
+    if(event==='PASSWORD_RECOVERY'){ setTimeout(function(){ try{ openSetNewPasswordModal(); }catch(e){} }, 400); }
+  });
+}catch(e){}
 
 let _supaUser = null;
 let _realtimeSubs = [];
@@ -4796,10 +4843,20 @@ function _showGate(){
   document.getElementById('backBtn').style.visibility='hidden';
   document.querySelector('.bottomnav').style.display='none';
   const ex=document.getElementById('modeBadge'); if(ex) ex.remove();
-  // Pre-fill saved username hint from last logout
+  // Choose the right gate view: email is primary; devices that only ever used
+  // a legacy username (and have no saved email) land on the legacy form.
+  const savedEmail = localStorage.getItem('toh_login_email');
   const saved = localStorage.getItem('toh_last_username');
-  if(saved){ const inp=document.getElementById('usernameInput'); if(inp) inp.value=saved; }
-  setTimeout(()=>document.getElementById('usernameInput')?.focus(), 50);
+  if(savedEmail){
+    gateView('email');
+    const ei=document.getElementById('emailInput'); if(ei) ei.value=savedEmail;
+  } else if(saved){
+    gateView('legacy');
+    const inp=document.getElementById('usernameInput'); if(inp) inp.value=saved;
+  } else {
+    gateView('email');
+  }
+  setTimeout(()=>document.getElementById(_gateView==='legacy'?'usernameInput':'emailInput')?.focus(), 50);
 }
 
 /* ══ PIN MANAGEMENT — change, recovery codes, and lockout resets ══════════════
@@ -4959,30 +5016,230 @@ async function doForgotPinReset(){
   }
 }
 
+/* ── Register / change the account email (signed in) ── */
+async function openRegisterEmailModal(){
+  const { data:{ user } } = await supa.auth.getUser();
+  if(!user){ toast('Sign in first to register an email','var(--red)'); return; }
+  const legacy=String(user.email||'').endsWith('@tome.local');
+  _openPinModal('📧 REGISTER EMAIL',
+    '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:2px">'
+    +(legacy
+      ?'This account is <span style="color:var(--gold)">username-only</span>. Register an email to sign in with it from any device and reset a forgotten password by email.'
+      :'Signed in as <span style="color:var(--gold)">'+esc(user.email)+'</span>. Enter a new address to change it.')
+    +'</div>'
+    +_pinField('reEmail','EMAIL ADDRESS','you@example.com','email')
+    +_pinField('reConfirmEmail','CONFIRM EMAIL','you@example.com','email')
+    +_pinField('rePin','CURRENT '+(legacy?'PIN':'PASSWORD')+' (to confirm it\'s you)')
+    +'<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="doRegisterEmail()" id="reBtn">Register Email</button>');
+}
+async function doRegisterEmail(){
+  const email=(document.getElementById('reEmail')?.value||'').trim().toLowerCase();
+  const email2=(document.getElementById('reConfirmEmail')?.value||'').trim().toLowerCase();
+  const pin=document.getElementById('rePin')?.value||'';
+  if(!_validEmail(email)){ toast('Enter a valid email address','var(--red)'); return; }
+  if(email!==email2){ toast('Email addresses do not match','var(--red)'); return; }
+  const btn=document.getElementById('reBtn'); if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  const _fail=(m)=>{ toast(m,'var(--red)'); if(btn){btn.disabled=false;btn.textContent='Register Email';} };
+  try{
+    const { data:{ user } } = await supa.auth.getUser();
+    if(!user) return _fail('Not signed in');
+    // Re-verify identity before changing the login credential
+    const check=await supa.auth.signInWithPassword({ email:user.email, password:pin });
+    if(check.error) return _fail('Current password/PIN is incorrect');
+    const { data, error } = await supa.auth.updateUser({ email });
+    if(error){
+      const m=(error.message||'').toLowerCase();
+      return _fail(m.includes('already')?'That email is already used by another account':(error.message||'Could not register email'));
+    }
+    closePinModal();
+    if(data?.user?.email===email){
+      localStorage.setItem('toh_login_email', email);
+      toast('✦ Email registered! Use it (with your current password/PIN) to sign in from now on.','var(--green)');
+    } else {
+      toast('✉ Confirmation sent to '+email+' — click the link to finish. (Server owner: if it never applies, disable "Secure email change" in Supabase Auth settings, since old @tome.local addresses can\'t receive mail.)','var(--gold)');
+    }
+  }catch(e){ _fail('Could not register email: '+(e.message||'unknown error')); }
+}
+
+/* ── Forgot password (email accounts) ── */
+function openForgotPasswordModal(){
+  const pre=(document.getElementById('emailInput')?.value||'').trim();
+  _openPinModal('🔑 RESET PASSWORD',
+    '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:2px">'
+    +'We\'ll email you a reset link. Open it on this device to choose a new password. '
+    +'Username-only account? Use the legacy sign-in\'s <span style="color:var(--gold)">Forgot your PIN?</span> option instead.</div>'
+    +_pinField('fpwEmail','EMAIL ADDRESS','you@example.com','email')
+    +'<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="doForgotPassword()" id="fpwBtn">Send Reset Link</button>');
+  const e=document.getElementById('fpwEmail'); if(e) e.value=pre;
+}
+async function doForgotPassword(){
+  const email=(document.getElementById('fpwEmail')?.value||'').trim().toLowerCase();
+  if(!_validEmail(email)){ toast('Enter a valid email address','var(--red)'); return; }
+  const btn=document.getElementById('fpwBtn'); if(btn){btn.disabled=true;btn.textContent='Sending…';}
+  try{
+    const redirectTo=location.origin+location.pathname;
+    await supa.auth.resetPasswordForEmail(email, { redirectTo });
+  }catch(e){ /* uniform response regardless of outcome */ }
+  closePinModal();
+  toast('✉ If an account exists for '+email+', a reset link is on its way.','var(--gold)');
+}
+
+/* ── Recovery-link landing: user arrives signed in via the emailed link ── */
+function openSetNewPasswordModal(){
+  _openPinModal('🔑 SET A NEW PASSWORD',
+    '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:2px">'
+    +'You followed a password reset link — choose your new password below.</div>'
+    +_pinField('snpNew','NEW PASSWORD (6+ characters)')
+    +_pinField('snpConfirm','CONFIRM NEW PASSWORD')
+    +'<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="doSetNewPassword()" id="snpBtn">Save &amp; Enter</button>');
+}
+async function doSetNewPassword(){
+  const nw=document.getElementById('snpNew')?.value||'';
+  const cf=document.getElementById('snpConfirm')?.value||'';
+  if(nw.length<6){ toast('Password must be at least 6 characters','var(--red)'); return; }
+  if(nw!==cf){ toast('Passwords do not match','var(--red)'); return; }
+  const btn=document.getElementById('snpBtn'); if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{
+    const { error } = await supa.auth.updateUser({ password: nw });
+    if(error) throw error;
+    const { data:{ user } } = await supa.auth.getUser();
+    if(user){
+      const username=_usernameFromUser(user);
+      setGroupId(username);
+      localStorage.setItem('toh_username', username);
+      if(user.email && !String(user.email).endsWith('@tome.local')) localStorage.setItem('toh_login_email', user.email);
+    }
+    closePinModal();
+    toast('✦ Password updated — entering the Tome…','var(--green)');
+    // Strip the recovery token from the URL and boot with the live session
+    setTimeout(function(){ location.replace(location.origin+location.pathname); }, 900);
+  }catch(e){
+    toast('Could not set password: '+(e.message||'unknown error'),'var(--red)');
+    if(btn){btn.disabled=false;btn.textContent='Save & Enter';}
+  }
+}
+
+/* ══ GATE VIEWS ══ */
+let _gateView='email';
+function gateView(v){
+  _gateView=v;
+  const views={email:'gateEmailView',register:'gateRegisterView',legacy:'gateLegacyView'};
+  Object.keys(views).forEach(function(k){ const el=document.getElementById(views[k]); if(el) el.style.display=(k===v?'':'none'); });
+  const lbl=document.getElementById('gateBtnLabel'), desc=document.getElementById('gateBtnDesc');
+  if(lbl&&desc){
+    if(v==='register'){ lbl.textContent='Create Account'; desc.textContent='Register with your email to get started'; }
+    else if(v==='legacy'){ lbl.textContent='Enter Tome of Heroes'; desc.textContent='Legacy username + PIN sign-in'; }
+    else { lbl.textContent='Enter Tome of Heroes'; desc.textContent='Full access to all campaigns and characters'; }
+  }
+}
+function gateSubmit(){
+  if(_gateView==='register') registerAccount();
+  else if(_gateView==='legacy') userLogin();
+  else emailLogin();
+}
+function _gateBusy(on){
+  const btn=document.querySelector('#scr-modegate .modegate-btn');
+  if(btn){ btn.style.opacity=on?'0.6':''; btn.style.pointerEvents=on?'none':''; }
+}
+function _validEmail(e){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e); }
+function _usernameFromUser(user){
+  let u=(user?.user_metadata?.username||'').toUpperCase().replace(/[^A-Z0-9_]/g,'').slice(0,20);
+  if(u.length>=2) return u;
+  // Derive from email local part for accounts created outside the app
+  u=String(user?.email||'').split('@')[0].toUpperCase().replace(/[^A-Z0-9_]/g,'').slice(0,20);
+  if(u.length<2) u='HERO'+Math.floor(1000+Math.random()*9000);
+  try{ supa.auth.updateUser({ data:{ username:u } }); }catch(e){}
+  return u;
+}
+
+/* ── Email sign-in (primary) ── */
+async function emailLogin(){
+  const email=(document.getElementById('emailInput')?.value||'').trim().toLowerCase();
+  const pass=document.getElementById('passwordInput')?.value||'';
+  if(!_validEmail(email)){ toast('Enter a valid email address','var(--red)'); return; }
+  if(pass.length<6){ toast('Password must be at least 6 characters','var(--red)'); return; }
+  _gateBusy(true);
+  try{
+    const r=await supa.auth.signInWithPassword({ email, password: pass });
+    if(r.error){
+      const m=(r.error.message||'').toLowerCase();
+      toast(m.includes('invalid login')?'Wrong email or password':(r.error.message||'Sign-in failed'),'var(--red)');
+      _gateBusy(false); return;
+    }
+    _authUid=r.data.user.id;
+    localStorage.setItem('toh_login_email', email);
+    const username=_usernameFromUser(r.data.user);
+    await _completeLogin(username, false);
+  }catch(e){ toast('Sign-in failed: '+(e.message||'network error'),'var(--red)'); }
+  _gateBusy(false);
+}
+
+/* ── Email registration ── */
+async function registerAccount(){
+  const username=(document.getElementById('regUsername')?.value||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,'');
+  const email=(document.getElementById('regEmail')?.value||'').trim().toLowerCase();
+  const pass=document.getElementById('regPassword')?.value||'';
+  const conf=document.getElementById('regConfirm')?.value||'';
+  if(!username||username.length<2){ toast('Choose a username (at least 2 characters)','var(--red)'); return; }
+  if(!_validEmail(email)){ toast('Enter a valid email address','var(--red)'); return; }
+  if(pass.length<6){ toast('Password must be at least 6 characters','var(--red)'); return; }
+  if(pass!==conf){ toast('Passwords do not match','var(--red)'); return; }
+  _gateBusy(true);
+  try{
+    const s=await supa.auth.signUp({ email, password: pass, options:{ data:{ username } } });
+    if(s.error){
+      const m=(s.error.message||'').toLowerCase();
+      toast(m.includes('already registered')?'That email is already registered — sign in instead':(s.error.message||'Could not create account'),'var(--red)');
+      _gateBusy(false); return;
+    }
+    if(s.data?.user && !s.data.session){
+      // Email confirmation is enabled on the project
+      toast('✉ Check your inbox — click the confirmation link, then sign in here.','var(--gold)');
+      gateView('email');
+      const ei=document.getElementById('emailInput'); if(ei) ei.value=email;
+      _gateBusy(false); return;
+    }
+    _authUid=s.data.user.id;
+    localStorage.setItem('toh_login_email', email);
+    await _completeLogin(username, true);
+  }catch(e){ toast('Registration failed: '+(e.message||'network error'),'var(--red)'); }
+  _gateBusy(false);
+}
+
+/* ── Legacy sign-in: username + PIN (accounts without a registered email) ── */
 async function userLogin(){
   const username = (document.getElementById('usernameInput')?.value||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,'');
   if(!username || username.length < 2){ toast('Enter a username (at least 2 characters)','var(--red)'); return; }
-  const btn = document.querySelector('#scr-modegate .modegate-btn');
-  const _reenable = ()=>{ if(btn){ btn.style.opacity=''; btn.style.pointerEvents=''; } };
-  if(btn){ btn.style.opacity='0.6'; btn.style.pointerEvents='none'; }
+  const pin = (document.getElementById('pinInput')?.value||'');
+  if(pin.length < 6){ toast('PIN must be at least 6 characters','var(--red)'); return; }
+  _gateBusy(true);
+  const auth = await authSignIn(username, pin);
+  if(!auth.ok){
+    toast(auth.error || 'Sign-in failed','var(--red)');
+    _gateBusy(false); return;
+  }
+  await _completeLogin(username, auth.created);
+  _gateBusy(false);
+}
+
+/* ── Shared post-auth boot (email, registration, and legacy paths) ── */
+async function _completeLogin(username, created){
+  const _reenable = ()=>{};
   const statusDiv = document.createElement('div');
   statusDiv.style.cssText = 'position:fixed;bottom:60px;left:0;right:0;text-align:center;font-size:11px;color:var(--muted);z-index:9999;padding:4px';
   document.body.appendChild(statusDiv);
   const _status = msg => { statusDiv.textContent = msg; console.log('[login]', msg); };
-
-  const pin = (document.getElementById('pinInput')?.value||'');
-  if(pin.length < 6){ toast('PIN must be at least 6 characters','var(--red)'); _reenable(); statusDiv.remove(); return; }
   _status('Signing in…');
-  const auth = await authSignIn(username, pin);
-  if(!auth.ok){
-    toast(auth.error || 'Sign-in failed','var(--red)');
-    _reenable(); statusDiv.remove(); return;
-  }
-  if(auth.created) toast('✦ Account created — welcome, '+username+'!','var(--gold)');
-  // Nudge toward a recovery code so a forgotten PIN isn't a dead end
+
+  if(created) toast('✦ Account created — welcome, '+username+'!','var(--gold)');
+  // Migration + safety nudges based on account state
   try{
     const { data:{ user:_lu } } = await supa.auth.getUser();
-    if(_lu && !_lu.user_metadata?.recovery_hash && !localStorage.getItem('toh_rc_nudge_'+username)){
+    const _legacy=_lu && String(_lu.email||'').endsWith('@tome.local');
+    if(_legacy && !localStorage.getItem('toh_email_nudge_'+username)){
+      localStorage.setItem('toh_email_nudge_'+username,'1');
+      setTimeout(function(){ toast('📧 Register your email in Settings — sign in with it anywhere, and reset a forgotten password by email','var(--purple)'); }, 2500);
+    } else if(_legacy && !_lu.user_metadata?.recovery_hash && !localStorage.getItem('toh_rc_nudge_'+username)){
       localStorage.setItem('toh_rc_nudge_'+username,'1');
       setTimeout(function(){ toast('Tip: set a 🛟 Recovery Code in Settings in case you forget your PIN','var(--purple)'); }, 2500);
     }
@@ -5222,7 +5479,7 @@ function resetMode(){
 function showModeGateChoice(){}
 
 function showPlayerJoinGate(){}
-function enterAsDM(){ userLogin(); }
+function enterAsDM(){ gateSubmit(); } // legacy shim — routes through the current gate view
 function switchToDM(){}
 function switchToPlayer(){}
 function enterAsPlayerMode(){}
