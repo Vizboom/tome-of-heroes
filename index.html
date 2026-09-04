@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v7.0.0 map-and-library 2026-09-05 -->
+<!-- Tome of Heroes v7.1.0 illustrated-maps-fog 2026-09-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -494,6 +494,18 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .map-node.current circle{stroke:var(--gold);stroke-width:3;filter:drop-shadow(0 0 6px rgba(201,162,39,0.7));}
 .map-node.rumoured circle{stroke-dasharray:3 3;opacity:0.75;}
 .map-edge{stroke:rgba(232,224,255,0.28);stroke-width:1.5;stroke-dasharray:5 4;}
+.map-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px;}
+.map-chip{flex:0 0 auto;font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.5px;padding:6px 10px;border-radius:14px;border:1px solid var(--border2);background:var(--surface);color:var(--muted);cursor:pointer;white-space:nowrap;}
+.map-chip.on{background:var(--gold);color:var(--bg);border-color:var(--gold);}
+.map-chip.add{border-style:dashed;color:var(--gold);}
+.map-wrap.placing{outline:2px dashed var(--gold);cursor:crosshair;}
+.map-wrap.placing .map-node{pointer-events:none;}
+.map-fog{pointer-events:none;}
+.map-node .mn-sub{font-size:9px;pointer-events:all;cursor:pointer;}
+.map-node.pinlabel text{fill:#fff;paint-order:stroke;stroke:rgba(0,0,0,0.75);stroke-width:2.5px;}
+.map-node.illus circle{fill:rgba(28,24,56,0.85);}
+.map-tray{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+.map-ctrls{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
 .map-legend{position:absolute;left:8px;top:6px;font-size:9px;color:var(--muted);font-family:'Cinzel',serif;letter-spacing:0.5px;pointer-events:none;}
 .place-card{background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:10px 12px;margin-bottom:8px;}
 .place-card.current{border-color:var(--gold);}
@@ -12865,6 +12877,7 @@ function toggleCampChar(campId, charId) {
 
 let _currentCampTab = 'sessions';
 function campTab(t) {
+  if(t!=='map'){ _placingId=null; window._showMapForm=false; }
   _currentCampTab = t;
   document.querySelectorAll('#campTabRow .tab-btn').forEach((b,i)=>b.classList.toggle('active',['sessions','quests','npcs','arcs','map','books','notes'][i]===t));
   document.querySelectorAll('#campDetailView .tab-pane').forEach(p=>p.classList.remove('active'));
@@ -14396,36 +14409,164 @@ function _mapLayout(places){
   return true;
 }
 
+let _curMapId = null;      // which of camp.maps is displayed (null = auto → home)
+let _placingId = null;     // place being positioned by tap
+const _mapImgCache = {};   // mapId → dataURL / url
+const MAP_REVEAL = { small:0.07, medium:0.11, large:0.17 };
+
+function _campMaps(camp){ if(!camp.maps) camp.maps=[]; return camp.maps; }
+function _homeMap(camp){ const ms=_campMaps(camp); return ms.find(m=>m.isHome) || ms.find(m=>!m.placeId) || null; }
+function _curMap(camp){
+  const ms=_campMaps(camp);
+  let m = ms.find(x=>x.id===_curMapId);
+  if(!m){ m=_homeMap(camp); _curMapId=m?m.id:null; }
+  return m;
+}
+function _mapImgSrc(map){
+  if(!map) return null;
+  if(map.imgUrl) return map.imgUrl;
+  if(map.imgKey){
+    if(_mapImgCache[map.id]) return _mapImgCache[map.id];
+    _fetchMapImage(map);
+    return null;
+  }
+  return null;
+}
+async function _fetchMapImage(map){
+  if(map._loading) return; map._loading=true;
+  try{
+    const { data } = await supa.from('settings').select('value').eq('key', map.imgKey).maybeSingle();
+    if(data?.value){ _mapImgCache[map.id]=data.value; if(_currentCampTab==='map') renderMap(); }
+  }catch(e){ console.warn('map image load:', e.message); }
+  map._loading=false;
+}
+async function _storeMapImage(camp, map, dataUrl){
+  const key='camp_map_'+camp.id+'_'+map.id;
+  _mapImgCache[map.id]=dataUrl; map.imgKey=key; delete map.imgUrl;
+  try{ await supa.from('settings').upsert({ key, value:dataUrl, owner_group:getGroupId() }, { onConflict:'key' }); }
+  catch(e){ toast('Image kept on this device only — could not upload ('+(e.message||'error')+')','var(--red)'); }
+}
+/* Downscale an uploaded image so it syncs comfortably (≈1600px, JPEG). */
+function _readMapFile(file, cb){
+  const rd=new FileReader();
+  rd.onload=()=>{ const img=new Image(); img.onload=()=>{
+    const max=1600, sc=Math.min(1, max/Math.max(img.width,img.height));
+    const c=document.createElement('canvas'); c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    let q=0.82, out=c.toDataURL('image/jpeg',q);
+    while(out.length>900000 && q>0.4){ q-=0.12; out=c.toDataURL('image/jpeg',q); }
+    cb(out, c.width, c.height);
+  }; img.src=rd.result; };
+  rd.readAsDataURL(file);
+}
+
 function renderMap(){
   const camp = getCampaigns().find(c=>c.id===editingCampId);
   if(!camp) return;
   const el = document.getElementById('ctab-map'); if(!el) return;
   if(!camp.places) camp.places=[];
   const places = camp.places;
-  if(_mapLayout(places)) saveCampaign(camp);
-
+  const maps = _campMaps(camp);
+  const map = _curMap(camp);
   const byName = n => places.find(q=>_fuzzyMatch(q.name,n)>=0.75);
-  const edges=[]; places.forEach(p=>(p.links||[]).forEach(n=>{ const q=byName(n); if(q&&q!==p&&!edges.some(e=>e[0]===q&&e[1]===p)) edges.push([p,q]); }));
-  const X=p=>Math.round(p.x*MAP_W), Y=p=>Math.round(p.y*MAP_H);
-  let svg = `<svg viewBox="0 0 ${MAP_W} ${MAP_H}" xmlns="http://www.w3.org/2000/svg" id="campMapSvg">
-    <defs><pattern id="mapGrid" width="22" height="22" patternUnits="userSpaceOnUse"><path d="M22 0H0V22" fill="none" stroke="rgba(255,255,255,0.04)"/></pattern></defs>
-    <rect width="${MAP_W}" height="${MAP_H}" fill="url(#mapGrid)"/>
-    ${edges.map(([p,q])=>`<line class="map-edge" x1="${X(p)}" y1="${Y(p)}" x2="${X(q)}" y2="${Y(q)}"/>`).join('')}
-    ${places.map(p=>`<g class="map-node ${p.status||''}" data-id="${p.id}" transform="translate(${X(p)},${Y(p)})">
-      <circle r="14"/>
-      <text class="mn-icon" text-anchor="middle" y="5">${PLACE_ICONS[p.type]||PLACE_ICONS.other}</text>
-      <text text-anchor="middle" y="26">${esc(String(p.name).slice(0,18))}</text>
-    </g>`).join('')}
-  </svg>`;
+  const placeById = id => places.find(p=>p.id===id);
 
-  let html = places.length
-    ? `<div class="map-wrap" id="campMapWrap">${svg}<div class="map-legend">drag to arrange · ◎ gold = party is here · dashed = only heard of</div></div>
-       <div style="display:flex;gap:8px;margin-bottom:12px">
-         <button class="pc-pill" onclick="mapResetLayout()">↺ Re-arrange</button>
-         <button class="pc-pill" onclick="openQuickJot()">✎ Jot a place</button>
-       </div>`
-    : `<div class="empty-state" style="margin-bottom:12px"><div class="es-icon">🗺</div><p>No places logged yet.<br>Mention a town, dungeon or road in a Quick Jot or session import and it appears here.</p></div>`;
+  let html = '';
 
+  // ── Map selector ──
+  if(maps.length){
+    html += '<div class="map-chips">'+maps.map(m=>{
+      const lp = m.placeId ? placeById(m.placeId) : null;
+      return `<button class="map-chip ${map&&m.id===map.id?'on':''}" onclick="switchMap('${m.id}')">${m.isHome?'🏠 ':(lp?(PLACE_ICONS[lp.type]||'📍')+' ':'🗺 ')}${esc(m.name)}</button>`;
+    }).join('')+`<button class="map-chip add" onclick="toggleAddMap()">+ Map</button></div>`;
+  }
+
+  // ── Canvas ──
+  if(map){
+    const src=_mapImgSrc(map);
+    const VW=440, VH=Math.round(440*((map.h&&map.w)?map.h/map.w:0.68));
+    const pinned = places.filter(p=>p.pins&&p.pins[map.id]);
+    const X=p=>Math.round(p.pins[map.id].x*VW), Y=p=>Math.round(p.pins[map.id].y*VH);
+    const edges=[]; pinned.forEach(p=>(p.links||[]).forEach(n=>{ const q=byName(n); if(q&&q!==p&&q.pins&&q.pins[map.id]&&!edges.some(e=>e[0]===q&&e[1]===p)) edges.push([p,q]); }));
+    const rr = (MAP_REVEAL[map.reveal]||MAP_REVEAL.medium)*VW;
+    const fogOn = map.fog!==false && !map._peek;
+    const holes = pinned.filter(p=>p.status!=='rumoured'||map.revealRumoured).map(p=>{
+      const rum=p.status==='rumoured';
+      return `<circle cx="${X(p)}" cy="${Y(p)}" r="${Math.round(rum?rr*0.55:rr)}" fill="url(#${rum?'holeDim':'hole'})"/>`;
+    }).join('');
+    const svg = `<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="campMapSvg" data-vw="${VW}" data-vh="${VH}">
+      <defs>
+        <radialGradient id="hole"><stop offset="0" stop-color="#000"/><stop offset="0.55" stop-color="#000"/><stop offset="1" stop-color="#fff"/></radialGradient>
+        <radialGradient id="holeDim"><stop offset="0" stop-color="#555"/><stop offset="0.5" stop-color="#777"/><stop offset="1" stop-color="#fff"/></radialGradient>
+        <mask id="fogMask" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}"><rect width="${VW}" height="${VH}" fill="#fff"/>${holes}</mask>
+        <pattern id="fogTex" width="18" height="18" patternUnits="userSpaceOnUse"><rect width="18" height="18" fill="#0a0716"/><circle cx="4" cy="6" r="3" fill="#120d24"/><circle cx="13" cy="12" r="4" fill="#100b20"/></pattern>
+      </defs>
+      ${src?`<image href="${src}" x="0" y="0" width="${VW}" height="${VH}" preserveAspectRatio="none"/>`
+           :`<rect width="${VW}" height="${VH}" fill="#1a1530"/><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="#8880b0" font-size="11" font-family="Cinzel,serif">${map.imgKey?'loading map…':'no image yet'}</text>`}
+      ${fogOn?`<rect class="map-fog" width="${VW}" height="${VH}" fill="url(#fogTex)" opacity="0.93" mask="url(#fogMask)"/>`:''}
+      ${edges.map(([p,q])=>`<line class="map-edge" x1="${X(p)}" y1="${Y(p)}" x2="${X(q)}" y2="${Y(q)}"/>`).join('')}
+      ${pinned.map(p=>{ const sub=maps.find(m=>m.placeId===p.id);
+        return `<g class="map-node illus pinlabel ${p.status||''}" data-id="${p.id}" transform="translate(${X(p)},${Y(p)})">
+        <circle r="13"/><text class="mn-icon" text-anchor="middle" y="5">${PLACE_ICONS[p.type]||PLACE_ICONS.other}</text>
+        <text text-anchor="middle" y="25">${esc(String(p.name).slice(0,20))}</text>
+        ${sub?`<g class="mn-sub" onclick="switchMap('${sub.id}');event.stopPropagation()"><circle cx="12" cy="-10" r="7" fill="var(--gold)"/><text x="12" y="-7" text-anchor="middle" font-size="8" fill="#0d0a1a" style="fill:#0d0a1a;stroke:none">🗺</text></g>`:''}
+      </g>`; }).join('')}
+    </svg>`;
+    // On a sub-map only offer places that plausibly belong there: linked to
+    // the map's own place, or not yet pinned anywhere (fresh discoveries).
+    const parent = map.placeId ? placeById(map.placeId) : null;
+    const unplaced = places.filter(p=>!(p.pins&&p.pins[map.id]) && p.id!==map.placeId
+      && (!parent || !p.pins || !Object.keys(p.pins).length || (parent.links||[]).some(n=>_fuzzyMatch(n,p.name)>=0.75) || (p.links||[]).some(n=>_fuzzyMatch(n,parent.name)>=0.75)));
+    html += `<div class="map-wrap ${_placingId?'placing':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':'drag pins · fog lifts where you\'ve been'}</div></div>`;
+    html += `<div class="map-ctrls">
+      ${map.placeId?`<button class="pc-pill" onclick="switchMap('${_homeMap(camp)?.id||''}')">← home map</button>`:''}
+      <button class="pc-pill ${map.fog!==false?'on':''}" onclick="toggleFog('${map.id}')">${map.fog!==false?'🌫 fog on':'fog off'}</button>
+      ${map.fog!==false?`<button class="pc-pill" onpointerdown="peekFog('${map.id}',true)" onpointerup="peekFog('${map.id}',false)" onpointerleave="peekFog('${map.id}',false)">👁 hold to peek</button>`:''}
+      <select class="pc-pill" onchange="setMapReveal('${map.id}',this.value)" style="appearance:auto">${Object.keys(MAP_REVEAL).map(k=>`<option value="${k}" ${(map.reveal||'medium')===k?'selected':''}>reveal: ${k}</option>`).join('')}</select>
+      <button class="pc-pill ${map.revealRumoured?'on':''}" onclick="toggleRumoured('${map.id}')">dim-reveal rumours</button>
+      <button class="pc-pill" onclick="toggleAddMap('${map.id}')">✎ edit map</button>
+    </div>`;
+    if(unplaced.length){
+      html += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">NOT ON THIS MAP YET — tap one, then tap the map</div>
+      <div class="map-tray">${unplaced.map(p=>`<button class="pc-pill ${_placingId===p.id?'on gold':''}" onclick="beginPlace('${p.id}')">${PLACE_ICONS[p.type]||'📍'} ${esc(p.name)}</button>`).join('')}${_placingId?`<button class="pc-pill" onclick="beginPlace(null)">cancel</button>`:''}</div>`;
+    }
+  } else if(places.length){
+    // No illustrated map yet → the sketch graph
+    if(_mapLayout(places)) saveCampaign(camp);
+    html += `<div class="map-wrap" id="campMapWrap">${_renderSketchSvg(places)}<div class="map-legend">sketch map · drag to arrange</div></div>
+      <div class="map-ctrls"><button class="pc-pill" onclick="mapResetLayout()">↺ Re-arrange</button>
+      <button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="toggleAddMap()">🖼 Add an illustrated backdrop</button></div>`;
+  } else {
+    html += `<div class="empty-state" style="margin-bottom:12px"><div class="es-icon">🗺</div><p>No places logged yet.<br>Mention a town, dungeon or road in a Quick Jot or session import and it appears here — or add a backdrop map below.</p></div>
+      <div class="map-ctrls"><button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="toggleAddMap()">🖼 Add an illustrated backdrop</button></div>`;
+  }
+
+  // ── Add / edit map form ──
+  const em = window._editMapId ? maps.find(m=>m.id===window._editMapId) : null;
+  html += `<div class="card" id="mapForm" style="margin-bottom:14px;display:${window._showMapForm?'':'none'}">
+    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">${em?'Edit Map':'Add Map'}</div>
+    <div class="form-row two">
+      <div class="field"><label>Map name</label><input id="mpName" placeholder="e.g. Sword Coast, Barovia" value="${esc(em?.name||'')}"></div>
+      <div class="field"><label>Detailed map of</label><select id="mpPlace"><option value="">— overview / home map —</option>${places.map(p=>`<option value="${p.id}" ${em?.placeId===p.id?'selected':''}>${PLACE_ICONS[p.type]||'📍'} ${esc(p.name)}</option>`).join('')}</select></div>
+    </div>
+    <div class="field"><label>Image</label>
+      <input type="file" id="mpFile" accept="image/*" style="font-size:12px;color:var(--muted)">
+      <div style="font-size:10px;color:var(--muted2);margin:4px 0">…or paste an image URL</div>
+      <input id="mpUrl" placeholder="https://…/map.jpg" value="${esc(em?.imgUrl||'')}">
+      <div style="font-size:10px;color:var(--muted2);margin-top:4px">Use your own scan or a map you have the rights to. Uploads are shrunk to ~1600px and shared with campaign members.</div>
+    </div>
+    <div class="form-row two">
+      <div class="field"><label>Fog of war</label><select id="mpFog"><option value="1" ${em?.fog!==false?'selected':''}>on — reveal as you go</option><option value="0" ${em&&em.fog===false?'selected':''}>off</option></select></div>
+      <div class="field"><label>Home map</label><select id="mpHome"><option value="0">no</option><option value="1" ${em?.isHome||(!em&&!maps.length)?'selected':''}>yes — shown first</option></select></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1;margin:0" onclick="saveMapForm()">${em?'Save Map':'Add Map'}</button>
+      ${em?`<button class="btn btn-danger" style="flex:0 0 auto;margin:0;padding:13px 16px" onclick="deleteMap('${em.id}')">Delete</button>`:''}
+      <button class="btn btn-outline" style="flex:0 0 auto;margin:0;padding:13px 16px" onclick="toggleAddMap()">✕</button>
+    </div>
+  </div>`;
+
+  // ── Add place form + travel log ──
   html += `<div class="card" style="margin-bottom:14px">
     <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">Add Place</div>
     <div class="form-row two">
@@ -14441,13 +14582,16 @@ function renderMap(){
   if(places.length){
     const order = {current:0, visited:1, rumoured:2};
     const sorted = [...places].sort((a,b)=>(order[a.status]??1)-(order[b.status]??1) || (b.session||0)-(a.session||0) || a.name.localeCompare(b.name));
-    html += `<div class="divider"><span>Travel Log · ${places.length} place${places.length!==1?'s':''}</span></div>` + sorted.map(p=>`
+    html += `<div class="divider"><span>Travel Log · ${places.length} place${places.length!==1?'s':''}</span></div>` + sorted.map(p=>{
+      const sub=maps.find(m=>m.placeId===p.id);
+      const onCur = map && p.pins && p.pins[map.id];
+      return `
       <div class="place-card ${p.status==='current'?'current':''}" id="pl_${p.id}">
         <div class="pc-head">
           <span style="font-size:18px">${PLACE_ICONS[p.type]||PLACE_ICONS.other}</span>
           <div style="flex:1;min-width:0">
-            <div class="pc-name">${esc(p.name)}</div>
-            <div class="pc-sub">${[p.type,p.region].filter(Boolean).map(esc).join(' · ')}${p.session?` · noted session ${p.session}`:''}</div>
+            <div class="pc-name">${esc(p.name)}${sub?` <span class="pc-pill on gold" style="font-size:7px;padding:1px 6px;cursor:pointer" onclick="switchMap('${sub.id}')">🗺 own map</span>`:''}</div>
+            <div class="pc-sub">${[p.type,p.region].filter(Boolean).map(esc).join(' · ')}${p.session?` · noted session ${p.session}`:''}${map?(onCur?' · pinned':' · <span style="color:var(--gold)">not on '+esc(map.name)+'</span>'):''}</div>
           </div>
           <button class="icon-btn" style="color:var(--red);font-size:12px" onclick="deletePlace('${p.id}')">✕</button>
         </div>
@@ -14457,35 +14601,118 @@ function renderMap(){
           <button class="pc-pill ${p.status==='current'?'on gold':''}" onclick="setPlaceStatus('${p.id}','current')">📍 here</button>
           <button class="pc-pill ${p.status==='visited'?'on':''}" onclick="setPlaceStatus('${p.id}','visited')">visited</button>
           <button class="pc-pill ${p.status==='rumoured'?'on':''}" onclick="setPlaceStatus('${p.id}','rumoured')">heard of</button>
+          ${map&&!onCur?`<button class="pc-pill" onclick="beginPlace('${p.id}')">📌 pin to map</button>`:''}
+          ${map&&onCur?`<button class="pc-pill" onclick="unpinPlace('${p.id}')">unpin</button>`:''}
+          ${!sub?`<button class="pc-pill" onclick="toggleAddMap(null,'${p.id}')" style="margin-left:auto">+ own map</button>`:''}
         </div>
-      </div>`).join('');
+      </div>`; }).join('');
   }
   el.innerHTML = html;
-  _bindMapDrag(camp);
+  _bindMapDrag(camp, map);
+  const fileIn=document.getElementById('mpFile');
+  if(fileIn) fileIn.onchange=()=>{ const f=fileIn.files[0]; if(!f) return; _readMapFile(f,(url,w,h)=>{ window._pendingMapImg={url,w,h}; toast('Image ready — '+w+'×'+h,'var(--gold)'); }); };
+  if(window._presetMapPlace){ const sel=document.getElementById('mpPlace'); if(sel) sel.value=window._presetMapPlace; window._presetMapPlace=null; }
 }
 
-function _bindMapDrag(camp){
+function _renderSketchSvg(places){
+  const byName = n => places.find(q=>_fuzzyMatch(q.name,n)>=0.75);
+  const edges=[]; places.forEach(p=>(p.links||[]).forEach(n=>{ const q=byName(n); if(q&&q!==p&&!edges.some(e=>e[0]===q&&e[1]===p)) edges.push([p,q]); }));
+  const X=p=>Math.round(p.x*MAP_W), Y=p=>Math.round(p.y*MAP_H);
+  return `<svg viewBox="0 0 ${MAP_W} ${MAP_H}" xmlns="http://www.w3.org/2000/svg" id="campMapSvg" data-vw="${MAP_W}" data-vh="${MAP_H}" data-sketch="1">
+    <defs><pattern id="mapGrid" width="22" height="22" patternUnits="userSpaceOnUse"><path d="M22 0H0V22" fill="none" stroke="rgba(255,255,255,0.04)"/></pattern></defs>
+    <rect width="${MAP_W}" height="${MAP_H}" fill="url(#mapGrid)"/>
+    ${edges.map(([p,q])=>`<line class="map-edge" x1="${X(p)}" y1="${Y(p)}" x2="${X(q)}" y2="${Y(q)}"/>`).join('')}
+    ${places.map(p=>`<g class="map-node ${p.status||''}" data-id="${p.id}" transform="translate(${X(p)},${Y(p)})">
+      <circle r="14"/><text class="mn-icon" text-anchor="middle" y="5">${PLACE_ICONS[p.type]||PLACE_ICONS.other}</text>
+      <text text-anchor="middle" y="26">${esc(String(p.name).slice(0,18))}</text>
+    </g>`).join('')}
+  </svg>`;
+}
+
+function _bindMapDrag(camp, map){
   const svg=document.getElementById('campMapSvg'); if(!svg) return;
-  let drag=null;
+  const VW=+svg.dataset.vw, VH=+svg.dataset.vh, sketch=!!svg.dataset.sketch;
   const toLocal=(e)=>{ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; const m=svg.getScreenCTM(); return m?pt.matrixTransform(m.inverse()):pt; };
+  const getPos=p=>sketch?{x:p.x,y:p.y}:(p.pins&&p.pins[map.id])||null;
+  const setPos=(p,x,y)=>{ if(sketch){ p.x=x; p.y=y; } else { if(!p.pins) p.pins={}; p.pins[map.id]={x,y}; } };
+  // Tap-to-place mode
+  if(_placingId && !sketch){
+    svg.addEventListener('pointerup',e=>{
+      const l=toLocal(e); const p=(camp.places||[]).find(q=>q.id===_placingId); if(!p) return;
+      setPos(p, Math.max(0.03,Math.min(0.97,l.x/VW)), Math.max(0.03,Math.min(0.97,l.y/VH)));
+      _placingId=null; saveCampaign(camp); renderMap(); toast('📌 Pinned '+p.name,'var(--gold)');
+    });
+    return;
+  }
+  let drag=null;
   svg.querySelectorAll('.map-node').forEach(g=>{
-    g.addEventListener('pointerdown',e=>{ drag={g, id:g.dataset.id, moved:false}; g.setPointerCapture(e.pointerId); e.preventDefault(); });
+    g.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-sub')) return; drag={g, id:g.dataset.id, moved:false}; g.setPointerCapture(e.pointerId); e.preventDefault(); });
   });
   svg.addEventListener('pointermove',e=>{
     if(!drag) return; const l=toLocal(e); drag.moved=true;
-    const x=Math.max(16,Math.min(MAP_W-16,l.x)), y=Math.max(16,Math.min(MAP_H-30,l.y));
+    const x=Math.max(14,Math.min(VW-14,l.x)), y=Math.max(14,Math.min(VH-28,l.y));
     drag.g.setAttribute('transform',`translate(${Math.round(x)},${Math.round(y)})`);
-    const p=(camp.places||[]).find(q=>q.id===drag.id); if(p){ p.x=x/MAP_W; p.y=y/MAP_H; }
-    // move attached edges live
+    const p=(camp.places||[]).find(q=>q.id===drag.id); if(p) setPos(p, x/VW, y/VH);
+    // live-update edges and fog holes
     const byName=n=>(camp.places||[]).find(q=>_fuzzyMatch(q.name,n)>=0.75);
     svg.querySelectorAll('.map-edge').forEach(line=>line.remove());
-    const edges=[]; (camp.places||[]).forEach(a=>(a.links||[]).forEach(n=>{ const b=byName(n); if(b&&b!==a&&!edges.some(e=>e[0]===b&&e[1]===a)) edges.push([a,b]); }));
+    const edges=[]; (camp.places||[]).forEach(a=>(a.links||[]).forEach(n=>{ const b=byName(n); if(b&&b!==a&&getPos(a)&&getPos(b)&&!edges.some(e=>e[0]===b&&e[1]===a)) edges.push([a,b]); }));
     const first=svg.querySelector('.map-node');
     edges.forEach(([a,b])=>{ const ln=document.createElementNS('http://www.w3.org/2000/svg','line'); ln.setAttribute('class','map-edge');
-      ln.setAttribute('x1',Math.round(a.x*MAP_W)); ln.setAttribute('y1',Math.round(a.y*MAP_H)); ln.setAttribute('x2',Math.round(b.x*MAP_W)); ln.setAttribute('y2',Math.round(b.y*MAP_H)); svg.insertBefore(ln, first); });
+      const A=getPos(a),B=getPos(b); ln.setAttribute('x1',Math.round(A.x*VW)); ln.setAttribute('y1',Math.round(A.y*VH)); ln.setAttribute('x2',Math.round(B.x*VW)); ln.setAttribute('y2',Math.round(B.y*VH)); svg.insertBefore(ln, first); });
+    if(!sketch){ const mask=svg.querySelector('#fogMask'); if(mask){ const idx=(camp.places||[]).filter(q=>getPos(q)&&(q.status!=='rumoured'||map.revealRumoured)).findIndex(q=>q.id===drag.id); const circ=mask.querySelectorAll('circle')[idx]; if(circ){ circ.setAttribute('cx',Math.round(x)); circ.setAttribute('cy',Math.round(y)); } } }
   });
   const end=()=>{ if(drag&&drag.moved) saveCampaign(camp); drag=null; };
   svg.addEventListener('pointerup',end); svg.addEventListener('pointercancel',end);
+}
+
+/* ── Map management ── */
+function switchMap(id){ _placingId=null; _curMapId=id||null; renderMap(); }
+function toggleAddMap(editId, presetPlaceId){
+  window._showMapForm = editId ? true : (presetPlaceId ? true : !window._showMapForm);
+  window._editMapId = editId||null; window._pendingMapImg=null; window._presetMapPlace=presetPlaceId||null;
+  renderMap();
+  if(window._showMapForm) document.getElementById('mapForm')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function saveMapForm(){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  const maps=_campMaps(camp);
+  const name=(document.getElementById('mpName')?.value||'').trim();
+  if(!name){ toast('Give the map a name','var(--red)'); return; }
+  let m = window._editMapId ? maps.find(x=>x.id===window._editMapId) : null;
+  if(!m){ m={ id:genItemId(), reveal:'medium', added:Date.now() }; maps.push(m); }
+  m.name=name;
+  m.placeId=document.getElementById('mpPlace')?.value||null; if(!m.placeId) delete m.placeId;
+  m.fog=document.getElementById('mpFog')?.value!=='0';
+  if(document.getElementById('mpHome')?.value==='1'){ maps.forEach(x=>x.isHome=false); m.isHome=true; delete m.placeId; }
+  const url=(document.getElementById('mpUrl')?.value||'').trim();
+  const pend=window._pendingMapImg;
+  if(pend){ m.w=pend.w; m.h=pend.h; toast('Uploading map image…','var(--gold)'); await _storeMapImage(camp, m, pend.url); }
+  else if(url && url!==m.imgUrl){ m.imgUrl=url; delete m.imgKey; delete m.w; delete m.h; _probeImg(url, m); }
+  if(!m.imgUrl && !m.imgKey){ toast('Add an image (file or URL)','var(--red)'); if(!window._editMapId) maps.pop(); return; }
+  window._showMapForm=false; window._editMapId=null; window._pendingMapImg=null;
+  _curMapId=m.id;
+  saveCampaign(camp); renderMap(); toast('🗺 Map saved','var(--gold)');
+}
+function _probeImg(url, m){ const img=new Image(); img.onload=()=>{ const camp=getCampaigns().find(c=>c.id===editingCampId); m.w=img.width; m.h=img.height; if(camp) saveCampaign(camp); if(_currentCampTab==='map') renderMap(); }; img.src=url; }
+function deleteMap(id){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  const m=_campMaps(camp).find(x=>x.id===id); if(!m) return;
+  if(!confirm('Delete the map "'+m.name+'"? Pins on it are removed; places stay.')) return;
+  camp.maps=camp.maps.filter(x=>x.id!==id);
+  (camp.places||[]).forEach(p=>{ if(p.pins) delete p.pins[id]; });
+  if(m.imgKey) supa.from('settings').delete().eq('key', m.imgKey).then(()=>{}).catch(()=>{});
+  window._showMapForm=false; window._editMapId=null; _curMapId=null;
+  saveCampaign(camp); renderMap(); toast('Map deleted','var(--red)');
+}
+function toggleFog(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.fog=!(m.fog!==false); saveCampaign(camp); renderMap(); }
+function toggleRumoured(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.revealRumoured=!m.revealRumoured; saveCampaign(camp); renderMap(); }
+function setMapReveal(id,v){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.reveal=v; saveCampaign(camp); renderMap(); }
+function peekFog(id,on){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m._peek=on; const fog=document.querySelector('#campMapSvg .map-fog'); if(fog) fog.style.opacity=on?'0':''; }
+function beginPlace(id){ _placingId = (id && _placingId!==id) ? id : null; renderMap(); if(_placingId) document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
+function unpinPlace(id){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const m=_curMap(camp); const p=(camp.places||[]).find(q=>q.id===id);
+  if(p&&p.pins&&m){ delete p.pins[m.id]; saveCampaign(camp); renderMap(); }
 }
 
 function mapResetLayout(){
@@ -14517,6 +14744,7 @@ function deletePlace(id){
   if(!confirm('Remove '+pl.name+' from the map?')) return;
   camp.places=camp.places.filter(p=>p.id!==id);
   camp.places.forEach(p=>{ p.links=(p.links||[]).filter(n=>_fuzzyMatch(n,pl.name)<0.75); });
+  (camp.maps||[]).forEach(m=>{ if(m.placeId===id) delete m.placeId; });
   saveCampaign(camp); renderMap(); toast('Place removed','var(--red)');
 }
 
