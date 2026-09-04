@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v6.7.1 email-redirects 2026-07-12 -->
+<!-- Tome of Heroes v7.0.0 map-and-library 2026-09-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -361,8 +361,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .divider span{font-family:'Cinzel',serif;font-size:9px;color:var(--purple);letter-spacing:2.5px;white-space:nowrap;text-transform:uppercase;}
 .section-label{font-family:'Cinzel',serif;font-size:9px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin:14px 0 8px;}
 
-.tab-row{display:flex;background:var(--surface);border-radius:10px;padding:3px;margin-bottom:14px;border:1px solid var(--border);}
-.tab-btn{flex:1;padding:7px 2px;background:none;border:none;border-radius:8px;color:var(--muted);font-family:'Cinzel',serif;font-size:8px;letter-spacing:0.5px;cursor:pointer;transition:var(--trans);text-transform:uppercase;}
+.tab-row{display:flex;background:var(--surface);border-radius:10px;padding:3px;margin-bottom:14px;border:1px solid var(--border);overflow-x:auto;}
+.tab-btn{flex:1;padding:7px 2px;white-space:nowrap;background:none;border:none;border-radius:8px;color:var(--muted);font-family:'Cinzel',serif;font-size:8px;letter-spacing:0.5px;cursor:pointer;transition:var(--trans);text-transform:uppercase;}
 .tab-btn.active{background:var(--purple);color:white;}
 .tab-pane{display:none;}
 .tab-pane.active{display:block;}
@@ -482,6 +482,56 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .cs-box{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 4px;text-align:center;}
 .cs-val{font-family:'Cinzel',serif;font-size:22px;font-weight:700;color:var(--cc,var(--purple));line-height:1;}
 .cs-label{font-family:'Cinzel',serif;font-size:8px;letter-spacing:1px;color:var(--muted);margin-top:3px;}
+
+/* Campaign map */
+.map-wrap{background:radial-gradient(ellipse at 50% 40%,#2a2344 0%,var(--bg2) 75%);border:1px solid var(--border2);border-radius:12px;overflow:hidden;margin-bottom:12px;position:relative;touch-action:none;}
+.map-wrap svg{display:block;width:100%;height:auto;user-select:none;}
+.map-node{cursor:grab;}
+.map-node:active{cursor:grabbing;}
+.map-node text{font-family:'Cinzel',serif;font-size:9px;fill:var(--text);pointer-events:none;letter-spacing:0.3px;}
+.map-node .mn-icon{font-size:13px;pointer-events:none;}
+.map-node circle{fill:var(--surface2);stroke:var(--purple);stroke-width:1.5;}
+.map-node.current circle{stroke:var(--gold);stroke-width:3;filter:drop-shadow(0 0 6px rgba(201,162,39,0.7));}
+.map-node.rumoured circle{stroke-dasharray:3 3;opacity:0.75;}
+.map-edge{stroke:rgba(232,224,255,0.28);stroke-width:1.5;stroke-dasharray:5 4;}
+.map-legend{position:absolute;left:8px;top:6px;font-size:9px;color:var(--muted);font-family:'Cinzel',serif;letter-spacing:0.5px;pointer-events:none;}
+.place-card{background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:10px 12px;margin-bottom:8px;}
+.place-card.current{border-color:var(--gold);}
+.pc-head{display:flex;align-items:center;gap:8px;}
+.pc-name{font-family:'Cinzel',serif;font-size:12px;}
+.pc-sub{font-size:11px;color:var(--muted);}
+.pc-pill{font-family:'Cinzel',serif;font-size:8px;letter-spacing:0.5px;padding:3px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--muted);cursor:pointer;}
+.pc-pill.on{background:var(--purple);color:#fff;border-color:var(--purple);}
+.pc-pill.on.gold{background:var(--gold);color:var(--bg);border-color:var(--gold);}
+
+/* Library */
+.book-card{background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:12px 14px;margin-bottom:8px;display:flex;gap:10px;}
+.book-spine{width:34px;height:46px;border-radius:3px 6px 6px 3px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;background:linear-gradient(90deg,rgba(0,0,0,0.35),transparent 30%),var(--bc,var(--purple));box-shadow:inset 3px 0 0 rgba(255,255,255,0.15);}
+.book-title{font-family:'Cinzel',serif;font-size:12px;color:var(--gold);}
+.book-meta{font-size:11px;color:var(--muted);margin-top:2px;}
+.book-blurb{font-size:12px;color:var(--text);line-height:1.55;margin-top:6px;white-space:pre-line;}
+.book-contents{font-size:11px;color:var(--muted);margin-top:6px;padding-left:14px;}
+.book-contents li{margin:2px 0;}
+
+/* Quick Jot FAB + sheet */
+.jot-fab{position:absolute;right:16px;bottom:calc(var(--nav-h) + 14px);width:50px;height:50px;border-radius:50%;background:var(--purple);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,0.45);z-index:60;border:1px solid rgba(255,255,255,0.15);transition:var(--trans);}
+.jot-fab:active{transform:scale(0.92);}
+.jot-textarea{width:100%;min-height:110px;background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:12px;color:var(--text);font-size:14px;line-height:1.5;resize:vertical;box-sizing:border-box;}
+.jot-chip{display:inline-block;font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:2px 8px;border-radius:8px;border:1px solid var(--border2);color:var(--muted);margin:0 4px 6px 0;cursor:pointer;}
+.jot-chip:active{background:var(--surface2);}
+
+/* Character hero card */
+.char-hero-card{background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--cc,var(--purple));border-radius:12px;padding:10px 12px;margin:0 14px 10px;}
+.chc-top{display:flex;align-items:center;gap:10px;}
+.chc-icon{font-size:26px;flex-shrink:0;}
+.chc-name{font-family:'Cinzel',serif;font-size:14px;color:var(--cc,var(--gold));}
+.chc-sub{font-size:11px;color:var(--muted);margin-top:1px;}
+.chc-ac{margin-left:auto;text-align:center;font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;}
+.chc-ac b{display:block;font-size:18px;color:var(--text);}
+.chc-hp-row{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px;}
+.chc-hp-row button{width:34px;height:30px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font-size:16px;line-height:1;}
+.chc-hp-row input{width:46px;height:30px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;color:var(--text);text-align:center;font-size:13px;}
+.chc-hp-num{margin-left:auto;font-family:'Cinzel',serif;font-size:13px;}
 
 /* HP block */
 .hp-block{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:10px 0;}
@@ -1080,6 +1130,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <div class="nav-item" id="nav-campaign" onclick="nav('campaign')"><span class="nav-icon">📖</span>CAMPAIGN</div>
   </div>
   <div class="toast" id="toast"></div>
+  <button id="jotFab" class="jot-fab" onclick="openQuickJot()" title="Quick jot — sort a note into Quests / NPCs / Arcs" style="display:none">✎</button>
   <div id="content-area">
 
   <!-- ROSTER -->
@@ -1409,35 +1460,36 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   <!-- LOGIN SCREEN -->
   <div class="screen" id="scr-login" style="display:none"></div>
 
-  <!-- GATE — just a username -->
+  <!-- GATE — sign in with email (or a legacy username) -->
   <div class="screen" data-panel-label="SETTINGS" id="scr-modegate">
     <div class="modegate-rune">📖</div>
     <div class="modegate-title">Tome of Heroes</div>
-    <div class="modegate-sub" style="margin-bottom:24px">Sign in with your email to get started</div>
+    <div class="modegate-sub" style="margin-bottom:24px">Sign in to get started</div>
 
     <div style="width:100%;max-width:320px" id="gateViews">
 
-      <!-- EMAIL SIGN-IN (primary) -->
-      <div id="gateEmailView">
-        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;text-align:left">EMAIL</div>
-        <input id="emailInput" type="email" placeholder="you@example.com"
-          autocomplete="email" autocapitalize="none"
+      <!-- SIGN IN: one identifier field accepts an email, or a username from an older account -->
+      <div id="gateSignInView">
+        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;text-align:left">EMAIL <span style="opacity:.6">(or username)</span></div>
+        <input id="loginIdInput" type="text" placeholder="you@example.com"
+          autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email"
           style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-size:16px;text-align:center;box-sizing:border-box"
+          oninput="_loginIdHint(this.value)"
           onkeydown="if(event.key==='Enter')document.getElementById('passwordInput')?.focus()">
+        <div id="loginIdHint" style="display:none;font-size:11px;color:var(--muted);margin-top:6px;text-align:center;font-style:italic">Signing in with a username — you can add an email afterwards in Settings.</div>
         <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin:14px 0 8px;text-align:left">PASSWORD</div>
         <input id="passwordInput" type="password" placeholder="••••••"
           autocomplete="current-password"
           style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-size:16px;letter-spacing:4px;text-align:center;box-sizing:border-box"
-          onkeydown="if(event.key==='Enter')emailLogin()">
+          onkeydown="if(event.key==='Enter')signIn()">
         <div style="margin-top:10px;text-align:center;font-size:11px">
           <span onclick="gateView('register')" style="color:var(--gold);cursor:pointer;text-decoration:underline">Create an account</span>
           <span style="color:var(--muted)"> · </span>
           <span onclick="openForgotPasswordModal()" style="color:var(--gold);cursor:pointer;text-decoration:underline">Forgot password?</span>
         </div>
-        <div style="margin-top:8px;text-align:center"><span onclick="gateView('legacy')" style="font-size:10px;color:var(--muted);cursor:pointer;text-decoration:underline;opacity:0.8">Older username-only account? Sign in with username →</span></div>
       </div>
 
-      <!-- REGISTER -->
+    <!-- REGISTER -->
       <div id="gateRegisterView" style="display:none">
         <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;text-align:left">USERNAME <span style="opacity:.6">(your handle at the table)</span></div>
         <input id="regUsername" placeholder="e.g. NAROG" autocomplete="username"
@@ -1453,25 +1505,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
         <input id="regConfirm" type="password" placeholder="••••••" autocomplete="new-password"
           style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px;color:var(--gold);font-size:15px;letter-spacing:4px;text-align:center;box-sizing:border-box"
           onkeydown="if(event.key==='Enter')registerAccount()">
-        <div style="margin-top:10px;text-align:center"><span onclick="gateView('email')" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">← Back to sign in</span></div>
-      </div>
-
-      <!-- LEGACY USERNAME + PIN -->
-      <div id="gateLegacyView" style="display:none">
-        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;text-align:left">USERNAME</div>
-        <input id="usernameInput" placeholder="e.g. NAROG"
-          autocomplete="username"
-          style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-family:'Cinzel',serif;font-size:22px;letter-spacing:4px;text-align:center;text-transform:uppercase;box-sizing:border-box"
-          oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9_]/g,'').slice(0,20)"
-          onkeydown="if(event.key==='Enter')document.getElementById('pinInput')?.focus()">
-        <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:2px;margin:14px 0 8px;text-align:left">PIN <span style="opacity:.6">(6+ characters)</span></div>
-        <input id="pinInput" type="password" placeholder="••••••"
-          autocomplete="current-password"
-          style="width:100%;background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:14px;color:var(--gold);font-family:'Cinzel',serif;font-size:22px;letter-spacing:6px;text-align:center;box-sizing:border-box"
-          onkeydown="if(event.key==='Enter')userLogin()">
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;text-align:center">After signing in, register your email in Settings —<br>then use email to sign in from any device.</div>
-        <div style="margin-top:8px;text-align:center;font-size:10px;color:var(--muted);opacity:0.8">Forgot your PIN? Ask your DM to reset it.</div>
-        <div style="margin-top:8px;text-align:center"><span onclick="gateView('email')" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">← Back to email sign-in</span></div>
+        <div style="margin-top:10px;text-align:center"><span onclick="gateView('signin')" style="font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline">← Back to sign in</span></div>
       </div>
 
     </div>
@@ -1495,7 +1529,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <div style="font-size:10px;color:var(--muted);margin-top:5px;text-align:left">Shared keys are usable (and visible) to every member of that campaign. Leave the field blank to rely on a campaign-shared key.</div>
     </div>
     <button onclick="openRegisterEmailModal()" style="margin-top:16px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.85">
-      📧 Register / Change Email
+      📧 Add / Change Email
     </button>
     <button onclick="openChangePinModal()" style="margin-top:8px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.75">
       🔑 Change Password / PIN
@@ -1577,12 +1611,16 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
         <button class="tab-btn" onclick="campTab('quests')">Quests</button>
         <button class="tab-btn" onclick="campTab('npcs')">NPCs</button>
         <button class="tab-btn" onclick="campTab('arcs')">Arcs</button>
+        <button class="tab-btn" onclick="campTab('map')">🗺 Map</button>
+        <button class="tab-btn" onclick="campTab('books')">📚 Books</button>
         <button class="tab-btn" onclick="campTab('notes')">Notes</button>
       </div>
       <div class="tab-pane active" id="ctab-sessions"></div>
       <div class="tab-pane" id="ctab-quests"></div>
       <div class="tab-pane" id="ctab-npcs"></div>
       <div class="tab-pane" id="ctab-arcs"></div>
+      <div class="tab-pane" id="ctab-map"></div>
+      <div class="tab-pane" id="ctab-books"></div>
       <div class="tab-pane" id="ctab-notes"></div>
     </div>
   </div>
@@ -1638,8 +1676,8 @@ function jsq(s){
    must NOT silently brick: retry with backoff and show a banner. */
 let _authUid = null;
 async function ensureAuthSession(){
-  // Accounts model: a session exists only after username+PIN sign-in at the
-  // gate. This only verifies/caches it — it never mints identities.
+  // Accounts model: a session exists only after sign-in at the gate (email,
+  // or a legacy username). This only verifies/caches it — never mints identities.
   try {
     const { data:{ session } } = await supa.auth.getSession();
     if(session){ _authUid = session.user.id; _hideAuthBanner(); return true; }
@@ -1656,7 +1694,7 @@ async function authSignIn(username, pin){
   if(!r.error){ _authUid = r.data.user.id; return { ok:true, created:false }; }
   const msg = (r.error.message||'').toLowerCase();
   if(msg.includes('invalid login credentials')){
-    return { ok:false, error:'Wrong PIN — or no account with that username. New here? Use "Create an account" with your email.' };
+    return { ok:false, error:'Wrong PIN — or no account with that username. Already added an email? Sign in with that instead.' };
   }
   return { ok:false, error: r.error.message };
 }
@@ -3339,7 +3377,7 @@ function nav(id){
       // Clear rendered content so it adds no ghost scroll height
       const header = document.getElementById('campDetailHeader');
       if(header) header.innerHTML = '';
-      ['ctab-sessions','ctab-quests','ctab-npcs','ctab-arcs','ctab-notes'].forEach(tabId=>{
+      ['ctab-sessions','ctab-quests','ctab-npcs','ctab-arcs','ctab-map','ctab-books','ctab-notes'].forEach(tabId=>{
         const el = document.getElementById(tabId); if(el) el.innerHTML='';
       });
     }
@@ -4839,21 +4877,17 @@ function _showGate(){
   document.getElementById('topIcon').textContent='📖';
   document.getElementById('backBtn').style.visibility='hidden';
   document.querySelector('.bottomnav').style.display='none';
+  const fab=document.getElementById('jotFab'); if(fab) fab.style.display='none';
   const ex=document.getElementById('modeBadge'); if(ex) ex.remove();
-  // Choose the right gate view: email is primary; devices that only ever used
-  // a legacy username (and have no saved email) land on the legacy form.
-  const savedEmail = localStorage.getItem('toh_login_email');
+  // One sign-in form. Prefill with the email last used on this device; failing
+  // that, the email linked to the last username; failing that, the username.
+  gateView('signin');
   const saved = localStorage.getItem('toh_last_username');
-  if(savedEmail){
-    gateView('email');
-    const ei=document.getElementById('emailInput'); if(ei) ei.value=savedEmail;
-  } else if(saved){
-    gateView('legacy');
-    const inp=document.getElementById('usernameInput'); if(inp) inp.value=saved;
-  } else {
-    gateView('email');
-  }
-  setTimeout(()=>document.getElementById(_gateView==='legacy'?'usernameInput':'emailInput')?.focus(), 50);
+  const prefill = localStorage.getItem('toh_login_email') || (saved && _emailForUsername(saved)) || saved || '';
+  const idIn=document.getElementById('loginIdInput');
+  if(idIn){ idIn.value=prefill; _loginIdHint(prefill); }
+  const pw=document.getElementById('passwordInput'); if(pw) pw.value='';
+  setTimeout(()=>document.getElementById(prefill?'passwordInput':'loginIdInput')?.focus(), 50);
 }
 
 /* ══ ACCOUNT MANAGEMENT — change password, register email ═════════════════════
@@ -4883,33 +4917,34 @@ function closePinModal(){ document.getElementById('pinModalOverlay')?.remove(); 
 /* ── Change PIN (requires an active session) ── */
 async function openChangePinModal(){
   const { data:{ user } } = await supa.auth.getUser();
-  if(!user){ toast('Sign in first to change your PIN','var(--red)'); return; }
-  _openPinModal('🔑 CHANGE PIN',
-    _pinField('cpCurrent','CURRENT PIN')
-    +_pinField('cpNew','NEW PIN (6+ characters)')
-    +_pinField('cpConfirm','CONFIRM NEW PIN')
-    +'<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="doChangePin()" id="cpBtn">Update PIN</button>');
+  if(!user){ toast('Sign in first to change your password','var(--red)'); return; }
+  const w=String(user.email||'').endsWith('@tome.local')?'PIN':'PASSWORD';
+  _openPinModal('🔑 CHANGE '+w,
+    _pinField('cpCurrent','CURRENT '+w)
+    +_pinField('cpNew','NEW '+w+' (6+ characters)')
+    +_pinField('cpConfirm','CONFIRM NEW '+w)
+    +'<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="doChangePin()" id="cpBtn">Update</button>');
 }
 async function doChangePin(){
   const cur=document.getElementById('cpCurrent')?.value||'';
   const nw =document.getElementById('cpNew')?.value||'';
   const cf =document.getElementById('cpConfirm')?.value||'';
-  if(nw.length<6){ toast('New PIN must be at least 6 characters','var(--red)'); return; }
-  if(nw!==cf){ toast('New PINs do not match','var(--red)'); return; }
+  if(nw.length<6){ toast('Must be at least 6 characters','var(--red)'); return; }
+  if(nw!==cf){ toast('Entries do not match','var(--red)'); return; }
   const btn=document.getElementById('cpBtn'); if(btn){btn.disabled=true;btn.textContent='Updating…';}
   try{
     const { data:{ user } } = await supa.auth.getUser();
     if(!user) throw new Error('Not signed in');
     // Re-verify the current PIN before allowing the change
     const check = await supa.auth.signInWithPassword({ email:user.email, password:cur });
-    if(check.error){ toast('Current PIN is incorrect','var(--red)'); if(btn){btn.disabled=false;btn.textContent='Update PIN';} return; }
+    if(check.error){ toast('Current password/PIN is incorrect','var(--red)'); if(btn){btn.disabled=false;btn.textContent='Update';} return; }
     const { error } = await supa.auth.updateUser({ password: nw });
     if(error) throw error;
     closePinModal();
-    toast('✦ PIN updated','var(--green)');
+    toast('✦ Updated','var(--green)');
   }catch(e){
-    toast('Could not update PIN: '+(e.message||'unknown error'),'var(--red)');
-    if(btn){btn.disabled=false;btn.textContent='Update PIN';}
+    toast('Could not update: '+(e.message||'unknown error'),'var(--red)');
+    if(btn){btn.disabled=false;btn.textContent='Update';}
   }
 }
 
@@ -4919,16 +4954,16 @@ async function openRegisterEmailModal(){
   const { data:{ user } } = await supa.auth.getUser();
   if(!user){ toast('Sign in first to register an email','var(--red)'); return; }
   const legacy=String(user.email||'').endsWith('@tome.local');
-  _openPinModal('📧 REGISTER EMAIL',
+  _openPinModal('📧 ADD EMAIL',
     '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:2px">'
     +(legacy
-      ?'This account is <span style="color:var(--gold)">username-only</span>. Register an email to sign in with it from any device and reset a forgotten password by email.'
+      ?'This account is <span style="color:var(--gold)">username-only</span>. Add an email so you can sign in from any device and reset a forgotten password. Your password stays the same.'
       :'Signed in as <span style="color:var(--gold)">'+esc(user.email)+'</span>. Enter a new address to change it.')
     +'</div>'
     +_pinField('reEmail','EMAIL ADDRESS','you@example.com','email')
     +_pinField('reConfirmEmail','CONFIRM EMAIL','you@example.com','email')
     +_pinField('rePin','CURRENT '+(legacy?'PIN':'PASSWORD')+' (to confirm it\'s you)')
-    +'<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="doRegisterEmail()" id="reBtn">Register Email</button>');
+    +'<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="doRegisterEmail()" id="reBtn">Add Email</button>');
 }
 async function doRegisterEmail(){
   const email=(document.getElementById('reEmail')?.value||'').trim().toLowerCase();
@@ -4937,7 +4972,7 @@ async function doRegisterEmail(){
   if(!_validEmail(email)){ toast('Enter a valid email address','var(--red)'); return; }
   if(email!==email2){ toast('Email addresses do not match','var(--red)'); return; }
   const btn=document.getElementById('reBtn'); if(btn){btn.disabled=true;btn.textContent='Saving…';}
-  const _fail=(m)=>{ toast(m,'var(--red)'); if(btn){btn.disabled=false;btn.textContent='Register Email';} };
+  const _fail=(m)=>{ toast(m,'var(--red)'); if(btn){btn.disabled=false;btn.textContent='Add Email';} };
   try{
     const { data:{ user } } = await supa.auth.getUser();
     if(!user) return _fail('Not signed in');
@@ -4950,9 +4985,10 @@ async function doRegisterEmail(){
       return _fail(m.includes('already')?'That email is already used by another account':(error.message||'Could not register email'));
     }
     closePinModal();
+    _rememberEmailForUsername(getGroupId()||localStorage.getItem('toh_username')||'', email);
     if(data?.user?.email===email){
       localStorage.setItem('toh_login_email', email);
-      toast('✦ Email registered! Use it (with your current password/PIN) to sign in from now on.','var(--green)');
+      toast('✦ Email added! Sign in with it (same password) from now on — your username still works on this device.','var(--green)');
     } else {
       toast('✉ Confirmation sent to '+email+' — click the link to finish. (Server owner: if it never applies, disable "Secure email change" in Supabase Auth settings, since old @tome.local addresses can\'t receive mail.)','var(--gold)');
     }
@@ -4961,11 +4997,12 @@ async function doRegisterEmail(){
 
 /* ── Forgot password (email accounts) ── */
 function openForgotPasswordModal(){
-  const pre=(document.getElementById('emailInput')?.value||'').trim();
+  const cur=(document.getElementById('loginIdInput')?.value||'').trim();
+  const pre=_isEmailLike(cur)?cur:'';
   _openPinModal('🔑 RESET PASSWORD',
     '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:2px">'
     +'We\'ll email you a reset link. Open it on this device to choose a new password. '
-    +'Username-only account? Use the legacy sign-in\'s <span style="color:var(--gold)">Forgot your PIN?</span> option instead.</div>'
+    +'No email on your account yet? Ask your DM to reset your PIN.</div>'
     +_pinField('fpwEmail','EMAIL ADDRESS','you@example.com','email')
     +'<button class="btn btn-gold" style="margin-top:16px;width:100%" onclick="doForgotPassword()" id="fpwBtn">Send Reset Link</button>');
   const e=document.getElementById('fpwEmail'); if(e) e.value=pre;
@@ -5018,22 +5055,28 @@ async function doSetNewPassword(){
 }
 
 /* ══ GATE VIEWS ══ */
-let _gateView='email';
+let _gateView='signin';
 function gateView(v){
+  if(v==='email'||v==='legacy') v='signin'; // old view names → unified sign-in
   _gateView=v;
-  const views={email:'gateEmailView',register:'gateRegisterView',legacy:'gateLegacyView'};
+  const views={signin:'gateSignInView',register:'gateRegisterView'};
   Object.keys(views).forEach(function(k){ const el=document.getElementById(views[k]); if(el) el.style.display=(k===v?'':'none'); });
   const lbl=document.getElementById('gateBtnLabel'), desc=document.getElementById('gateBtnDesc');
   if(lbl&&desc){
     if(v==='register'){ lbl.textContent='Create Account'; desc.textContent='Register with your email to get started'; }
-    else if(v==='legacy'){ lbl.textContent='Enter Tome of Heroes'; desc.textContent='Legacy username + PIN sign-in'; }
     else { lbl.textContent='Enter Tome of Heroes'; desc.textContent='Full access to all campaigns and characters'; }
   }
 }
 function gateSubmit(){
   if(_gateView==='register') registerAccount();
-  else if(_gateView==='legacy') userLogin();
-  else emailLogin();
+  else signIn();
+}
+// The sign-in identifier is an email if it contains "@", otherwise a legacy username.
+function _isEmailLike(v){ return String(v||'').includes('@'); }
+function _normUsername(v){ return String(v||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,'').slice(0,20); }
+function _loginIdHint(v){
+  const h=document.getElementById('loginIdHint'); if(!h) return;
+  h.style.display=(v.trim()&&!_isEmailLike(v))?'':'none';
 }
 function _gateBusy(on){
   const btn=document.querySelector('#scr-modegate .modegate-btn');
@@ -5050,12 +5093,24 @@ function _usernameFromUser(user){
   return u;
 }
 
-/* ── Email sign-in (primary) ── */
-async function emailLogin(){
-  const email=(document.getElementById('emailInput')?.value||'').trim().toLowerCase();
+/* ── Sign-in: one field, two paths ──
+   • Contains "@"  → email + password (the account model going forward).
+   • Otherwise     → legacy username + PIN, mapped to <username>@tome.local.
+     If that fails and this device previously linked the username to an email
+     (the user has already transitioned), retry transparently with the email. */
+async function signIn(){
+  const id=(document.getElementById('loginIdInput')?.value||'').trim();
   const pass=document.getElementById('passwordInput')?.value||'';
-  if(!_validEmail(email)){ toast('Enter a valid email address','var(--red)'); return; }
+  if(!id){ toast('Enter your email (or username)','var(--red)'); return; }
   if(pass.length<6){ toast('Password must be at least 6 characters','var(--red)'); return; }
+  if(_isEmailLike(id)) return emailLogin(id.toLowerCase(), pass);
+  const username=_normUsername(id);
+  if(username.length<2){ toast('Enter a valid email address or username','var(--red)'); return; }
+  return usernameLogin(username, pass);
+}
+
+async function emailLogin(email, pass){
+  if(!_validEmail(email)){ toast('Enter a valid email address','var(--red)'); return; }
   _gateBusy(true);
   try{
     const r=await supa.auth.signInWithPassword({ email, password: pass });
@@ -5067,9 +5122,46 @@ async function emailLogin(){
     _authUid=r.data.user.id;
     localStorage.setItem('toh_login_email', email);
     const username=_usernameFromUser(r.data.user);
+    _rememberEmailForUsername(username, email);
     await _completeLogin(username, false);
   }catch(e){ toast('Sign-in failed: '+(e.message||'network error'),'var(--red)'); }
   _gateBusy(false);
+}
+
+/* Legacy path — accounts that have not registered an email yet */
+async function usernameLogin(username, pin){
+  _gateBusy(true);
+  try{
+    let auth = await authSignIn(username, pin);
+    if(!auth.ok){
+      // Already transitioned on this device? Their @tome.local login no longer
+      // exists, but the same password works with the email they registered.
+      const linked=_emailForUsername(username);
+      if(linked){
+        const r=await supa.auth.signInWithPassword({ email:linked, password:pin });
+        if(!r.error){
+          _authUid=r.data.user.id;
+          localStorage.setItem('toh_login_email', linked);
+          await _completeLogin(_usernameFromUser(r.data.user), false);
+          _gateBusy(false); return;
+        }
+      }
+      toast(auth.error || 'Sign-in failed','var(--red)');
+      _gateBusy(false); return;
+    }
+    localStorage.removeItem('toh_login_email'); // this device is on a username-only account
+    localStorage.setItem('toh_last_username', username);
+    await _completeLogin(username, false, { legacy:true });
+  }catch(e){ toast('Sign-in failed: '+(e.message||'network error'),'var(--red)'); }
+  _gateBusy(false);
+}
+
+/* Username → email link, kept per device so a transitioned user can keep
+   typing the username they're used to. */
+function _emailForUsername(u){ return localStorage.getItem('toh_email_for_'+_normUsername(u))||null; }
+function _rememberEmailForUsername(u, email){
+  u=_normUsername(u); if(u.length<2||!_validEmail(email)) return;
+  localStorage.setItem('toh_email_for_'+u, email);
 }
 
 /* ── Email registration ── */
@@ -5093,35 +5185,21 @@ async function registerAccount(){
     if(s.data?.user && !s.data.session){
       // Email confirmation is enabled on the project
       toast('✉ Check your inbox — click the confirmation link, then sign in here.','var(--gold)');
-      gateView('email');
-      const ei=document.getElementById('emailInput'); if(ei) ei.value=email;
+      gateView('signin');
+      const ei=document.getElementById('loginIdInput'); if(ei){ ei.value=email; _loginIdHint(email); }
       _gateBusy(false); return;
     }
     _authUid=s.data.user.id;
     localStorage.setItem('toh_login_email', email);
+    _rememberEmailForUsername(username, email);
     await _completeLogin(username, true);
   }catch(e){ toast('Registration failed: '+(e.message||'network error'),'var(--red)'); }
   _gateBusy(false);
 }
 
-/* ── Legacy sign-in: username + PIN (accounts without a registered email) ── */
-async function userLogin(){
-  const username = (document.getElementById('usernameInput')?.value||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,'');
-  if(!username || username.length < 2){ toast('Enter a username (at least 2 characters)','var(--red)'); return; }
-  const pin = (document.getElementById('pinInput')?.value||'');
-  if(pin.length < 6){ toast('PIN must be at least 6 characters','var(--red)'); return; }
-  _gateBusy(true);
-  const auth = await authSignIn(username, pin);
-  if(!auth.ok){
-    toast(auth.error || 'Sign-in failed','var(--red)');
-    _gateBusy(false); return;
-  }
-  await _completeLogin(username, auth.created);
-  _gateBusy(false);
-}
-
 /* ── Shared post-auth boot (email, registration, and legacy paths) ── */
-async function _completeLogin(username, created){
+async function _completeLogin(username, created, opts){
+  opts=opts||{};
   const _reenable = ()=>{};
   const statusDiv = document.createElement('div');
   statusDiv.style.cssText = 'position:fixed;bottom:60px;left:0;right:0;text-align:center;font-size:11px;color:var(--muted);z-index:9999;padding:4px';
@@ -5130,15 +5208,13 @@ async function _completeLogin(username, created){
   _status('Signing in…');
 
   if(created) toast('✦ Account created — welcome, '+username+'!','var(--gold)');
-  // Migration + safety nudges based on account state
+  // Transition nudge for username-only accounts: offer the add-email form once
+  // per device, then a gentle reminder on later sign-ins.
+  let _nudgeLegacy=false;
   try{
     const { data:{ user:_lu } } = await supa.auth.getUser();
-    const _legacy=_lu && String(_lu.email||'').endsWith('@tome.local');
-    if(_legacy && !localStorage.getItem('toh_email_nudge_'+username)){
-      localStorage.setItem('toh_email_nudge_'+username,'1');
-      setTimeout(function(){ toast('📧 Register your email in Settings — sign in with it anywhere, and reset a forgotten password by email','var(--purple)'); }, 2500);
-    }
-  }catch(e){}
+    _nudgeLegacy = !!(_lu && String(_lu.email||'').endsWith('@tome.local'));
+  }catch(e){ _nudgeLegacy = !!opts.legacy; }
   // Hard-reset in-memory state: a login switch must never inherit the
   // previous user's campaigns, characters, loot, or settings cache.
   _db.chars=[]; _db.campaigns=[]; _db.items={}; _db.wealth={};
@@ -5184,6 +5260,15 @@ async function _completeLogin(username, created){
   }
   _status('Entering app…');
   _enterApp();
+  if(_nudgeLegacy){
+    const key='toh_email_nudge_'+username;
+    if(!localStorage.getItem(key)){
+      localStorage.setItem(key,'1');
+      setTimeout(function(){ try{ openRegisterEmailModal(); }catch(e){} }, 1200);
+    } else {
+      setTimeout(function(){ toast('📧 Add your email in Settings to sign in from any device and reset a forgotten password','var(--purple)'); }, 2500);
+    }
+  }
 }
 
 // Load all user settings from Supabase into cache on login
@@ -5205,6 +5290,7 @@ function _promptFirstCampaign(){
 
 function _enterApp(){
   document.querySelector('.bottomnav').style.display='flex';
+  const fab=document.getElementById('jotFab'); if(fab) fab.style.display='';
   _applyUserBadge();
   // Land on Campaign screen when no active campaign — user picks/creates one first
   if(!getActiveCampId() || !getCampaigns().filter(c=>!c._ownerGid).length){
@@ -5390,7 +5476,7 @@ function _ensurePlayerCampAddBtn(){}
 function _enterPlayerForCampaign(code, camp){ if(camp){ setActiveCampId(camp.id); nav('campaign'); } }
 function enterAsPlayer(){}
 async function joinAsPlayer(){}
-async function setDMMode(){ userLogin(); }
+async function setDMMode(){ signIn(); }
 function showPlayerGate(){}
 function applyDesktopSplit(){}
 
@@ -10640,9 +10726,12 @@ async function doLogout(){
   // Keep device_id and save username as a hint for re-login
   const deviceId = localStorage.getItem('toh_device_id');
   const lastUsername = localStorage.getItem('toh_group_id') || localStorage.getItem('toh_username');
-  Object.keys(localStorage).filter(k=>k.startsWith('toh_')||k.startsWith('sb-')||k.includes('supabase')||k.includes('auth-token')).forEach(k=>localStorage.removeItem(k));
+  const loginEmail = localStorage.getItem('toh_login_email');
+  const keep = k => k.startsWith('toh_email_for_') || k.startsWith('toh_email_nudge_');
+  Object.keys(localStorage).filter(k=>!keep(k)&&(k.startsWith('toh_')||k.startsWith('sb-')||k.includes('supabase')||k.includes('auth-token'))).forEach(k=>localStorage.removeItem(k));
   if(deviceId) localStorage.setItem('toh_device_id', deviceId);
   if(lastUsername) localStorage.setItem('toh_last_username', lastUsername);
+  if(loginEmail) localStorage.setItem('toh_login_email', loginEmail);
   _realtimeSubs.forEach(s=>supa.removeChannel(s));
   _realtimeSubs = [];
   _db.chars=[]; _db.campaigns=[]; _db.items={}; _db.wealth={};
@@ -12777,13 +12866,15 @@ function toggleCampChar(campId, charId) {
 let _currentCampTab = 'sessions';
 function campTab(t) {
   _currentCampTab = t;
-  document.querySelectorAll('#campTabRow .tab-btn').forEach((b,i)=>b.classList.toggle('active',['sessions','quests','npcs','arcs','notes'][i]===t));
+  document.querySelectorAll('#campTabRow .tab-btn').forEach((b,i)=>b.classList.toggle('active',['sessions','quests','npcs','arcs','map','books','notes'][i]===t));
   document.querySelectorAll('#campDetailView .tab-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('ctab-'+t).classList.add('active');
   if (t==='sessions') renderSessions();
   if (t==='quests')   renderQuests();
   if (t==='npcs')     renderNPCs();
   if (t==='arcs')     renderArcs();
+  if (t==='map')      renderMap();
+  if (t==='books')    renderBooks();
   if (t==='notes')    renderNotes();
 }
 
@@ -12836,6 +12927,7 @@ function renderSessions() {
     </div>` : ''}
     <button class="btn btn-primary" onclick="addSession()">Log Session</button>
     <button class="btn btn-outline" onclick="showBulkImport()" style="border-color:var(--purple);color:var(--purple)">🤖 Bulk Import</button>
+    <button class="btn btn-outline" onclick="openQuickJot()" style="border-color:var(--purple);color:var(--purple)">✎ Quick Jot — one thing, sorted for you</button>
   </div></div>
 
   <div id="sessFormClaude" style="display:none"><div class="card" style="margin-bottom:14px">
@@ -12851,7 +12943,7 @@ function renderSessions() {
 
   <div id="sessBulkImport" style="display:none"><div class="card" style="margin-bottom:14px">
     <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-bottom:8px">🤖 Smart Session Import</div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Paste your notes after each session. Claude will log the session, then <strong style="color:var(--text)">update existing</strong> NPCs, quests &amp; arcs — or create new ones — based on what happened.</p>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Paste your notes after each session — headings are optional, plain prose works. Claude will log the session, then <strong style="color:var(--text)">update existing</strong> NPCs, quests &amp; arcs — or create new ones — based on what happened. For a single thought mid-session, use <strong style="color:var(--text)">Quick Jot</strong> instead.</p>
     <div style="background:var(--surface);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:var(--muted);line-height:2;font-family:monospace">
       <span style="color:var(--gold)">## SESSION</span> &nbsp;what happened, XP &amp; gold<br>
       <span style="color:var(--purple)">## QUESTS</span> &nbsp;status changes or new quests<br>
@@ -13012,6 +13104,143 @@ function showBulkImport(){
   sb.style.display = sb.style.display==='none' ? '' : 'none';
 }
 
+/* ══ QUICK JOT — one freeform thought, sorted into Quests / NPCs / Arcs ══
+   Players jot a single topic mid-session; Claude classifies it against the
+   campaign's existing records and the player approves the diff before it is
+   saved. Reuses the bulk importer's merge plan + preview + apply pipeline. */
+const JOT_EXAMPLES = [
+  'Met a dwarf called Brom at the Sleeping Giant. He wants us to find his brother Dain, missing in the Wave Echo mines. Offered 50gp.',
+  'The mayor is lying about the goblin raids — the tracks lead toward the old keep, not the forest.',
+  'Sister Garaele asked us to find the banshee Agatha and ask about a lost spellbook.',
+];
+function openQuickJot(prefill){
+  const camp = getActiveCamp();
+  if(!camp){ toast('Pick an active campaign first','var(--red)'); nav('campaign'); return; }
+  window._pendingJot = null;
+  _openPinModal('✎ QUICK JOT · '+esc(String(camp.name||'').slice(0,26)),
+    '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:8px">Jot one thing while it\'s fresh — an NPC you met, a job you were offered, a thread you\'re pulling on. Claude sorts it into <span style="color:var(--purple)">Quests</span>, <span style="color:var(--teal)">NPCs</span> and <span style="color:var(--gold)">Arcs</span>; you approve before anything is saved.</div>'
+    +'<textarea id="jotText" class="jot-textarea" placeholder="'+esc(JOT_EXAMPLES[Math.floor(Math.random()*JOT_EXAMPLES.length)])+'"></textarea>'
+    +'<div id="jotStatus" style="font-size:11px;text-align:center;min-height:16px;margin-top:6px"></div>'
+    +'<div id="jotPreview"></div>'
+    +'<div id="jotActions" style="display:flex;gap:8px;margin-top:8px">'
+    +'<button class="btn btn-gold" style="flex:1;margin:0;background:var(--purple);color:#fff" onclick="doQuickJot()" id="jotSortBtn">✦ Sort it</button>'
+    +'<button class="btn btn-outline" style="flex:1;margin:0" onclick="saveJotAsNote()">Save as note</button>'
+    +'</div>');
+  const ta=document.getElementById('jotText');
+  if(ta){ if(prefill) ta.value=prefill; setTimeout(()=>ta.focus(),80); }
+}
+
+function _jotSystemPrompt(camp){
+  const existingCtx = {
+    quests: (camp.quests||[]).map(q=>({title:q.title,status:q.status,giver:q.giver||undefined})),
+    npcs:   (camp.npcs||[]).map(n=>({name:n.name,relationship:n.relationship,role:n.role||undefined})),
+    arcs:   (camp.arcs||[]).map(a=>({title:a.title,status:a.status})),
+    places: (camp.places||[]).map(p=>({name:p.name,type:p.type,region:p.region||undefined,status:p.status})),
+    books:  (camp.books||[]).map(b=>({title:b.title,type:b.type,status:b.status})),
+    partyCharacters: getVisibleChars().map(c=>c.name),
+  };
+  return `You are the scribe for a D&D 5e campaign. A player has jotted a short, freeform note — usually about ONE thing they just learned or did. Sort its contents into the campaign's records. Return ONLY valid JSON, no markdown, no backticks.
+
+Return exactly this shape (omit any field you have nothing for; arrays may be empty):
+{
+  "quests": [ { "title": "short imperative title", "matchExisting": bool, "status": "active|completed|failed|abandoned", "description": "string", "priority": "main|side|personal", "giver": "NPC name", "reward": "string", "objectives": ["concrete step"], "appendNote": "string" } ],
+  "npcs":   [ { "name": "string", "matchExisting": bool, "relationship": "allied|friendly|neutral|hostile", "role": "what they are, e.g. innkeeper", "race": "string", "location": "where met / found", "desc": "string", "appendNote": "string" } ],
+  "arcs":   [ { "title": "string", "matchExisting": bool, "status": "active|upcoming|resolved", "description": "string", "appendNote": "string" } ],
+  "places": [ { "name": "string", "matchExisting": bool, "type": "city|town|village|dungeon|wilderness|landmark|region|building|other", "region": "string or omit", "desc": "string or omit", "connectedTo": ["names of places it is adjacent to / has a route to"] or omit, "partyIsHere": bool or omit, "appendNote": "string or omit" } ],
+  "books":  [ { "title": "string", "matchExisting": bool, "author": "string or omit", "type": "tome|spellbook|journal|letter|scroll|map|scripture|ledger|other", "foundAt": "string or omit", "blurb": "3-5 sentence detailed description", "contents": ["notable entries, spells, secrets"] or omit, "status": "unread|reading|read or omit", "appendNote": "string or omit" } ],
+  "notes":  [ { "title": "string", "body": "string" } ]
+}
+
+How to classify:
+- QUEST — something the party has been asked to do, promised to do, or decided to do: a task, job, favour, goal. Title it as an action ("Find Dain in Wave Echo Cave"). Put concrete steps in objectives. giver = the NPC who gave it, if any. A quest that is clearly finished → status completed.
+- NPC — any named person or creature the party met or heard about by name. Never the party's own characters (listed below). Use role for what they are and location for where they are.
+- ARC — a plot thread bigger than one task: a conspiracy, a villain's plan, a mystery that spans quests. Only create a NEW arc when the note clearly points at something bigger; otherwise attach what was learned to an existing arc via appendNote. Most jots produce no arc.
+- PLACE — any named location the party visits, hears about, or is heading to (towns, dungeons, inns, regions). connectedTo = places it is adjacent to or has a road/route to, if the note says so. partyIsHere = the party is currently there.
+- BOOK — any written work found or read: tome, spellbook, journal, letter, scroll, ledger, map. Write blurb as a detailed, evocative 3-5 sentence description: what it is, its condition, what it contains or hints at, who wrote it, why it matters. Descriptive flavour (binding, script, wear) is welcome; invented plot facts, names or contents are not.
+- NOTE — anything that fits nowhere: rumours, theories, lore, reminders, loot to sell.
+- The same jot can feed several lists (an NPC who gives a quest that belongs to an arc). Cross-reference by name.
+- Prefer matching EXISTING records (fuzzy name match is fine) and set matchExisting:true; then include only what changed, using appendNote for newly-learned facts.
+- Do not invent details that are not in the note. Do not return a session.
+
+Existing campaign records:
+${JSON.stringify(existingCtx, null, 1)}`;
+}
+
+async function doQuickJot(){
+  const camp = getActiveCamp(); if(!camp) return;
+  const text = (document.getElementById('jotText')?.value||'').trim();
+  if(!text){ toast('Write something first','var(--red)'); return; }
+  const btn=document.getElementById('jotSortBtn'), st=document.getElementById('jotStatus'), pv=document.getElementById('jotPreview');
+  if(btn){ btn.disabled=true; btn.textContent='Sorting…'; }
+  if(st) st.innerHTML='<span style="color:var(--purple)">🤖 Reading your note…</span>';
+  if(pv) pv.innerHTML='';
+  try{
+    const res = await callClaude({ model:'claude-sonnet-5', max_tokens:2500, system:_jotSystemPrompt(camp),
+      messages:[{ role:'user', content: text }] });
+    const rawText = res.content?.find(b=>b.type==='text')?.text||'';
+    const m = rawText.match(/\{[\s\S]*\}/);
+    if(!m) throw new Error('Could not read the response');
+    const parsed = JSON.parse(m[0]);
+    parsed.session = null;
+    const plan = _buildMergePlan(parsed, camp);
+    const total = plan.quests.length + plan.npcs.length + plan.arcs.length + plan.places.length + plan.books.length + plan.notes.length;
+    if(!total){
+      if(st) st.innerHTML='<span style="color:var(--muted)">Nothing to file — save it as a plain note instead?</span>';
+      if(btn){ btn.disabled=false; btn.textContent='✦ Sort it'; }
+      return;
+    }
+    window._pendingJot = { plan, text };
+    const upd=[...plan.quests,...plan.npcs,...plan.arcs,...plan.places,...plan.books].filter(x=>x.action==='update').length;
+    const nw =[...plan.quests,...plan.npcs,...plan.arcs,...plan.places,...plan.books,...plan.notes].filter(x=>x.action==='new').length;
+    if(pv) pv.innerHTML = '<div style="margin-top:10px">'+_renderMergePreview(plan, null)+'</div>'
+      +'<div style="font-size:10px;color:var(--muted2);text-align:center;margin:-6px 0 8px">Not right? Edit your jot above and sort again.</div>';
+    if(st) st.innerHTML='';
+    const act=document.getElementById('jotActions');
+    if(act) act.innerHTML='<button class="btn btn-gold" style="flex:1;margin:0;background:var(--purple);color:#fff" onclick="applyQuickJot()">✦ Apply '
+      +(upd?upd+' update'+(upd!==1?'s':''):'')+(upd&&nw?' + ':'')+(nw?nw+' new':'')+'</button>'
+      +'<button class="btn btn-outline" style="flex:0 0 auto;margin:0;padding:13px 16px" onclick="doQuickJot()">↻</button>';
+  }catch(e){
+    if(st) st.innerHTML='<span style="color:var(--red)">⚠ '+esc(e.message||'Failed')+'</span>';
+    if(btn){ btn.disabled=false; btn.textContent='✦ Sort it'; }
+  }
+}
+
+function applyQuickJot(){
+  const p=window._pendingJot; if(!p?.plan) return;
+  const camp = getActiveCamp(); if(!camp) return;
+  const stats = _applyMergePlan(p.plan, camp);
+  saveCampaign(camp);
+  window._pendingJot=null;
+  closePinModal();
+  const parts=[]; if(stats.newCount) parts.push(stats.newCount+' added'); if(stats.updateCount) parts.push(stats.updateCount+' updated');
+  toast('✦ Filed — '+parts.join(', '),'var(--purple)');
+  _refreshCampaignViews(camp.id);
+}
+
+function saveJotAsNote(){
+  const camp = getActiveCamp(); if(!camp) return;
+  const text = (document.getElementById('jotText')?.value||'').trim();
+  if(!text){ toast('Write something first','var(--red)'); return; }
+  if(!camp.notes) camp.notes=[];
+  const title = text.split(/[.\n!?]/)[0].trim().slice(0,48) || 'Note';
+  camp.notes.unshift({ id:genItemId(), title, body:text, updated:Date.now() });
+  saveCampaign(camp);
+  closePinModal();
+  toast('📝 Note saved','var(--blue)');
+  _refreshCampaignViews(camp.id);
+}
+
+/* Re-render whatever campaign view is on screen after data changed elsewhere. */
+function _refreshCampaignViews(campId){
+  try{
+    if(currentScreen==='campaign'){
+      if(editingCampId===campId && typeof _currentCampTab!=='undefined'){ campTab(_currentCampTab); renderCampDetailHeader(); }
+      else renderCampList();
+    }
+    if(currentScreen==='roster') renderCampaignSwitchBanner();
+  }catch(e){ console.warn('refresh after jot:', e); }
+}
+
 /* ── Fuzzy name matcher for smart merge ── */
 function _fuzzyMatch(a, b) {
   const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -13037,7 +13266,7 @@ function _findExisting(name, arr, key='name') {
 
 /* ── Smart diff preview builder ── */
 function _buildMergePlan(parsed, camp) {
-  const plan = { session: null, quests:[], npcs:[], arcs:[], notes:[] };
+  const plan = { session: null, quests:[], npcs:[], arcs:[], places:[], books:[], notes:[] };
 
   // Session — always new
   if(parsed.session) plan.session = { action:'new', data: parsed.session };
@@ -13047,9 +13276,17 @@ function _buildMergePlan(parsed, camp) {
     const existing = _findExisting(q.title, camp.quests||[], 'title');
     if(existing) {
       const changes = [];
+      const exDesc = existing.description||existing.desc||'';
+      const inDesc = q.description||q.desc||'';
       if(q.status && q.status !== existing.status) changes.push({ field:'status', from: existing.status, to: q.status });
-      if(q.desc && q.desc !== existing.desc) changes.push({ field:'desc', from: existing.desc, to: q.desc });
       if(q.priority && q.priority !== existing.priority) changes.push({ field:'priority', from: existing.priority, to: q.priority });
+      if(q.giver && q.giver !== (existing.giver||'')) changes.push({ field:'giver', from: existing.giver||'', to: q.giver });
+      if(q.reward && q.reward !== (existing.reward||'')) changes.push({ field:'reward', from: existing.reward||'', to: q.reward });
+      if(q.appendNote) changes.push({ field:'note', from:'', to: q.appendNote });
+      else if(inDesc && inDesc !== exDesc) changes.push({ field:'description', from: exDesc, to: inDesc });
+      const exObjs = (existing.objectives||[]).map(o=>typeof o==='string'?o:o.text);
+      const newObjs = (q.objectives||[]).filter(o=>o && !exObjs.some(e=>_fuzzyMatch(e,o)>=0.75));
+      if(newObjs.length) changes.push({ field:'objectives', from:'', to: newObjs.join(' · '), list:newObjs });
       plan.quests.push({ action:'update', existing, incoming: q, changes });
     } else {
       plan.quests.push({ action:'new', incoming: q });
@@ -13063,6 +13300,8 @@ function _buildMergePlan(parsed, camp) {
       const changes = [];
       if(n.relationship && n.relationship !== existing.relationship) changes.push({ field:'relationship', from: existing.relationship, to: n.relationship });
       if(n.role && n.role !== (existing.role||'')) changes.push({ field:'role', from: existing.role||'', to: n.role });
+      if(n.race && n.race !== (existing.race||'')) changes.push({ field:'race', from: existing.race||'', to: n.race });
+      if(n.location && n.location !== (existing.location||'')) changes.push({ field:'location', from: existing.location||'', to: n.location });
       if(n.appendNote) changes.push({ field:'note', from:'', to: n.appendNote });
       else if(n.desc && n.desc !== existing.desc) changes.push({ field:'desc', from: existing.desc||'', to: n.desc });
       plan.npcs.push({ action:'update', existing, incoming: n, changes });
@@ -13082,6 +13321,47 @@ function _buildMergePlan(parsed, camp) {
       plan.arcs.push({ action:'update', existing, incoming: a, changes });
     } else {
       plan.arcs.push({ action:'new', incoming: a });
+    }
+  });
+
+  // Places
+  (parsed.places||[]).forEach(pl => {
+    if(!pl?.name) return;
+    const existing = _findExisting(pl.name, camp.places||[], 'name');
+    if(existing) {
+      const changes = [];
+      if(pl.type && pl.type !== existing.type) changes.push({ field:'type', from: existing.type||'', to: pl.type });
+      if(pl.region && pl.region !== (existing.region||'')) changes.push({ field:'region', from: existing.region||'', to: pl.region });
+      if(pl.partyIsHere && existing.status!=='current') changes.push({ field:'status', from: existing.status||'', to: 'current' });
+      if(pl.appendNote) changes.push({ field:'note', from:'', to: pl.appendNote });
+      else if(pl.desc && pl.desc !== (existing.desc||'')) changes.push({ field:'desc', from: existing.desc||'', to: pl.desc });
+      const exLinks=(existing.links||[]);
+      const newLinks=(pl.connectedTo||[]).filter(n=>n && !exLinks.some(e=>_fuzzyMatch(e,n)>=0.75) && _fuzzyMatch(n,existing.name)<0.75);
+      if(newLinks.length) changes.push({ field:'routes', from:'', to:newLinks.join(' · '), list:newLinks });
+      plan.places.push({ action:'update', existing, incoming: pl, changes });
+    } else {
+      plan.places.push({ action:'new', incoming: pl });
+    }
+  });
+
+  // Books
+  (parsed.books||[]).forEach(b => {
+    if(!b?.title) return;
+    const existing = _findExisting(b.title, camp.books||[], 'title');
+    if(existing) {
+      const changes = [];
+      if(b.author && b.author !== (existing.author||'')) changes.push({ field:'author', from: existing.author||'', to: b.author });
+      if(b.type && b.type !== existing.type) changes.push({ field:'type', from: existing.type||'', to: b.type });
+      if(b.foundAt && b.foundAt !== (existing.foundAt||'')) changes.push({ field:'foundAt', from: existing.foundAt||'', to: b.foundAt });
+      if(b.status && b.status !== existing.status) changes.push({ field:'status', from: existing.status||'', to: b.status });
+      if(b.appendNote) changes.push({ field:'note', from:'', to: b.appendNote });
+      else if(b.blurb && !existing.blurb) changes.push({ field:'blurb', from:'', to: b.blurb });
+      const exC=(existing.contents||[]);
+      const newC=(b.contents||[]).filter(c=>c && !exC.some(e=>_fuzzyMatch(e,c)>=0.75));
+      if(newC.length) changes.push({ field:'contents', from:'', to:newC.join(' · '), list:newC });
+      plan.books.push({ action:'update', existing, incoming: b, changes });
+    } else {
+      plan.books.push({ action:'new', incoming: b });
     }
   });
 
@@ -13107,9 +13387,9 @@ function _renderMergePreview(plan, sessionNum) {
     html += `<div style="background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:12px">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
         <span style="font-size:10px;background:var(--gold);color:var(--bg);font-family:'Cinzel',serif;padding:2px 7px;border-radius:8px;letter-spacing:0.5px">NEW</span>
-        <span style="font-family:'Cinzel',serif;font-size:12px;color:var(--gold)">📜 Session ${sessionNum}: ${s.title}</span>
+        <span style="font-family:'Cinzel',serif;font-size:12px;color:var(--gold)">📜 ${sessionNum?'Session '+sessionNum+': ':''}${esc(s.title||'')}</span>
       </div>
-      <div style="font-size:11px;color:var(--muted);line-height:1.5">${s.summary||''}</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">${esc(s.summary||'')}</div>
       ${s.xpAwarded||s.goldAwarded?`<div style="font-size:10px;color:var(--muted);margin-top:5px">${s.xpAwarded?s.xpAwarded+' XP':''} ${s.goldAwarded?'· '+s.goldAwarded+' gp':''}</div>`:''}
     </div>`;
   }
@@ -13125,14 +13405,14 @@ function _renderMergePreview(plan, sessionNum) {
       html += `<div style="padding:6px 8px;background:rgba(123,94,167,0.08);border-radius:7px;border-left:3px solid var(--purple)">
         <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
           <span style="font-size:9px;background:var(--purple);color:white;font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">UPDATE</span>
-          <span style="font-family:'Cinzel',serif;font-size:11px">${item.existing.title}</span>
+          <span style="font-family:'Cinzel',serif;font-size:11px">${esc(item.existing.title||'')}</span>
         </div>
         ${item.changes.length ? item.changes.map(c=>`
           <div style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px;margin-top:2px">
             <span style="font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.5px;color:var(--muted2)">${c.field.toUpperCase()}</span>
-            <span style="color:var(--red);text-decoration:line-through">${c.from||'—'}</span>
+            <span style="color:var(--red);text-decoration:line-through">${esc(c.from||'—')}</span>
             <span style="color:var(--muted)">→</span>
-            <span style="color:${c.field==='status'?_statusColor(c.to):'var(--text)'}">${c.to}</span>
+            <span style="color:${c.field==='status'?_statusColor(c.to):'var(--text)'}">${esc(c.to)}</span>
           </div>`).join('') : '<div style="font-size:10px;color:var(--muted2);font-style:italic">No tracked changes detected</div>'}
       </div>`;
     });
@@ -13140,9 +13420,12 @@ function _renderMergePreview(plan, sessionNum) {
       html += `<div style="padding:6px 8px;background:rgba(39,174,96,0.06);border-radius:7px;border-left:3px solid var(--green)">
         <div style="display:flex;align-items:center;gap:5px">
           <span style="font-size:9px;background:var(--green);color:white;font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">NEW</span>
-          <span style="font-family:'Cinzel',serif;font-size:11px">${item.incoming.title}</span>
+          <span style="font-family:'Cinzel',serif;font-size:11px">${esc(item.incoming.title||'')}</span>
           <span style="font-size:9px;color:${_statusColor(item.incoming.status||'active')};margin-left:auto">${item.incoming.status||'active'}</span>
         </div>
+        ${item.incoming.giver?`<div style="font-size:10px;color:var(--muted);margin-top:2px">Given by ${esc(item.incoming.giver)}</div>`:''}
+        ${(item.incoming.description||item.incoming.desc)?`<div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">${esc(item.incoming.description||item.incoming.desc)}</div>`:''}
+        ${(item.incoming.objectives||[]).length?`<div style="font-size:10px;color:var(--muted2);margin-top:2px">☐ ${item.incoming.objectives.map(esc).join(' &nbsp;☐ ')}</div>`:''}
       </div>`;
     });
     html += '</div></div>';
@@ -13159,13 +13442,13 @@ function _renderMergePreview(plan, sessionNum) {
       html += `<div style="padding:6px 8px;background:rgba(22,160,133,0.08);border-radius:7px;border-left:3px solid var(--teal)">
         <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
           <span style="font-size:9px;background:var(--teal);color:white;font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">UPDATE</span>
-          <span style="font-family:'Cinzel',serif;font-size:11px">${item.existing.name}</span>
+          <span style="font-family:'Cinzel',serif;font-size:11px">${esc(item.existing.name||'')}</span>
         </div>
         ${item.changes.length ? item.changes.map(c=>`
           <div style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px;margin-top:2px">
             <span style="font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.5px;color:var(--muted2)">${c.field.toUpperCase()}</span>
-            ${c.from?`<span style="color:var(--red);text-decoration:line-through">${c.from}</span><span style="color:var(--muted)">→</span>`:''}
-            <span style="color:${c.field==='relationship'?_relColor(c.to):'var(--text)'}">${c.to}</span>
+            ${c.from?`<span style="color:var(--red);text-decoration:line-through">${esc(c.from)}</span><span style="color:var(--muted)">→</span>`:''}
+            <span style="color:${c.field==='relationship'?_relColor(c.to):'var(--text)'}">${esc(c.to)}</span>
           </div>`).join('') : '<div style="font-size:10px;color:var(--muted2);font-style:italic">No tracked changes detected</div>'}
       </div>`;
     });
@@ -13173,9 +13456,11 @@ function _renderMergePreview(plan, sessionNum) {
       html += `<div style="padding:6px 8px;background:rgba(39,174,96,0.06);border-radius:7px;border-left:3px solid var(--green)">
         <div style="display:flex;align-items:center;gap:5px">
           <span style="font-size:9px;background:var(--green);color:white;font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">NEW</span>
-          <span style="font-family:'Cinzel',serif;font-size:11px">${item.incoming.name}</span>
+          <span style="font-family:'Cinzel',serif;font-size:11px">${esc(item.incoming.name||'')}</span>
           ${item.incoming.relationship?`<span style="font-size:9px;color:${_relColor(item.incoming.relationship)};margin-left:auto">${item.incoming.relationship}</span>`:''}
         </div>
+        ${(item.incoming.role||item.incoming.race||item.incoming.location)?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${[item.incoming.race,item.incoming.role,item.incoming.location].filter(Boolean).map(esc).join(' · ')}</div>`:''}
+        ${item.incoming.desc?`<div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">${esc(item.incoming.desc)}</div>`:''}
       </div>`;
     });
     html += '</div></div>';
@@ -13192,13 +13477,13 @@ function _renderMergePreview(plan, sessionNum) {
       html += `<div style="padding:6px 8px;background:rgba(201,162,39,0.08);border-radius:7px;border-left:3px solid var(--gold)">
         <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
           <span style="font-size:9px;background:var(--gold);color:var(--bg);font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">UPDATE</span>
-          <span style="font-family:'Cinzel',serif;font-size:11px">${item.existing.title}</span>
+          <span style="font-family:'Cinzel',serif;font-size:11px">${esc(item.existing.title||'')}</span>
         </div>
         ${item.changes.length ? item.changes.map(c=>`
           <div style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px;margin-top:2px">
             <span style="font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.5px;color:var(--muted2)">${c.field.toUpperCase()}</span>
-            ${c.from?`<span style="color:var(--red);text-decoration:line-through">${c.from}</span><span style="color:var(--muted)">→</span>`:''}
-            <span style="color:var(--text)">${c.to}</span>
+            ${c.from?`<span style="color:var(--red);text-decoration:line-through">${esc(c.from)}</span><span style="color:var(--muted)">→</span>`:''}
+            <span style="color:var(--text)">${esc(c.to)}</span>
           </div>`).join('') : '<div style="font-size:10px;color:var(--muted2);font-style:italic">No tracked changes detected</div>'}
       </div>`;
     });
@@ -13206,13 +13491,53 @@ function _renderMergePreview(plan, sessionNum) {
       html += `<div style="padding:6px 8px;background:rgba(39,174,96,0.06);border-radius:7px;border-left:3px solid var(--green)">
         <div style="display:flex;align-items:center;gap:5px">
           <span style="font-size:9px;background:var(--green);color:white;font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">NEW</span>
-          <span style="font-family:'Cinzel',serif;font-size:11px">${item.incoming.title}</span>
+          <span style="font-family:'Cinzel',serif;font-size:11px">${esc(item.incoming.title||'')}</span>
           ${item.incoming.status?`<span style="font-size:9px;color:var(--muted);margin-left:auto">${item.incoming.status}</span>`:''}
         </div>
+        ${item.incoming.description?`<div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">${esc(item.incoming.description)}</div>`:''}
       </div>`;
     });
     html += '</div></div>';
   }
+
+  // ── PLACES & BOOKS (shared renderer) ──
+  const section = (items, label, color, nameKey, subFn) => {
+    if(!items.length) return '';
+    let h = `<div style="background:var(--surface2);border:1px solid ${color};border-radius:10px;padding:12px">
+      <div style="font-family:'Cinzel',serif;font-size:11px;color:${color};margin-bottom:8px;letter-spacing:1px">${label}</div>
+      <div style="display:flex;flex-direction:column;gap:6px">`;
+    items.filter(x=>x.action==='update').forEach(item => {
+      h += `<div style="padding:6px 8px;background:rgba(255,255,255,0.03);border-radius:7px;border-left:3px solid ${color}">
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px">
+          <span style="font-size:9px;background:${color};color:var(--bg);font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">UPDATE</span>
+          <span style="font-family:'Cinzel',serif;font-size:11px">${esc(item.existing[nameKey]||'')}</span>
+        </div>
+        ${item.changes.length ? item.changes.map(c=>`
+          <div style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px;margin-top:2px;flex-wrap:wrap">
+            <span style="font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.5px;color:var(--muted2)">${c.field.toUpperCase()}</span>
+            ${c.from?`<span style="color:var(--red);text-decoration:line-through">${esc(c.from)}</span><span style="color:var(--muted)">→</span>`:''}
+            <span style="color:var(--text)">${esc(c.to)}</span>
+          </div>`).join('') : '<div style="font-size:10px;color:var(--muted2);font-style:italic">No tracked changes detected</div>'}
+      </div>`;
+    });
+    items.filter(x=>x.action==='new').forEach(item => {
+      h += `<div style="padding:6px 8px;background:rgba(39,174,96,0.06);border-radius:7px;border-left:3px solid var(--green)">
+        <div style="display:flex;align-items:center;gap:5px">
+          <span style="font-size:9px;background:var(--green);color:white;font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">NEW</span>
+          <span style="font-family:'Cinzel',serif;font-size:11px">${esc(item.incoming[nameKey]||'')}</span>
+        </div>
+        ${subFn(item.incoming)}
+      </div>`;
+    });
+    return h + '</div></div>';
+  };
+  html += section(plan.places||[], '🗺 PLACES', 'var(--teal)', 'name', pl =>
+    `${(pl.type||pl.region)?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${[pl.type,pl.region].filter(Boolean).map(esc).join(' · ')}${pl.partyIsHere?' · <span style="color:var(--gold)">party is here</span>':''}</div>`:''}
+     ${(pl.connectedTo||[]).length?`<div style="font-size:10px;color:var(--muted2);margin-top:2px">⇄ ${pl.connectedTo.map(esc).join(', ')}</div>`:''}
+     ${pl.desc?`<div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">${esc(pl.desc)}</div>`:''}`);
+  html += section(plan.books||[], '📚 BOOKS', 'var(--gold)', 'title', b =>
+    `${(b.type||b.author||b.foundAt)?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${[b.type,b.author?'by '+b.author:'',b.foundAt?'found: '+b.foundAt:''].filter(Boolean).map(esc).join(' · ')}</div>`:''}
+     ${b.blurb?`<div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">${esc(b.blurb)}</div>`:''}`);
 
   // ── NOTES ──
   if(plan.notes.length) {
@@ -13220,7 +13545,7 @@ function _renderMergePreview(plan, sessionNum) {
       <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--blue);margin-bottom:6px;letter-spacing:1px">📝 NOTES (${plan.notes.length} new)</div>
       ${plan.notes.map(x=>`<div style="font-size:11px;color:var(--text);padding:2px 0;display:flex;align-items:center;gap:5px">
         <span style="font-size:9px;background:var(--green);color:white;font-family:'Cinzel',serif;padding:1px 6px;border-radius:6px">NEW</span>
-        ${x.incoming.title||'Untitled Note'}
+        ${esc(x.incoming.title||'Untitled Note')}
       </div>`).join('')}
     </div>`;
   }
@@ -13247,9 +13572,11 @@ async function doBulkImport(){
     quests: (camp?.quests||[]).map(q=>({title:q.title,status:q.status})),
     npcs:   (camp?.npcs||[]).map(n=>({name:n.name,relationship:n.relationship,role:n.role})),
     arcs:   (camp?.arcs||[]).map(a=>({title:a.title,status:a.status})),
+    places: (camp?.places||[]).map(p=>({name:p.name,type:p.type,region:p.region||undefined,status:p.status})),
+    books:  (camp?.books||[]).map(b=>({title:b.title,type:b.type,status:b.status})),
   };
 
-  const systemPrompt = `You are a D&D campaign notes parser. The user will give you session notes under headings like ## SESSION, ## QUESTS, ## NPCS, ## NOTES, ## ARCS. Return ONLY valid JSON, no markdown, no backticks.
+  const systemPrompt = `You are a D&D campaign notes parser. The user will give you session notes. They MAY use headings like ## SESSION, ## QUESTS, ## NPCS, ## NOTES, ## ARCS, but often they will not — in that case infer which records each sentence belongs to. Return ONLY valid JSON, no markdown, no backticks.
 
 You are also given the campaign's EXISTING records. For each NPC, quest, and arc you parse:
 - If it matches an existing record (even approximately), set "matchExisting": true and only include fields that are CHANGING.
@@ -13260,11 +13587,16 @@ You are also given the campaign's EXISTING records. For each NPC, quest, and arc
 Return this structure:
 {
   "session": null | { "title": "string", "date": "YYYY-MM-DD or empty", "summary": "2-4 sentence summary", "xpAwarded": 0, "goldAwarded": 0, "highlights": ["string"] },
-  "quests": [ { "title": "string", "matchExisting": bool, "status": "active|completed|failed|abandoned", "desc": "string or omit if unchanged", "priority": "main|side|personal or omit", "appendNote": "string or omit" } ],
-  "npcs":   [ { "name": "string", "matchExisting": bool, "relationship": "allied|friendly|neutral|hostile or omit if unchanged", "role": "string or omit", "desc": "string or omit", "appendNote": "string or omit" } ],
+  "quests": [ { "title": "string", "matchExisting": bool, "status": "active|completed|failed|abandoned", "description": "string or omit if unchanged", "priority": "main|side|personal or omit", "giver": "NPC name or omit", "reward": "string or omit", "objectives": ["concrete step", "..."] or omit, "appendNote": "string or omit" } ],
+  "npcs":   [ { "name": "string", "matchExisting": bool, "relationship": "allied|friendly|neutral|hostile or omit if unchanged", "role": "string or omit", "race": "string or omit", "location": "string or omit", "desc": "string or omit", "appendNote": "string or omit" } ],
   "arcs":   [ { "title": "string", "matchExisting": bool, "status": "active|upcoming|resolved or omit", "description": "string or omit", "appendNote": "string or omit" } ],
+  "places": [ { "name": "string", "matchExisting": bool, "type": "city|town|village|dungeon|wilderness|landmark|region|building|other", "region": "string or omit", "desc": "string or omit", "connectedTo": ["names of places it is adjacent to / has a route to"] or omit, "partyIsHere": bool or omit, "appendNote": "string or omit" } ],
+  "books":  [ { "title": "string", "matchExisting": bool, "author": "string or omit", "type": "tome|spellbook|journal|letter|scroll|map|scripture|ledger|other", "foundAt": "string or omit", "blurb": "3-5 sentence detailed description", "contents": ["notable entries, spells, secrets"] or omit, "status": "unread|reading|read or omit", "appendNote": "string or omit" } ],
   "notes":  [ { "title": "string", "body": "string" } ]
 }
+
+Places: log every named location the party visits, hears about, or is heading to; connectedTo captures routes/adjacency mentioned; partyIsHere when the party ends the notes there.
+Books: log any written work found or read (tomes, spellbooks, journals, letters, scrolls, ledgers, maps). Write the blurb as a detailed, evocative description — what it is, its condition, what it contains or hints at, who wrote it, why it matters. You may add descriptive flavour (binding, script, wear) but never invent plot facts, names, or contents the notes do not imply.
 
 Existing records for context:
 ${JSON.stringify(existingCtx, null, 2)}
@@ -13277,7 +13609,7 @@ Rules:
 - Return ONLY the JSON`;
 
   try {
-    const res = await callClaude({ model:'claude-sonnet-5', max_tokens:2500, system:systemPrompt,
+    const res = await callClaude({ model:'claude-sonnet-5', max_tokens:4000, system:systemPrompt,
         messages:[{ role:'user', content: `Session ${sessionNum} notes:\n\n${notes}` }] });
     const raw = (res.content?.find(b=>b.type==='text')?.text||'').replace(/^[\s\S]*?(?=\{)/,'').replace(/\}[\s\S]*$/,'}').trim();
     let parsed;
@@ -13293,7 +13625,7 @@ Rules:
     const plan = _buildMergePlan(parsed, camp);
     window._pendingBulkImport = { parsed, plan };
 
-    const totalChanges = plan.quests.length + plan.npcs.length + plan.arcs.length + plan.notes.length + (plan.session?1:0);
+    const totalChanges = plan.quests.length + plan.npcs.length + plan.arcs.length + plan.places.length + plan.books.length + plan.notes.length + (plan.session?1:0);
     if(totalChanges === 0 && !plan.session){
       previewEl.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px">Nothing to import was detected in these notes.</div>';
       statusEl.innerHTML = '';
@@ -13301,8 +13633,8 @@ Rules:
       return;
     }
 
-    const updCount = [...plan.quests,...plan.npcs,...plan.arcs].filter(x=>x.action==='update').length;
-    const newCount = [...plan.quests,...plan.npcs,...plan.arcs,...plan.notes].filter(x=>x.action==='new').length;
+    const updCount = [...plan.quests,...plan.npcs,...plan.arcs,...plan.places,...plan.books].filter(x=>x.action==='update').length;
+    const newCount = [...plan.quests,...plan.npcs,...plan.arcs,...plan.places,...plan.books,...plan.notes].filter(x=>x.action==='new').length;
 
     previewEl.innerHTML = _renderMergePreview(plan, sessionNum) +
       `<div style="display:flex;gap:8px;align-items:center;margin-top:4px">
@@ -13318,15 +13650,11 @@ Rules:
   btn.disabled = false;
 }
 
-function confirmBulkImport(){
-  const p = window._pendingBulkImport;
-  if(!p?.plan) return;
-  const { plan } = p;
-  const camps = getCampaigns();
-  const ci = camps.findIndex(c=>c.id===editingCampId);
-  if(ci<0) return;
-  const camp = camps[ci];
+/* Apply a merge plan to a campaign object (does not save). Returns {newCount, updateCount}. */
+function _applyMergePlan(plan, camp){
   let stats = { newCount:0, updateCount:0 };
+  const stamp = new Date().toLocaleDateString();
+  const appendTo = (cur, txt) => (cur ? cur+'\n\n' : '') + `[${stamp}] ${txt}`;
 
   // ── Session (always new) ──
   if(plan.session){
@@ -13358,19 +13686,23 @@ function confirmBulkImport(){
     if(item.action === 'update') {
       const qi = camp.quests.findIndex(q=>q.id===item.existing.id);
       if(qi<0) return;
+      const q = camp.quests[qi];
       item.changes.forEach(c => {
-        if(c.field==='status')   camp.quests[qi].status = c.to;
-        if(c.field==='desc')     camp.quests[qi].desc   = c.to;
-        if(c.field==='priority') camp.quests[qi].priority = c.to;
+        if(c.field==='status')      q.status = c.to;
+        if(c.field==='description') q.description = c.to;
+        if(c.field==='priority')    q.priority = c.to;
+        if(c.field==='giver')       q.giver = c.to;
+        if(c.field==='reward')      q.reward = c.to;
+        if(c.field==='note')        q.description = appendTo(q.description||q.desc||'', c.to);
+        if(c.field==='objectives'){ if(!q.objectives) q.objectives=[]; (c.list||[]).forEach(t=>q.objectives.push({text:t,done:false})); }
       });
-      if(item.incoming.appendNote) {
-        const stamp = new Date().toLocaleDateString();
-        camp.quests[qi].desc = (camp.quests[qi].desc ? camp.quests[qi].desc+'\n\n' : '') + `[${stamp}] ${item.incoming.appendNote}`;
-      }
+      if(q.desc && !q.description){ q.description=q.desc; } // migrate legacy field
+      delete q.desc;
       stats.updateCount++;
     } else {
       const q = item.incoming;
-      camp.quests.push({ id:genItemId(), title:q.title||'Untitled Quest', desc:q.desc||'', priority:q.priority||'side', status:q.status||'active', objectives:[] });
+      camp.quests.push({ id:genItemId(), title:q.title||'Untitled Quest', description:q.description||q.desc||'', giver:q.giver||'', reward:q.reward||'',
+        priority:q.priority||'side', status:q.status||'active', objectives:(q.objectives||[]).filter(Boolean).map(t=>({text:t,done:false})) });
       stats.newCount++;
     }
   });
@@ -13381,19 +13713,19 @@ function confirmBulkImport(){
     if(item.action === 'update') {
       const ni = camp.npcs.findIndex(n=>n.id===item.existing.id);
       if(ni<0) return;
+      const n = camp.npcs[ni];
       item.changes.forEach(c => {
-        if(c.field==='relationship') camp.npcs[ni].relationship = c.to;
-        if(c.field==='role')         camp.npcs[ni].role = c.to;
-        if(c.field==='desc')         camp.npcs[ni].desc = c.to;
-        if(c.field==='note') {
-          const stamp = new Date().toLocaleDateString();
-          camp.npcs[ni].desc = (camp.npcs[ni].desc ? camp.npcs[ni].desc+'\n\n' : '') + `[${stamp}] ${c.to}`;
-        }
+        if(c.field==='relationship') n.relationship = c.to;
+        if(c.field==='role')         n.role = c.to;
+        if(c.field==='race')         n.race = c.to;
+        if(c.field==='location')     n.location = c.to;
+        if(c.field==='desc')         n.desc = c.to;
+        if(c.field==='note')         n.desc = appendTo(n.desc, c.to);
       });
       stats.updateCount++;
     } else {
       const n = item.incoming;
-      camp.npcs.push({ id:genItemId(), name:n.name||'Unknown', role:n.role||'', desc:n.desc||'', relationship:n.relationship||'neutral', alive:true });
+      camp.npcs.push({ id:genItemId(), name:n.name||'Unknown', role:n.role||'', race:n.race||'', location:n.location||'', desc:n.desc||'', relationship:n.relationship||'neutral', alive:true });
       stats.newCount++;
     }
   });
@@ -13404,13 +13736,11 @@ function confirmBulkImport(){
     if(item.action === 'update') {
       const ai = camp.arcs.findIndex(a=>a.id===item.existing.id);
       if(ai<0) return;
+      const a = camp.arcs[ai];
       item.changes.forEach(c => {
-        if(c.field==='status')      camp.arcs[ai].status = c.to;
-        if(c.field==='description') camp.arcs[ai].description = c.to;
-        if(c.field==='note') {
-          const stamp = new Date().toLocaleDateString();
-          camp.arcs[ai].notes = (camp.arcs[ai].notes ? camp.arcs[ai].notes+'\n\n' : '') + `[${stamp}] ${c.to}`;
-        }
+        if(c.field==='status')      a.status = c.to;
+        if(c.field==='description') a.description = c.to;
+        if(c.field==='note')        a.notes = appendTo(a.notes, c.to);
       });
       stats.updateCount++;
     } else {
@@ -13420,13 +13750,105 @@ function confirmBulkImport(){
     }
   });
 
+  // ── Places ──
+  if(!camp.places) camp.places=[];
+  const sessionNo = (camp.sessions||[]).length;
+  (plan.places||[]).forEach(item => {
+    if(item.action === 'update') {
+      const pi = camp.places.findIndex(p=>p.id===item.existing.id);
+      if(pi<0) return;
+      const pl = camp.places[pi];
+      item.changes.forEach(c => {
+        if(c.field==='type')   pl.type = c.to;
+        if(c.field==='region') pl.region = c.to;
+        if(c.field==='desc')   pl.desc = c.to;
+        if(c.field==='note')   pl.desc = appendTo(pl.desc, c.to);
+        if(c.field==='status') _setCurrentPlace(camp, pl);
+        if(c.field==='routes') (c.list||[]).forEach(n=>_linkPlaces(camp, pl, n, sessionNo));
+      });
+      stats.updateCount++;
+    } else {
+      const p = item.incoming;
+      // A route stub for this place may have been created moments ago by another
+      // entry's connectedTo — upgrade it instead of duplicating.
+      let pl = _findExisting(p.name, camp.places, 'name');
+      if(pl){
+        if(p.type && p.type!=='other') pl.type=p.type;
+        if(p.region) pl.region=p.region;
+        if(p.desc) pl.desc = pl.desc ? appendTo(pl.desc, p.desc) : p.desc;
+        if(pl.status==='rumoured' && !p.partyIsHere) pl.status='visited';
+      } else {
+        pl = { id:genItemId(), name:p.name, type:p.type||'other', region:p.region||'', desc:p.desc||'', status:p.partyIsHere?'current':'visited', links:[], session:sessionNo, added:Date.now() };
+        camp.places.push(pl);
+      }
+      if(p.partyIsHere) _setCurrentPlace(camp, pl);
+      (p.connectedTo||[]).forEach(n=>_linkPlaces(camp, pl, n, sessionNo));
+      stats.newCount++;
+    }
+  });
+
+  // ── Books ──
+  if(!camp.books) camp.books=[];
+  (plan.books||[]).forEach(item => {
+    if(item.action === 'update') {
+      const bi = camp.books.findIndex(b=>b.id===item.existing.id);
+      if(bi<0) return;
+      const b = camp.books[bi];
+      item.changes.forEach(c => {
+        if(c.field==='author')  b.author = c.to;
+        if(c.field==='type')    b.type = c.to;
+        if(c.field==='foundAt') b.foundAt = c.to;
+        if(c.field==='status')  b.status = c.to;
+        if(c.field==='blurb')   b.blurb = c.to;
+        if(c.field==='note')    b.blurb = appendTo(b.blurb, c.to);
+        if(c.field==='contents'){ if(!b.contents) b.contents=[]; (c.list||[]).forEach(t=>b.contents.push(t)); }
+      });
+      b.updated=Date.now();
+      stats.updateCount++;
+    } else {
+      const b = item.incoming;
+      camp.books.push({ id:genItemId(), title:b.title, author:b.author||'', type:b.type||'tome', foundAt:b.foundAt||'', blurb:b.blurb||'', contents:(b.contents||[]).filter(Boolean), status:b.status||'unread', session:sessionNo, added:Date.now(), updated:Date.now() });
+      stats.newCount++;
+    }
+  });
+
   // ── Notes (always new) ──
   if(!camp.notes) camp.notes=[];
   plan.notes.forEach(item => {
     const n = item.incoming;
-    camp.notes.push({ id:genItemId(), title:n.title||'Note', body:n.body||'', updated:Date.now() });
+    camp.notes.unshift({ id:genItemId(), title:n.title||'Note', body:n.body||'', updated:Date.now() });
     stats.newCount++;
   });
+  return stats;
+}
+
+/* Place helpers shared by importer, quick jot and the Map tab */
+function _setCurrentPlace(camp, pl){
+  (camp.places||[]).forEach(p=>{ if(p.status==='current' && p.id!==pl.id) p.status='visited'; });
+  pl.status='current';
+}
+function _linkPlaces(camp, pl, otherName, sessionNo){
+  if(!otherName) return;
+  let other = _findExisting(otherName, camp.places||[], 'name');
+  if(other && other.id===pl.id) return;
+  if(!other){
+    other = { id:genItemId(), name:otherName, type:'other', region:'', desc:'', status:'rumoured', links:[], session:sessionNo||0, added:Date.now() };
+    camp.places.push(other);
+  }
+  if(!pl.links) pl.links=[]; if(!other.links) other.links=[];
+  if(!pl.links.some(n=>_fuzzyMatch(n,other.name)>=0.75)) pl.links.push(other.name);
+  if(!other.links.some(n=>_fuzzyMatch(n,pl.name)>=0.75)) other.links.push(pl.name);
+}
+
+function confirmBulkImport(){
+  const p = window._pendingBulkImport;
+  if(!p?.plan) return;
+  const { plan } = p;
+  const camps = getCampaigns();
+  const ci = camps.findIndex(c=>c.id===editingCampId);
+  if(ci<0) return;
+  const camp = camps[ci];
+  const stats = _applyMergePlan(plan, camp);
 
   saveCampaign(camp);
   window._pendingBulkImport = null;
@@ -13657,18 +14079,18 @@ function renderQuestCard(q) {
   return `<div class="quest-card ${priClass}" id="qc_${q.id}" onclick="toggleCard('qc_${q.id}')">
     <div style="display:flex;align-items:center;gap:8px">
       <div style="flex:1">
-        <div class="quest-title">${q.title}</div>
-        ${q.giver?('<div style="font-size:11px;color:var(--muted);margin-top:2px">Given by: '+q.giver+'</div>'):''}
+        <div class="quest-title">${esc(q.title||'')}</div>
+        ${q.giver?('<div style="font-size:11px;color:var(--muted);margin-top:2px">Given by: '+esc(q.giver)+'</div>'):''}
       </div>
       <span class="quest-status-badge ${statusClass}">${q.status||'active'}</span>
       <span style="color:var(--muted);font-size:12px">▼</span>
     </div>
     <div class="session-body" style="display:none">
-      ${q.description?('<p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:8px;font-style:italic">'+q.description+'</p>'):''}
-      ${q.reward?('<div style="font-size:12px;color:var(--gold);margin-bottom:8px">Reward: '+q.reward+'</div>'):''}
+      ${(q.description||q.desc)?('<p style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:8px;font-style:italic;white-space:pre-line">'+esc(q.description||q.desc)+'</p>'):''}
+      ${q.reward?('<div style="font-size:12px;color:var(--gold);margin-bottom:8px">Reward: '+esc(q.reward)+'</div>'):''}
       ${objs.length?`<div style="margin-bottom:8px">${objs.map((o,oi)=>`<div class="obj-row">
         <div class="obj-check ${o.done?'done':''}" onclick="toggleObj('${q.id}',${oi});event.stopPropagation()">${o.done?'✓':''}</div>
-        <span class="obj-text ${o.done?'done':''}">${typeof o==='string'?o:o.text}</span>
+        <span class="obj-text ${o.done?'done':''}">${esc(typeof o==='string'?o:(o.text||''))}</span>
       </div>`).join('')}</div>`:''}
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
         ${['active','completed','failed','abandoned'].map(s=>
@@ -13942,12 +14364,256 @@ function deleteArc(aid) {
 }
 
 /* ── Notes ── */
+/* ══ MAP TAB — a sketch map grown from the party's notes ══
+   Places are nodes; routes/adjacency mentioned in notes are edges. Layout is a
+   small force simulation on first render, then positions persist and nodes
+   can be dragged. It's a relationship map, not cartography — good enough to
+   see where you've been, where you are, and what's connected to what. */
+const PLACE_ICONS = { city:'🏰', town:'🏘', village:'🛖', dungeon:'🕳', wilderness:'🌲', landmark:'⛰', region:'🗺', building:'🏛', other:'📍' };
+const MAP_W=440, MAP_H=300;
+
+function _mapLayout(places){
+  const need = places.filter(p=>!(p.x>0&&p.y>0));
+  if(!need.length) return false;
+  // Deterministic seed per id so the first render is stable across devices
+  const seed = id => { let h=0; for(const ch of String(id)) h=(h*31+ch.charCodeAt(0))>>>0; return h; };
+  need.forEach(p=>{ const h=seed(p.id); p.x = 0.2+0.6*((h%1000)/1000); p.y = 0.2+0.6*(((h>>10)%1000)/1000); });
+  const byName = n => places.find(q=>_fuzzyMatch(q.name,n)>=0.75);
+  const edges = [];
+  places.forEach(p=>(p.links||[]).forEach(n=>{ const q=byName(n); if(q&&q!==p&&!edges.some(e=>(e[0]===q&&e[1]===p))) edges.push([p,q]); }));
+  const fixed = p => !need.includes(p);
+  for(let it=0; it<160; it++){
+    const k = 0.02;
+    places.forEach(a=>{
+      if(fixed(a)) return;
+      let fx=0, fy=0;
+      places.forEach(b=>{ if(a===b) return; let dx=a.x-b.x, dy=a.y-b.y; const d2=dx*dx+dy*dy+0.0004; const f=0.004/d2; fx+=dx*f; fy+=dy*f; });
+      edges.forEach(([p,q])=>{ if(p!==a&&q!==a) return; const o=p===a?q:p; const dx=o.x-a.x, dy=o.y-a.y; const d=Math.sqrt(dx*dx+dy*dy)||0.01; const f=(d-0.28)*0.08; fx+=dx/d*f; fy+=dy/d*f; });
+      fx+=(0.5-a.x)*0.01; fy+=(0.5-a.y)*0.01;
+      a.x=Math.max(0.13,Math.min(0.87,a.x+fx*k*40)); a.y=Math.max(0.12,Math.min(0.84,a.y+fy*k*40));
+    });
+  }
+  return true;
+}
+
+function renderMap(){
+  const camp = getCampaigns().find(c=>c.id===editingCampId);
+  if(!camp) return;
+  const el = document.getElementById('ctab-map'); if(!el) return;
+  if(!camp.places) camp.places=[];
+  const places = camp.places;
+  if(_mapLayout(places)) saveCampaign(camp);
+
+  const byName = n => places.find(q=>_fuzzyMatch(q.name,n)>=0.75);
+  const edges=[]; places.forEach(p=>(p.links||[]).forEach(n=>{ const q=byName(n); if(q&&q!==p&&!edges.some(e=>e[0]===q&&e[1]===p)) edges.push([p,q]); }));
+  const X=p=>Math.round(p.x*MAP_W), Y=p=>Math.round(p.y*MAP_H);
+  let svg = `<svg viewBox="0 0 ${MAP_W} ${MAP_H}" xmlns="http://www.w3.org/2000/svg" id="campMapSvg">
+    <defs><pattern id="mapGrid" width="22" height="22" patternUnits="userSpaceOnUse"><path d="M22 0H0V22" fill="none" stroke="rgba(255,255,255,0.04)"/></pattern></defs>
+    <rect width="${MAP_W}" height="${MAP_H}" fill="url(#mapGrid)"/>
+    ${edges.map(([p,q])=>`<line class="map-edge" x1="${X(p)}" y1="${Y(p)}" x2="${X(q)}" y2="${Y(q)}"/>`).join('')}
+    ${places.map(p=>`<g class="map-node ${p.status||''}" data-id="${p.id}" transform="translate(${X(p)},${Y(p)})">
+      <circle r="14"/>
+      <text class="mn-icon" text-anchor="middle" y="5">${PLACE_ICONS[p.type]||PLACE_ICONS.other}</text>
+      <text text-anchor="middle" y="26">${esc(String(p.name).slice(0,18))}</text>
+    </g>`).join('')}
+  </svg>`;
+
+  let html = places.length
+    ? `<div class="map-wrap" id="campMapWrap">${svg}<div class="map-legend">drag to arrange · ◎ gold = party is here · dashed = only heard of</div></div>
+       <div style="display:flex;gap:8px;margin-bottom:12px">
+         <button class="pc-pill" onclick="mapResetLayout()">↺ Re-arrange</button>
+         <button class="pc-pill" onclick="openQuickJot()">✎ Jot a place</button>
+       </div>`
+    : `<div class="empty-state" style="margin-bottom:12px"><div class="es-icon">🗺</div><p>No places logged yet.<br>Mention a town, dungeon or road in a Quick Jot or session import and it appears here.</p></div>`;
+
+  html += `<div class="card" style="margin-bottom:14px">
+    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">Add Place</div>
+    <div class="form-row two">
+      <div class="field"><label>Name</label><input id="plName" placeholder="e.g. Phandalin"></div>
+      <div class="field"><label>Type</label><select id="plType">${Object.keys(PLACE_ICONS).map(t=>`<option value="${t}">${PLACE_ICONS[t]} ${t}</option>`).join('')}</select></div>
+      <div class="field"><label>Region</label><input id="plRegion" placeholder="e.g. Sword Coast"></div>
+      <div class="field"><label>Connected to</label><input id="plLinks" placeholder="Neverwinter, Triboar Trail"></div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="plDesc" placeholder="What's here, who's here, why it matters…" style="min-height:52px"></textarea></div>
+    <button class="btn btn-primary" onclick="addPlace()">Add Place</button>
+  </div>`;
+
+  if(places.length){
+    const order = {current:0, visited:1, rumoured:2};
+    const sorted = [...places].sort((a,b)=>(order[a.status]??1)-(order[b.status]??1) || (b.session||0)-(a.session||0) || a.name.localeCompare(b.name));
+    html += `<div class="divider"><span>Travel Log · ${places.length} place${places.length!==1?'s':''}</span></div>` + sorted.map(p=>`
+      <div class="place-card ${p.status==='current'?'current':''}" id="pl_${p.id}">
+        <div class="pc-head">
+          <span style="font-size:18px">${PLACE_ICONS[p.type]||PLACE_ICONS.other}</span>
+          <div style="flex:1;min-width:0">
+            <div class="pc-name">${esc(p.name)}</div>
+            <div class="pc-sub">${[p.type,p.region].filter(Boolean).map(esc).join(' · ')}${p.session?` · noted session ${p.session}`:''}</div>
+          </div>
+          <button class="icon-btn" style="color:var(--red);font-size:12px" onclick="deletePlace('${p.id}')">✕</button>
+        </div>
+        ${(p.links||[]).length?`<div style="font-size:11px;color:var(--muted2);margin-top:4px">⇄ ${p.links.map(esc).join(', ')}</div>`:''}
+        ${p.desc?`<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-top:6px;white-space:pre-line">${esc(p.desc)}</div>`:''}
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button class="pc-pill ${p.status==='current'?'on gold':''}" onclick="setPlaceStatus('${p.id}','current')">📍 here</button>
+          <button class="pc-pill ${p.status==='visited'?'on':''}" onclick="setPlaceStatus('${p.id}','visited')">visited</button>
+          <button class="pc-pill ${p.status==='rumoured'?'on':''}" onclick="setPlaceStatus('${p.id}','rumoured')">heard of</button>
+        </div>
+      </div>`).join('');
+  }
+  el.innerHTML = html;
+  _bindMapDrag(camp);
+}
+
+function _bindMapDrag(camp){
+  const svg=document.getElementById('campMapSvg'); if(!svg) return;
+  let drag=null;
+  const toLocal=(e)=>{ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; const m=svg.getScreenCTM(); return m?pt.matrixTransform(m.inverse()):pt; };
+  svg.querySelectorAll('.map-node').forEach(g=>{
+    g.addEventListener('pointerdown',e=>{ drag={g, id:g.dataset.id, moved:false}; g.setPointerCapture(e.pointerId); e.preventDefault(); });
+  });
+  svg.addEventListener('pointermove',e=>{
+    if(!drag) return; const l=toLocal(e); drag.moved=true;
+    const x=Math.max(16,Math.min(MAP_W-16,l.x)), y=Math.max(16,Math.min(MAP_H-30,l.y));
+    drag.g.setAttribute('transform',`translate(${Math.round(x)},${Math.round(y)})`);
+    const p=(camp.places||[]).find(q=>q.id===drag.id); if(p){ p.x=x/MAP_W; p.y=y/MAP_H; }
+    // move attached edges live
+    const byName=n=>(camp.places||[]).find(q=>_fuzzyMatch(q.name,n)>=0.75);
+    svg.querySelectorAll('.map-edge').forEach(line=>line.remove());
+    const edges=[]; (camp.places||[]).forEach(a=>(a.links||[]).forEach(n=>{ const b=byName(n); if(b&&b!==a&&!edges.some(e=>e[0]===b&&e[1]===a)) edges.push([a,b]); }));
+    const first=svg.querySelector('.map-node');
+    edges.forEach(([a,b])=>{ const ln=document.createElementNS('http://www.w3.org/2000/svg','line'); ln.setAttribute('class','map-edge');
+      ln.setAttribute('x1',Math.round(a.x*MAP_W)); ln.setAttribute('y1',Math.round(a.y*MAP_H)); ln.setAttribute('x2',Math.round(b.x*MAP_W)); ln.setAttribute('y2',Math.round(b.y*MAP_H)); svg.insertBefore(ln, first); });
+  });
+  const end=()=>{ if(drag&&drag.moved) saveCampaign(camp); drag=null; };
+  svg.addEventListener('pointerup',end); svg.addEventListener('pointercancel',end);
+}
+
+function mapResetLayout(){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  (camp.places||[]).forEach(p=>{ delete p.x; delete p.y; });
+  renderMap();
+}
+function addPlace(){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  const name=(document.getElementById('plName')?.value||'').trim();
+  if(!name){ toast('Enter a place name','var(--red)'); return; }
+  if(!camp.places) camp.places=[];
+  if(_findExisting(name, camp.places, 'name')){ toast('That place is already on the map','var(--red)'); return; }
+  const pl={ id:genItemId(), name, type:document.getElementById('plType')?.value||'other', region:(document.getElementById('plRegion')?.value||'').trim(),
+    desc:(document.getElementById('plDesc')?.value||'').trim(), status:'visited', links:[], session:(camp.sessions||[]).length, added:Date.now() };
+  camp.places.push(pl);
+  (document.getElementById('plLinks')?.value||'').split(',').map(x=>x.trim()).filter(Boolean).forEach(n=>_linkPlaces(camp, pl, n, pl.session));
+  saveCampaign(camp); renderMap(); toast('Place added!');
+}
+function setPlaceStatus(id, st){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  const pl=(camp.places||[]).find(p=>p.id===id); if(!pl) return;
+  if(st==='current') _setCurrentPlace(camp, pl); else pl.status=st;
+  saveCampaign(camp); renderMap();
+}
+function deletePlace(id){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  const pl=(camp.places||[]).find(p=>p.id===id); if(!pl) return;
+  if(!confirm('Remove '+pl.name+' from the map?')) return;
+  camp.places=camp.places.filter(p=>p.id!==id);
+  camp.places.forEach(p=>{ p.links=(p.links||[]).filter(n=>_fuzzyMatch(n,pl.name)<0.75); });
+  saveCampaign(camp); renderMap(); toast('Place removed','var(--red)');
+}
+
+/* ══ BOOKS TAB — the party's library ══ */
+const BOOK_TYPES = { tome:'📕', spellbook:'📘', journal:'📓', letter:'✉️', scroll:'📜', map:'🗺', scripture:'📖', ledger:'📒', other:'📚' };
+const BOOK_COLORS = { tome:'#7b2e2e', spellbook:'#2e4a7b', journal:'#5a4630', letter:'#6b6b5a', scroll:'#8a7440', map:'#3e6b4a', scripture:'#6a4c93', ledger:'#2f5f5f', other:'#4a3f6b' };
+
+function renderBooks(){
+  const camp = getCampaigns().find(c=>c.id===editingCampId);
+  if(!camp) return;
+  const el = document.getElementById('ctab-books'); if(!el) return;
+  const books = camp.books||[];
+  let html = `<div class="card" style="margin-bottom:14px">
+    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">Log a Book</div>
+    <div class="form-row two">
+      <div class="field"><label>Title</label><input id="bkTitle" placeholder="e.g. Journal of Iarno Albrek"></div>
+      <div class="field"><label>Type</label><select id="bkType">${Object.keys(BOOK_TYPES).map(t=>`<option value="${t}">${BOOK_TYPES[t]} ${t}</option>`).join('')}</select></div>
+      <div class="field"><label>Author</label><input id="bkAuthor" placeholder="if known"></div>
+      <div class="field"><label>Found at</label><input id="bkFound" placeholder="e.g. Tresendar Manor"></div>
+    </div>
+    <div class="field"><label>Blurb</label><textarea id="bkBlurb" placeholder="What it is, what's in it, why it matters… leave blank and tap ✨ later to have it written from what you know." style="min-height:60px"></textarea></div>
+    <button class="btn btn-primary" onclick="addBook()">Add to Library</button>
+  </div>`;
+  if(!books.length){
+    html += `<div class="empty-state"><div class="es-icon">📚</div><p>The library is empty.<br>Books, journals, letters and scrolls mentioned in a Quick Jot or session import are shelved here with a blurb.</p></div>`;
+  } else {
+    const st = {reading:0, unread:1, read:2};
+    const sorted=[...books].sort((a,b)=>(st[a.status]??1)-(st[b.status]??1) || (b.updated||0)-(a.updated||0));
+    html += `<div class="divider"><span>Library · ${books.length} volume${books.length!==1?'s':''}</span></div>` + sorted.map(b=>`
+      <div class="book-card" id="bk_${b.id}">
+        <div class="book-spine" style="--bc:${BOOK_COLORS[b.type]||BOOK_COLORS.other}">${BOOK_TYPES[b.type]||BOOK_TYPES.other}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:flex-start;gap:6px">
+            <div style="flex:1;min-width:0">
+              <div class="book-title">${esc(b.title)}</div>
+              <div class="book-meta">${[b.type, b.author?'by '+b.author:'', b.foundAt?'found at '+b.foundAt:'', b.session?'session '+b.session:''].filter(Boolean).map(esc).join(' · ')}</div>
+            </div>
+            <button class="icon-btn" style="color:var(--red);font-size:12px" onclick="deleteBook('${b.id}')">✕</button>
+          </div>
+          ${b.blurb?`<div class="book-blurb">${esc(b.blurb)}</div>`:`<div class="book-blurb" style="color:var(--muted2);font-style:italic">No blurb yet.</div>`}
+          ${(b.contents||[]).length?`<ul class="book-contents">${b.contents.map(c=>`<li>${esc(c)}</li>`).join('')}</ul>`:''}
+          <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
+            ${['unread','reading','read'].map(s=>`<button class="pc-pill ${b.status===s?'on':''}" onclick="setBookStatus('${b.id}','${s}')">${s}</button>`).join('')}
+            <button class="pc-pill" style="margin-left:auto;color:var(--gold);border-color:var(--gold)" onclick="writeBookBlurb('${b.id}')" id="bkAi_${b.id}">✨ ${b.blurb?'Expand':'Write'} blurb</button>
+          </div>
+        </div>
+      </div>`).join('');
+  }
+  el.innerHTML = html;
+}
+function addBook(){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  const title=(document.getElementById('bkTitle')?.value||'').trim();
+  if(!title){ toast('Enter a title','var(--red)'); return; }
+  if(!camp.books) camp.books=[];
+  camp.books.push({ id:genItemId(), title, type:document.getElementById('bkType')?.value||'tome', author:(document.getElementById('bkAuthor')?.value||'').trim(),
+    foundAt:(document.getElementById('bkFound')?.value||'').trim(), blurb:(document.getElementById('bkBlurb')?.value||'').trim(), contents:[], status:'unread',
+    session:(camp.sessions||[]).length, added:Date.now(), updated:Date.now() });
+  saveCampaign(camp); renderBooks(); toast('Shelved!');
+}
+function setBookStatus(id, st){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  const b=(camp.books||[]).find(x=>x.id===id); if(!b) return;
+  b.status=st; b.updated=Date.now(); saveCampaign(camp); renderBooks();
+}
+function deleteBook(id){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  const b=(camp.books||[]).find(x=>x.id===id); if(!b) return;
+  if(!confirm('Remove "'+b.title+'" from the library?')) return;
+  camp.books=camp.books.filter(x=>x.id!==id); saveCampaign(camp); renderBooks(); toast('Removed','var(--red)');
+}
+async function writeBookBlurb(id){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  const b=(camp.books||[]).find(x=>x.id===id); if(!b) return;
+  const btn=document.getElementById('bkAi_'+id); if(btn){ btn.disabled=true; btn.textContent='✨ Writing…'; }
+  try{
+    const ctx = { campaign:camp.name, setting:camp.setting||camp.description||'', book:{ title:b.title, type:b.type, author:b.author, foundAt:b.foundAt, currentBlurb:b.blurb, contents:b.contents },
+      relatedNotes:(camp.notes||[]).filter(n=>String(n.body||'').toLowerCase().includes(String(b.title).toLowerCase().split(' ')[0])).slice(0,3).map(n=>n.body),
+      npcs:(camp.npcs||[]).map(n=>n.name).slice(0,30), arcs:(camp.arcs||[]).map(a=>a.title) };
+    const res = await callClaude({ model:'claude-sonnet-5', max_tokens:600,
+      system:'You write entries for a D&D party\'s in-game library. Given what the party knows about a book, write a detailed blurb of 4-6 sentences: what the object is and its condition, who wrote it, what it contains or hints at, and why it matters to the campaign. Keep every factual claim grounded in the provided details; you may add sensory and physical flavour (binding, script, smell, wear) but must not invent names, spells, plot facts or contents that are not supported. If a current blurb exists, expand and improve it rather than contradict it. Return plain prose only.',
+      messages:[{ role:'user', content: JSON.stringify(ctx) }] });
+    const text=(res.content?.find(x=>x.type==='text')?.text||'').trim();
+    if(!text) throw new Error('Empty response');
+    b.blurb=text; b.updated=Date.now(); saveCampaign(camp); renderBooks(); toast('✦ Blurb written','var(--gold)');
+  }catch(e){ toast('Could not write blurb: '+(e.message||'error'),'var(--red)'); if(btn){ btn.disabled=false; btn.textContent='✨ Write blurb'; } }
+}
+
 function renderNotes() {
   const camp = getCampaigns().find(c => c.id === editingCampId);
   if (!camp) return;
   const el = document.getElementById('ctab-notes');
   const notes = camp.notes||[];
-  let html = `<button class="btn btn-gold" style="margin-bottom:14px" onclick="addNote()">+ New Note</button>`;
+  let html = `<div style="display:flex;gap:8px;margin-bottom:14px">
+    <button class="btn btn-gold" style="flex:1" onclick="addNote()">+ New Note</button>
+    <button class="btn btn-outline" style="flex:1;margin:0;border-color:var(--purple);color:var(--purple)" onclick="openQuickJot()">✎ Quick Jot</button>
+  </div>`;
   if (!notes.length) { html += `<div class="empty-state"><div class="es-icon">📝</div><p>No notes yet.<br>Jot down anything — world lore, player theories, DM secrets…</p></div>`; }
   else {
     html += notes.map((n,i) => `<div class="note-card">
@@ -14838,22 +15504,60 @@ function renderCharacterScreen(){
   charScreenId = char.id;
   const cls = CLASSES[char.classIdx];
 
-  // Character selector pills
-  heroEl.innerHTML='<div class="char-select-bar">'+chars.map(function(c){
+  // Character selector pills (only when there is a choice to make)
+  heroEl.innerHTML=(chars.length>1?'<div class="char-select-bar">'+chars.map(function(c){
     const cc=classColor(c.classIdx);
-    return '<div class="char-select-pill '+(String(c.id)===String(charScreenId)?'active':'')+'" style="--cc:'+cc+';--cc-dim:'+cc+'22" onclick="selectCharScreen('+c.id+')"><span class="csp-icon">'+classIcon(c.classIdx)+'</span>'+esc(c.name)+'</div>';
-  }).join('')+'</div>';
+    return '<div class="char-select-pill '+(String(c.id)===String(charScreenId)?'active':'')+'" style="--cc:'+cc+';--cc-dim:'+cc+'22" onclick="selectCharScreen(\''+String(c.id).replace(/'/g,'')+'\')"><span class="csp-icon">'+classIcon(c.classIdx)+'</span>'+esc(c.name)+'</div>';
+  }).join('')+'</div>':'')+_renderCharHero(char, cls);
 
-  // Re-activate the current tab
+  // Re-activate the current tab (charTab renders that tab's content)
   charTab(_charTab);
+}
 
-  // Always render equip tab content (paperdoll etc)
-  if(_charTab === 'equip'){
-    renderPaperdoll(char, cls);
-    renderInvBag(char, cls);
-    renderCharStats(char, cls);
-    initDragAndDrop();
-  }
+/* Always-visible hero strip: who this is, AC, and a one-tap HP tracker so
+   players don't have to dig into Sheet ▸ Combat mid-fight. */
+function _renderCharHero(char, cls){
+  const cc=classColor(char.classIdx);
+  const max=Math.max(1,parseInt(char.maxHP)||1), cur=Math.max(0,Math.min(max,parseInt(char.currentHP)||0));
+  const pct=Math.round(cur/max*100);
+  const col=pct>50?'var(--green)':pct>25?'var(--gold)':'var(--red)';
+  const mcs=(char.multiclasses||[]).length>1
+    ? char.multiclasses.map(mc=>(CLASSES[mc.classIdx]?.name||'')+' '+mc.level).join(' / ')
+    : (cls?.name||'')+' '+(char.level||1)+(char.subclass?' · '+char.subclass:'');
+  let ac=''; try{ ac=getEquipSlotAC(char); }catch(e){ ac=char.ac||''; }
+  return '<div class="char-hero-card" style="--cc:'+cc+'">'
+    +'<div class="chc-top"><span class="chc-icon">'+classIcon(char.classIdx)+'</span>'
+    +'<div style="min-width:0"><div class="chc-name">'+esc(char.name||'')+'</div><div class="chc-sub">'+esc((char.race?char.race+' · ':'')+mcs)+'</div></div>'
+    +'<div class="chc-ac">AC<b>'+esc(String(ac))+'</b></div></div>'
+    +'<div class="hp-track" style="margin:8px 0 4px"><div class="hp-fill" style="width:'+pct+'%;background:'+col+'"></div></div>'
+    +'<div class="chc-hp-row">'
+    +'<button onclick="charQuickHP(-1)" title="Damage">−</button>'
+    +'<input id="chcHpAmt" type="number" min="1" value="5" inputmode="numeric">'
+    +'<button onclick="charQuickHP(1)" title="Heal">+</button>'
+    +'<span style="font-size:10px;color:var(--muted)">dmg / heal</span>'
+    +'<span class="chc-hp-num" style="color:'+col+'">'+cur+' <span style="color:var(--muted);font-size:10px">/ '+max+' HP</span>'+(cur===0?' <span style="color:var(--red);font-size:10px">💀 down</span>':'')+'</span>'
+    +'</div></div>';
+}
+
+function charQuickHP(sign){
+  const amt=Math.abs(parseInt(document.getElementById('chcHpAmt')?.value)||0);
+  if(!amt) return;
+  const chars=getChars(); const ci=chars.findIndex(c=>String(c.id)===String(charScreenId));
+  if(ci<0){ toast('This character is read-only here','var(--red)'); return; }
+  const char=chars[ci];
+  const max=Math.max(1,parseInt(char.maxHP)||1);
+  const prev=Math.max(0,parseInt(char.currentHP)||0);
+  char.currentHP=Math.max(0,Math.min(max,prev+sign*amt));
+  try{
+    const camps=getCampaigns(); const cc=camps.findIndex(c=>c.id===getActiveCampId());
+    if(cc>=0){
+      if(prev>0 && char.currentHP===0){ addPartyHistoryEvent(camps[cc],'death',`${char.name} fell to 0 HP!`,'💀'); saveCampaigns(camps); }
+      else if(prev===0 && char.currentHP>0){ addPartyHistoryEvent(camps[cc],'revive',`${char.name} was revived!`,'✨'); saveCampaigns(camps); }
+    }
+  }catch(e){}
+  saveChars(chars);
+  renderCharacterScreen();
+  const inp=document.getElementById('chcHpAmt'); if(inp) inp.value=amt;
 }
 
 function selectCharScreen(id){ charScreenId=id; renderCharacterScreen(); }
