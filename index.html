@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v7.4.0 pin-size-min-map-delete 2026-09-05 -->
+<!-- Tome of Heroes v7.6.0 pin-px-resize-grip 2026-09-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14415,10 +14415,12 @@ function _mapLayout(places){
 
 let _curMapId = null;      // which of camp.maps is displayed (null = auto → home)
 let _placingId = null;     // place being positioned by tap
+let _selPinId = null;      // pin selected on the illustrated map (shows resize grip)
 const _mapImgCache = {};   // mapId → dataURL / url
 const MAP_REVEAL = { small:0.07, medium:0.11, large:0.17 };
 
 function _campMaps(camp){ if(!camp.maps) camp.maps=[]; return camp.maps; }
+function _pinPx(map){ if(map.pinPx!=null) return map.pinPx; if(map.pinScale) return Math.round(map.pinScale*13); return 13; }
 function _homeMap(camp){ const ms=_campMaps(camp); return ms.find(m=>m.isHome) || ms.find(m=>!m.placeId) || null; }
 function _curMap(camp){
   const ms=_campMaps(camp);
@@ -14509,27 +14511,34 @@ function renderMap(){
            :`<rect width="${VW}" height="${VH}" fill="#1a1530"/><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="#8880b0" font-size="11" font-family="Cinzel,serif">${map.imgKey?'loading map…':'no image yet'}</text>`}
       ${fogOn?`<rect class="map-fog" width="${VW}" height="${VH}" fill="url(#fogTex)" opacity="0.93" mask="url(#fogMask)"/>`:''}
       ${edges.map(([p,q])=>`<line class="map-edge" x1="${X(p)}" y1="${Y(p)}" x2="${X(q)}" y2="${Y(q)}"/>`).join('')}
-      ${pinned.map(p=>{ const sub=maps.find(m=>m.placeId===p.id); const sc=map.pinScale||1; const R=(13*sc).toFixed(1); const IC=(13*sc).toFixed(1); const LY=(4+11*sc).toFixed(1); const LF=Math.max(4,9*Math.min(1.35,sc)).toFixed(1); const bx=(12*sc).toFixed(1), by=(-10*sc).toFixed(1), br=(7*sc).toFixed(1), bf=(8*sc).toFixed(1);
-        return `<g class="map-node illus pinlabel ${p.status||''}" data-id="${p.id}" transform="translate(${X(p)},${Y(p)})">
-        <circle r="${R}"/><text class="mn-icon" text-anchor="middle" y="${(5*sc).toFixed(1)}" style="font-size:${IC}px">${PLACE_ICONS[p.type]||PLACE_ICONS.other}</text>
+      ${(()=>{ const R=_pinPx(map); const showIcon=R>=6; const IC=R.toFixed(1); const LF=Math.max(4,Math.min(13,R*0.72)).toFixed(1); const LY=(R+ (+LF)*0.95 + 1).toFixed(1);
+        const br=(R*0.55).toFixed(1), bx=(R*0.95).toFixed(1), by=(-R*0.78).toFixed(1), bf=Math.max(5,R*0.62).toFixed(1);
+        const gh=Math.max(R*0.707, 7); // grip sits on the edge, but stays grabbable on tiny pins
+        return pinned.map(p=>{ const sub=maps.find(m=>m.placeId===p.id); const seld=_selPinId===p.id;
+        return `<g class="map-node illus pinlabel ${p.status||''} ${seld?'selpin':''}" data-id="${p.id}" transform="translate(${X(p)},${Y(p)})">
+        ${seld?`<circle r="${(R+3).toFixed(1)}" fill="none" stroke="var(--gold)" stroke-width="1" stroke-dasharray="3 2" opacity="0.9"/>`:''}
+        <circle r="${R.toFixed(1)}"/>${showIcon?`<text class="mn-icon" text-anchor="middle" y="${(R*0.38).toFixed(1)}" style="font-size:${IC}px">${PLACE_ICONS[p.type]||PLACE_ICONS.other}</text>`:''}
         ${map.hidePinLabels?'':`<text text-anchor="middle" y="${LY}" style="font-size:${LF}px">${esc(String(p.name).slice(0,20))}</text>`}
         ${sub?`<g class="mn-sub" onclick="switchMap('${sub.id}');event.stopPropagation()"><circle cx="${bx}" cy="${by}" r="${br}" fill="var(--gold)"/><text x="${bx}" y="${(by*0.7).toFixed(1)}" text-anchor="middle" style="font-size:${bf}px" fill="#0d0a1a" stroke="none">🗺</text></g>`:''}
-      </g>`; }).join('')}
+        ${seld?`<g class="mn-resize"><line x1="${(R*0.707).toFixed(1)}" y1="${(R*0.707).toFixed(1)}" x2="${gh.toFixed(1)}" y2="${gh.toFixed(1)}" stroke="var(--gold)" stroke-width="0.6" opacity="0.6"/><rect x="${(gh-9).toFixed(1)}" y="${(gh-9).toFixed(1)}" width="18" height="18" fill="transparent" style="cursor:nwse-resize"/><rect x="${(gh-3).toFixed(1)}" y="${(gh-3).toFixed(1)}" width="6" height="6" rx="1" fill="var(--gold)" stroke="#0d0a1a" stroke-width="0.6" style="pointer-events:none"/></g>`:''}
+      </g>`; }).join(''); })()}
     </svg>`;
     // On a sub-map only offer places that plausibly belong there: linked to
     // the map's own place, or not yet pinned anywhere (fresh discoveries).
     const parent = map.placeId ? placeById(map.placeId) : null;
     const unplaced = places.filter(p=>!(p.pins&&p.pins[map.id]) && p.id!==map.placeId
       && (!parent || !p.pins || !Object.keys(p.pins).length || (parent.links||[]).some(n=>_fuzzyMatch(n,p.name)>=0.75) || (p.links||[]).some(n=>_fuzzyMatch(n,parent.name)>=0.75)));
-    html += `<div class="map-wrap ${_placingId?'placing':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':'drag pins · fog lifts where you\'ve been'}</div></div>`;
+    html += `<div class="map-wrap ${_placingId?'placing':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_selPinId?'drag the gold grip to resize · drag pin to move':'tap a pin to resize · drag to move')}</div></div>`;
     html += `<div class="map-ctrls">
       ${map.placeId?`<button class="pc-pill" onclick="switchMap('${_homeMap(camp)?.id||''}')">← home map</button>`:''}
       <button class="pc-pill ${map.fog!==false?'on':''}" onclick="toggleFog('${map.id}')">${map.fog!==false?'🌫 fog on':'fog off'}</button>
       ${map.fog!==false?`<button class="pc-pill" onpointerdown="peekFog('${map.id}',true)" onpointerup="peekFog('${map.id}',false)" onpointerleave="peekFog('${map.id}',false)">👁 hold to peek</button>`:''}
       <select class="pc-pill" onchange="setMapReveal('${map.id}',this.value)" style="appearance:auto">${Object.keys(MAP_REVEAL).map(k=>`<option value="${k}" ${(map.reveal||'medium')===k?'selected':''}>reveal: ${k}</option>`).join('')}</select>
-      <label class="pc-pill" style="display:flex;align-items:center;gap:6px;cursor:default">📌<input type="range" min="0.2" max="2" step="0.05" value="${map.pinScale||1}" oninput="setPinScale('${map.id}',this.value)" style="width:84px;accent-color:var(--gold)"><span id="pinScaleVal" style="min-width:26px;text-align:right">${Math.round((map.pinScale||1)*100)}%</span></label>
+<span class="pc-pill" style="cursor:default">📌 ${_pinPx(map)}px</span>
       <button class="pc-pill ${map.hidePinLabels?'on':''}" onclick="togglePinLabels('${map.id}')" title="Hide place names on the map (handy for very small pins)">${map.hidePinLabels?'labels off':'labels on'}</button>
+      <button class="pc-pill" onclick="resetPinSize('${map.id}')" title="Reset pin size">↺ pin size</button>
       <button class="pc-pill ${map.revealRumoured?'on':''}" onclick="toggleRumoured('${map.id}')">dim-reveal rumours</button>
+      <button class="pc-pill ${map.isHome?'on gold':''}" onclick="toggleHomeMap('${map.id}')" title="${map.isHome?'This is the landing map — tap to unset':'Make this the map shown first'}">${map.isHome?'🏠 home map':'set as home'}</button>
       <button class="pc-pill" onclick="toggleAddMap('${map.id}')">✎ edit map</button>
       <button class="pc-pill" style="color:var(--red);border-color:var(--red)" onclick="deleteMap('${map.id}')">🗑 remove map</button>
       <button class="pc-pill" onclick="scanSessionsForPlaces()" id="scanPlacesBtn">🔍 scan sessions for places</button>
@@ -14657,9 +14666,22 @@ function _bindMapDrag(camp, map){
     });
     return;
   }
+  // Deselect when tapping empty map
+  svg.addEventListener('pointerdown',e=>{ if(!sketch && !e.target.closest('.map-node') && _selPinId){ _selPinId=null; renderMap(); } });
+  // Resize grip on the selected pin (illustrated maps only)
+  if(!sketch){
+    const grip=svg.querySelector('.mn-resize'); const selP=(camp.places||[]).find(q=>q.id===_selPinId);
+    if(grip && selP){
+      let rz=null;
+      grip.addEventListener('pointerdown',e=>{ const pos=getPos(selP); if(!pos) return; rz={cx:pos.x*VW, cy:pos.y*VH}; grip.setPointerCapture(e.pointerId); e.preventDefault(); e.stopPropagation(); });
+      svg.addEventListener('pointermove',e=>{ if(!rz) return; const l=toLocal(e); let r=Math.hypot(l.x-rz.cx, l.y-rz.cy); r=Math.max(0.5, Math.min(60, r)); map.pinPx=Math.round(r*2)/2; _livePinSize(svg, map); const lg=svg.parentElement.querySelector('.map-legend'); if(lg) lg.textContent='pin size: '+map.pinPx+'px'; e.preventDefault(); });
+      const rzEnd=()=>{ if(rz){ saveCampaign(camp); renderMap(); } rz=null; };
+      grip.addEventListener('pointerup',rzEnd); grip.addEventListener('pointercancel',rzEnd);
+    }
+  }
   let drag=null;
   svg.querySelectorAll('.map-node').forEach(g=>{
-    g.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-sub')) return; drag={g, id:g.dataset.id, moved:false}; g.setPointerCapture(e.pointerId); e.preventDefault(); });
+    g.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-sub')||e.target.closest('.mn-resize')) return; drag={g, id:g.dataset.id, moved:false}; g.setPointerCapture(e.pointerId); e.preventDefault(); });
   });
   svg.addEventListener('pointermove',e=>{
     if(!drag) return; const l=toLocal(e); drag.moved=true;
@@ -14675,8 +14697,24 @@ function _bindMapDrag(camp, map){
       const A=getPos(a),B=getPos(b); ln.setAttribute('x1',Math.round(A.x*VW)); ln.setAttribute('y1',Math.round(A.y*VH)); ln.setAttribute('x2',Math.round(B.x*VW)); ln.setAttribute('y2',Math.round(B.y*VH)); svg.insertBefore(ln, first); });
     if(!sketch){ const mask=svg.querySelector('#fogMask'); if(mask){ const idx=(camp.places||[]).filter(q=>getPos(q)&&(q.status!=='rumoured'||map.revealRumoured)).findIndex(q=>q.id===drag.id); const circ=mask.querySelectorAll('circle')[idx]; if(circ){ circ.setAttribute('cx',Math.round(x)); circ.setAttribute('cy',Math.round(y)); } } }
   });
-  const end=()=>{ if(drag&&drag.moved) saveCampaign(camp); drag=null; };
+  const end=()=>{ if(drag){ if(drag.moved) saveCampaign(camp); else if(!sketch && _selPinId!==drag.id){ _selPinId=drag.id; renderMap(); } } drag=null; };
   svg.addEventListener('pointerup',end); svg.addEventListener('pointercancel',end);
+}
+
+/* Live-resize every illustrated pin as the grip is dragged (no full re-render). */
+function _livePinSize(svg, map){
+  const R=_pinPx(map), showIcon=R>=6, LF=Math.max(4,Math.min(13,R*0.72)), LY=(R+LF*0.95+1);
+  svg.querySelectorAll('.map-node.illus').forEach(g=>{
+    const circles=g.querySelectorAll(':scope > circle');
+    const main=g.classList.contains('selpin')?circles[1]:circles[0];
+    if(main) main.setAttribute('r',R.toFixed(1));
+    const sel=g.classList.contains('selpin')?circles[0]:null; if(sel) sel.setAttribute('r',(R+3).toFixed(1));
+    const ic=g.querySelector('.mn-icon'); if(ic){ ic.style.display=showIcon?'':'none'; ic.style.fontSize=R.toFixed(1)+'px'; ic.setAttribute('y',(R*0.38).toFixed(1)); }
+    const lbl=g.querySelector(':scope > text:not(.mn-icon)'); if(lbl){ lbl.setAttribute('y',LY.toFixed(1)); lbl.style.fontSize=LF.toFixed(1)+'px'; }
+    const sub=g.querySelector('.mn-sub'); if(sub){ const br=(R*0.55).toFixed(1),bx=(R*0.95).toFixed(1),by=(-R*0.78).toFixed(1); const bc=sub.querySelector('circle'),bt=sub.querySelector('text'); if(bc){bc.setAttribute('r',br);bc.setAttribute('cx',bx);bc.setAttribute('cy',by);} if(bt){bt.setAttribute('x',bx);bt.setAttribute('y',(by*0.7).toFixed(1));bt.style.fontSize=Math.max(5,R*0.62).toFixed(1)+'px';} }
+    const grip=g.querySelector('.mn-resize'); if(grip){ const gh=Math.max(R*0.707,7); const ln=grip.querySelector('line'); if(ln){ln.setAttribute('x1',(R*0.707).toFixed(1));ln.setAttribute('y1',(R*0.707).toFixed(1));ln.setAttribute('x2',gh.toFixed(1));ln.setAttribute('y2',gh.toFixed(1));} const rects=grip.querySelectorAll('rect'); if(rects[0]){rects[0].setAttribute('x',(gh-9).toFixed(1));rects[0].setAttribute('y',(gh-9).toFixed(1));} if(rects[1]){rects[1].setAttribute('x',(gh-3).toFixed(1));rects[1].setAttribute('y',(gh-3).toFixed(1));} }
+  });
+  const pd=document.getElementById('pinPxVal'); if(pd) pd.textContent=R+'px';
 }
 
 /* ══ PLACE SCANNER — mine session logs for locations ══
@@ -14774,7 +14812,7 @@ function applyPlacesReview(){
 function dismissPlacesReview(){ const camp=_markScanned(); if(camp) saveCampaign(camp); window._pendingPlaceScan=null; closePinModal(); }
 
 /* ── Map management ── */
-function switchMap(id){ _placingId=null; _curMapId=id||null; renderMap(); }
+function switchMap(id){ _placingId=null; _selPinId=null; _curMapId=id||null; renderMap(); }
 function toggleAddMap(editId, presetPlaceId){
   window._showMapForm = editId ? true : (presetPlaceId ? true : !window._showMapForm);
   window._editMapId = editId||null; window._pendingMapImg=null; window._presetMapPlace=presetPlaceId||null;
@@ -14792,6 +14830,7 @@ async function saveMapForm(){
   m.placeId=document.getElementById('mpPlace')?.value||null; if(!m.placeId) delete m.placeId;
   m.fog=document.getElementById('mpFog')?.value!=='0';
   if(document.getElementById('mpHome')?.value==='1'){ maps.forEach(x=>x.isHome=false); m.isHome=true; delete m.placeId; }
+  else if(m.isHome){ m.isHome=false; }
   const url=(document.getElementById('mpUrl')?.value||'').trim();
   const pend=window._pendingMapImg;
   if(pend){ m.w=pend.w; m.h=pend.h; toast('Uploading map image…','var(--gold)'); await _storeMapImage(camp, m, pend.url); }
@@ -14806,30 +14845,25 @@ function deleteMap(id){
   const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
   const m=_campMaps(camp).find(x=>x.id===id); if(!m) return;
   if(!confirm('Delete the map "'+m.name+'"? Pins on it are removed; places stay.')) return;
+  const wasHome=m.isHome;
   camp.maps=camp.maps.filter(x=>x.id!==id);
   (camp.places||[]).forEach(p=>{ if(p.pins) delete p.pins[id]; });
   if(m.imgKey) supa.from('settings').delete().eq('key', m.imgKey).then(()=>{}).catch(()=>{});
+  if(wasHome && camp.maps.length && !camp.maps.some(x=>x.isHome)){ const nh=camp.maps.find(x=>!x.placeId)||camp.maps[0]; nh.isHome=true; }
   window._showMapForm=false; window._editMapId=null; _curMapId=null;
   saveCampaign(camp); renderMap(); toast('Map deleted','var(--red)');
+}
+function toggleHomeMap(id){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  const m=_campMaps(camp).find(x=>x.id===id); if(!m) return;
+  if(m.isHome){ m.isHome=false; toast('Home map unset','var(--muted)'); }
+  else { camp.maps.forEach(x=>x.isHome=false); m.isHome=true; if(m.placeId) delete m.placeId; toast('🏠 '+m.name+' is now the home map','var(--gold)'); }
+  saveCampaign(camp); renderMap();
 }
 function toggleFog(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.fog=!(m.fog!==false); saveCampaign(camp); renderMap(); }
 function toggleRumoured(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.revealRumoured=!m.revealRumoured; saveCampaign(camp); renderMap(); }
 function setMapReveal(id,v){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.reveal=v; saveCampaign(camp); renderMap(); }
-let _pinScaleTimer=null;
-function setPinScale(id,v){
-  const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return;
-  m.pinScale=Math.round(parseFloat(v)*10)/10;
-  // Live-scale the rendered pins without a full re-render (keeps the slider smooth)
-  const svg=document.getElementById('campMapSvg');
-  if(svg){ const sc=m.pinScale; svg.querySelectorAll('.map-node.illus').forEach(g=>{
-    const c=g.querySelector('circle'); if(c) c.setAttribute('r',(13*sc).toFixed(1));
-    const ic=g.querySelector('.mn-icon'); if(ic){ ic.style.fontSize=(13*sc).toFixed(1)+'px'; ic.setAttribute('y',(5*sc).toFixed(1)); }
-    const lbl=g.querySelector('text:not(.mn-icon)'); if(lbl){ lbl.setAttribute('y',(4+11*sc).toFixed(1)); lbl.style.fontSize=Math.max(4,9*Math.min(1.35,sc)).toFixed(1)+'px'; }
-    const sub=g.querySelector('.mn-sub'); if(sub){ const bx=(12*sc).toFixed(1),by=(-10*sc).toFixed(1); const bc=sub.querySelector('circle'), bt=sub.querySelector('text'); if(bc){bc.setAttribute('cx',bx);bc.setAttribute('cy',by);bc.setAttribute('r',(7*sc).toFixed(1));} if(bt){bt.setAttribute('x',bx);bt.setAttribute('y',(by*0.7).toFixed(1));bt.style.fontSize=(8*sc).toFixed(1)+'px';} }
-  }); }
-  const vv=document.getElementById('pinScaleVal'); if(vv) vv.textContent=Math.round(m.pinScale*100)+'%';
-  clearTimeout(_pinScaleTimer); _pinScaleTimer=setTimeout(()=>saveCampaign(camp), 400);
-}
+function resetPinSize(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.pinPx=13; delete m.pinScale; saveCampaign(camp); renderMap(); }
 function togglePinLabels(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.hidePinLabels=!m.hidePinLabels; saveCampaign(camp); renderMap(); }
 function peekFog(id,on){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m._peek=on; const fog=document.querySelector('#campMapSvg .map-fog'); if(fog) fog.style.opacity=on?'0':''; }
 function beginPlace(id){ _placingId = (id && _placingId!==id) ? id : null; renderMap(); if(_placingId) document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
