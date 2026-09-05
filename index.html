@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v8.0.0 sword-coast-seed 2026-09-05 -->
+<!-- Tome of Heroes v8.1.0 map-zoom-pan 2026-09-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14419,6 +14419,19 @@ let _curMapId = null;      // which of camp.maps is displayed (null = auto → h
 let _placingId = null;     // place being positioned by tap
 let _selPinId = null;      // pin selected on the illustrated map (shows resize grip)
 let _paintMode = null;     // 'reveal' | 'refog' | null — fog painting mode
+let _mapGesture = false;   // true while a 2-finger zoom/pan gesture is active
+const _mapView = {};       // mapId → {z, x, y, vw, vh} viewBox pan/zoom (session-local, not synced)
+const MAP_ZMAX = 8;
+function _applyMapView(id){
+  const v=_mapView[id]; const svg=document.getElementById('campMapSvg'); if(!v||!svg) return;
+  v.z=Math.max(1,Math.min(MAP_ZMAX, v.z));
+  const vw=v.vw/v.z, vh=v.vh/v.z;
+  v.x=Math.max(0,Math.min(v.vw-vw, v.x)); v.y=Math.max(0,Math.min(v.vh-vh, v.y));
+  svg.setAttribute('viewBox', `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${vw.toFixed(1)} ${vh.toFixed(1)}`);
+  const zl=document.getElementById('mapZoomLbl'); if(zl) zl.textContent=Math.round(v.z*100)+'%';
+}
+function zoomMap(id,f){ const v=_mapView[id]; if(!v) return; const cx=v.x+(v.vw/v.z)/2, cy=v.y+(v.vh/v.z)/2; v.z=Math.max(1,Math.min(MAP_ZMAX,v.z*f)); v.x=cx-(v.vw/v.z)/2; v.y=cy-(v.vh/v.z)/2; _applyMapView(id); }
+function zoomReset(id){ const v=_mapView[id]; if(!v) return; v.z=1; v.x=0; v.y=0; _applyMapView(id); }
 const _mapImgCache = {};   // mapId → dataURL / url
 const MAP_REVEAL = { small:0.07, medium:0.11, large:0.17 }; // legacy (unused for pin reveal)
 const FOG_AREA_BUFFER = 1.072;   // +15% area over the icon (√1.15)
@@ -14512,7 +14525,7 @@ function renderMap(){
       <defs>
         <radialGradient id="hole"><stop offset="0" stop-color="#000"/><stop offset="0.55" stop-color="#000"/><stop offset="1" stop-color="#fff"/></radialGradient>
         <radialGradient id="holeDim"><stop offset="0" stop-color="#555"/><stop offset="0.5" stop-color="#777"/><stop offset="1" stop-color="#fff"/></radialGradient>
-        <radialGradient id="holeSoft"><stop offset="0" stop-color="#000"/><stop offset="0.7" stop-color="#000"/><stop offset="1" stop-color="#fff"/></radialGradient>
+        <radialGradient id="holeSoft"><stop offset="0" stop-color="#000"/><stop offset="0.86" stop-color="#000"/><stop offset="1" stop-color="#fff"/></radialGradient>
         <mask id="fogMask" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}"><rect width="${VW}" height="${VH}" fill="#fff"/>${holes}${painted}</mask>
         <pattern id="fogTex" width="18" height="18" patternUnits="userSpaceOnUse"><rect width="18" height="18" fill="#0a0716"/><circle cx="4" cy="6" r="3" fill="#120d24"/><circle cx="13" cy="12" r="4" fill="#100b20"/></pattern>
       </defs>
@@ -14537,9 +14550,11 @@ function renderMap(){
     const parent = map.placeId ? placeById(map.placeId) : null;
     const unplaced = places.filter(p=>!(p.pins&&p.pins[map.id]) && p.id!==map.placeId
       && (!parent || !p.pins || !Object.keys(p.pins).length || (parent.links||[]).some(n=>_fuzzyMatch(n,p.name)>=0.75) || (p.links||[]).some(n=>_fuzzyMatch(n,parent.name)>=0.75)));
-    html += `<div class="map-wrap ${_placingId?'placing':''} ${_paintMode?'painting-fog':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_paintMode==='reveal'?'paint to clear fog · '+Math.round(_brushR(map))+'px brush':(_paintMode==='refog'?'paint to restore fog':(_selPinId?'drag the gold grip to resize · drag pin to move':'tap a pin to resize · drag to move')))}</div></div>`;
+    html += `<div class="map-wrap ${_placingId?'placing':''} ${_paintMode?'painting-fog':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_paintMode==='reveal'?'paint to clear fog · '+Math.round(_brushR(map))+'px brush':(_paintMode==='refog'?'paint to restore fog':(_selPinId?'drag the gold grip to resize · drag pin to move':'tap a pin to resize · pinch/scroll to zoom')))}</div></div>`;
     html += `<div class="map-ctrls">
       ${map.placeId?`<button class="pc-pill" onclick="switchMap('${_homeMap(camp)?.id||''}')">← home map</button>`:''}
+      <span class="pc-pill" style="display:flex;align-items:center;gap:4px;cursor:default"><button onclick="zoomMap('${map.id}',1/1.4)" style="background:none;border:none;color:var(--text);font-size:15px;cursor:pointer;padding:0 4px">−</button><span id="mapZoomLbl" style="min-width:34px;text-align:center;font-size:11px">${Math.round((_mapView[map.id]?.z||1)*100)}%</span><button onclick="zoomMap('${map.id}',1.4)" style="background:none;border:none;color:var(--text);font-size:15px;cursor:pointer;padding:0 4px">＋</button></span>
+      <button class="pc-pill" onclick="zoomReset('${map.id}')" title="Reset zoom">⟲ fit</button>
       <button class="pc-pill ${map.fog!==false?'on':''}" onclick="toggleFog('${map.id}')">${map.fog!==false?'🌫 fog on':'fog off'}</button>
       ${map.fog!==false?`<button class="pc-pill" onpointerdown="peekFog('${map.id}',true)" onpointerup="peekFog('${map.id}',false)" onpointerleave="peekFog('${map.id}',false)">👁 hold to peek</button>`:''}
       ${map.fog!==false?`<button class="pc-pill ${_paintMode==='reveal'?'on gold':''}" onclick="setPaintMode('reveal')" title="Brush to clear fog by hand">🖌 paint reveal</button>
@@ -14676,6 +14691,25 @@ function _bindMapDrag(camp, map){
   const toLocal=(e)=>{ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; const m=svg.getScreenCTM(); return m?pt.matrixTransform(m.inverse()):pt; };
   const getPos=p=>sketch?{x:p.x,y:p.y}:(p.pins&&p.pins[map.id])||null;
   const setPos=(p,x,y)=>{ if(sketch){ p.x=x; p.y=y; } else { if(!p.pins) p.pins={}; p.pins[map.id]={x,y}; } };
+
+  // ── Pan & zoom (viewBox). Icons live in the SVG, so they scale with zoom. ──
+  const view=_mapView[map.id]||(_mapView[map.id]={z:1,x:0,y:0}); view.vw=VW; view.vh=VH;
+  const applyView=()=>_applyMapView(map.id); applyView();
+  const rectOf=()=>svg.getBoundingClientRect();
+  const pts=new Map(); let gest=null, bgPan=null;
+  const zoomAt=(sx,sy,f)=>{ const r=rectOf(); const nz=Math.max(1,Math.min(MAP_ZMAX,view.z*f)); const ux=view.x+(sx-r.left)/r.width*(VW/view.z), uy=view.y+(sy-r.top)/r.height*(VH/view.z); view.z=nz; view.x=ux-(sx-r.left)/r.width*(VW/nz); view.y=uy-(sy-r.top)/r.height*(VH/nz); applyView(); };
+  svg.addEventListener('wheel',e=>{ e.preventDefault(); zoomAt(e.clientX,e.clientY, e.deltaY<0?1.15:1/1.15); },{passive:false});
+  svg.addEventListener('pointerdown',e=>{ pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(pts.size===2){ const[a,b]=[...pts.values()]; gest={d:Math.hypot(a.x-b.x,a.y-b.y)||1, cx:(a.x+b.x)/2, cy:(a.y+b.y)/2, z:view.z, x:view.x, y:view.y}; _mapGesture=true; bgPan=null; } });
+  svg.addEventListener('pointermove',e=>{ if(pts.has(e.pointerId)) pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pts.size>=2 && gest){ const[a,b]=[...pts.values()]; const nd=Math.hypot(a.x-b.x,a.y-b.y)||1, ncx=(a.x+b.x)/2, ncy=(a.y+b.y)/2; const r=rectOf(); let nz=Math.max(1,Math.min(MAP_ZMAX, gest.z*(nd/gest.d))); const uw=VW/nz, uh=VH/nz; const ux=gest.x+(gest.cx-r.left)/r.width*(VW/gest.z), uy=gest.y+(gest.cy-r.top)/r.height*(VH/gest.z); view.z=nz; view.x=ux-(ncx-r.left)/r.width*uw; view.y=uy-(ncy-r.top)/r.height*uh; applyView(); e.preventDefault(); }
+  });
+  const gestUp=e=>{ pts.delete(e.pointerId); if(pts.size<2){ gest=null; setTimeout(()=>{ _mapGesture=false; },60); } };
+  svg.addEventListener('pointerup',gestUp); svg.addEventListener('pointercancel',gestUp);
+  // Single-finger pan on empty backdrop when zoomed in (pins/paint/place take priority)
+  svg.addEventListener('pointerdown',e=>{ if(pts.size>=2||view.z<=1||_placingId||_paintMode) return; if(e.target.closest('.map-node')) return; bgPan={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y}; });
+  svg.addEventListener('pointermove',e=>{ if(!bgPan||pts.size>=2) return; const r=rectOf(); view.x=bgPan.vx-(e.clientX-bgPan.x)/r.width*(VW/view.z); view.y=bgPan.vy-(e.clientY-bgPan.y)/r.height*(VH/view.z); applyView(); e.preventDefault(); });
+  const bgEnd=()=>{ bgPan=null; }; svg.addEventListener('pointerup',bgEnd); svg.addEventListener('pointercancel',bgEnd);
+
   // Tap-to-place mode
   if(_placingId && !sketch){
     svg.addEventListener('pointerup',e=>{
@@ -14700,6 +14734,7 @@ function _bindMapDrag(camp, map){
   }
   // Fog painting mode: pointer strokes add (reveal) or remove (refog) circles.
   if(_paintMode && !sketch){
+    const _blocked=()=>pts.size>=2||_mapGesture;
     const mask=svg.querySelector('#fogMask'); let paintingNow=false;
     const dab=(e)=>{ const l=toLocal(e); const nx=l.x/VW, ny=l.y/VH, nr=_brushR(map)/VW;
       if(_paintMode==='reveal'){
@@ -14711,18 +14746,18 @@ function _bindMapDrag(camp, map){
           map.paint=map.paint.filter(d=>Math.hypot((d.x-bx),(d.y-by)*(VH/VW))>br*0.8); }
       }
     };
-    svg.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-resize')) return; paintingNow=true; svg.setPointerCapture(e.pointerId); dab(e); e.preventDefault(); });
-    svg.addEventListener('pointermove',e=>{ if(paintingNow) dab(e); });
+    svg.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-resize')||_blocked()) return; paintingNow=true; dab(e); e.preventDefault(); });
+    svg.addEventListener('pointermove',e=>{ if(paintingNow&&!_blocked()) dab(e); });
     const pend=()=>{ if(paintingNow){ paintingNow=false; saveCampaign(camp); if(_paintMode==='refog') renderMap(); } };
     svg.addEventListener('pointerup',pend); svg.addEventListener('pointercancel',pend);
     return; // in paint mode, skip pin drag/select wiring
   }
   let drag=null;
   svg.querySelectorAll('.map-node').forEach(g=>{
-    g.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-sub')||e.target.closest('.mn-resize')) return; drag={g, id:g.dataset.id, moved:false}; g.setPointerCapture(e.pointerId); e.preventDefault(); });
+    g.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-sub')||e.target.closest('.mn-resize')||pts.size>=2||_mapGesture) return; drag={g, id:g.dataset.id, moved:false}; g.setPointerCapture(e.pointerId); e.preventDefault(); });
   });
   svg.addEventListener('pointermove',e=>{
-    if(!drag) return; const l=toLocal(e); drag.moved=true;
+    if(!drag||pts.size>=2||_mapGesture){ drag=null; return; } const l=toLocal(e); drag.moved=true;
     const x=Math.max(14,Math.min(VW-14,l.x)), y=Math.max(14,Math.min(VH-28,l.y));
     drag.g.setAttribute('transform',`translate(${Math.round(x)},${Math.round(y)})`);
     const p=(camp.places||[]).find(q=>q.id===drag.id); if(p) setPos(p, x/VW, y/VH);
@@ -14850,7 +14885,7 @@ function applyPlacesReview(){
 function dismissPlacesReview(){ const camp=_markScanned(); if(camp) saveCampaign(camp); window._pendingPlaceScan=null; closePinModal(); }
 
 /* ── Map management ── */
-function switchMap(id){ _placingId=null; _selPinId=null; _paintMode=null; _curMapId=id||null; renderMap(); }
+function switchMap(id){ _placingId=null; _selPinId=null; _paintMode=null; if(id&&_mapView[id]){ _mapView[id].z=1; _mapView[id].x=0; _mapView[id].y=0; } _curMapId=id||null; renderMap(); }
 function toggleAddMap(editId, presetPlaceId){
   window._showMapForm = editId ? true : (presetPlaceId ? true : !window._showMapForm);
   window._editMapId = editId||null; window._pendingMapImg=null; window._presetMapPlace=presetPlaceId||null;
