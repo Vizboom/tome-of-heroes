@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v7.7.0 pin-label-proportional 2026-09-05 -->
+<!-- Tome of Heroes v7.9.0 fog-literal-icon 2026-09-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -499,6 +499,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .map-chip.on{background:var(--gold);color:var(--bg);border-color:var(--gold);}
 .map-chip.add{border-style:dashed;color:var(--gold);}
 .map-wrap.placing{outline:2px dashed var(--gold);cursor:crosshair;}
+.map-wrap.painting-fog{outline:2px dashed var(--teal);cursor:crosshair;}
+.map-wrap.painting-fog .map-node{pointer-events:none;}
 .map-wrap.placing .map-node{pointer-events:none;}
 .map-fog{pointer-events:none;}
 .map-node .mn-sub{font-size:9px;pointer-events:all;cursor:pointer;}
@@ -14416,8 +14418,12 @@ function _mapLayout(places){
 let _curMapId = null;      // which of camp.maps is displayed (null = auto → home)
 let _placingId = null;     // place being positioned by tap
 let _selPinId = null;      // pin selected on the illustrated map (shows resize grip)
+let _paintMode = null;     // 'reveal' | 'refog' | null — fog painting mode
 const _mapImgCache = {};   // mapId → dataURL / url
-const MAP_REVEAL = { small:0.07, medium:0.11, large:0.17 };
+const MAP_REVEAL = { small:0.07, medium:0.11, large:0.17 }; // legacy (unused for pin reveal)
+const FOG_AREA_BUFFER = 1.072;   // +15% area over the icon (√1.15)
+function _revealR(map){ return _pinPx(map) * FOG_AREA_BUFFER; }
+function _brushR(map){ return map.brushPx || Math.max(14, _pinPx(map)*2.4); }
 
 function _campMaps(camp){ if(!camp.maps) camp.maps=[]; return camp.maps; }
 function _pinPx(map){ if(map.pinPx!=null) return map.pinPx; if(map.pinScale) return Math.round(map.pinScale*13); return 13; }
@@ -14494,17 +14500,20 @@ function renderMap(){
     const pinned = places.filter(p=>p.pins&&p.pins[map.id]);
     const X=p=>Math.round(p.pins[map.id].x*VW), Y=p=>Math.round(p.pins[map.id].y*VH);
     const edges=[]; pinned.forEach(p=>(p.links||[]).forEach(n=>{ const q=byName(n); if(q&&q!==p&&q.pins&&q.pins[map.id]&&!edges.some(e=>e[0]===q&&e[1]===p)) edges.push([p,q]); }));
-    const rr = (MAP_REVEAL[map.reveal]||MAP_REVEAL.medium)*VW;
+    const rr = _revealR(map);
     const fogOn = map.fog!==false && !map._peek;
     const holes = pinned.filter(p=>p.status!=='rumoured'||map.revealRumoured).map(p=>{
       const rum=p.status==='rumoured';
-      return `<circle cx="${X(p)}" cy="${Y(p)}" r="${Math.round(rum?rr*0.55:rr)}" fill="url(#${rum?'holeDim':'hole'})"/>`;
+      return `<circle cx="${X(p)}" cy="${Y(p)}" r="${(rum?rr*0.55:rr).toFixed(1)}" fill="url(#${rum?'holeDim':'hole'})"/>`;
     }).join('');
+    // Manually-painted reveals (stored normalized to VW on both axes).
+    const painted = (map.paint||[]).map(d=>`<circle cx="${(d.x*VW).toFixed(1)}" cy="${(d.y*VH).toFixed(1)}" r="${(d.r*VW).toFixed(1)}" fill="url(#holeSoft)"/>`).join('');
     const svg = `<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="campMapSvg" data-vw="${VW}" data-vh="${VH}">
       <defs>
         <radialGradient id="hole"><stop offset="0" stop-color="#000"/><stop offset="0.55" stop-color="#000"/><stop offset="1" stop-color="#fff"/></radialGradient>
         <radialGradient id="holeDim"><stop offset="0" stop-color="#555"/><stop offset="0.5" stop-color="#777"/><stop offset="1" stop-color="#fff"/></radialGradient>
-        <mask id="fogMask" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}"><rect width="${VW}" height="${VH}" fill="#fff"/>${holes}</mask>
+        <radialGradient id="holeSoft"><stop offset="0" stop-color="#000"/><stop offset="0.7" stop-color="#000"/><stop offset="1" stop-color="#fff"/></radialGradient>
+        <mask id="fogMask" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}"><rect width="${VW}" height="${VH}" fill="#fff"/>${holes}${painted}</mask>
         <pattern id="fogTex" width="18" height="18" patternUnits="userSpaceOnUse"><rect width="18" height="18" fill="#0a0716"/><circle cx="4" cy="6" r="3" fill="#120d24"/><circle cx="13" cy="12" r="4" fill="#100b20"/></pattern>
       </defs>
       ${src?`<image href="${src}" x="0" y="0" width="${VW}" height="${VH}" preserveAspectRatio="none"/>`
@@ -14528,12 +14537,15 @@ function renderMap(){
     const parent = map.placeId ? placeById(map.placeId) : null;
     const unplaced = places.filter(p=>!(p.pins&&p.pins[map.id]) && p.id!==map.placeId
       && (!parent || !p.pins || !Object.keys(p.pins).length || (parent.links||[]).some(n=>_fuzzyMatch(n,p.name)>=0.75) || (p.links||[]).some(n=>_fuzzyMatch(n,parent.name)>=0.75)));
-    html += `<div class="map-wrap ${_placingId?'placing':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_selPinId?'drag the gold grip to resize · drag pin to move':'tap a pin to resize · drag to move')}</div></div>`;
+    html += `<div class="map-wrap ${_placingId?'placing':''} ${_paintMode?'painting-fog':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_paintMode==='reveal'?'paint to clear fog · '+Math.round(_brushR(map))+'px brush':(_paintMode==='refog'?'paint to restore fog':(_selPinId?'drag the gold grip to resize · drag pin to move':'tap a pin to resize · drag to move')))}</div></div>`;
     html += `<div class="map-ctrls">
       ${map.placeId?`<button class="pc-pill" onclick="switchMap('${_homeMap(camp)?.id||''}')">← home map</button>`:''}
       <button class="pc-pill ${map.fog!==false?'on':''}" onclick="toggleFog('${map.id}')">${map.fog!==false?'🌫 fog on':'fog off'}</button>
       ${map.fog!==false?`<button class="pc-pill" onpointerdown="peekFog('${map.id}',true)" onpointerup="peekFog('${map.id}',false)" onpointerleave="peekFog('${map.id}',false)">👁 hold to peek</button>`:''}
-      <select class="pc-pill" onchange="setMapReveal('${map.id}',this.value)" style="appearance:auto">${Object.keys(MAP_REVEAL).map(k=>`<option value="${k}" ${(map.reveal||'medium')===k?'selected':''}>reveal: ${k}</option>`).join('')}</select>
+      ${map.fog!==false?`<button class="pc-pill ${_paintMode==='reveal'?'on gold':''}" onclick="setPaintMode('reveal')" title="Brush to clear fog by hand">🖌 paint reveal</button>
+      <button class="pc-pill ${_paintMode==='refog'?'on':''}" onclick="setPaintMode('refog')" title="Brush to restore fog">🌫 re-fog</button>
+      ${_paintMode?`<label class="pc-pill" style="display:flex;align-items:center;gap:6px;cursor:default">brush<input type="range" min="6" max="80" step="2" value="${Math.round(_brushR(map))}" oninput="setBrush('${map.id}',this.value)" style="width:70px;accent-color:var(--gold)"></label>`:''}
+      ${(map.paint||[]).length?`<button class="pc-pill" onclick="clearPaint('${map.id}')" title="Remove all hand-painted reveals">✕ clear painted</button>`:''}`:''}
 <span class="pc-pill" style="cursor:default">📌 ${_pinPx(map)}px</span>
       <button class="pc-pill ${map.hidePinLabels?'on':''}" onclick="togglePinLabels('${map.id}')" title="Hide place names on the map (handy for very small pins)">${map.hidePinLabels?'labels off':'labels on'}</button>
       <button class="pc-pill" onclick="resetPinSize('${map.id}')" title="Reset pin size">↺ pin size</button>
@@ -14679,6 +14691,25 @@ function _bindMapDrag(camp, map){
       grip.addEventListener('pointerup',rzEnd); grip.addEventListener('pointercancel',rzEnd);
     }
   }
+  // Fog painting mode: pointer strokes add (reveal) or remove (refog) circles.
+  if(_paintMode && !sketch){
+    const mask=svg.querySelector('#fogMask'); let paintingNow=false;
+    const dab=(e)=>{ const l=toLocal(e); const nx=l.x/VW, ny=l.y/VH, nr=_brushR(map)/VW;
+      if(_paintMode==='reveal'){
+        if(!map.paint) map.paint=[];
+        map.paint.push({ x:+nx.toFixed(4), y:+ny.toFixed(4), r:+nr.toFixed(4) });
+        if(mask){ const c=document.createElementNS('http://www.w3.org/2000/svg','circle'); c.setAttribute('cx',(l.x).toFixed(1)); c.setAttribute('cy',(l.y).toFixed(1)); c.setAttribute('r',_brushR(map).toFixed(1)); c.setAttribute('fill','url(#holeSoft)'); mask.appendChild(c); }
+      } else { // refog: drop painted dabs within the brush; the auto pin-reveal stays
+        if(map.paint&&map.paint.length){ const bx=l.x/VW, by=l.y/VH, br=_brushR(map)/VW;
+          map.paint=map.paint.filter(d=>Math.hypot((d.x-bx),(d.y-by)*(VH/VW))>br*0.8); }
+      }
+    };
+    svg.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-resize')) return; paintingNow=true; svg.setPointerCapture(e.pointerId); dab(e); e.preventDefault(); });
+    svg.addEventListener('pointermove',e=>{ if(paintingNow) dab(e); });
+    const pend=()=>{ if(paintingNow){ paintingNow=false; saveCampaign(camp); if(_paintMode==='refog') renderMap(); } };
+    svg.addEventListener('pointerup',pend); svg.addEventListener('pointercancel',pend);
+    return; // in paint mode, skip pin drag/select wiring
+  }
   let drag=null;
   svg.querySelectorAll('.map-node').forEach(g=>{
     g.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-sub')||e.target.closest('.mn-resize')) return; drag={g, id:g.dataset.id, moved:false}; g.setPointerCapture(e.pointerId); e.preventDefault(); });
@@ -14812,7 +14843,7 @@ function applyPlacesReview(){
 function dismissPlacesReview(){ const camp=_markScanned(); if(camp) saveCampaign(camp); window._pendingPlaceScan=null; closePinModal(); }
 
 /* ── Map management ── */
-function switchMap(id){ _placingId=null; _selPinId=null; _curMapId=id||null; renderMap(); }
+function switchMap(id){ _placingId=null; _selPinId=null; _paintMode=null; _curMapId=id||null; renderMap(); }
 function toggleAddMap(editId, presetPlaceId){
   window._showMapForm = editId ? true : (presetPlaceId ? true : !window._showMapForm);
   window._editMapId = editId||null; window._pendingMapImg=null; window._presetMapPlace=presetPlaceId||null;
@@ -14860,9 +14891,13 @@ function toggleHomeMap(id){
   else { camp.maps.forEach(x=>x.isHome=false); m.isHome=true; if(m.placeId) delete m.placeId; toast('🏠 '+m.name+' is now the home map','var(--gold)'); }
   saveCampaign(camp); renderMap();
 }
-function toggleFog(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.fog=!(m.fog!==false); saveCampaign(camp); renderMap(); }
+function toggleFog(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.fog=!(m.fog!==false); if(m.fog===false) _paintMode=null; saveCampaign(camp); renderMap(); }
 function toggleRumoured(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.revealRumoured=!m.revealRumoured; saveCampaign(camp); renderMap(); }
 function setMapReveal(id,v){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.reveal=v; saveCampaign(camp); renderMap(); }
+function setPaintMode(mode){ _paintMode = (_paintMode===mode)?null:mode; if(_paintMode) _selPinId=null; renderMap(); }
+let _brushTimer=null;
+function setBrush(id,v){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.brushPx=parseInt(v)||20; const lg=document.querySelector('#campMapWrap .map-legend'); if(lg&&_paintMode==='reveal') lg.textContent='paint to clear fog · '+m.brushPx+'px brush'; clearTimeout(_brushTimer); _brushTimer=setTimeout(()=>saveCampaign(camp),400); }
+function clearPaint(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; if(!confirm('Remove all hand-painted fog reveals on this map?')) return; m.paint=[]; saveCampaign(camp); renderMap(); }
 function resetPinSize(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.pinPx=13; delete m.pinScale; saveCampaign(camp); renderMap(); }
 function togglePinLabels(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.hidePinLabels=!m.hidePinLabels; saveCampaign(camp); renderMap(); }
 function peekFog(id,on){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m._peek=on; const fog=document.querySelector('#campMapSvg .map-fog'); if(fog) fog.style.opacity=on?'0':''; }
