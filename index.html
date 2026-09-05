@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v7.1.0 illustrated-maps-fog 2026-09-05 -->
+<!-- Tome of Heroes v7.3.0 pin-size 2026-09-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -13681,6 +13681,7 @@ function _applyMergePlan(plan, camp){
       goldAwarded: s.goldAwarded||0, highlights: s.highlights||[],
       presentCharIds: [], goldAddedToLoot: false,
     };
+    session.placesScanned = true; // places were extracted alongside this import
     camp.sessions.push(session);
     camp.lastPlayed = Date.now();
     addPartyHistoryEvent(camp,'session',`Session ${sessionNum}: "${session.title}"`,'📜');
@@ -13965,12 +13966,14 @@ function confirmClaudeSession(){
     if(si>=0) camps[ci2].sessions[si].goldAddedToLoot = true;
   }
   saveCampaigns(camps);
+  const _rawNotes = document.getElementById('claudeSessionNotes')?.value || '';
   document.getElementById('claudeSessionNotes').value = '';
   document.getElementById('claudeSessionPreview').innerHTML = '';
   window._pendingClaudeSession = null;
   toast('Session logged!');
   renderSessions();
   renderCampDetailHeader();
+  setTimeout(()=>autoScanSessionPlaces(editingCampId, session, _rawNotes), 300);
 }
 
 function addSession() {
@@ -14027,6 +14030,7 @@ function addSession() {
   document.getElementById('sGold').value='0';
   renderSessions();
   renderCampDetailHeader();
+  setTimeout(()=>autoScanSessionPlaces(editingCampId, session), 300);
 }
 
 function deleteSession(sid) {
@@ -14505,11 +14509,11 @@ function renderMap(){
            :`<rect width="${VW}" height="${VH}" fill="#1a1530"/><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="#8880b0" font-size="11" font-family="Cinzel,serif">${map.imgKey?'loading map…':'no image yet'}</text>`}
       ${fogOn?`<rect class="map-fog" width="${VW}" height="${VH}" fill="url(#fogTex)" opacity="0.93" mask="url(#fogMask)"/>`:''}
       ${edges.map(([p,q])=>`<line class="map-edge" x1="${X(p)}" y1="${Y(p)}" x2="${X(q)}" y2="${Y(q)}"/>`).join('')}
-      ${pinned.map(p=>{ const sub=maps.find(m=>m.placeId===p.id);
+      ${pinned.map(p=>{ const sub=maps.find(m=>m.placeId===p.id); const sc=map.pinScale||1; const R=(13*sc).toFixed(1); const IC=(13*sc).toFixed(1); const LY=(11+13*sc).toFixed(1); const LF=(9*Math.min(1.35,Math.max(0.85,sc))).toFixed(1); const bx=(12*sc).toFixed(1), by=(-10*sc).toFixed(1), br=(7*sc).toFixed(1), bf=(8*sc).toFixed(1);
         return `<g class="map-node illus pinlabel ${p.status||''}" data-id="${p.id}" transform="translate(${X(p)},${Y(p)})">
-        <circle r="13"/><text class="mn-icon" text-anchor="middle" y="5">${PLACE_ICONS[p.type]||PLACE_ICONS.other}</text>
-        <text text-anchor="middle" y="25">${esc(String(p.name).slice(0,20))}</text>
-        ${sub?`<g class="mn-sub" onclick="switchMap('${sub.id}');event.stopPropagation()"><circle cx="12" cy="-10" r="7" fill="var(--gold)"/><text x="12" y="-7" text-anchor="middle" font-size="8" fill="#0d0a1a" style="fill:#0d0a1a;stroke:none">🗺</text></g>`:''}
+        <circle r="${R}"/><text class="mn-icon" text-anchor="middle" y="${(5*sc).toFixed(1)}" style="font-size:${IC}px">${PLACE_ICONS[p.type]||PLACE_ICONS.other}</text>
+        <text text-anchor="middle" y="${LY}" style="font-size:${LF}px">${esc(String(p.name).slice(0,20))}</text>
+        ${sub?`<g class="mn-sub" onclick="switchMap('${sub.id}');event.stopPropagation()"><circle cx="${bx}" cy="${by}" r="${br}" fill="var(--gold)"/><text x="${bx}" y="${(by*0.7).toFixed(1)}" text-anchor="middle" style="font-size:${bf}px" fill="#0d0a1a" stroke="none">🗺</text></g>`:''}
       </g>`; }).join('')}
     </svg>`;
     // On a sub-map only offer places that plausibly belong there: linked to
@@ -14523,8 +14527,11 @@ function renderMap(){
       <button class="pc-pill ${map.fog!==false?'on':''}" onclick="toggleFog('${map.id}')">${map.fog!==false?'🌫 fog on':'fog off'}</button>
       ${map.fog!==false?`<button class="pc-pill" onpointerdown="peekFog('${map.id}',true)" onpointerup="peekFog('${map.id}',false)" onpointerleave="peekFog('${map.id}',false)">👁 hold to peek</button>`:''}
       <select class="pc-pill" onchange="setMapReveal('${map.id}',this.value)" style="appearance:auto">${Object.keys(MAP_REVEAL).map(k=>`<option value="${k}" ${(map.reveal||'medium')===k?'selected':''}>reveal: ${k}</option>`).join('')}</select>
+      <label class="pc-pill" style="display:flex;align-items:center;gap:6px;cursor:default">📌<input type="range" min="0.6" max="2" step="0.1" value="${map.pinScale||1}" oninput="setPinScale('${map.id}',this.value)" style="width:74px;accent-color:var(--gold)"></label>
       <button class="pc-pill ${map.revealRumoured?'on':''}" onclick="toggleRumoured('${map.id}')">dim-reveal rumours</button>
       <button class="pc-pill" onclick="toggleAddMap('${map.id}')">✎ edit map</button>
+      <button class="pc-pill" onclick="scanSessionsForPlaces()" id="scanPlacesBtn">🔍 scan sessions for places</button>
+      <button class="pc-pill ${camp.autoScanPlaces!==false?'on':''}" onclick="toggleAutoScan()" title="Scan every new session for places automatically">auto-scan new sessions</button>
     </div>`;
     if(unplaced.length){
       html += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">NOT ON THIS MAP YET — tap one, then tap the map</div>
@@ -14535,10 +14542,14 @@ function renderMap(){
     if(_mapLayout(places)) saveCampaign(camp);
     html += `<div class="map-wrap" id="campMapWrap">${_renderSketchSvg(places)}<div class="map-legend">sketch map · drag to arrange</div></div>
       <div class="map-ctrls"><button class="pc-pill" onclick="mapResetLayout()">↺ Re-arrange</button>
-      <button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="toggleAddMap()">🖼 Add an illustrated backdrop</button></div>`;
+      <button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="toggleAddMap()">🖼 Add an illustrated backdrop</button>
+      <button class="pc-pill" onclick="scanSessionsForPlaces()" id="scanPlacesBtn">🔍 scan sessions for places</button>
+      <button class="pc-pill ${camp.autoScanPlaces!==false?'on':''}" onclick="toggleAutoScan()" title="Scan every new session for places automatically">auto-scan new sessions</button></div>`;
   } else {
     html += `<div class="empty-state" style="margin-bottom:12px"><div class="es-icon">🗺</div><p>No places logged yet.<br>Mention a town, dungeon or road in a Quick Jot or session import and it appears here — or add a backdrop map below.</p></div>
-      <div class="map-ctrls"><button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="toggleAddMap()">🖼 Add an illustrated backdrop</button></div>`;
+      <div class="map-ctrls"><button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="toggleAddMap()">🖼 Add an illustrated backdrop</button>
+      <button class="pc-pill" onclick="scanSessionsForPlaces()" id="scanPlacesBtn">🔍 scan sessions for places</button>
+      <button class="pc-pill ${camp.autoScanPlaces!==false?'on':''}" onclick="toggleAutoScan()" title="Scan every new session for places automatically">auto-scan new sessions</button></div>`;
   }
 
   // ── Add / edit map form ──
@@ -14666,6 +14677,100 @@ function _bindMapDrag(camp, map){
   svg.addEventListener('pointerup',end); svg.addEventListener('pointercancel',end);
 }
 
+/* ══ PLACE SCANNER — mine session logs for locations ══
+   Runs over session summaries/highlights (all of them, or just the ones not
+   scanned yet) and proposes places + routes for review. Also runs
+   automatically whenever a session is logged, unless switched off. */
+function _placesPrompt(camp){
+  const ctx = { places:(camp.places||[]).map(p=>({name:p.name,type:p.type,status:p.status,links:p.links||[]})), partyCharacters:getVisibleChars().map(c=>c.name), npcs:(camp.npcs||[]).map(n=>n.name).slice(0,40) };
+  return `You extract LOCATIONS from D&D session logs for a campaign map. Return ONLY valid JSON, no markdown:
+{ "places": [ { "name": "string", "matchExisting": bool, "type": "city|town|village|dungeon|wilderness|landmark|region|building|other", "region": "string or omit", "desc": "one line: what happened there / what it is", "connectedTo": ["places with a road, route or direct travel between them"], "partyIsHere": bool, "firstSession": number, "appendNote": "string or omit" } ] }
+Rules:
+- A place is any named location the party visited, passed through, was told about, or is heading to: settlements, dungeons, inns, roads, regions, ruins, landmarks.
+- Not people, not organisations, not the party's own characters.
+- Skip generic unnamed spots ("a cave", "the forest") unless the log treats them as a specific landmark.
+- connectedTo: only routes the log actually implies (travelled between, "the road to", "north of").
+- partyIsHere: true only for where the party ends the LATEST session provided.
+- firstSession: the session number where the place is first mentioned.
+- Prefer matching EXISTING places (fuzzy is fine, matchExisting:true) and add appendNote for anything new learned; keep desc short.
+Existing records:
+${JSON.stringify(ctx)}`;
+}
+async function _extractPlaces(camp, text){
+  const res = await callClaude({ model:'claude-sonnet-5', max_tokens:2500, system:_placesPrompt(camp), messages:[{ role:'user', content:text }] });
+  const raw=(res.content?.find(b=>b.type==='text')?.text||''); const m=raw.match(/\{[\s\S]*\}/);
+  if(!m) throw new Error('Could not read the response');
+  const parsed=JSON.parse(m[0]);
+  return { places:(parsed.places||[]).filter(p=>p&&p.name) };
+}
+function _sessionText(sess, num){
+  const parts=[`Session ${num}: ${sess.title||''}`, sess.date?`Date: ${sess.date}`:'', sess.summary||'', (sess.highlights||[]).length?'Highlights:\n- '+sess.highlights.join('\n- '):'', sess.rawNotes||''];
+  return parts.filter(Boolean).join('\n');
+}
+async function scanSessionsForPlaces(){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  const sessions=camp.sessions||[];
+  if(!sessions.length){ toast('No sessions logged yet','var(--red)'); return; }
+  const unscanned=sessions.filter(x=>!x.placesScanned);
+  let list=unscanned;
+  if(!unscanned.length){ if(!confirm('Every session has been scanned. Scan them all again?')) return; list=sessions; }
+  else if(unscanned.length<sessions.length && confirm(`${unscanned.length} session${unscanned.length!==1?'s':''} not scanned yet. OK = scan those, Cancel = scan all ${sessions.length}.`)===false){ list=sessions; }
+  const btn=document.getElementById('scanPlacesBtn'); if(btn){ btn.disabled=true; btn.textContent='🔍 scanning…'; }
+  try{
+    // Batch to keep each request a sensible size
+    const batches=[]; let cur=[], len=0;
+    list.forEach(x=>{ const n=sessions.indexOf(x)+1; const t=_sessionText(x,n); if(len+t.length>9000 && cur.length){ batches.push(cur); cur=[]; len=0; } cur.push({x,n,t}); len+=t.length; });
+    if(cur.length) batches.push(cur);
+    let all=[]; let i=0;
+    for(const b of batches){ i++; if(btn) btn.textContent=`🔍 scanning ${i}/${batches.length}…`; const r=await _extractPlaces(camp, b.map(o=>o.t).join('\n\n')); all=all.concat(r.places); }
+    // Merge duplicates across batches (later mentions win for partyIsHere)
+    const merged=[]; all.forEach(pl=>{ const ex=merged.find(m=>_fuzzyMatch(m.name,pl.name)>=0.75); if(ex){ ex.connectedTo=[...new Set([...(ex.connectedTo||[]),...(pl.connectedTo||[])])]; if(pl.partyIsHere){ merged.forEach(m=>m.partyIsHere=false); ex.partyIsHere=true; } if(pl.appendNote) ex.appendNote=(ex.appendNote?ex.appendNote+' ':'')+pl.appendNote; ex.firstSession=Math.min(ex.firstSession||99, pl.firstSession||99); } else merged.push(pl); });
+    if(merged.some(m=>m.partyIsHere) && list.length<sessions.length && list.indexOf(sessions[sessions.length-1])<0) merged.forEach(m=>m.partyIsHere=false); // only the latest session decides "here"
+    const plan=_buildMergePlan({places:merged}, camp);
+    _showPlacesReview(camp, plan, list.map(x=>x.id), `🔍 ${list.length} session${list.length!==1?'s':''} scanned`);
+  }catch(e){ toast('Scan failed: '+(e.message||'error'),'var(--red)'); }
+  if(btn){ btn.disabled=false; btn.textContent='🔍 scan sessions for places'; }
+}
+/* Called right after a session is logged (manual, Claude import). */
+async function autoScanSessionPlaces(campId, session, rawText){
+  const camp=getCampaigns().find(c=>c.id===campId); if(!camp || camp.autoScanPlaces===false) return;
+  const num=(camp.sessions||[]).findIndex(x=>x.id===session.id)+1;
+  const text=_sessionText({...session, rawNotes:rawText||''}, num);
+  if(text.length<40){ session.placesScanned=true; return; }
+  try{
+    const r=await _extractPlaces(camp, text);
+    const plan=_buildMergePlan({places:r.places}, camp);
+    if(!plan.places.length){ session.placesScanned=true; saveCampaign(camp); return; }
+    _showPlacesReview(camp, plan, [session.id], `🗺 Places spotted in session ${num}`);
+  }catch(e){ console.warn('auto place scan:', e.message); }
+}
+function toggleAutoScan(){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; camp.autoScanPlaces = camp.autoScanPlaces===false ? true : false; saveCampaign(camp); renderMap(); toast(camp.autoScanPlaces===false?'Auto-scan off':'New sessions will be scanned for places','var(--gold)'); }
+function _showPlacesReview(camp, plan, sessionIds, title){
+  window._pendingPlaceScan={ campId:camp.id, plan, sessionIds };
+  const upd=plan.places.filter(x=>x.action==='update').length, nw=plan.places.filter(x=>x.action==='new').length;
+  _openPinModal(title,
+    (plan.places.length ? '<div style="font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.5">Review what the log mentions. New places land unpinned in the travel log; pin them onto a map afterwards.</div>'
+      + _renderMergePreview({session:null,quests:[],npcs:[],arcs:[],places:plan.places,books:[],notes:[]}, null)
+      : '<div style="font-size:12px;color:var(--muted);padding:12px 0;text-align:center">No new places or routes found in these sessions.</div>')
+    +'<div style="display:flex;gap:8px;margin-top:6px">'
+    +(plan.places.length?'<button class="btn btn-gold" style="flex:1;margin:0;background:var(--teal);color:#fff" onclick="applyPlacesReview()">✦ Add '+(nw?nw+' new':'')+(nw&&upd?' + ':'')+(upd?upd+' update'+(upd!==1?'s':''):'')+'</button>':'')
+    +'<button class="btn btn-outline" style="flex:0 0 auto;margin:0;padding:13px 16px" onclick="dismissPlacesReview()">Skip</button></div>');
+}
+function _markScanned(){
+  const p=window._pendingPlaceScan; if(!p) return null;
+  const camp=getCampaigns().find(c=>c.id===p.campId); if(!camp) return null;
+  (camp.sessions||[]).forEach(x=>{ if(p.sessionIds.includes(x.id)) x.placesScanned=true; });
+  return camp;
+}
+function applyPlacesReview(){
+  const p=window._pendingPlaceScan; const camp=_markScanned(); if(!p||!camp) return;
+  const stats=_applyMergePlan({session:null,quests:[],npcs:[],arcs:[],places:p.plan.places,books:[],notes:[]}, camp);
+  saveCampaign(camp); window._pendingPlaceScan=null; closePinModal();
+  toast('🗺 '+(stats.newCount?stats.newCount+' place'+(stats.newCount!==1?'s':'')+' added':'')+(stats.newCount&&stats.updateCount?', ':'')+(stats.updateCount?stats.updateCount+' updated':''),'var(--teal)');
+  if(_currentCampTab==='map') renderMap(); else if(_currentCampTab==='sessions') renderSessions();
+}
+function dismissPlacesReview(){ const camp=_markScanned(); if(camp) saveCampaign(camp); window._pendingPlaceScan=null; closePinModal(); }
+
 /* ── Map management ── */
 function switchMap(id){ _placingId=null; _curMapId=id||null; renderMap(); }
 function toggleAddMap(editId, presetPlaceId){
@@ -14708,6 +14813,20 @@ function deleteMap(id){
 function toggleFog(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.fog=!(m.fog!==false); saveCampaign(camp); renderMap(); }
 function toggleRumoured(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.revealRumoured=!m.revealRumoured; saveCampaign(camp); renderMap(); }
 function setMapReveal(id,v){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.reveal=v; saveCampaign(camp); renderMap(); }
+let _pinScaleTimer=null;
+function setPinScale(id,v){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return;
+  m.pinScale=Math.round(parseFloat(v)*10)/10;
+  // Live-scale the rendered pins without a full re-render (keeps the slider smooth)
+  const svg=document.getElementById('campMapSvg');
+  if(svg){ const sc=m.pinScale; svg.querySelectorAll('.map-node.illus').forEach(g=>{
+    const c=g.querySelector('circle'); if(c) c.setAttribute('r',(13*sc).toFixed(1));
+    const ic=g.querySelector('.mn-icon'); if(ic){ ic.style.fontSize=(13*sc).toFixed(1)+'px'; ic.setAttribute('y',(5*sc).toFixed(1)); }
+    const lbl=g.querySelector('text:not(.mn-icon)'); if(lbl){ lbl.setAttribute('y',(11+13*sc).toFixed(1)); lbl.style.fontSize=(9*Math.min(1.35,Math.max(0.85,sc))).toFixed(1)+'px'; }
+    const sub=g.querySelector('.mn-sub'); if(sub){ const bx=(12*sc).toFixed(1),by=(-10*sc).toFixed(1); const bc=sub.querySelector('circle'), bt=sub.querySelector('text'); if(bc){bc.setAttribute('cx',bx);bc.setAttribute('cy',by);bc.setAttribute('r',(7*sc).toFixed(1));} if(bt){bt.setAttribute('x',bx);bt.setAttribute('y',(by*0.7).toFixed(1));bt.style.fontSize=(8*sc).toFixed(1)+'px';} }
+  }); }
+  clearTimeout(_pinScaleTimer); _pinScaleTimer=setTimeout(()=>saveCampaign(camp), 400);
+}
 function peekFog(id,on){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m._peek=on; const fog=document.querySelector('#campMapSvg .map-fog'); if(fog) fog.style.opacity=on?'0':''; }
 function beginPlace(id){ _placingId = (id && _placingId!==id) ? id : null; renderMap(); if(_placingId) document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
 function unpinPlace(id){
