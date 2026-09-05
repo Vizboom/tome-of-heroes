@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v7.9.0 fog-literal-icon 2026-09-05 -->
+<!-- Tome of Heroes v8.0.0 sword-coast-seed 2026-09-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14611,6 +14611,13 @@ function renderMap(){
     </div>
     <div class="field"><label>Notes</label><textarea id="plDesc" placeholder="What's here, who's here, why it matters…" style="min-height:52px"></textarea></div>
     <button class="btn btn-primary" onclick="addPlace()">Add Place</button>
+    ${(()=>{ const seeded=(places||[]).filter(pp=>pp.seed==='swordcoast').length; const hint=looksLikeSwordCoast(camp);
+      return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
+        <span style="font-size:10px;color:var(--muted);font-family:'Cinzel',serif;letter-spacing:0.5px">STARTER SET</span>
+        <button class="pc-pill ${hint?'on':''}" onclick="seedSwordCoast()" title="Seed canonical Sword Coast locations as hidden places">🌊 Sword Coast${hint?' ✦':''}</button>
+        ${seeded?`<button class="pc-pill" style="color:var(--red);border-color:var(--red)" onclick="removeSwordCoastSeed()">remove unused</button><span style="font-size:10px;color:var(--muted2)">${seeded} seeded</span>`:''}
+      </div>
+      <div style="font-size:10px;color:var(--muted2);margin-top:4px;line-height:1.4">Adds well-known Sword Coast locations to the travel log, hidden and unpinned — pin each as your party finds it. Bring your own map image as the backdrop.</div>`; })()}
   </div>`;
 
   if(places.length){
@@ -14912,6 +14919,69 @@ function mapResetLayout(){
   (camp.places||[]).forEach(p=>{ delete p.x; delete p.y; });
   renderMap();
 }
+/* ══ STARTER LOCATIONS — canonical Sword Coast geography ══
+   Well-known Forgotten Realms locations of the Sword Coast, seeded as HIDDEN
+   (rumoured, unpinned) places so nothing appears on the map until the party
+   discovers each one and it gets pinned. Names/positions are general setting
+   knowledge — not traced from any specific copyrighted map. Descriptions are
+   original one-liners. Roads (High Road, Trade Way, Long Road) become links. */
+const SWORD_COAST_SEED = [
+  {name:'Neverwinter', type:'city', region:'Sword Coast North', desc:'The Jewel of the North — a rebuilt port city warmed by an underground fire river.', links:['Luskan','Leilon','Neverwinter Wood','Phandalin']},
+  {name:'Waterdeep', type:'city', region:'Sword Coast North', desc:'The City of Splendors — the largest and richest metropolis on the coast.', links:['Leilon','Daggerford','Red Larch']},
+  {name:'Baldur\'s Gate', type:'city', region:'Western Heartlands', desc:'A crowded, wealthy port on the River Chionthar, ruled by its Patriars and Flaming Fist.', links:['Beregost','Candlekeep','Daggerford']},
+  {name:'Luskan', type:'city', region:'Sword Coast North', desc:'The City of Sails — a lawless pirate port at the mouth of the River Mirar.', links:['Neverwinter']},
+  {name:'Daggerford', type:'town', region:'Sword Coast', desc:'A small walled town on the Trade Way, guarded by its ducal castle.', links:['Waterdeep','Baldur\'s Gate']},
+  {name:'Leilon', type:'town', region:'Sword Coast North', desc:'A modest waypoint town midway along the High Road.', links:['Neverwinter','Waterdeep']},
+  {name:'Phandalin', type:'town', region:'Sword Coast North', desc:'A frontier town in the Sword Mountains foothills, rebuilt among older ruins.', links:['Neverwinter','Triboar','Conyberry']},
+  {name:'Triboar', type:'town', region:'Dessarin Valley', desc:'A ranching crossroads town where the Long Road meets the Evermoor Way.', links:['Yartar','Longsaddle','Red Larch','Phandalin']},
+  {name:'Yartar', type:'town', region:'Dessarin Valley', desc:'A walled river town controlling trade on the River Surbrin.', links:['Triboar']},
+  {name:'Beregost', type:'town', region:'Western Heartlands', desc:'A quiet farming town on the Coast Way south of Baldur\'s Gate.', links:['Baldur\'s Gate','Nashkel']},
+  {name:'Red Larch', type:'village', region:'Dessarin Valley', desc:'A crossroads village of quarries and caravans on the Long Road.', links:['Waterdeep','Triboar']},
+  {name:'Longsaddle', type:'village', region:'Dessarin Valley', desc:'A village overshadowed by the eccentric Harpell wizarding family.', links:['Triboar']},
+  {name:'Nashkel', type:'village', region:'Western Heartlands', desc:'A mining village near the Cloud Peaks, close to the Amnish border.', links:['Beregost']},
+  {name:'Conyberry', type:'village', region:'Sword Coast North', desc:'A ruined hamlet on the Triboar Trail, long abandoned to raiders.', links:['Phandalin']},
+  {name:'Candlekeep', type:'landmark', region:'Sword Coast', desc:'A towering library-fortress on a crag, hoarding priceless tomes behind strict entry tolls.', links:['Baldur\'s Gate']},
+  {name:'Helm\'s Hold', type:'building', region:'Sword Coast North', desc:'A fortified monastery and asylum southeast of Neverwinter.', links:['Neverwinter']},
+  {name:'Neverwinter Wood', type:'wilderness', region:'Sword Coast North', desc:'A vast, ancient forest wrapped in druidic and fey secrets.', links:['Neverwinter']},
+  {name:'Kryptgarden Forest', type:'wilderness', region:'Sword Coast North', desc:'A dark wood rumoured to hide a green dragon\'s lair.', links:[]},
+  {name:'Mere of Dead Men', type:'wilderness', region:'Sword Coast North', desc:'A haunted coastal swamp swallowing the High Road in fog and lizardfolk.', links:[]},
+  {name:'High Forest', type:'wilderness', region:'Savage Frontier', desc:'One of Faerûn\'s last great primeval forests, home to elves and worse.', links:[]},
+  {name:'Sword Mountains', type:'region', region:'Sword Coast North', desc:'A rugged coastal range riddled with old mines and monster lairs.', links:['Phandalin']},
+  {name:'Ardeep Forest', type:'wilderness', region:'Sword Coast', desc:'A small, elf-touched wood south of Waterdeep.', links:[]},
+  {name:'Misty Forest', type:'wilderness', region:'Western Heartlands', desc:'A quiet wood east of the Trade Way, sheltering reclusive folk.', links:[]},
+  {name:'Icewind Dale', type:'region', region:'Frozenfar', desc:'A frozen tundra of ten hardy towns beyond the Spine of the World.', links:['Luskan']},
+];
+function looksLikeSwordCoast(camp){
+  const hay=((camp?.name||'')+' '+(camp?.setting||'')+' '+(camp?.description||'')).toLowerCase();
+  return /sword ?coast|forgotten realms|faer[uû]n|neverwinter|waterdeep|baldur|phandal|phandelver|icewind|luskan|toril|dessarin|dragon heist|dragon of icespire/.test(hay);
+}
+function seedSwordCoast(){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  if(!camp.places) camp.places=[];
+  const already=camp.places.filter(p=>SWORD_COAST_SEED.some(sd=>_fuzzyMatch(sd.name,p.name)>=0.8)).length;
+  const toAdd=SWORD_COAST_SEED.filter(sd=>!_findExisting(sd.name, camp.places, 'name'));
+  if(!toAdd.length){ toast('All '+SWORD_COAST_SEED.length+' Sword Coast locations are already in your travel log','var(--muted)'); return; }
+  if(!confirm('Add '+toAdd.length+' hidden Sword Coast location'+(toAdd.length!==1?'s':'')+' to the travel log?\n\nThey stay unpinned and unrevealed — pin each one as your party discovers it.')) return;
+  toAdd.forEach(sd=>{ camp.places.push({ id:genItemId(), name:sd.name, type:sd.type, region:sd.region, desc:sd.desc, status:'rumoured', links:[...(sd.links||[])], seed:'swordcoast', session:0, added:Date.now() }); });
+  // Make links reciprocal so routes draw once both ends are pinned.
+  camp.places.forEach(p=>{ (p.links||[]).forEach(n=>{ const q=_findExisting(n, camp.places, 'name'); if(q&&q!==p){ if(!q.links) q.links=[]; if(!q.links.some(x=>_fuzzyMatch(x,p.name)>=0.8)) q.links.push(p.name); } }); });
+  saveCampaign(camp); renderMap();
+  toast('🌊 Added '+toAdd.length+' hidden Sword Coast location'+(toAdd.length!==1?'s':'')+' — pin them as you go','var(--teal)');
+}
+function removeSwordCoastSeed(){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  const seeded=(camp.places||[]).filter(p=>p.seed==='swordcoast');
+  // Keep any the party has actually engaged with (pinned or marked visited/current).
+  const untouched=seeded.filter(p=>p.status==='rumoured' && !(p.pins&&Object.keys(p.pins).length));
+  if(!untouched.length){ toast('No untouched seeded locations to remove','var(--muted)'); return; }
+  if(!confirm('Remove '+untouched.length+' unused seeded Sword Coast location'+(untouched.length!==1?'s':'')+'? (Ones you\'ve pinned or visited are kept.)')) return;
+  const ids=new Set(untouched.map(p=>p.id));
+  const names=untouched.map(p=>p.name);
+  camp.places=camp.places.filter(p=>!ids.has(p.id));
+  camp.places.forEach(p=>{ p.links=(p.links||[]).filter(n=>!names.some(nm=>_fuzzyMatch(nm,n)>=0.8)); });
+  saveCampaign(camp); renderMap(); toast('Removed '+untouched.length+' seeded location'+(untouched.length!==1?'s':''),'var(--red)');
+}
+
 function addPlace(){
   const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
   const name=(document.getElementById('plName')?.value||'').trim();
