@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v8.7.0 pin-label-scales 2026-09-05 -->
+<!-- Tome of Heroes v8.8.0 label-matches-dot 2026-09-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14461,10 +14461,10 @@ function _revealR(map){ return _pinPx(map) * FOG_AREA_BUFFER; }
 function _brushR(map){ return map.brushPx || Math.max(14, _pinPx(map)*2.4); }
 
 function _campMaps(camp){ if(!camp.maps) camp.maps=[]; return camp.maps; }
-function _pinPx(map){ if(map.pinPx!=null) return map.pinPx; if(map.pinScale) return Math.round(map.pinScale*13); return 2; }
+function _pinPx(map){ if(map.pinPx!=null) return map.pinPx; if(map.pinScale) return Math.round(map.pinScale*13); return 2; } // 2px = starting size; grip can shrink to 0.4
 // Label scales with the pin, like the dot. Proportional to radius with a
 // tiny floor so it can shrink down to roughly dot size.
-function _pinLabelPx(R){ return Math.max(1.5, R*1.15); }
+function _pinLabelPx(R){ return Math.max(1, R*1.1); } // label tracks the dot, small; shrinks with pin
 // On-screen scale for pins: they don't grow 1:1 with the map. 1× at zoom-out,
 // ramping to at most 2× at full zoom, so a pin stays a small marker throughout.
 function _pinScreenScale(z){ z=Math.max(1, z||1); const mult=Math.min(2, 1+(z-1)/(MAP_ZMAX-1)); return mult/z; }
@@ -14736,7 +14736,7 @@ function _bindMapDrag(camp, map){
     if(grip && selP){
       let rz=null;
       grip.addEventListener('pointerdown',e=>{ const pos=getPos(selP); if(!pos) return; rz={cx:pos.x*VW, cy:pos.y*VH}; grip.setPointerCapture(e.pointerId); e.preventDefault(); e.stopPropagation(); });
-      svg.addEventListener('pointermove',e=>{ if(!rz) return; const l=toLocal(e); const _S=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1)||1; let r=Math.hypot(l.x-rz.cx, l.y-rz.cy)/_S; r=Math.max(0.5, Math.min(60, r)); map.pinPx=Math.round(r*2)/2; _livePinSize(svg, map); const lg=svg.parentElement.querySelector('.map-legend'); if(lg) lg.textContent='pin size: '+map.pinPx+'px'; e.preventDefault(); });
+      svg.addEventListener('pointermove',e=>{ if(!rz) return; const l=toLocal(e); const _S=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1)||1; let r=Math.hypot(l.x-rz.cx, l.y-rz.cy)/_S; r=Math.max(0.4, Math.min(60, r)); map.pinPx=Math.round(r*10)/10; _livePinSize(svg, map); const lg=svg.parentElement.querySelector('.map-legend'); if(lg) lg.textContent='pin size: '+map.pinPx+'px'; e.preventDefault(); });
       const rzEnd=()=>{ if(rz){ saveCampaign(camp); renderMap(); } rz=null; };
       grip.addEventListener('pointerup',rzEnd); grip.addEventListener('pointercancel',rzEnd);
     }
