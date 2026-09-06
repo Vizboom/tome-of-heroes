@@ -524,7 +524,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .map-wrap.placing .map-node{pointer-events:none;}
 .map-fog{pointer-events:none;}
 .map-node .mn-sub{font-size:9px;pointer-events:all;cursor:pointer;}
-.map-node.pinlabel text{fill:#fff;paint-order:stroke;stroke:rgba(0,0,0,0.75);stroke-width:2.5px;}
+.map-node.pinlabel text{fill:#fff;paint-order:stroke;stroke:none;filter:drop-shadow(0 1px 1.5px rgba(0,0,0,0.9));}
 .map-node.illus circle{fill:rgba(28,24,56,0.85);}
 .map-tray{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
 .map-ctrls{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
@@ -14553,7 +14553,7 @@ function renderMap(){
         return `<g class="map-node illus pinlabel ${p.status||''} ${seld?'selpin':''} ${sub?'hasmap':''}" data-id="${p.id}" data-cx="${X(p)}" data-cy="${Y(p)}" transform="translate(${X(p)},${Y(p)}) scale(${PS})">${sub?`<title>${esc(p.name)} — double-click to open its map</title>`:''}
         ${seld?`<circle r="${(R+3).toFixed(1)}" fill="none" stroke="var(--gold)" stroke-width="1" stroke-dasharray="3 2" opacity="0.9"/>`:''}
         <circle r="${R.toFixed(1)}"/>${showIcon?`<text class="mn-icon" text-anchor="middle" y="${(R*0.38).toFixed(1)}" style="font-size:${IC}px">${PLACE_ICONS[p.type]||PLACE_ICONS.other}</text>`:''}
-        ${(!map.hidePinLabels)?`<text text-anchor="middle" y="${LY}" style="font-size:${LF}px">${esc(String(p.name).slice(0,20))}</text>`:''}
+        ${(!map.hidePinLabels && p.hideName!==true)?`<text text-anchor="middle" y="${LY}" style="font-size:${LF}px">${esc(String(p.name).slice(0,20))}</text>`:''}
         ${sub?`<g class="mn-sub" onclick="switchMap('${sub.id}');event.stopPropagation()"><circle cx="${bx}" cy="${by}" r="${br}" fill="var(--gold)"/><text x="${bx}" y="${(by*0.7).toFixed(1)}" text-anchor="middle" style="font-size:${bf}px" fill="#0d0a1a" stroke="none">🗺</text></g>`:''}
         ${seld?`<g class="mn-resize"><line x1="${(R*0.707).toFixed(1)}" y1="${(R*0.707).toFixed(1)}" x2="${gh.toFixed(1)}" y2="${gh.toFixed(1)}" stroke="var(--gold)" stroke-width="0.6" opacity="0.6"/><rect x="${(gh-9).toFixed(1)}" y="${(gh-9).toFixed(1)}" width="18" height="18" fill="transparent" style="cursor:nwse-resize"/><rect x="${(gh-3).toFixed(1)}" y="${(gh-3).toFixed(1)}" width="6" height="6" rx="1" fill="var(--gold)" stroke="#0d0a1a" stroke-width="0.6" style="pointer-events:none"/></g>`:''}
       </g>`; }).join(''); })()}
@@ -14570,7 +14570,7 @@ function renderMap(){
       <button class="pc-pill" onclick="zoomReset('${map.id}')" title="Reset zoom">⟲ fit</button>
 
 <span class="pc-pill" style="cursor:default">📌 ${_pinPx(map)}px</span>
-      <button class="pc-pill ${map.hidePinLabels?'on':''}" onclick="togglePinLabels('${map.id}')" title="Hide place names on the map (handy for very small pins)">${map.hidePinLabels?'labels off':'labels on'}</button>
+      <button class="pc-pill ${map.hidePinLabels?'on':''}" onclick="togglePinLabels('${map.id}')" title="Master switch — hide every place name on this map">${map.hidePinLabels?'all names off':'all names on'}</button>
       <button class="pc-pill" onclick="resetPinSize('${map.id}')" title="Reset pin size">↺ pin size</button>
       <button class="pc-pill ${map.isHome?'on gold':''}" onclick="toggleHomeMap('${map.id}')" title="${map.isHome?'This is the landing map — tap to unset':'Make this the map shown first'}">${map.isHome?'🏠 home map':'set as home'}</button>
       <button class="pc-pill" onclick="toggleAddMap('${map.id}')">✎ edit map</button>
@@ -14667,6 +14667,7 @@ function renderMap(){
           <button class="pc-pill ${p.status==='rumoured'?'on':''}" onclick="setPlaceStatus('${p.id}','rumoured')">heard of</button>
           ${map&&!onCur?`<button class="pc-pill" onclick="beginPlace('${p.id}')">📌 pin to map</button>`:''}
           ${map&&onCur?`<button class="pc-pill" onclick="unpinPlace('${p.id}')">unpin</button>`:''}
+          <button class="pc-pill ${p.hideName?'':'on'}" onclick="togglePlaceName('${p.id}')" title="Show or hide this place's name on the map">${p.hideName?'🏷 name off':'🏷 name on'}</button>
           ${!sub?`<button class="pc-pill" onclick="toggleAddMap(null,'${p.id}')" style="margin-left:auto">+ own map</button>`:''}
         </div>
       </div>`; }).join('');
@@ -14810,7 +14811,7 @@ function _livePinSize(svg, map){
     if(main) main.setAttribute('r',R.toFixed(1));
     const sel=g.classList.contains('selpin')?circles[0]:null; if(sel) sel.setAttribute('r',(R+3).toFixed(1));
     const ic=g.querySelector('.mn-icon'); if(ic){ ic.style.display=showIcon?'':'none'; ic.style.fontSize=R.toFixed(1)+'px'; ic.setAttribute('y',(R*0.38).toFixed(1)); }
-    const lbl=g.querySelector(':scope > text:not(.mn-icon)'); if(lbl){ lbl.style.display=map.hidePinLabels?'none':''; lbl.setAttribute('y',LY.toFixed(1)); lbl.style.fontSize=LF.toFixed(1)+'px'; }
+    const lbl=g.querySelector(':scope > text:not(.mn-icon)'); if(lbl){ const _pl=(getCampaigns().find(c=>c.id===editingCampId)?.places||[]).find(q=>q.id===g.dataset.id); lbl.style.display=(map.hidePinLabels||_pl?.hideName===true)?'none':''; lbl.setAttribute('y',LY.toFixed(1)); lbl.style.fontSize=LF.toFixed(1)+'px'; }
     const sub=g.querySelector('.mn-sub'); if(sub){ const br=(R*0.55).toFixed(1),bx=(R*0.95).toFixed(1),by=(-R*0.78).toFixed(1); const bc=sub.querySelector('circle'),bt=sub.querySelector('text'); if(bc){bc.setAttribute('r',br);bc.setAttribute('cx',bx);bc.setAttribute('cy',by);} if(bt){bt.setAttribute('x',bx);bt.setAttribute('y',(by*0.7).toFixed(1));bt.style.fontSize=Math.max(5,R*0.62).toFixed(1)+'px';} }
     const grip=g.querySelector('.mn-resize'); if(grip){ const gh=Math.max(R*0.707,7); const ln=grip.querySelector('line'); if(ln){ln.setAttribute('x1',(R*0.707).toFixed(1));ln.setAttribute('y1',(R*0.707).toFixed(1));ln.setAttribute('x2',gh.toFixed(1));ln.setAttribute('y2',gh.toFixed(1));} const rects=grip.querySelectorAll('rect'); if(rects[0]){rects[0].setAttribute('x',(gh-9).toFixed(1));rects[0].setAttribute('y',(gh-9).toFixed(1));} if(rects[1]){rects[1].setAttribute('x',(gh-3).toFixed(1));rects[1].setAttribute('y',(gh-3).toFixed(1));} }
   });
@@ -15148,6 +15149,7 @@ let _brushTimer=null;
 function setBrush(id,v){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.brushPx=parseInt(v)||20; const lg=document.querySelector('#campMapWrap .map-legend'); if(lg&&_paintMode==='reveal') lg.textContent='paint to clear fog · '+m.brushPx+'px brush'; clearTimeout(_brushTimer); _brushTimer=setTimeout(()=>saveCampaign(camp),400); }
 function clearPaint(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; if(!confirm('Remove all hand-painted fog reveals on this map?')) return; m.paint=[]; saveCampaign(camp); renderMap(); }
 function resetPinSize(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.pinPx=13; delete m.pinScale; saveCampaign(camp); renderMap(); }
+function togglePlaceName(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const pl=(camp.places||[]).find(p=>p.id===id); if(!pl) return; pl.hideName=!pl.hideName; saveCampaign(camp); renderMap(); }
 function togglePinLabels(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.hidePinLabels=!m.hidePinLabels; saveCampaign(camp); renderMap(); }
 function peekFog(id,on){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m._peek=on; const fog=document.querySelector('#campMapSvg .map-fog'); if(fog) fog.style.opacity=on?'0':''; }
 function beginPlace(id){ _placingId = (id && _placingId!==id) ? id : null; renderMap(); if(_placingId) document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
