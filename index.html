@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v8.6.0 board-zoom-lastaction 2026-09-05 -->
+<!-- Tome of Heroes v8.7.0 pin-label-scales 2026-09-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14462,7 +14462,9 @@ function _brushR(map){ return map.brushPx || Math.max(14, _pinPx(map)*2.4); }
 
 function _campMaps(camp){ if(!camp.maps) camp.maps=[]; return camp.maps; }
 function _pinPx(map){ if(map.pinPx!=null) return map.pinPx; if(map.pinScale) return Math.round(map.pinScale*13); return 2; }
-const PIN_LABEL_PX = 9;   // fixed, smallest-legible label size (in base units)
+// Label scales with the pin, like the dot. Proportional to radius with a
+// tiny floor so it can shrink down to roughly dot size.
+function _pinLabelPx(R){ return Math.max(1.5, R*1.15); }
 // On-screen scale for pins: they don't grow 1:1 with the map. 1× at zoom-out,
 // ramping to at most 2× at full zoom, so a pin stays a small marker throughout.
 function _pinScreenScale(z){ z=Math.max(1, z||1); const mult=Math.min(2, 1+(z-1)/(MAP_ZMAX-1)); return mult/z; }
@@ -14544,7 +14546,7 @@ function renderMap(){
       ${src?`<image href="${src}" x="0" y="0" width="${VW}" height="${VH}" preserveAspectRatio="none"/>`
            :`<rect width="${VW}" height="${VH}" fill="#1a1530"/><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="#8880b0" font-size="11" font-family="Cinzel,serif">${map.imgKey?'loading map…':'no image yet'}</text>`}
       ${edges.map(([p,q])=>`<line class="map-edge" x1="${X(p)}" y1="${Y(p)}" x2="${X(q)}" y2="${Y(q)}"/>`).join('')}
-      ${(()=>{ const R=_pinPx(map); const showIcon=R>=5; const IC=R.toFixed(1); const LF=PIN_LABEL_PX.toFixed(1); const LY=(R+PIN_LABEL_PX*0.95 + 1).toFixed(1); const showLabel=true; const PS=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4);
+      ${(()=>{ const R=_pinPx(map); const showIcon=R>=5; const IC=R.toFixed(1); const _lf=_pinLabelPx(R); const LF=_lf.toFixed(1); const LY=(R+_lf*0.95 + 1).toFixed(1); const showLabel=true; const PS=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4);
         const br=(R*0.55).toFixed(1), bx=(R*0.95).toFixed(1), by=(-R*0.78).toFixed(1), bf=Math.max(5,R*0.62).toFixed(1);
         const gh=Math.max(R*0.707, 7); // grip sits on the edge, but stays grabbable on tiny pins
         return pinned.map(p=>{ const sub=maps.find(m=>m.placeId===p.id); const seld=_selPinId===p.id;
@@ -14801,7 +14803,7 @@ function _bindMapDrag(camp, map){
 
 /* Live-resize every illustrated pin as the grip is dragged (no full re-render). */
 function _livePinSize(svg, map){
-  const R=_pinPx(map), showIcon=R>=5, LF=PIN_LABEL_PX, LY=(R+PIN_LABEL_PX*0.95+1);
+  const R=_pinPx(map), showIcon=R>=5, LF=_pinLabelPx(R), LY=(R+_pinLabelPx(R)*0.95+1);
   svg.querySelectorAll('.map-node.illus').forEach(g=>{
     const circles=g.querySelectorAll(':scope > circle');
     const main=g.classList.contains('selpin')?circles[1]:circles[0];
