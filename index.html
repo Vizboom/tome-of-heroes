@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v8.1.0 map-zoom-pan 2026-09-05 -->
+<!-- Tome of Heroes v8.4.0 pin-dblclick-submap 2026-09-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -482,6 +482,25 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .cs-box{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 4px;text-align:center;}
 .cs-val{font-family:'Cinzel',serif;font-size:22px;font-weight:700;color:var(--cc,var(--purple));line-height:1;}
 .cs-label{font-family:'Cinzel',serif;font-size:8px;letter-spacing:1px;color:var(--muted);margin-top:3px;}
+
+/* Collaborative draw board (pop-out, ephemeral) */
+.board-overlay{position:fixed;inset:0;z-index:900;background:rgba(8,6,18,0.96);display:flex;flex-direction:column;}
+.board-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--border);}
+.board-title{font-family:'Cinzel',serif;font-size:13px;color:var(--gold);}
+.board-presence{display:flex;gap:6px;flex-wrap:wrap;}
+.board-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text);background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:2px 9px;}
+.board-dot{width:9px;height:9px;border-radius:50%;background:var(--pc,#888);box-shadow:0 0 6px var(--pc);}
+.board-tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.board-btn{background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:8px;padding:6px 9px;font-size:12px;cursor:pointer;font-family:'Cinzel',serif;letter-spacing:0.3px;}
+.board-btn.on{background:var(--teal);color:#fff;border-color:var(--teal);}
+.board-btn.board-close{color:var(--red);border-color:var(--red);}
+#boardColor{width:34px;height:30px;border:1px solid var(--border2);border-radius:8px;background:var(--surface2);padding:2px;cursor:pointer;}
+.board-stage{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:12px;}
+.board-canvaswrap{position:relative;max-width:100%;max-height:100%;width:min(100%,1000px);box-shadow:0 8px 40px rgba(0,0,0,0.6);border:1px solid var(--border2);border-radius:8px;overflow:hidden;background:#1a1530;}
+.board-img{display:block;width:100%;height:100%;object-fit:fill;user-select:none;-webkit-user-drag:none;}
+.board-noimg{aspect-ratio:3/2;display:flex;align-items:center;justify-content:center;color:var(--muted);font-family:'Cinzel',serif;}
+.board-canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair;}
+.board-hint{padding:7px 12px;font-size:11px;color:var(--muted);text-align:center;border-top:1px solid var(--border);background:var(--surface);}
 
 /* Campaign map */
 .map-wrap{background:radial-gradient(ellipse at 50% 40%,#2a2344 0%,var(--bg2) 75%);border:1px solid var(--border2);border-radius:12px;overflow:hidden;margin-bottom:12px;position:relative;touch-action:none;}
@@ -14439,7 +14458,7 @@ function _revealR(map){ return _pinPx(map) * FOG_AREA_BUFFER; }
 function _brushR(map){ return map.brushPx || Math.max(14, _pinPx(map)*2.4); }
 
 function _campMaps(camp){ if(!camp.maps) camp.maps=[]; return camp.maps; }
-function _pinPx(map){ if(map.pinPx!=null) return map.pinPx; if(map.pinScale) return Math.round(map.pinScale*13); return 13; }
+function _pinPx(map){ if(map.pinPx!=null) return map.pinPx; if(map.pinScale) return Math.round(map.pinScale*13); return 4; }
 function _homeMap(camp){ const ms=_campMaps(camp); return ms.find(m=>m.isHome) || ms.find(m=>!m.placeId) || null; }
 function _curMap(camp){
   const ms=_campMaps(camp);
@@ -14513,31 +14532,15 @@ function renderMap(){
     const pinned = places.filter(p=>p.pins&&p.pins[map.id]);
     const X=p=>Math.round(p.pins[map.id].x*VW), Y=p=>Math.round(p.pins[map.id].y*VH);
     const edges=[]; pinned.forEach(p=>(p.links||[]).forEach(n=>{ const q=byName(n); if(q&&q!==p&&q.pins&&q.pins[map.id]&&!edges.some(e=>e[0]===q&&e[1]===p)) edges.push([p,q]); }));
-    const rr = _revealR(map);
-    const fogOn = map.fog!==false && !map._peek;
-    const holes = pinned.filter(p=>p.status!=='rumoured'||map.revealRumoured).map(p=>{
-      const rum=p.status==='rumoured';
-      return `<circle cx="${X(p)}" cy="${Y(p)}" r="${(rum?rr*0.55:rr).toFixed(1)}" fill="url(#${rum?'holeDim':'hole'})"/>`;
-    }).join('');
-    // Manually-painted reveals (stored normalized to VW on both axes).
-    const painted = (map.paint||[]).map(d=>`<circle cx="${(d.x*VW).toFixed(1)}" cy="${(d.y*VH).toFixed(1)}" r="${(d.r*VW).toFixed(1)}" fill="url(#holeSoft)"/>`).join('');
     const svg = `<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="campMapSvg" data-vw="${VW}" data-vh="${VH}">
-      <defs>
-        <radialGradient id="hole"><stop offset="0" stop-color="#000"/><stop offset="0.55" stop-color="#000"/><stop offset="1" stop-color="#fff"/></radialGradient>
-        <radialGradient id="holeDim"><stop offset="0" stop-color="#555"/><stop offset="0.5" stop-color="#777"/><stop offset="1" stop-color="#fff"/></radialGradient>
-        <radialGradient id="holeSoft"><stop offset="0" stop-color="#000"/><stop offset="0.86" stop-color="#000"/><stop offset="1" stop-color="#fff"/></radialGradient>
-        <mask id="fogMask" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}"><rect width="${VW}" height="${VH}" fill="#fff"/>${holes}${painted}</mask>
-        <pattern id="fogTex" width="18" height="18" patternUnits="userSpaceOnUse"><rect width="18" height="18" fill="#0a0716"/><circle cx="4" cy="6" r="3" fill="#120d24"/><circle cx="13" cy="12" r="4" fill="#100b20"/></pattern>
-      </defs>
       ${src?`<image href="${src}" x="0" y="0" width="${VW}" height="${VH}" preserveAspectRatio="none"/>`
            :`<rect width="${VW}" height="${VH}" fill="#1a1530"/><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="#8880b0" font-size="11" font-family="Cinzel,serif">${map.imgKey?'loading map…':'no image yet'}</text>`}
-      ${fogOn?`<rect class="map-fog" width="${VW}" height="${VH}" fill="url(#fogTex)" opacity="0.93" mask="url(#fogMask)"/>`:''}
       ${edges.map(([p,q])=>`<line class="map-edge" x1="${X(p)}" y1="${Y(p)}" x2="${X(q)}" y2="${Y(q)}"/>`).join('')}
-      ${(()=>{ const R=_pinPx(map); const showIcon=R>=6; const IC=R.toFixed(1); const LF=Math.min(14,R*0.72).toFixed(1); const LY=(R+ (+LF)*0.95 + 1).toFixed(1); const showLabel=showIcon;
+      ${(()=>{ const R=_pinPx(map); const showIcon=R>=3; const IC=R.toFixed(1); const LF=Math.min(13,R*0.62).toFixed(1); const LY=(R+ (+LF)*0.95 + 1).toFixed(1); const showLabel=R>=4;
         const br=(R*0.55).toFixed(1), bx=(R*0.95).toFixed(1), by=(-R*0.78).toFixed(1), bf=Math.max(5,R*0.62).toFixed(1);
         const gh=Math.max(R*0.707, 7); // grip sits on the edge, but stays grabbable on tiny pins
         return pinned.map(p=>{ const sub=maps.find(m=>m.placeId===p.id); const seld=_selPinId===p.id;
-        return `<g class="map-node illus pinlabel ${p.status||''} ${seld?'selpin':''}" data-id="${p.id}" transform="translate(${X(p)},${Y(p)})">
+        return `<g class="map-node illus pinlabel ${p.status||''} ${seld?'selpin':''} ${sub?'hasmap':''}" data-id="${p.id}" transform="translate(${X(p)},${Y(p)})">${sub?`<title>${esc(p.name)} — double-click to open its map</title>`:''}
         ${seld?`<circle r="${(R+3).toFixed(1)}" fill="none" stroke="var(--gold)" stroke-width="1" stroke-dasharray="3 2" opacity="0.9"/>`:''}
         <circle r="${R.toFixed(1)}"/>${showIcon?`<text class="mn-icon" text-anchor="middle" y="${(R*0.38).toFixed(1)}" style="font-size:${IC}px">${PLACE_ICONS[p.type]||PLACE_ICONS.other}</text>`:''}
         ${(showLabel && !map.hidePinLabels)?`<text text-anchor="middle" y="${LY}" style="font-size:${LF}px">${esc(String(p.name).slice(0,20))}</text>`:''}
@@ -14550,24 +14553,19 @@ function renderMap(){
     const parent = map.placeId ? placeById(map.placeId) : null;
     const unplaced = places.filter(p=>!(p.pins&&p.pins[map.id]) && p.id!==map.placeId
       && (!parent || !p.pins || !Object.keys(p.pins).length || (parent.links||[]).some(n=>_fuzzyMatch(n,p.name)>=0.75) || (p.links||[]).some(n=>_fuzzyMatch(n,parent.name)>=0.75)));
-    html += `<div class="map-wrap ${_placingId?'placing':''} ${_paintMode?'painting-fog':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_paintMode==='reveal'?'paint to clear fog · '+Math.round(_brushR(map))+'px brush':(_paintMode==='refog'?'paint to restore fog':(_selPinId?'drag the gold grip to resize · drag pin to move':'tap a pin to resize · pinch/scroll to zoom')))}</div></div>`;
+    html += `<div class="map-wrap ${_placingId?'placing':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_selPinId?'drag the gold grip to resize · drag pin to move':'tap a pin to resize · pinch/scroll to zoom')}</div></div>`;
     html += `<div class="map-ctrls">
       ${map.placeId?`<button class="pc-pill" onclick="switchMap('${_homeMap(camp)?.id||''}')">← home map</button>`:''}
       <span class="pc-pill" style="display:flex;align-items:center;gap:4px;cursor:default"><button onclick="zoomMap('${map.id}',1/1.4)" style="background:none;border:none;color:var(--text);font-size:15px;cursor:pointer;padding:0 4px">−</button><span id="mapZoomLbl" style="min-width:34px;text-align:center;font-size:11px">${Math.round((_mapView[map.id]?.z||1)*100)}%</span><button onclick="zoomMap('${map.id}',1.4)" style="background:none;border:none;color:var(--text);font-size:15px;cursor:pointer;padding:0 4px">＋</button></span>
       <button class="pc-pill" onclick="zoomReset('${map.id}')" title="Reset zoom">⟲ fit</button>
-      <button class="pc-pill ${map.fog!==false?'on':''}" onclick="toggleFog('${map.id}')">${map.fog!==false?'🌫 fog on':'fog off'}</button>
-      ${map.fog!==false?`<button class="pc-pill" onpointerdown="peekFog('${map.id}',true)" onpointerup="peekFog('${map.id}',false)" onpointerleave="peekFog('${map.id}',false)">👁 hold to peek</button>`:''}
-      ${map.fog!==false?`<button class="pc-pill ${_paintMode==='reveal'?'on gold':''}" onclick="setPaintMode('reveal')" title="Brush to clear fog by hand">🖌 paint reveal</button>
-      <button class="pc-pill ${_paintMode==='refog'?'on':''}" onclick="setPaintMode('refog')" title="Brush to restore fog">🌫 re-fog</button>
-      ${_paintMode?`<label class="pc-pill" style="display:flex;align-items:center;gap:6px;cursor:default">brush<input type="range" min="6" max="80" step="2" value="${Math.round(_brushR(map))}" oninput="setBrush('${map.id}',this.value)" style="width:70px;accent-color:var(--gold)"></label>`:''}
-      ${(map.paint||[]).length?`<button class="pc-pill" onclick="clearPaint('${map.id}')" title="Remove all hand-painted reveals">✕ clear painted</button>`:''}`:''}
+
 <span class="pc-pill" style="cursor:default">📌 ${_pinPx(map)}px</span>
       <button class="pc-pill ${map.hidePinLabels?'on':''}" onclick="togglePinLabels('${map.id}')" title="Hide place names on the map (handy for very small pins)">${map.hidePinLabels?'labels off':'labels on'}</button>
       <button class="pc-pill" onclick="resetPinSize('${map.id}')" title="Reset pin size">↺ pin size</button>
-      <button class="pc-pill ${map.revealRumoured?'on':''}" onclick="toggleRumoured('${map.id}')">dim-reveal rumours</button>
       <button class="pc-pill ${map.isHome?'on gold':''}" onclick="toggleHomeMap('${map.id}')" title="${map.isHome?'This is the landing map — tap to unset':'Make this the map shown first'}">${map.isHome?'🏠 home map':'set as home'}</button>
       <button class="pc-pill" onclick="toggleAddMap('${map.id}')">✎ edit map</button>
       <button class="pc-pill" style="color:var(--red);border-color:var(--red)" onclick="deleteMap('${map.id}')">🗑 remove map</button>
+      <button class="pc-pill" style="color:var(--teal);border-color:var(--teal)" onclick="openMapBoard()" title="Pop out a shared drawing board over this map (live, not saved)">✎ draw together</button>
       <button class="pc-pill" onclick="scanSessionsForPlaces()" id="scanPlacesBtn">🔍 scan sessions for places</button>
       <button class="pc-pill ${camp.autoScanPlaces!==false?'on':''}" onclick="toggleAutoScan()" title="Scan every new session for places automatically">auto-scan new sessions</button>
     </div>`;
@@ -14753,8 +14751,11 @@ function _bindMapDrag(camp, map){
     return; // in paint mode, skip pin drag/select wiring
   }
   let drag=null;
+  const subMapFor=id=>(camp.maps||[]).find(m=>m.placeId===id);
   svg.querySelectorAll('.map-node').forEach(g=>{
-    g.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-sub')||e.target.closest('.mn-resize')||pts.size>=2||_mapGesture) return; drag={g, id:g.dataset.id, moved:false}; g.setPointerCapture(e.pointerId); e.preventDefault(); });
+    g.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-sub')||e.target.closest('.mn-resize')||pts.size>=2||_mapGesture) return; drag={g, id:g.dataset.id, moved:false, t:Date.now()}; g.setPointerCapture(e.pointerId); e.preventDefault(); });
+    // Double-click / double-tap a pin to open its own map, if it has one.
+    g.addEventListener('dblclick',e=>{ e.preventDefault(); e.stopPropagation(); const sub=subMapFor(g.dataset.id); if(sub){ switchMap(sub.id); } else { const pl=(camp.places||[]).find(q=>q.id===g.dataset.id); toast((pl?pl.name:'This place')+' has no map yet — use “+ own map” to add one','var(--muted)'); } });
   });
   svg.addEventListener('pointermove',e=>{
     if(!drag||pts.size>=2||_mapGesture){ drag=null; return; } const l=toLocal(e); drag.moved=true;
@@ -14770,25 +14771,193 @@ function _bindMapDrag(camp, map){
       const A=getPos(a),B=getPos(b); ln.setAttribute('x1',Math.round(A.x*VW)); ln.setAttribute('y1',Math.round(A.y*VH)); ln.setAttribute('x2',Math.round(B.x*VW)); ln.setAttribute('y2',Math.round(B.y*VH)); svg.insertBefore(ln, first); });
     if(!sketch){ const mask=svg.querySelector('#fogMask'); if(mask){ const idx=(camp.places||[]).filter(q=>getPos(q)&&(q.status!=='rumoured'||map.revealRumoured)).findIndex(q=>q.id===drag.id); const circ=mask.querySelectorAll('circle')[idx]; if(circ){ circ.setAttribute('cx',Math.round(x)); circ.setAttribute('cy',Math.round(y)); } } }
   });
-  const end=()=>{ if(drag){ if(drag.moved) saveCampaign(camp); else if(!sketch && _selPinId!==drag.id){ _selPinId=drag.id; renderMap(); } } drag=null; };
+  let _lastTap={id:null,t:0};
+  const end=()=>{ if(drag){
+      if(drag.moved) saveCampaign(camp);
+      else if(!sketch){
+        const now=Date.now();
+        if(_lastTap.id===drag.id && now-_lastTap.t<380){ // double-tap → open sub-map
+          _lastTap={id:null,t:0};
+          const sub=subMapFor(drag.id);
+          if(sub){ drag=null; switchMap(sub.id); return; }
+        }
+        _lastTap={id:drag.id,t:now};
+        if(_selPinId!==drag.id){ _selPinId=drag.id; renderMap(); }
+      }
+    } drag=null; };
   svg.addEventListener('pointerup',end); svg.addEventListener('pointercancel',end);
 }
 
 /* Live-resize every illustrated pin as the grip is dragged (no full re-render). */
 function _livePinSize(svg, map){
-  const R=_pinPx(map), showIcon=R>=6, LF=Math.min(14,R*0.72), LY=(R+LF*0.95+1);
+  const R=_pinPx(map), showIcon=R>=3, LF=Math.min(13,R*0.62), LY=(R+LF*0.95+1);
   svg.querySelectorAll('.map-node.illus').forEach(g=>{
     const circles=g.querySelectorAll(':scope > circle');
     const main=g.classList.contains('selpin')?circles[1]:circles[0];
     if(main) main.setAttribute('r',R.toFixed(1));
     const sel=g.classList.contains('selpin')?circles[0]:null; if(sel) sel.setAttribute('r',(R+3).toFixed(1));
     const ic=g.querySelector('.mn-icon'); if(ic){ ic.style.display=showIcon?'':'none'; ic.style.fontSize=R.toFixed(1)+'px'; ic.setAttribute('y',(R*0.38).toFixed(1)); }
-    const lbl=g.querySelector(':scope > text:not(.mn-icon)'); if(lbl){ lbl.style.display=showIcon?'':'none'; lbl.setAttribute('y',LY.toFixed(1)); lbl.style.fontSize=LF.toFixed(1)+'px'; }
+    const lbl=g.querySelector(':scope > text:not(.mn-icon)'); if(lbl){ lbl.style.display=(R>=4)?'':'none'; lbl.setAttribute('y',LY.toFixed(1)); lbl.style.fontSize=LF.toFixed(1)+'px'; }
     const sub=g.querySelector('.mn-sub'); if(sub){ const br=(R*0.55).toFixed(1),bx=(R*0.95).toFixed(1),by=(-R*0.78).toFixed(1); const bc=sub.querySelector('circle'),bt=sub.querySelector('text'); if(bc){bc.setAttribute('r',br);bc.setAttribute('cx',bx);bc.setAttribute('cy',by);} if(bt){bt.setAttribute('x',bx);bt.setAttribute('y',(by*0.7).toFixed(1));bt.style.fontSize=Math.max(5,R*0.62).toFixed(1)+'px';} }
     const grip=g.querySelector('.mn-resize'); if(grip){ const gh=Math.max(R*0.707,7); const ln=grip.querySelector('line'); if(ln){ln.setAttribute('x1',(R*0.707).toFixed(1));ln.setAttribute('y1',(R*0.707).toFixed(1));ln.setAttribute('x2',gh.toFixed(1));ln.setAttribute('y2',gh.toFixed(1));} const rects=grip.querySelectorAll('rect'); if(rects[0]){rects[0].setAttribute('x',(gh-9).toFixed(1));rects[0].setAttribute('y',(gh-9).toFixed(1));} if(rects[1]){rects[1].setAttribute('x',(gh-3).toFixed(1));rects[1].setAttribute('y',(gh-3).toFixed(1));} }
   });
   const pd=document.getElementById('pinPxVal'); if(pd) pd.textContent=R+'px';
 }
+
+/* == COLLABORATIVE DRAW BOARD -- ephemeral shared highlighter over the map ==
+   A pop-out copy of the current map that a group can draw on together in real
+   time. Strokes broadcast over a Supabase Realtime channel and are NEVER saved
+   -- closing the board (or reloading) clears everything. Each participant draws
+   in their character's class colour by default. */
+let _board = null;
+
+function _myBoardIdentity(){
+  const chars = (typeof getVisibleChars==='function') ? getVisibleChars() : [];
+  const mine = chars.find(c=>c.owned||c._mine||c.isOwn) || chars[0];
+  const color = mine ? classColor(mine.classIdx) : ('#'+(((_authUid||'x').split('').reduce((a,c)=>a+c.charCodeAt(0),0)%2)?'e08a3c':'3ca9e0'));
+  const name = mine ? mine.name : 'Player';
+  const uid = (_authUid||'anon')+'-'+Math.random().toString(36).slice(2,6);
+  return { uid, name, color };
+}
+
+function openMapBoard(){
+  const camp = getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  const map = _curMap(camp);
+  if(!map){ toast('Add a backdrop map first','var(--red)'); return; }
+  const src = _mapImgSrc(map);
+  const me = _myBoardIdentity();
+  const VW=1000, VH=Math.round(VW*((map.h&&map.w)?map.h/map.w:0.68));
+
+  const ov = document.createElement('div'); ov.id='mapBoardOverlay'; ov.className='board-overlay';
+  ov.innerHTML = `
+    <div class="board-bar">
+      <span class="board-title">&#9998; ${esc(map.name||'Map')} &mdash; <span style="color:var(--muted);font-weight:400">shared sketch (not saved)</span></span>
+      <span id="boardPresence" class="board-presence"></span>
+      <span style="flex:1"></span>
+      <span class="board-tools">
+        <button class="board-btn" id="bTool-draw" title="Highlighter" onclick="_boardSetTool('draw')">&#128394;</button>
+        <button class="board-btn" id="bTool-erase" title="Erase your strokes" onclick="_boardSetTool('erase')">&#9003;</button>
+        <input type="color" id="boardColor" value="${me.color}" title="Your colour" oninput="_boardSetColor(this.value)">
+        <label class="board-btn" style="display:flex;align-items:center;gap:5px;cursor:default">&bull;<input type="range" id="boardWidth" min="2" max="22" value="7" oninput="_boardSetWidth(this.value)" style="width:64px;accent-color:${me.color}"></label>
+        <button class="board-btn" onclick="_boardClearMine()" title="Clear your own drawing">clear mine</button>
+        <button class="board-btn" onclick="_boardClearAll()" title="Clear everyone's drawing">clear all</button>
+        <button class="board-btn board-close" onclick="closeMapBoard()">&#10005; close</button>
+      </span>
+    </div>
+    <div class="board-stage" id="boardStage">
+      <div class="board-canvaswrap" id="boardCanvasWrap" style="aspect-ratio:${VW}/${VH}">
+        ${src?`<img class="board-img" src="${src}" draggable="false" alt="">`:`<div class="board-noimg">no image</div>`}
+        <canvas class="board-canvas" id="boardCanvas" width="${VW}" height="${VH}"></canvas>
+      </div>
+    </div>
+    <div class="board-hint">Draw to discuss. Everyone online in this campaign sees strokes live. Nothing here is saved.</div>`;
+  document.body.appendChild(ov);
+
+  const canvas=document.getElementById('boardCanvas'); const ctx=canvas.getContext('2d');
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  _board = { map, me, VW, VH, canvas, ctx, tool:'draw', color:me.color, width:7, strokes:[], drawing:false, erasing:false, cur:null, present:{}, channel:null };
+  _board.present[me.uid]={ name:me.name, color:me.color, t:Date.now() };
+  _boardSetTool('draw'); _renderPresence();
+
+  const pos=(e)=>{ const r=canvas.getBoundingClientRect(); return { x:(e.clientX-r.left)/r.width, y:(e.clientY-r.top)/r.height }; };
+  canvas.addEventListener('pointerdown',e=>{ if(e.button!==undefined&&e.button!==0) return; canvas.setPointerCapture(e.pointerId);
+    const pt=pos(e);
+    if(_board.tool==='erase'){ _board.erasing=true; _boardEraseAt(pt); return; }
+    _board.drawing=true; _board.cur={ id:_board.me.uid+'-'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), uid:_board.me.uid, color:_board.color, w:_board.width, pts:[pt] };
+    _board.strokes.push(_board.cur); _boardRedraw();
+  });
+  canvas.addEventListener('pointermove',e=>{ const pt=pos(e);
+    if(_board.erasing){ _boardEraseAt(pt); return; }
+    if(!_board.drawing||!_board.cur) return;
+    _board.cur.pts.push(pt); _boardRedraw();
+    if(_board.cur.pts.length%3===0) _boardBroadcast('stroke', _board.cur);
+  });
+  const endStroke=()=>{ if(_board.drawing&&_board.cur){ _boardBroadcast('stroke', _board.cur); } _board.drawing=false; _board.erasing=false; _board.cur=null; };
+  canvas.addEventListener('pointerup',endStroke); canvas.addEventListener('pointercancel',endStroke);
+
+  _boardConnect(camp, map);
+}
+
+function closeMapBoard(){
+  if(_board){ try{ if(_board.channel) supa.removeChannel(_board.channel); }catch(e){} }
+  _board=null;
+  document.getElementById('mapBoardOverlay')?.remove();
+}
+
+function _boardSetTool(t){ if(!_board) return; _board.tool=t; ['draw','erase'].forEach(k=>{ const b=document.getElementById('bTool-'+k); if(b) b.classList.toggle('on', k===t); }); const cv=document.getElementById('boardCanvas'); if(cv) cv.style.cursor = t==='erase'?'cell':'crosshair'; }
+function _boardSetColor(v){ if(!_board) return; _board.color=v; if(_board.present[_board.me.uid]) _board.present[_board.me.uid].color=v; const w=document.getElementById('boardWidth'); if(w) w.style.accentColor=v; _boardBroadcast('present',null); _renderPresence(); }
+function _boardSetWidth(v){ if(_board) _board.width=parseInt(v)||7; }
+
+function _boardRedraw(){
+  const {ctx,VW,VH,strokes}=_board; ctx.clearRect(0,0,VW,VH);
+  ctx.globalAlpha=0.55;
+  strokes.forEach(st=>{ if(!st.pts||!st.pts.length) return; ctx.strokeStyle=st.color; ctx.lineWidth=st.w*(VW/1000); ctx.beginPath();
+    st.pts.forEach((p,i)=>{ const x=p.x*VW, y=p.y*VH; i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    if(st.pts.length===1){ const p=st.pts[0]; ctx.arc(p.x*VW,p.y*VH,(st.w*(VW/1000))/2,0,7); ctx.fillStyle=st.color; ctx.fill(); }
+    ctx.stroke();
+  });
+  ctx.globalAlpha=1;
+}
+function _boardEraseAt(pt){
+  const before=_board.strokes.length;
+  _board.strokes=_board.strokes.filter(st=>{ if(st.uid!==_board.me.uid) return true; return !st.pts.some(p=>Math.hypot(p.x-pt.x,p.y-pt.y)<0.02); });
+  if(_board.strokes.length!==before){ _boardRedraw(); _boardBroadcast('erasemine', null); }
+}
+function _boardClearMine(){ if(!_board) return; _board.strokes=_board.strokes.filter(st=>st.uid!==_board.me.uid); _boardRedraw(); _boardBroadcast('erasemine', null); }
+function _boardClearAll(){ if(!_board) return; if(!confirm('Clear the whole board for everyone?')) return; _board.strokes=[]; _boardRedraw(); _boardBroadcast('clearall', null); }
+
+function _renderPresence(){
+  const el=document.getElementById('boardPresence'); if(!el||!_board) return;
+  const people=Object.values(_board.present).sort((a,b)=>a.t-b.t);
+  el.innerHTML=people.map(p=>`<span class="board-chip" style="--pc:${p.color}"><span class="board-dot"></span>${esc(p.name)}</span>`).join('');
+}
+
+function _boardBroadcast(kind, stroke){
+  if(!_board?.channel) return;
+  const payload={ kind, uid:_board.me.uid, name:_board.me.name, color:_board.color };
+  if(kind==='stroke') payload.stroke=stroke;
+  const event = (kind==='hello') ? 'hello' : 'draw';
+  try{ _board.channel.send({ type:'broadcast', event, payload }); }catch(e){}
+}
+function _boardApply(payload){
+  if(!_board||!payload||payload.uid===_board.me.uid) return;
+  _board.present[payload.uid]={ name:payload.name, color:payload.color, t:_board.present[payload.uid]?.t||Date.now() };
+  if(payload.kind==='stroke' && payload.stroke){
+    const i=_board.strokes.findIndex(s=>s.id===payload.stroke.id);
+    if(i>=0) _board.strokes[i]=payload.stroke; else _board.strokes.push(payload.stroke);
+    _boardRedraw();
+  } else if(payload.kind==='erasemine'){ _board.strokes=_board.strokes.filter(s=>s.uid!==payload.uid); _boardRedraw(); }
+  else if(payload.kind==='clearall'){ _board.strokes=[]; _boardRedraw(); }
+  _renderPresence();
+}
+function _boardConnect(camp, map){
+  const gid=getGroupId(); if(!gid || !window.supabase || !_online){ _boardOffline(); return; }
+  const topic='board-'+gid+'-'+camp.id+'-'+map.id;
+  let ch;
+  try{ ch=supa.channel(topic, { config:{ broadcast:{ self:false }, presence:{ key:_board.me.uid } } }); }
+  catch(e){ _boardOffline(); return; }
+  _board.channel=ch;
+  ch.on('broadcast',{event:'draw'}, ({payload})=>_boardApply(payload));
+  ch.on('broadcast',{event:'hello'}, ({payload})=>{ if(payload.uid===_board.me.uid) return;
+    _board.present[payload.uid]={ name:payload.name, color:payload.color, t:Date.now() };
+    _board.strokes.filter(s=>s.uid===_board.me.uid).forEach(s=>_boardBroadcast('stroke', s));
+    _renderPresence();
+  });
+  ch.on('presence',{event:'sync'}, ()=>{
+    const state=ch.presenceState(); const seen={};
+    Object.values(state).flat().forEach(pp=>{ if(pp.uid) seen[pp.uid]={ name:pp.name, color:pp.color, t:_board.present[pp.uid]?.t||Date.now() }; });
+    seen[_board.me.uid]={ name:_board.me.name, color:_board.color, t:_board.present[_board.me.uid]?.t||Date.now() };
+    _board.present=seen; _renderPresence();
+  });
+  ch.subscribe(async (status)=>{
+    if(status==='SUBSCRIBED'){
+      try{ await ch.track({ uid:_board.me.uid, name:_board.me.name, color:_board.color }); }catch(e){}
+      _boardBroadcast('hello', null);
+      const h=document.querySelector('#mapBoardOverlay .board-hint'); if(h) h.textContent='Connected -- drawing is shared live with everyone online. Nothing here is saved.';
+    } else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){ _boardOffline(); }
+  });
+}
+function _boardOffline(){ const h=document.querySelector('#mapBoardOverlay .board-hint'); if(h) h.textContent='Offline -- this board is local to your device (live sharing needs a connection). Nothing here is saved.'; }
 
 /* ══ PLACE SCANNER — mine session logs for locations ══
    Runs over session summaries/highlights (all of them, or just the ones not
@@ -14898,7 +15067,7 @@ async function saveMapForm(){
   const name=(document.getElementById('mpName')?.value||'').trim();
   if(!name){ toast('Give the map a name','var(--red)'); return; }
   let m = window._editMapId ? maps.find(x=>x.id===window._editMapId) : null;
-  if(!m){ m={ id:genItemId(), reveal:'medium', added:Date.now() }; maps.push(m); }
+  if(!m){ m={ id:genItemId(), reveal:'medium', pinPx:4, added:Date.now() }; maps.push(m); }
   m.name=name;
   m.placeId=document.getElementById('mpPlace')?.value||null; if(!m.placeId) delete m.placeId;
   m.fog=document.getElementById('mpFog')?.value!=='0';
