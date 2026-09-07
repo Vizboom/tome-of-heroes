@@ -531,7 +531,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .map-wrap.placing .map-node{pointer-events:none;}
 .map-fog{pointer-events:none;}
 .map-node .mn-sub{font-size:9px;pointer-events:all;cursor:pointer;}
-.map-node.pinlabel text{fill:#000;font-weight:700;paint-order:stroke;stroke:none;filter:none;}
+.map-node.pinlabel text{fill:#000;font-weight:700;paint-order:stroke;stroke:#fff;stroke-linejoin:round;stroke-linecap:round;}
 .map-node.illus circle{fill:rgba(28,24,56,0.85);}
 .map-tray{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
 .map-ctrls{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
@@ -14494,7 +14494,7 @@ const PIN_MAX = 1;   // ceiling (icons scale with the map; this is map-unit size
 function _pinPx(map){ let v = map.pinPx!=null ? map.pinPx : (map.pinScale? map.pinScale*13 : 0.7); return Math.max(0.2, Math.min(PIN_MAX, v)); } // default 0.7, capped at 1
 // Label scales with the pin, like the dot. Proportional to radius with a
 // tiny floor so it can shrink down to roughly dot size.
-function _pinLabelPx(R){ return Math.max(1, R*1.1); } // label tracks the dot, small; shrinks with pin
+function _pinLabelPx(R){ return Math.max(0.1, R*1.3); } // label tracks the pin all the way down (no size floor)
 // On-screen scale for pins: they don't grow 1:1 with the map. 1× at zoom-out,
 // ramping to at most 2× at full zoom, so a pin stays a small marker throughout.
 function _pinScreenScale(z){ return 1; } // pins are anchored to the map: they scale with zoom (shrink when zoomed out, grow when zoomed in)
@@ -14584,7 +14584,7 @@ function renderMap(){
         <circle class="pinring" r="${(R*1.5).toFixed(2)}" style="stroke-width:${Math.max(0.12,R*0.35).toFixed(2)}${p.status==='rumoured'?(';stroke-dasharray:'+(R*0.6).toFixed(2)+' '+(R*0.45).toFixed(2)):''}"/>
         ${seld?`<circle r="${(R*2.05).toFixed(2)}" fill="none" stroke="var(--gold)" stroke-width="${Math.max(0.12,R*0.3).toFixed(2)}" stroke-dasharray="${(R*0.5).toFixed(2)} ${(R*0.4).toFixed(2)}" opacity="0.9"/>`:''}
         ${_pinIconSvg(p, R)}
-        ${(!map.hidePinLabels && p.hideName!==true)?`<text text-anchor="middle" y="${LY}" style="font-size:${LF}px">${esc(String(p.name).slice(0,20))}</text>`:''}
+        ${(!map.hidePinLabels && p.hideName!==true)?`<text text-anchor="middle" y="${LY}" style="font-size:${LF}px;stroke-width:${(_lf*0.28).toFixed(2)}px">${esc(String(p.name).slice(0,20))}</text>`:''}
         ${seld?`<g class="mn-resize"><line x1="${(R).toFixed(2)}" y1="${(R).toFixed(2)}" x2="${gh.toFixed(2)}" y2="${gh.toFixed(2)}" stroke="var(--gold)" stroke-width="${(R*0.12).toFixed(2)}" opacity="0.6"/><rect x="${(gh-R*1.6).toFixed(2)}" y="${(gh-R*1.6).toFixed(2)}" width="${(R*3.2).toFixed(2)}" height="${(R*3.2).toFixed(2)}" fill="transparent" style="cursor:nwse-resize"/><rect x="${(gh-R*0.55).toFixed(2)}" y="${(gh-R*0.55).toFixed(2)}" width="${(R*1.1).toFixed(2)}" height="${(R*1.1).toFixed(2)}" rx="${(R*0.2).toFixed(2)}" fill="var(--gold)" stroke="#0d0a1a" stroke-width="${(R*0.1).toFixed(2)}" style="pointer-events:none"/></g>`:''}
       </g>`; }).join(''); })()}
     </svg>`;
@@ -14853,7 +14853,7 @@ function _livePinSize(svg, map){
     const ring=g.querySelector('.pinring'); if(ring){ ring.setAttribute('r',(R*1.5).toFixed(2)); ring.style.strokeWidth=Math.max(0.12,R*0.35).toFixed(2)+'px'; }
     const sel=g.querySelector(':scope > circle:not(.pinring)'); if(sel){ sel.setAttribute('r',(R*2.05).toFixed(2)); sel.setAttribute('stroke-width',Math.max(0.12,R*0.3).toFixed(2)); }
     const ico=g.querySelector('.pinicon'); if(ico) ico.setAttribute('transform',`scale(${(R/12).toFixed(4)})`);
-    const lbl=g.querySelector(':scope > text:not(.mn-icon)'); if(lbl){ const _pl=(getCampaigns().find(c=>c.id===editingCampId)?.places||[]).find(q=>q.id===g.dataset.id); lbl.style.display=(map.hidePinLabels||_pl?.hideName===true)?'none':''; lbl.setAttribute('y',LY.toFixed(1)); lbl.style.fontSize=LF.toFixed(1)+'px'; }
+    const lbl=g.querySelector(':scope > text:not(.mn-icon)'); if(lbl){ const _pl=(getCampaigns().find(c=>c.id===editingCampId)?.places||[]).find(q=>q.id===g.dataset.id); lbl.style.display=(map.hidePinLabels||_pl?.hideName===true)?'none':''; lbl.setAttribute('y',LY.toFixed(1)); lbl.style.fontSize=LF.toFixed(1)+'px'; lbl.style.strokeWidth=(LF*0.28).toFixed(2)+'px'; }
     const grip=g.querySelector('.mn-resize'); if(grip){ const gh=R*1.7; const ln=grip.querySelector('line'); if(ln){ln.setAttribute('x1',R.toFixed(2));ln.setAttribute('y1',R.toFixed(2));ln.setAttribute('x2',gh.toFixed(2));ln.setAttribute('y2',gh.toFixed(2));ln.setAttribute('stroke-width',(R*0.12).toFixed(2));} const rects=grip.querySelectorAll('rect'); if(rects[0]){rects[0].setAttribute('x',(gh-R*1.6).toFixed(2));rects[0].setAttribute('y',(gh-R*1.6).toFixed(2));rects[0].setAttribute('width',(R*3.2).toFixed(2));rects[0].setAttribute('height',(R*3.2).toFixed(2));} if(rects[1]){rects[1].setAttribute('x',(gh-R*0.55).toFixed(2));rects[1].setAttribute('y',(gh-R*0.55).toFixed(2));rects[1].setAttribute('width',(R*1.1).toFixed(2));rects[1].setAttribute('height',(R*1.1).toFixed(2));} }
   });
   const pd=document.getElementById('pinPxVal'); if(pd) pd.textContent=R+'px';
