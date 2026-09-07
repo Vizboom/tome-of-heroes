@@ -14491,6 +14491,10 @@ function _brushR(map){ return map.brushPx || Math.max(14, _pinPx(map)*2.4); }
 
 function _campMaps(camp){ if(!camp.maps) camp.maps=[]; return camp.maps; }
 const PIN_MAX = 1;   // ceiling (icons scale with the map; this is map-unit size)
+const TYPE_SCALE_MIN = 0.3, TYPE_SCALE_MAX = 3, TYPE_SCALE_STEP = 0.15;
+function _typeScale(map, type){ const t=PLACE_TYPES.includes(type)?type:'other'; const v=(map.typeScale||{})[t]; return (typeof v==='number' && v>0)? v : 1; }
+// Effective per-pin size = map base size × this place's type multiplier.
+function _placePx(map, p){ return Math.max(0.1, Math.min(PIN_MAX*TYPE_SCALE_MAX, _pinPx(map) * _typeScale(map, p.type))); }
 function _pinPx(map){ let v = map.pinPx!=null ? map.pinPx : (map.pinScale? map.pinScale*13 : 0.7); return Math.max(0.2, Math.min(PIN_MAX, v)); } // default 0.7, capped at 1
 // Label scales with the pin, like the dot. Proportional to radius with a
 // tiny floor so it can shrink down to roughly dot size.
@@ -14577,9 +14581,9 @@ function renderMap(){
       ${src?`<image href="${src}" x="0" y="0" width="${VW}" height="${VH}" preserveAspectRatio="none"/>`
            :`<rect width="${VW}" height="${VH}" fill="#1a1530"/><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="#8880b0" font-size="11" font-family="Cinzel,serif">${map.imgKey?'loading map…':'no image yet'}</text>`}
       ${edges.map(([p,q])=>`<line class="map-edge" x1="${X(p)}" y1="${Y(p)}" x2="${X(q)}" y2="${Y(q)}"/>`).join('')}
-      ${(()=>{ const R=_pinPx(map); const showIcon=R>=5; const IC=R.toFixed(1); const _lf=_pinLabelPx(R); const LF=_lf.toFixed(1); const LY=(R+_lf*0.95 + 1).toFixed(1); const showLabel=true; const PS=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4);
-        const gh=R*1.7; // resize grip offset, proportional to the pin
+      ${(()=>{ const PS=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4);
         return pinned.map(p=>{ const sub=maps.find(m=>m.placeId===p.id); const seld=_selPinId===p.id;
+        const R=_placePx(map, p); const _lf=_pinLabelPx(R); const LF=_lf.toFixed(2); const LY=(R+_lf*0.95 + 1).toFixed(2); const gh=R*1.7;
         return `<g class="map-node illus pinlabel ${p.status||''} ${seld?'selpin':''} ${sub?'hasmap':''}" data-id="${p.id}" data-cx="${X(p)}" data-cy="${Y(p)}" transform="translate(${X(p)},${Y(p)}) scale(${PS})">${sub?`<title>${esc(p.name)} — double-click to open its map</title>`:''}
         <circle class="pinring" r="${(R*1.5).toFixed(2)}" style="stroke-width:${Math.max(0.12,R*0.35).toFixed(2)}${p.status==='rumoured'?(';stroke-dasharray:'+(R*0.6).toFixed(2)+' '+(R*0.45).toFixed(2)):''}"/>
         ${seld?`<circle r="${(R*2.05).toFixed(2)}" fill="none" stroke="var(--gold)" stroke-width="${Math.max(0.12,R*0.3).toFixed(2)}" stroke-dasharray="${(R*0.5).toFixed(2)} ${(R*0.4).toFixed(2)}" opacity="0.9"/>`:''}
@@ -14678,10 +14682,18 @@ function renderMap(){
     const counts={}; places.filter(pp=>pp.pins&&pp.pins[map.id]).forEach(pp=>{ const t=PLACE_TYPES.includes(pp.type)?pp.type:'other'; counts[t]=(counts[t]||0)+1; });
     const present=PLACE_TYPES.filter(t=>counts[t]);
     if(present.length){
-      html += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin:2px 0 6px">LEGEND — tap a type to show/hide on this map</div>
+      html += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin:2px 0 6px">LEGEND — tap a type to show/hide · use − / + to size each type</div>
       <div class="map-legend-panel">`+present.map(t=>{
         const off=(map.hiddenTypes||[]).includes(t);
-        return `<span class="legend-chip ${off?'off':''}" onclick="toggleTypeVisible('${t}')">${_legendIcon(t,'var(--gold)',15)}<span>${PLACE_TYPE_LABEL[t]}</span><span class="legend-count">${counts[t]}</span></span>`;
+        const sc=_typeScale(map,t);
+        return `<span class="legend-chip ${off?'off':''}">
+          <span onclick="toggleTypeVisible('${t}')" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">${_legendIcon(t,'var(--gold)',15)}<span>${PLACE_TYPE_LABEL[t]}</span><span class="legend-count">${counts[t]}</span></span>
+          <span style="display:inline-flex;align-items:center;gap:3px;margin-left:2px;border-left:1px solid var(--border2);padding-left:6px">
+            <button onclick="bumpTypeScale('${t}',-1)" title="Smaller" style="background:none;border:none;color:var(--text);font-size:14px;line-height:1;cursor:pointer;padding:0 2px">−</button>
+            <span class="legend-count" style="min-width:30px;text-align:center">${Math.round(sc*100)}%</span>
+            <button onclick="bumpTypeScale('${t}',1)" title="Larger" style="background:none;border:none;color:var(--text);font-size:14px;line-height:1;cursor:pointer;padding:0 2px">+</button>
+          </span>
+        </span>`;
       }).join('')+`</div>`;
     }
   }
@@ -14848,8 +14860,10 @@ function _bindMapDrag(camp, map){
 
 /* Live-resize every illustrated pin as the grip is dragged (no full re-render). */
 function _livePinSize(svg, map){
-  const R=_pinPx(map), showIcon=R>=5, LF=_pinLabelPx(R), LY=(R+_pinLabelPx(R)*0.95+1);
+  const _camp=getCampaigns().find(c=>c.id===editingCampId);
   svg.querySelectorAll('.map-node.illus').forEach(g=>{
+    const _p=(_camp?.places||[]).find(q=>q.id===g.dataset.id);
+    const R=_p?_placePx(map,_p):_pinPx(map), LF=_pinLabelPx(R), LY=(R+_pinLabelPx(R)*0.95+1);
     const ring=g.querySelector('.pinring'); if(ring){ ring.setAttribute('r',(R*1.5).toFixed(2)); ring.style.strokeWidth=Math.max(0.12,R*0.35).toFixed(2)+'px'; }
     const sel=g.querySelector(':scope > circle:not(.pinring)'); if(sel){ sel.setAttribute('r',(R*2.05).toFixed(2)); sel.setAttribute('stroke-width',Math.max(0.12,R*0.3).toFixed(2)); }
     const ico=g.querySelector('.pinicon'); if(ico) ico.setAttribute('transform',`scale(${(R/12).toFixed(4)})`);
@@ -15191,6 +15205,7 @@ function setBrush(id,v){ const camp=getCampaigns().find(c=>c.id===editingCampId)
 function clearPaint(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; if(!confirm('Remove all hand-painted fog reveals on this map?')) return; m.paint=[]; saveCampaign(camp); renderMap(); }
 function resetPinSize(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.pinPx=0.7; delete m.pinScale; saveCampaign(camp); renderMap(); }
 function setPlaceColor(id, col){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const pl=(camp.places||[]).find(p=>p.id===id); if(!pl) return; if(col) pl.color=col; else delete pl.color; saveCampaign(camp); renderMap(); }
+function bumpTypeScale(t, dir){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const m=_curMap(camp); if(!m) return; if(!m.typeScale) m.typeScale={}; const cur=_typeScale(m,t); let v=Math.round((cur + dir*TYPE_SCALE_STEP)*100)/100; v=Math.max(TYPE_SCALE_MIN, Math.min(TYPE_SCALE_MAX, v)); m.typeScale[t]=v; saveCampaign(camp); renderMap(); }
 function toggleTypeVisible(t){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const m=_curMap(camp); if(!m) return; if(!m.hiddenTypes) m.hiddenTypes=[]; const i=m.hiddenTypes.indexOf(t); if(i>=0) m.hiddenTypes.splice(i,1); else m.hiddenTypes.push(t); saveCampaign(camp); renderMap(); }
 function togglePlaceName(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const pl=(camp.places||[]).find(p=>p.id===id); if(!pl) return; pl.hideName=!pl.hideName; saveCampaign(camp); renderMap(); }
 function togglePinLabels(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.hidePinLabels=!m.hidePinLabels; saveCampaign(camp); renderMap(); }
