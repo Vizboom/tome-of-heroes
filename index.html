@@ -14490,8 +14490,8 @@ function _revealR(map){ return _pinPx(map) * FOG_AREA_BUFFER; }
 function _brushR(map){ return map.brushPx || Math.max(14, _pinPx(map)*2.4); }
 
 function _campMaps(camp){ if(!camp.maps) camp.maps=[]; return camp.maps; }
-const PIN_MAX = 2;   // new ceiling — the former smallest/starting size
-function _pinPx(map){ let v = map.pinPx!=null ? map.pinPx : (map.pinScale? map.pinScale*13 : 1.2); return Math.max(0.3, Math.min(PIN_MAX, v)); } // default 1.2, capped at 2, shrinks from there
+const PIN_MAX = 1;   // ceiling (icons scale with the map; this is map-unit size)
+function _pinPx(map){ let v = map.pinPx!=null ? map.pinPx : (map.pinScale? map.pinScale*13 : 0.7); return Math.max(0.2, Math.min(PIN_MAX, v)); } // default 0.7, capped at 1
 // Label scales with the pin, like the dot. Proportional to radius with a
 // tiny floor so it can shrink down to roughly dot size.
 function _pinLabelPx(R){ return Math.max(1, R*1.1); } // label tracks the dot, small; shrinks with pin
@@ -14781,7 +14781,7 @@ function _bindMapDrag(camp, map){
     if(grip && selP){
       let rz=null;
       grip.addEventListener('pointerdown',e=>{ const pos=getPos(selP); if(!pos) return; rz={cx:pos.x*VW, cy:pos.y*VH}; grip.setPointerCapture(e.pointerId); e.preventDefault(); e.stopPropagation(); });
-      svg.addEventListener('pointermove',e=>{ if(!rz) return; const l=toLocal(e); const _S=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1)||1; let r=Math.hypot(l.x-rz.cx, l.y-rz.cy)/_S; r=Math.max(0.3, Math.min(PIN_MAX, r)); map.pinPx=Math.round(r*20)/20; _livePinSize(svg, map); const lg=svg.parentElement.querySelector('.map-legend'); if(lg) lg.textContent='pin size: '+map.pinPx+'px'; e.preventDefault(); });
+      svg.addEventListener('pointermove',e=>{ if(!rz) return; const l=toLocal(e); const _S=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1)||1; let r=Math.hypot(l.x-rz.cx, l.y-rz.cy)/_S; r=Math.max(0.2, Math.min(PIN_MAX, r)); map.pinPx=Math.round(r*20)/20; _livePinSize(svg, map); const lg=svg.parentElement.querySelector('.map-legend'); if(lg) lg.textContent='pin size: '+map.pinPx+'px'; e.preventDefault(); });
       const rzEnd=()=>{ if(rz){ saveCampaign(camp); renderMap(); } rz=null; };
       grip.addEventListener('pointerup',rzEnd); grip.addEventListener('pointercancel',rzEnd);
     }
@@ -15189,7 +15189,7 @@ function setPaintMode(mode){ _paintMode = (_paintMode===mode)?null:mode; if(_pai
 let _brushTimer=null;
 function setBrush(id,v){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.brushPx=parseInt(v)||20; const lg=document.querySelector('#campMapWrap .map-legend'); if(lg&&_paintMode==='reveal') lg.textContent='paint to clear fog · '+m.brushPx+'px brush'; clearTimeout(_brushTimer); _brushTimer=setTimeout(()=>saveCampaign(camp),400); }
 function clearPaint(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; if(!confirm('Remove all hand-painted fog reveals on this map?')) return; m.paint=[]; saveCampaign(camp); renderMap(); }
-function resetPinSize(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.pinPx=1.2; delete m.pinScale; saveCampaign(camp); renderMap(); }
+function resetPinSize(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.pinPx=0.7; delete m.pinScale; saveCampaign(camp); renderMap(); }
 function setPlaceColor(id, col){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const pl=(camp.places||[]).find(p=>p.id===id); if(!pl) return; if(col) pl.color=col; else delete pl.color; saveCampaign(camp); renderMap(); }
 function toggleTypeVisible(t){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const m=_curMap(camp); if(!m) return; if(!m.hiddenTypes) m.hiddenTypes=[]; const i=m.hiddenTypes.indexOf(t); if(i>=0) m.hiddenTypes.splice(i,1); else m.hiddenTypes.push(t); saveCampaign(camp); renderMap(); }
 function togglePlaceName(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const pl=(camp.places||[]).find(p=>p.id===id); if(!pl) return; pl.hideName=!pl.hideName; saveCampaign(camp); renderMap(); }
