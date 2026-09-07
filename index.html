@@ -14497,7 +14497,7 @@ function _pinPx(map){ let v = map.pinPx!=null ? map.pinPx : (map.pinScale? map.p
 function _pinLabelPx(R){ return Math.max(1, R*1.1); } // label tracks the dot, small; shrinks with pin
 // On-screen scale for pins: they don't grow 1:1 with the map. 1× at zoom-out,
 // ramping to at most 2× at full zoom, so a pin stays a small marker throughout.
-function _pinScreenScale(z){ z=Math.max(1, z||1); const mult=Math.min(2, 1+(z-1)/(MAP_ZMAX-1)); return mult/z; }
+function _pinScreenScale(z){ return 1; } // pins are anchored to the map: they scale with zoom (shrink when zoomed out, grow when zoomed in)
 function _applyPinScale(id){ const v=_mapView[id]; const svg=document.getElementById('campMapSvg'); if(!svg) return; const S=_pinScreenScale(v?v.z:1).toFixed(4); svg.querySelectorAll('.map-node.illus').forEach(g=>{ const cx=g.dataset.cx, cy=g.dataset.cy; if(cx!=null) g.setAttribute('transform',`translate(${cx},${cy}) scale(${S})`); }); }
 function _homeMap(camp){ const ms=_campMaps(camp); return ms.find(m=>m.isHome) || ms.find(m=>!m.placeId) || null; }
 function _curMap(camp){
