@@ -14582,7 +14582,8 @@ function renderMap(){
            :`<rect width="${VW}" height="${VH}" fill="#1a1530"/><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="#8880b0" font-size="11" font-family="Cinzel,serif">${map.imgKey?'loading map…':'no image yet'}</text>`}
       ${edges.map(([p,q])=>`<line class="map-edge" x1="${X(p)}" y1="${Y(p)}" x2="${X(q)}" y2="${Y(q)}"/>`).join('')}
       ${(()=>{ const PS=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4);
-        return pinned.map(p=>{ const sub=maps.find(m=>m.placeId===p.id); const seld=_selPinId===p.id;
+        const _locked=!!map.pinsLocked;
+        return pinned.map(p=>{ const sub=maps.find(m=>m.placeId===p.id); const seld=(_selPinId===p.id)&&!_locked;
         const R=_placePx(map, p); const _lf=_pinLabelPx(R); const LF=_lf.toFixed(2); const LY=(R+_lf*0.95 + 1).toFixed(2); const gh=R*1.7;
         return `<g class="map-node illus pinlabel ${p.status||''} ${seld?'selpin':''} ${sub?'hasmap':''}" data-id="${p.id}" data-cx="${X(p)}" data-cy="${Y(p)}" transform="translate(${X(p)},${Y(p)}) scale(${PS})">${sub?`<title>${esc(p.name)} — double-click to open its map</title>`:''}
         <circle class="pinring" r="${(R*1.5).toFixed(2)}" style="stroke-width:${Math.max(0.12,R*0.35).toFixed(2)}${p.status==='rumoured'?(';stroke-dasharray:'+(R*0.6).toFixed(2)+' '+(R*0.45).toFixed(2)):''}"/>
@@ -14606,6 +14607,7 @@ function renderMap(){
 <span class="pc-pill" style="cursor:default">📌 ${_pinPx(map)}px</span>
       <button class="pc-pill ${map.hidePinLabels?'on':''}" onclick="togglePinLabels('${map.id}')" title="Master switch — hide every place name on this map">${map.hidePinLabels?'all names off':'all names on'}</button>
       <button class="pc-pill" onclick="resetPinSize('${map.id}')" title="Reset pin size">↺ pin size</button>
+      <button class="pc-pill ${map.pinsLocked?'on gold':''}" onclick="togglePinsLock('${map.id}')" title="${map.pinsLocked?'Pins locked — tap to allow moving/resizing':'Lock pin size & position (double-click still opens sub-maps)'}">${map.pinsLocked?'🔒 locked':'🔓 lock pins'}</button>
       <button class="pc-pill ${map.isHome?'on gold':''}" onclick="toggleHomeMap('${map.id}')" title="${map.isHome?'This is the landing map — tap to unset':'Make this the map shown first'}">${map.isHome?'🏠 home map':'set as home'}</button>
       <button class="pc-pill" onclick="toggleAddMap('${map.id}')">✎ edit map</button>
       <button class="pc-pill" style="color:var(--red);border-color:var(--red)" onclick="deleteMap('${map.id}')">🗑 remove map</button>
@@ -14689,9 +14691,9 @@ function renderMap(){
         return `<span class="legend-chip ${off?'off':''}">
           <span onclick="toggleTypeVisible('${t}')" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">${_legendIcon(t,'var(--gold)',15)}<span>${PLACE_TYPE_LABEL[t]}</span><span class="legend-count">${counts[t]}</span></span>
           <span style="display:inline-flex;align-items:center;gap:3px;margin-left:2px;border-left:1px solid var(--border2);padding-left:6px">
-            <button onclick="bumpTypeScale('${t}',-1)" title="Smaller" style="background:none;border:none;color:var(--text);font-size:14px;line-height:1;cursor:pointer;padding:0 2px">−</button>
+<button onclick="${map.pinsLocked?'':`bumpTypeScale('`+t+`',-1)`}" title="Smaller" style="background:none;border:none;color:var(--text);font-size:14px;line-height:1;cursor:${map.pinsLocked?'not-allowed':'pointer'};opacity:${map.pinsLocked?0.4:1};padding:0 2px">−</button>
             <span class="legend-count" style="min-width:30px;text-align:center">${Math.round(sc*100)}%</span>
-            <button onclick="bumpTypeScale('${t}',1)" title="Larger" style="background:none;border:none;color:var(--text);font-size:14px;line-height:1;cursor:pointer;padding:0 2px">+</button>
+            <button onclick="${map.pinsLocked?'':`bumpTypeScale('`+t+`',1)`}" title="Larger" style="background:none;border:none;color:var(--text);font-size:14px;line-height:1;cursor:${map.pinsLocked?'not-allowed':'pointer'};opacity:${map.pinsLocked?0.4:1};padding:0 2px">+</button>
           </span>
         </span>`;
       }).join('')+`</div>`;
@@ -14821,12 +14823,12 @@ function _bindMapDrag(camp, map){
   let drag=null;
   const subMapFor=id=>(camp.maps||[]).find(m=>m.placeId===id);
   svg.querySelectorAll('.map-node').forEach(g=>{
-    g.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-sub')||e.target.closest('.mn-resize')||pts.size>=2||_mapGesture) return; drag={g, id:g.dataset.id, moved:false, t:Date.now()}; g.setPointerCapture(e.pointerId); e.preventDefault(); });
+    g.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-sub')||e.target.closest('.mn-resize')||pts.size>=2||_mapGesture) return; drag={g, id:g.dataset.id, moved:false, t:Date.now(), locked:!!map.pinsLocked}; g.setPointerCapture(e.pointerId); e.preventDefault(); });
     // Double-click / double-tap a pin to open its own map, if it has one.
     g.addEventListener('dblclick',e=>{ e.preventDefault(); e.stopPropagation(); const sub=subMapFor(g.dataset.id); if(sub){ switchMap(sub.id); } else { const pl=(camp.places||[]).find(q=>q.id===g.dataset.id); toast((pl?pl.name:'This place')+' has no map yet — use “+ own map” to add one','var(--muted)'); } });
   });
   svg.addEventListener('pointermove',e=>{
-    if(!drag||pts.size>=2||_mapGesture){ drag=null; return; } const l=toLocal(e); drag.moved=true;
+    if(!drag||pts.size>=2||_mapGesture){ drag=null; return; } if(drag.locked) return; const l=toLocal(e); drag.moved=true;
     const x=Math.max(14,Math.min(VW-14,l.x)), y=Math.max(14,Math.min(VH-28,l.y));
     const _S=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4);
     drag.g.setAttribute('transform',`translate(${Math.round(x)},${Math.round(y)}) scale(${_S})`);
@@ -14852,7 +14854,7 @@ function _bindMapDrag(camp, map){
           if(sub){ drag=null; switchMap(sub.id); return; }
         }
         _lastTap={id:drag.id,t:now};
-        if(_selPinId!==drag.id){ _selPinId=drag.id; renderMap(); }
+        if(!map.pinsLocked && _selPinId!==drag.id){ _selPinId=drag.id; renderMap(); }
       }
     } drag=null; };
   svg.addEventListener('pointerup',end); svg.addEventListener('pointercancel',end);
@@ -15203,6 +15205,7 @@ function setPaintMode(mode){ _paintMode = (_paintMode===mode)?null:mode; if(_pai
 let _brushTimer=null;
 function setBrush(id,v){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.brushPx=parseInt(v)||20; const lg=document.querySelector('#campMapWrap .map-legend'); if(lg&&_paintMode==='reveal') lg.textContent='paint to clear fog · '+m.brushPx+'px brush'; clearTimeout(_brushTimer); _brushTimer=setTimeout(()=>saveCampaign(camp),400); }
 function clearPaint(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; if(!confirm('Remove all hand-painted fog reveals on this map?')) return; m.paint=[]; saveCampaign(camp); renderMap(); }
+function togglePinsLock(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.pinsLocked=!m.pinsLocked; if(m.pinsLocked) _selPinId=null; saveCampaign(camp); renderMap(); toast(m.pinsLocked?'🔒 Pins locked':'🔓 Pins unlocked','var(--gold)'); }
 function resetPinSize(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.pinPx=0.7; delete m.pinScale; saveCampaign(camp); renderMap(); }
 function setPlaceColor(id, col){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const pl=(camp.places||[]).find(p=>p.id===id); if(!pl) return; if(col) pl.color=col; else delete pl.color; saveCampaign(camp); renderMap(); }
 function bumpTypeScale(t, dir){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const m=_curMap(camp); if(!m) return; if(!m.typeScale) m.typeScale={}; const cur=_typeScale(m,t); let v=Math.round((cur + dir*TYPE_SCALE_STEP)*100)/100; v=Math.max(TYPE_SCALE_MIN, Math.min(TYPE_SCALE_MAX, v)); m.typeScale[t]=v; saveCampaign(camp); renderMap(); }
