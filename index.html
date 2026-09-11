@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v8.8.0 label-matches-dot 2026-09-05 -->
+<!-- Tome of Heroes v9.19.0 relocate-key-remove-cleardata 2026-09-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -364,6 +364,9 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .tab-row{display:flex;background:var(--surface);border-radius:10px;padding:3px;margin-bottom:14px;border:1px solid var(--border);overflow-x:auto;}
 .tab-btn{flex:1;padding:7px 2px;white-space:nowrap;background:none;border:none;border-radius:8px;color:var(--muted);font-family:'Cinzel',serif;font-size:8px;letter-spacing:0.5px;cursor:pointer;transition:var(--trans);text-transform:uppercase;}
 .tab-btn.active{background:var(--purple);color:white;}
+#scr-character .tab-bar{display:flex;gap:5px;border-radius:12px;padding:5px;margin-bottom:14px;border:1px solid var(--border);overflow-x:auto;}
+#scr-character .tab-bar .tab-btn{flex:1 0 auto;padding:12px 10px;font-size:11px;letter-spacing:1px;border-radius:9px;}
+#scr-character .tab-bar .tab-btn.active{background:var(--purple);color:#fff;}
 .tab-pane{display:none;}
 .tab-pane.active{display:block;}
 /* Campaign detail: flex column filling full height — tab-pane is the scrolling area */
@@ -819,7 +822,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   background: var(--bg2); border-right: 1px solid var(--border);
 }
 @media (min-width: 720px) {
-  .char-left-pane { width: 320px; flex-shrink: 0; height: calc(100vh - 54px - 48px - 42px); overflow-y: auto; }
+  .char-left-pane { flex: 1 1 auto; min-width: 0; height: calc(100vh - 54px - 48px - 42px); overflow-y: auto; }
 }
 
 /* Paperdoll section */
@@ -1022,10 +1025,10 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 
 /* RIGHT PANE: stats */
 .char-right-pane {
-  flex: 1; padding: 14px 14px 20px; min-width: 0;
+  padding: 14px 14px 20px; min-width: 0;
 }
 @media (min-width: 720px) {
-  .char-right-pane { overflow-y: auto; height: calc(100vh - 54px - 48px - 42px); }
+  .char-right-pane { width: 260px; flex-shrink: 0; overflow-y: auto; height: calc(100vh - 54px - 48px - 42px); background: var(--bg2); border-left: 1px solid var(--border); }
 }
 
 .char-stat-section { margin-bottom: 14px; }
@@ -1163,11 +1166,11 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <span class="topbar-icon" id="topIcon">⚔</span>
   </div>
   <div class="bottomnav">
-    <div class="nav-item active" id="nav-roster" onclick="nav('roster')"><span class="nav-icon">📜</span>ROSTER</div>
-    <div class="nav-item" id="nav-dice" onclick="nav('dice')"><span class="nav-icon">⬡</span>DICE</div>
-    <div class="nav-item" id="nav-character" onclick="nav('character')"><span class="nav-icon">🧙</span>CHARACTER</div>
+    <div class="nav-item active" id="nav-character" onclick="nav('character')"><span class="nav-icon">🧙</span>CHARACTER</div>
     <div class="nav-item" id="nav-party" onclick="nav('party')"><span class="nav-icon">🛡</span>PARTY</div>
+    <div class="nav-item" id="nav-dice" onclick="nav('dice')"><span class="nav-icon">⬡</span>DICE</div>
     <div class="nav-item" id="nav-loot" onclick="nav('loot')"><span class="nav-icon">💰</span>LOOT</div>
+    <div class="nav-item" id="nav-maps" onclick="nav('maps')"><span class="nav-icon">🗺️</span>MAPS</div>
     <div class="nav-item" id="nav-campaign" onclick="nav('campaign')"><span class="nav-icon">📖</span>CAMPAIGN</div>
   </div>
   <div class="toast" id="toast"></div>
@@ -1175,15 +1178,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   <div id="content-area">
 
   <!-- ROSTER -->
-  <div class="scroll-region screen active" id="scr-roster" data-panel-label="ROSTER">
-    <div id="installBanner"></div>
-    <div id="campSwitchBanner"></div>
-    <div class="divider"><span>Your Characters</span></div>
-    <div id="rosterList"></div>
-    <button class="btn btn-gold" id="forgeBtn" onclick="showBuild()">+ Forge New Character</button>
-    <button class="btn btn-outline" id="importCharBtn" onclick="showCharImport()">↓ Import Character</button>
-    <button class="btn btn-outline" id="viewPartyBtn" onclick="nav('party')">⚔ View Party</button>
-  </div>
 
   <!-- BUILD -->
   <div class="scroll-region screen" data-panel-label="FORGE CHARACTER" id="scr-build">
@@ -1404,14 +1398,12 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 
   <!-- PARTY -->
   <div class="scroll-region screen" id="scr-party" data-panel-label="PARTY">
-    <div class="tab-row">
-      <button class="tab-btn active" onclick="partyTab('initiative')">Initiative</button>
-      <button class="tab-btn" onclick="partyTab('overview')">Overview</button>
-      <button class="tab-btn" onclick="partyTab('history')">History</button>
-    </div>
-    <div class="tab-pane active" id="ptab-initiative"></div>
-    <div class="tab-pane" id="ptab-overview"></div>
-    <div class="tab-pane" id="ptab-history"></div>
+    <div id="installBanner"></div>
+    <div id="campSwitchBanner"></div>
+    <div class="divider"><span>Your Party</span></div>
+    <div id="rosterList"></div>
+    <div class="divider" style="margin-top:20px"><span>Party History</span></div>
+    <div class="tab-pane active" id="ptab-history"></div>
     <div class="tab-pane" id="ptab-share" style="display:none"></div>
     <div class="tab-pane" id="ptab-manage" style="display:none"></div>
   </div>
@@ -1435,9 +1427,13 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 
   <!-- CHARACTER SCREEN -->
   <div class="scroll-region screen" id="scr-character" data-panel-label="CHARACTER">
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-gold" style="flex:1;margin:0" onclick="showBuild()">+ Forge New Character</button>
+      <button class="btn btn-outline" style="flex:1;margin:0" onclick="showCharImport()">📥 Import Character</button>
+    </div>
     <div id="charScreenHero"></div>
     <div id="charScreenEmpty" style="display:none">
-      <div class="empty-state"><div class="es-icon">🧙</div><p>No character selected.<br>Select a character from the Roster first.</p></div>
+      <div class="empty-state"><div class="es-icon">🧙</div><p>No character selected.<br>Forge or import one above, or pick a character from your Party.</p></div>
     </div>
     <div id="charScreenMain" style="display:none">
       <div class="tab-bar" style="position:sticky;top:0;z-index:10;background:var(--bg)">
@@ -1559,24 +1555,11 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       </span>
     </button>
 
-    <div style="margin-top:24px;width:100%;max-width:280px">
-      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;text-align:left">CLAUDE API KEY <span style="color:var(--muted);font-style:italic;font-family:'Crimson Pro',serif;letter-spacing:0">(yours, or shared by a campaign)</span></div>
-      <input id="claudeApiKeyInput" type="password" placeholder="sk-ant-api03-…"
-        style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:12px;font-family:monospace"
-        oninput="saveClaudeApiKey(this.value)" value="">
-      <button onclick="shareKeyWithCampaign()" style="margin-top:8px;width:100%;background:none;border:1px dashed var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:8px;cursor:pointer;opacity:0.85">
-        ⚭ Share this key with the active campaign
-      </button>
-      <div style="font-size:10px;color:var(--muted);margin-top:5px;text-align:left">Shared keys are usable (and visible) to every member of that campaign. Leave the field blank to rely on a campaign-shared key.</div>
-    </div>
     <button onclick="openRegisterEmailModal()" style="margin-top:16px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.85">
       📧 Add / Change Email
     </button>
     <button onclick="openChangePinModal()" style="margin-top:8px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.75">
       🔑 Change Password / PIN
-    </button>
-    <button onclick="clearAllData()" style="margin-top:8px;background:none;border:1px solid var(--red);border-radius:8px;color:var(--red);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.6">
-      🗑 Clear All Data
     </button>
     <button onclick="doLogout()" style="margin-top:8px;background:none;border:1px solid var(--muted);border-radius:8px;color:var(--muted);font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:8px 20px;cursor:pointer;opacity:0.5">
       ⇥ Sign Out
@@ -1589,6 +1572,21 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   <div class="scroll-region screen" id="scr-campaign" data-panel-label="CAMPAIGN">
     <!-- Campaign List view -->
     <div id="campListView">
+      <div id="campKeyBox" style="margin:4px 0 14px">
+        <div onclick="const b=document.getElementById('campKeyBody');b.style.display=b.style.display==='none'?'':'none';this.querySelector('span:last-child').textContent=b.style.display==='none'?'▸':'▾'" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;color:var(--gold);padding:8px 2px">
+          <span>⚙ CLAUDE API KEY</span><span>▸</span>
+        </div>
+        <div id="campKeyBody" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px">
+          <div style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:8px">Your personal Claude API key powers the AI features (Quick Jot, imports, blurbs). It's stored on your device.</div>
+          <input id="claudeApiKeyInput" type="password" placeholder="sk-ant-api03-…"
+            style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:12px;font-family:monospace;box-sizing:border-box"
+            oninput="saveClaudeApiKey(this.value)" value="">
+          <button onclick="shareKeyWithCampaign()" style="margin-top:8px;width:100%;background:none;border:1px dashed var(--gold);border-radius:8px;color:var(--gold);font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:9px;cursor:pointer">
+            🔑 Share this key with the active campaign
+          </button>
+          <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.5">Shared keys are usable (and visible) to every member of that campaign. Leave the field blank to rely on a campaign-shared key instead.</div>
+        </div>
+      </div>
       <div class="divider"><span>Your Campaigns</span></div>
       <div id="campList"></div>
       <button class="btn btn-gold" onclick="showNewCampForm()">+ New Campaign</button>
@@ -1652,7 +1650,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
         <button class="tab-btn" onclick="campTab('quests')">Quests</button>
         <button class="tab-btn" onclick="campTab('npcs')">NPCs</button>
         <button class="tab-btn" onclick="campTab('arcs')">Arcs</button>
-        <button class="tab-btn" onclick="campTab('map')">🗺 Map</button>
         <button class="tab-btn" onclick="campTab('books')">📚 Books</button>
         <button class="tab-btn" onclick="campTab('notes')">Notes</button>
       </div>
@@ -3396,10 +3393,11 @@ function toast(msg,col){const t=document.getElementById('toast');t.textContent=m
 let currentScreen='roster';
 const SCREEN_META={
   roster:{title:'Tome of Heroes',icon:'⚔',nav:'nav-roster',back:null},
-  build:{title:'Forge Character',icon:'✦',nav:'nav-roster',back:'roster'},
-  sheet:{title:'Character Sheet',icon:'📜',nav:'nav-roster',back:'roster'},
+  build:{title:'Forge Character',icon:'✦',nav:'nav-character',back:'character'},
+  sheet:{title:'Character Sheet',icon:'📜',nav:'nav-character',back:'character'},
   dice:{title:'Dice Oracle',icon:'⬡',nav:'nav-dice',back:null},
   character:{title:'Character',icon:'🧙',nav:'nav-character',back:null},
+  maps:{title:'Maps',icon:'🗺️',nav:'nav-maps',back:null},
   party:{title:'Party',icon:'🛡',nav:'nav-party',back:null},
   loot:{title:'Loot & Inventory',icon:'💰',nav:'nav-loot',back:null},
   campaign:{title:'Campaign',icon:'📖',nav:'nav-campaign',back:null},
@@ -3407,8 +3405,10 @@ const SCREEN_META={
   playergate:{title:'Join Campaign',icon:'⚔',nav:null,back:'modegate'},
 };
 function nav(id){
-  // If navigating away from the campaign screen while in detail/sub-form view, close it cleanly
-  if(currentScreen === 'campaign' && id !== 'campaign'){
+  if(id==='roster') id='party';                 // roster merged into Party
+  if(id==='maps') return _openMapsScreen();      // Maps = active campaign's map, promoted to a top-level screen
+  // If navigating away from the campaign/maps detail view, close it cleanly
+  if((currentScreen === 'campaign' || currentScreen === 'maps') && id !== 'campaign' && id !== 'maps'){
     const detail = document.getElementById('campDetailView');
     const listView = document.getElementById('campListView');
     if(detail){
@@ -3442,8 +3442,8 @@ function nav(id){
 
   try {
     if(id==='roster'){renderRoster();renderCampaignSwitchBanner();}
-    if(id==='campaign'){renderCampList();const _cs=document.getElementById('scr-campaign');if(_cs)_cs.scrollTop=0;}
-    if(id==='party'){partyTab('initiative');}
+    if(id==='campaign'){const _tr=document.getElementById('campTabRow');if(_tr)_tr.style.display='';renderCampList();const _cs=document.getElementById('scr-campaign');if(_cs)_cs.scrollTop=0;const _ki=document.getElementById('claudeApiKeyInput');if(_ki)getClaudeApiKey().then(k=>{_ki.value=k||'';});}
+    if(id==='party'){ renderRoster(); renderCampaignSwitchBanner(); renderPartyHistory(); }
     if(id==='modegate'){
       const keyInput = document.getElementById('claudeApiKeyInput');
       if(keyInput) getClaudeApiKey().then(k=>{ keyInput.value = k||''; });
@@ -3485,6 +3485,35 @@ function nav(id){
 
   _applyUserBadge();
   applyDesktopSplit();
+}
+function _openMapsScreen(){
+  const camp = getActiveCamp();
+  document.querySelectorAll('.screen').forEach(sc=>{sc.classList.remove('active');sc.classList.remove('desk-secondary');});
+  const scr=document.getElementById('scr-campaign'); if(scr) scr.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('nav-maps')?.classList.add('active');
+  document.getElementById('pageTitle').textContent='Maps';
+  document.getElementById('topIcon').textContent='🗺️';
+  document.getElementById('backBtn').style.visibility='hidden';
+  const prev=currentScreen; currentScreen='maps';
+  const listView=document.getElementById('campListView');
+  const detail=document.getElementById('campDetailView');
+  const tr=document.getElementById('campTabRow');
+  if(!camp){
+    if(detail) detail.style.display='none';
+    if(listView){ listView.style.display='block'; }
+    renderCampList();
+    const b=document.createElement('div'); // gentle hint handled by list view
+  } else {
+    editingCampId=camp.id;
+    if(listView) listView.style.display='none';
+    if(detail){ detail.style.display='block'; detail.classList.add('detail-active'); }
+    document.getElementById('scr-campaign')?.classList.add('detail-open');
+    if(tr) tr.style.display='none';               // map lives on its own screen now
+    renderCampDetailHeader();
+    campTab('map');
+  }
+  _applyUserBadge(); applyDesktopSplit();
 }
 function goBack(){const m=SCREEN_META[currentScreen];if(m?.back)nav(m.back);}
 
@@ -4646,13 +4675,9 @@ let partySheetCharId=null;
 /* ══ PARTY OVERVIEW ══ */
 let combatants=[],currentTurn=0,combatRound=1;
 function partyTab(t){
-  // Player mode: restrict to overview and initiative
-  const allTabs=['initiative','overview','history','share','manage'];
-  document.querySelectorAll('#scr-party .tab-btn').forEach((b,i)=>b.classList.toggle('active',allTabs[i]===t));
+  if(!['history','share','manage'].includes(t)) t='history';
   document.querySelectorAll('#scr-party .tab-pane').forEach(p=>p.classList.remove('active'));
-  document.getElementById('ptab-'+t).classList.add('active');
-  if(t==='overview')renderPartyOverview();
-  if(t==='initiative')renderInitiative();
+  const pane=document.getElementById('ptab-'+t); if(pane) pane.classList.add('active');
   if(t==='history')renderPartyHistory();
   if(t==='share')renderShareTab();
   if(t==='manage')renderPartyManage();
@@ -4680,6 +4705,7 @@ function getFullParty(){
 }
 
 function renderPartyOverview(){
+  if(!document.getElementById('ptab-overview')) return; // Overview removed (merged into Party)
   const party=getFullParty();
   const el=document.getElementById('ptab-overview');
   if(!party.length){
@@ -4774,6 +4800,7 @@ function buildCombatants(){if(!combatants.length)combatants=getFullParty().map(c
 function rollAllInit(){buildCombatants();const party=getFullParty();combatants=combatants.map(c=>{const pc=party.find(p=>p.id===c.id);const dex=pc?parseInt(getMod(pc.abilities?.DEX||10))||0:0;return{...c,initiative:Math.ceil(Math.random()*20)+dex};});combatants.sort((a,b)=>b.initiative-a.initiative);currentTurn=0;renderInitiative();toast('Initiative rolled!');}
 function addEnemy(){buildCombatants();const name=document.getElementById('enemyNameIn').value.trim();const init=parseInt(document.getElementById('enemyInitIn').value)||Math.ceil(Math.random()*20);if(!name){toast('Enter enemy name','var(--red)');return;}combatants.push({id:'e'+Date.now(),name,icon:'👹',color:'#c0392b',initiative:init,type:'enemy',hp:20,maxHP:20});combatants.sort((a,b)=>b.initiative-a.initiative);document.getElementById('enemyNameIn').value='';document.getElementById('enemyInitIn').value='';renderInitiative();}
 function renderInitiative(){
+  if(!document.getElementById('ptab-initiative')) return; // Initiative tracker removed
   buildCombatants();const el=document.getElementById('ptab-initiative');const active=currentTurn%Math.max(1,combatants.length);
   let html=`<div class="round-bar"><div class="round-label">Round ${combatRound}</div><div class="round-btns"><button class="round-btn small" onclick="prevTurn()">← Prev</button><button class="round-btn accent" onclick="nextTurn()">Next →</button><button class="round-btn small" onclick="resetCombat()">Reset</button></div></div>
   <div class="enemy-add"><input id="enemyNameIn" placeholder="Add enemy / NPC…"><input id="enemyInitIn" type="number" placeholder="Init" style="width:60px"><button onclick="addEnemy()">Add</button></div>`;
@@ -5337,7 +5364,7 @@ function _enterApp(){
   if(!getActiveCampId() || !getCampaigns().filter(c=>!c._ownerGid).length){
     nav('campaign');
   } else {
-    nav('roster');
+    nav('character');
   }
 }
 
@@ -10733,7 +10760,7 @@ function _bootContinue(mode, nav_bar){
   if(!getActiveCampId() || !_db.campaigns.filter(c=>!c._ownerGid).length){
     nav('campaign');
   } else {
-    nav('roster');
+    nav('character');
   }
   setTimeout(applyDesktopSplit, 0);
   // Then load shared camps in background and re-render when done
@@ -12920,7 +12947,8 @@ let _currentCampTab = 'sessions';
 function campTab(t) {
   if(t!=='map'){ _placingId=null; window._showMapForm=false; }
   _currentCampTab = t;
-  document.querySelectorAll('#campTabRow .tab-btn').forEach((b,i)=>b.classList.toggle('active',['sessions','quests','npcs','arcs','map','books','notes'][i]===t));
+  { const _tr=document.getElementById('campTabRow'); if(_tr && currentScreen!=='maps') _tr.style.display=''; }
+  document.querySelectorAll('#campTabRow .tab-btn').forEach((b,i)=>b.classList.toggle('active',['sessions','quests','npcs','arcs','books','notes'][i]===t));
   document.querySelectorAll('#campDetailView .tab-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('ctab-'+t).classList.add('active');
   if (t==='sessions') renderSessions();
