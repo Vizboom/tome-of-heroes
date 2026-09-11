@@ -14504,6 +14504,11 @@ function _pinLabelPx(R){ return Math.max(0.1, R*1.3); } // label tracks the pin 
 function _pinScreenScale(z){ return 1; } // pins are anchored to the map: they scale with zoom (shrink when zoomed out, grow when zoomed in)
 function _applyPinScale(id){ const v=_mapView[id]; const svg=document.getElementById('campMapSvg'); if(!svg) return; const S=_pinScreenScale(v?v.z:1).toFixed(4); svg.querySelectorAll('.map-node.illus').forEach(g=>{ const cx=g.dataset.cx, cy=g.dataset.cy; if(cx!=null) g.setAttribute('transform',`translate(${cx},${cy}) scale(${S})`); }); }
 function _homeMap(camp){ const ms=_campMaps(camp); return ms.find(m=>m.isHome) || ms.find(m=>!m.placeId) || null; }
+function _parentMap(camp, map){ if(!map||!map.placeId) return null; const pl=(camp.places||[]).find(x=>x.id===map.placeId); const pins=(pl&&pl.pins)||{};
+  // Prefer the parent whose own map is the home/overview, else any map holding this place's pin.
+  const cands=(camp.maps||[]).filter(m=>m!==map && pins[m.id]);
+  return cands.find(m=>m.isHome) || cands.find(m=>!m.placeId) || cands[0] || null; }
+function _mapChain(camp, map){ const chain=[map]; let cur=map, guard=0; while(cur && cur.placeId && guard++<16){ const par=_parentMap(camp, cur); if(!par || chain.includes(par)) break; chain.unshift(par); cur=par; } return chain; }
 function _curMap(camp){
   const ms=_campMaps(camp);
   let m = ms.find(x=>x.id===_curMapId);
@@ -14600,7 +14605,14 @@ function renderMap(){
       && (!parent || !p.pins || !Object.keys(p.pins).length || (parent.links||[]).some(n=>_fuzzyMatch(n,p.name)>=0.75) || (p.links||[]).some(n=>_fuzzyMatch(n,parent.name)>=0.75)));
     html += `<div class="map-wrap ${_placingId?'placing':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_selPinId?'drag the gold grip to resize · drag pin to move':'tap a pin to resize · pinch/scroll to zoom')}</div></div>`;
     html += `<div class="map-ctrls">
-      ${map.placeId?`<button class="pc-pill" onclick="switchMap('${_homeMap(camp)?.id||''}')">← home map</button>`:''}
+      ${map.placeId?(()=>{ const chain=_mapChain(camp, map);
+        if(chain.length>=2){ return `<span class="pc-pill" style="cursor:default;display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;max-width:100%">`
+          + chain.map((mm,i)=> i===chain.length-1
+              ? `<b style="color:var(--gold)">${esc(mm.name)}</b>`
+              : `<span onclick="switchMap('${mm.id}')" style="cursor:pointer;color:var(--gold);text-decoration:underline">${esc((mm.isHome?'🏠 ':'')+mm.name)}</span><span style="color:var(--muted)">▸</span>`
+            ).join('') + `</span>`; }
+        return `<button class="pc-pill" onclick="switchMap('${_homeMap(camp)?.id||''}')">← home map</button>`;
+      })():''}
       <span class="pc-pill" style="display:flex;align-items:center;gap:4px;cursor:default"><button onclick="zoomMap('${map.id}',1/1.4)" style="background:none;border:none;color:var(--text);font-size:15px;cursor:pointer;padding:0 4px">−</button><span id="mapZoomLbl" style="min-width:34px;text-align:center;font-size:11px">${Math.round((_mapView[map.id]?.z||1)*100)}%</span><button onclick="zoomMap('${map.id}',1.4)" style="background:none;border:none;color:var(--text);font-size:15px;cursor:pointer;padding:0 4px">＋</button></span>
       <button class="pc-pill" onclick="zoomReset('${map.id}')" title="Reset zoom">⟲ fit</button>
 
