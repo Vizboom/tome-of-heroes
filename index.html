@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v9.19.0 relocate-key-remove-cleardata 2026-09-05 -->
+<!-- Tome of Heroes v9.20.0 map-scroll-passthrough-fix 2026-09-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14829,8 +14829,14 @@ function _bindMapDrag(camp, map){
   const pts=new Map(); let gest=null, bgPan=null;
   const zoomAt=(sx,sy,f)=>{ const r=rectOf(); const nz=Math.max(1,Math.min(MAP_ZMAX,view.z*f)); const ux=view.x+(sx-r.left)/r.width*(VW/view.z), uy=view.y+(sy-r.top)/r.height*(VH/view.z); view.z=nz; view.x=ux-(sx-r.left)/r.width*(VW/nz); view.y=uy-(sy-r.top)/r.height*(VH/nz); applyView(); };
   svg.addEventListener('wheel',e=>{
-    // At minimum zoom, a further scroll-out isn't captured — let the page scroll.
-    if(e.deltaY>0 && view.z<=1) return;
+    // At minimum zoom, a scroll-down scrolls the surrounding page instead of zooming.
+    // The map can sit inside an overflow:hidden pane (e.g. the Maps screen), so we
+    // scroll the real scroll container by hand rather than relying on default bubbling.
+    if(e.deltaY>0 && view.z<=1){
+      const sc = svg.closest('.tab-pane.active') || svg.closest('.scroll-region') || document.scrollingElement;
+      if(sc){ sc.scrollTop += e.deltaY; e.preventDefault(); }
+      return;
+    }
     e.preventDefault(); zoomAt(e.clientX,e.clientY, e.deltaY<0?1.15:1/1.15);
   },{passive:false});
   svg.addEventListener('pointerdown',e=>{ pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(pts.size===2){ const[a,b]=[...pts.values()]; gest={d:Math.hypot(a.x-b.x,a.y-b.y)||1, cx:(a.x+b.x)/2, cy:(a.y+b.y)/2, z:view.z, x:view.x, y:view.y}; _mapGesture=true; bgPan=null; } });
