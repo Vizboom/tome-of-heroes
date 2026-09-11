@@ -12729,6 +12729,7 @@ async function openCamp(id) {
   campTab('sessions');
 }
 
+function toggleCampBanner(){ const now=localStorage.getItem('toh_camp_banner_min')==='1'; localStorage.setItem('toh_camp_banner_min', now?'0':'1'); renderCampDetailHeader(); }
 function renderCampDetailHeader() {
   const camp = getCampaigns().find(c => c.id === editingCampId);
   if (!camp) return;
@@ -12778,13 +12779,24 @@ function renderCampDetailHeader() {
     camp.charIds = realCharIds;
     saveCampaign(camp);
   }
+  const _min = localStorage.getItem('toh_camp_banner_min')==='1';
+  if(_min){
+    el.innerHTML = `
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:13px;padding:8px 12px;margin-bottom:14px;display:flex;align-items:center;gap:10px">
+      <div style="font-family:'Cinzel',serif;font-size:15px;color:var(--gold);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(camp.name)}</div>
+      ${isActive?`<span class="camp-badge active" style="flex-shrink:0">● Active</span>`:''}
+      <button onclick="toggleCampBanner()" title="Expand campaign details" style="flex-shrink:0;background:none;border:1px solid var(--border2);border-radius:8px;color:var(--muted);cursor:pointer;padding:3px 9px;font-size:13px">▾</button>
+    </div>`;
+    return;
+  }
   el.innerHTML = `
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:13px;padding:14px;margin-bottom:14px">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px">
+    <div style="position:relative;background:var(--surface2);border:1px solid var(--border);border-radius:13px;padding:14px;margin-bottom:14px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;padding-right:34px">
         <div>
           <div style="font-family:'Cinzel',serif;font-size:18px;color:var(--gold)">${esc(camp.name)}</div>
           <div style="font-size:12px;color:var(--muted);margin-top:2px">${camp.setting||'Custom Setting'}</div>
         </div>
+        <button onclick="toggleCampBanner()" title="Minimize — keep just the title" style="position:absolute;top:10px;right:12px;background:none;border:1px solid var(--border2);border-radius:8px;color:var(--muted);cursor:pointer;padding:3px 9px;font-size:13px;z-index:2">▴</button>
         ${isActive?`<span class="camp-badge active" style="flex-shrink:0">● Active</span>`:
           `<button onclick="switchCampaign('${camp.id}')" style="padding:5px 12px;background:var(--green);border:none;border-radius:8px;color:white;font-family:'Cinzel',serif;font-size:9px;cursor:pointer;letter-spacing:1px;flex-shrink:0">Set Active</button>`}
       </div>
@@ -14467,6 +14479,7 @@ function _mapLayout(places){
 
 let _curMapId = null;      // which of camp.maps is displayed (null = auto → home)
 let _placingId = null;     // place being positioned by tap
+let _placingParty = false; // dropping the party marker
 let _selPinId = null;      // pin selected on the illustrated map (shows resize grip)
 let _paintMode = null;     // 'reveal' | 'refog' | null — fog painting mode
 let _mapGesture = false;   // true while a 2-finger zoom/pan gesture is active
@@ -14597,13 +14610,18 @@ function renderMap(){
         ${(!map.hidePinLabels && p.hideName!==true)?`<text text-anchor="middle" y="${LY}" style="font-size:${LF}px;stroke-width:${(_lf*0.28).toFixed(2)}px">${esc(String(p.name).slice(0,20))}</text>`:''}
         ${seld?`<g class="mn-resize"><line x1="${(R).toFixed(2)}" y1="${(R).toFixed(2)}" x2="${gh.toFixed(2)}" y2="${gh.toFixed(2)}" stroke="var(--gold)" stroke-width="${(R*0.12).toFixed(2)}" opacity="0.6"/><rect x="${(gh-R*1.6).toFixed(2)}" y="${(gh-R*1.6).toFixed(2)}" width="${(R*3.2).toFixed(2)}" height="${(R*3.2).toFixed(2)}" fill="transparent" style="cursor:nwse-resize"/><rect x="${(gh-R*0.55).toFixed(2)}" y="${(gh-R*0.55).toFixed(2)}" width="${(R*1.1).toFixed(2)}" height="${(R*1.1).toFixed(2)}" rx="${(R*0.2).toFixed(2)}" fill="var(--gold)" stroke="#0d0a1a" stroke-width="${(R*0.1).toFixed(2)}" style="pointer-events:none"/></g>`:''}
       </g>`; }).join(''); })()}
+      ${map.party?(()=>{ const PS2=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4); const R=Math.max(0.6,_pinPx(map)*2.2); const px=(map.party.x*VW).toFixed(1), py=(map.party.y*VH).toFixed(1); const lf=(R*1.1).toFixed(2), ly=(R+R*1.1*0.95+1).toFixed(2);
+        return `<g class="map-node party pinlabel" data-id="__party__" data-cx="${px}" data-cy="${py}" transform="translate(${px},${py}) scale(${PS2})">
+          <g class="pinicon" transform="scale(${(R/12).toFixed(3)})" fill="var(--gold)" stroke="#0d0a1a" stroke-width="1.6"><rect x="-1.8" y="-12" width="3.6" height="24" rx="1"/><polygon points="1.8,-12 13,-8 1.8,-4"/></g>
+          <text text-anchor="middle" y="${ly}" style="font-size:${lf}px;stroke-width:${(R*1.1*0.28).toFixed(2)}px">Party</text>
+        </g>`; })():''}
     </svg>`;
     // On a sub-map only offer places that plausibly belong there: linked to
     // the map's own place, or not yet pinned anywhere (fresh discoveries).
     const parent = map.placeId ? placeById(map.placeId) : null;
     const unplaced = places.filter(p=>!(p.pins&&p.pins[map.id]) && p.id!==map.placeId
       && (!parent || !p.pins || !Object.keys(p.pins).length || (parent.links||[]).some(n=>_fuzzyMatch(n,p.name)>=0.75) || (p.links||[]).some(n=>_fuzzyMatch(n,parent.name)>=0.75)));
-    html += `<div class="map-wrap ${_placingId?'placing':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_selPinId?'drag the gold grip to resize · drag pin to move':'tap a pin to resize · pinch/scroll to zoom')}</div></div>`;
+    html += `<div class="map-wrap ${(_placingId||_placingParty)?'placing':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingParty?'tap to drop the party marker':(_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_selPinId?'drag the gold grip to resize · drag pin to move':'tap a pin to resize · pinch/scroll to zoom'))}</div></div>`;
     html += `<div class="map-ctrls">
       ${map.placeId?(()=>{ const chain=_mapChain(camp, map);
         if(chain.length>=2){ return `<span class="pc-pill" style="cursor:default;display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;max-width:100%">`
@@ -14615,6 +14633,9 @@ function renderMap(){
       })():''}
       <span class="pc-pill" style="display:flex;align-items:center;gap:4px;cursor:default"><button onclick="zoomMap('${map.id}',1/1.4)" style="background:none;border:none;color:var(--text);font-size:15px;cursor:pointer;padding:0 4px">−</button><span id="mapZoomLbl" style="min-width:34px;text-align:center;font-size:11px">${Math.round((_mapView[map.id]?.z||1)*100)}%</span><button onclick="zoomMap('${map.id}',1.4)" style="background:none;border:none;color:var(--text);font-size:15px;cursor:pointer;padding:0 4px">＋</button></span>
       <button class="pc-pill" onclick="zoomReset('${map.id}')" title="Reset zoom">⟲ fit</button>
+      <button class="pc-pill" style="border-color:var(--gold);color:var(--gold)" onclick="beginPlaceParty()" title="${map.party?'Reposition the party marker':'Drop a party marker anywhere on the map'}">🚩 ${map.party?'move party':'drop party'}</button>
+      ${map.party?`<button class="pc-pill" onclick="removeParty()">✕ party</button>`:''}
+      <button class="pc-pill" onclick="popOutMap()" title="Open this map full-screen in its own window">⛶ pop out</button>
 
 <span class="pc-pill" style="cursor:default">📌 ${_pinPx(map)}px</span>
       <button class="pc-pill ${map.hidePinLabels?'on':''}" onclick="togglePinLabels('${map.id}')" title="Master switch — hide every place name on this map">${map.hidePinLabels?'all names off':'all names on'}</button>
@@ -14747,6 +14768,7 @@ function renderMap(){
   const fileIn=document.getElementById('mpFile');
   if(fileIn) fileIn.onchange=()=>{ const f=fileIn.files[0]; if(!f) return; _readMapFile(f,(url,w,h)=>{ window._pendingMapImg={url,w,h}; toast('Image ready — '+w+'×'+h,'var(--gold)'); }); };
   if(window._presetMapPlace){ const sel=document.getElementById('mpPlace'); if(sel) sel.value=window._presetMapPlace; window._presetMapPlace=null; }
+  _pushToPopouts();
 }
 
 function _renderSketchSvg(places){
@@ -14768,8 +14790,9 @@ function _bindMapDrag(camp, map){
   const svg=document.getElementById('campMapSvg'); if(!svg) return;
   const VW=+svg.dataset.vw, VH=+svg.dataset.vh, sketch=!!svg.dataset.sketch;
   const toLocal=(e)=>{ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; const m=svg.getScreenCTM(); return m?pt.matrixTransform(m.inverse()):pt; };
-  const getPos=p=>sketch?{x:p.x,y:p.y}:(p.pins&&p.pins[map.id])||null;
-  const setPos=(p,x,y)=>{ if(sketch){ p.x=x; p.y=y; } else { if(!p.pins) p.pins={}; p.pins[map.id]={x,y}; } };
+  const getPos=p=>{ if(p&&p.__party) return map.party||null; return sketch?{x:p.x,y:p.y}:(p&&p.pins&&p.pins[map.id])||null; };
+  const setPos=(p,x,y)=>{ if(p&&p.__party){ map.party={x,y}; return; } if(sketch){ p.x=x; p.y=y; } else { if(!p.pins) p.pins={}; p.pins[map.id]={x,y}; } };
+  const nodeObj=id=> id==='__party__' ? {__party:true, id:'__party__'} : (camp.places||[]).find(q=>q.id===id);
 
   // ── Pan & zoom (viewBox). Icons live in the SVG, so they scale with zoom. ──
   const view=_mapView[map.id]||(_mapView[map.id]={z:1,x:0,y:0}); view.vw=VW; view.vh=VH;
@@ -14785,11 +14808,19 @@ function _bindMapDrag(camp, map){
   const gestUp=e=>{ pts.delete(e.pointerId); if(pts.size<2){ gest=null; setTimeout(()=>{ _mapGesture=false; },60); } };
   svg.addEventListener('pointerup',gestUp); svg.addEventListener('pointercancel',gestUp);
   // Single-finger pan on empty backdrop when zoomed in (pins/paint/place take priority)
-  svg.addEventListener('pointerdown',e=>{ if(pts.size>=2||view.z<=1||_placingId||_paintMode) return; if(e.target.closest('.map-node')) return; bgPan={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y}; });
+  svg.addEventListener('pointerdown',e=>{ if(pts.size>=2||view.z<=1||_placingId||_placingParty||_paintMode) return; if(e.target.closest('.map-node')) return; bgPan={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y}; });
   svg.addEventListener('pointermove',e=>{ if(!bgPan||pts.size>=2) return; const r=rectOf(); view.x=bgPan.vx-(e.clientX-bgPan.x)/r.width*(VW/view.z); view.y=bgPan.vy-(e.clientY-bgPan.y)/r.height*(VH/view.z); applyView(); e.preventDefault(); });
   const bgEnd=()=>{ bgPan=null; }; svg.addEventListener('pointerup',bgEnd); svg.addEventListener('pointercancel',bgEnd);
 
-  // Tap-to-place mode
+  // Tap-to-place mode (party marker or a place)
+  if(_placingParty && !sketch){
+    svg.addEventListener('pointerup',e=>{
+      const l=toLocal(e); const nx=Math.max(0.02,Math.min(0.98,l.x/VW)), ny=Math.max(0.02,Math.min(0.98,l.y/VH));
+      map.party={x:nx,y:ny}; _noteMapAction(camp, nx, ny);
+      _placingParty=false; saveCampaign(camp); renderMap(); toast('🚩 Party marker placed','var(--gold)');
+    });
+    return;
+  }
   if(_placingId && !sketch){
     svg.addEventListener('pointerup',e=>{
       const l=toLocal(e); const p=(camp.places||[]).find(q=>q.id===_placingId); if(!p) return;
@@ -14845,7 +14876,7 @@ function _bindMapDrag(camp, map){
     const _S=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4);
     drag.g.setAttribute('transform',`translate(${Math.round(x)},${Math.round(y)}) scale(${_S})`);
     drag.g.dataset.cx=Math.round(x); drag.g.dataset.cy=Math.round(y);
-    const p=(camp.places||[]).find(q=>q.id===drag.id); if(p) setPos(p, x/VW, y/VH);
+    const p=nodeObj(drag.id); if(p) setPos(p, x/VW, y/VH);
     // live-update edges and fog holes
     const byName=n=>(camp.places||[]).find(q=>_fuzzyMatch(q.name,n)>=0.75);
     svg.querySelectorAll('.map-edge').forEach(line=>line.remove());
@@ -14860,6 +14891,7 @@ function _bindMapDrag(camp, map){
       if(drag.moved){ const pp=(camp.places||[]).find(q=>q.id===drag.id); const gp=pp&&getPos(pp); if(gp) _noteMapAction(camp, gp.x, gp.y); saveCampaign(camp); }
       else if(!sketch){
         const now=Date.now();
+        if(drag.id==='__party__'){ drag=null; return; }
         if(_lastTap.id===drag.id && now-_lastTap.t<380){ // double-tap → open sub-map
           _lastTap={id:null,t:0};
           const sub=subMapFor(drag.id);
@@ -15225,7 +15257,87 @@ function toggleTypeVisible(t){ const camp=getCampaigns().find(c=>c.id===editingC
 function togglePlaceName(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const pl=(camp.places||[]).find(p=>p.id===id); if(!pl) return; pl.hideName=!pl.hideName; saveCampaign(camp); renderMap(); }
 function togglePinLabels(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.hidePinLabels=!m.hidePinLabels; saveCampaign(camp); renderMap(); }
 function peekFog(id,on){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m._peek=on; const fog=document.querySelector('#campMapSvg .map-fog'); if(fog) fog.style.opacity=on?'0':''; }
-function beginPlace(id){ _placingId = (id && _placingId!==id) ? id : null; renderMap(); if(_placingId) document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
+function beginPlace(id){ _placingId = (id && _placingId!==id) ? id : null; _placingParty=false; renderMap(); if(_placingId) document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
+function beginPlaceParty(){ _placingParty=true; _placingId=null; _selPinId=null; renderMap(); document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
+function removeParty(){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_curMap(camp); if(!m) return; delete m.party; saveCampaign(camp); renderMap(); toast('Party marker removed','var(--muted)'); }
+/* Open the current map full-screen in its own window — a self-contained,
+   interactive (pan/zoom) snapshot that runs independently of the app. */
+const _popouts = [];   // live pop-out windows: {win, mapId}
+// Clean, full-extent clone of the current map SVG (no selection/resize chrome).
+function _mapSnapshotSvg(){
+  const svg=document.getElementById('campMapSvg'); if(!svg) return null;
+  const c=svg.cloneNode(true); c.removeAttribute('id');
+  c.setAttribute('viewBox', `0 0 ${svg.dataset.vw} ${svg.dataset.vh}`);
+  c.setAttribute('preserveAspectRatio','xMidYMid meet');
+  c.querySelectorAll('.mn-resize').forEach(n=>n.remove());
+  c.querySelectorAll('circle[stroke-dasharray]').forEach(n=>{ if(!n.classList.contains('pinring')) n.remove(); });
+  return c;
+}
+// Push the current map into every open pop-out (same-origin direct DOM update).
+// Called from renderMap, so any pin/party/size/zoom change or map switch shows live.
+function _pushToPopouts(){
+  if(!_popouts.length) return;
+  const camp=getCampaigns().find(c=>c.id===editingCampId); const map=camp&&_curMap(camp);
+  const live=document.getElementById('campMapSvg'); if(!map||!live) return;
+  const VW=+live.dataset.vw, VH=+live.dataset.vh;
+  for(let i=_popouts.length-1;i>=0;i--){ const o=_popouts[i];
+    if(!o.win || o.win.closed){ _popouts.splice(i,1); continue; }
+    try{
+      const fresh=_mapSnapshotSvg(); if(!fresh) continue;
+      const vp=o.win.document.getElementById('vp'); if(!vp){ _popouts.splice(i,1); continue; }
+      const old=vp.querySelector('svg');
+      const imported=o.win.document.importNode(fresh, true);
+      if(old) vp.replaceChild(imported, old); else vp.appendChild(imported);
+      const keepView = (o.mapId===map.id); o.mapId=map.id;
+      if(typeof o.win.__rebind==='function') o.win.__rebind(map.id, VW, VH, keepView);
+    }catch(e){ /* window navigating or blocked — drop it */ _popouts.splice(i,1); }
+  }
+}
+
+function popOutMap(){
+  const svg=document.getElementById('campMapSvg');
+  const camp=getCampaigns().find(c=>c.id===editingCampId);
+  const map=camp&&_curMap(camp);
+  if(!svg||!map){ toast('Open a map first','var(--red)'); return; }
+  const VW=+svg.dataset.vw, VH=+svg.dataset.vh;
+  const clone=_mapSnapshotSvg();
+  const cssText=(document.querySelector('style')?.textContent)||'';
+  const title=esc((map.name||'Map')+' — '+(camp.name||''));
+  const w=window.open('', 'toh_map_'+map.id, 'width=1280,height=860');
+  if(!w){ toast('Pop-out blocked — allow pop-ups for this site','var(--red)'); return; }
+  w.document.open();
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+    +'<title>'+title+'</title><style>'+cssText
+    +'html,body{margin:0;height:100%;background:#0d0a1a;overflow:hidden;font-family:system-ui,sans-serif}'
+    +'#vp{position:fixed;inset:0;touch-action:none;cursor:grab}#vp:active{cursor:grabbing}'
+    +'#vp svg{position:absolute;inset:0;width:100%;height:100%;display:block}'
+    +'#bar{position:fixed;top:10px;right:10px;display:flex;gap:6px;z-index:10}'
+    +'#bar button{font-family:inherit;font-size:13px;padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.25);background:rgba(20,16,40,0.85);color:#e8e0ff;cursor:pointer}'
+    +'#ttl{position:fixed;top:10px;left:12px;z-index:10;color:#e8e0ff;font-family:Cinzel,serif;font-size:14px;letter-spacing:1px;text-shadow:0 1px 3px #000}'
+    +'</style></head><body>'
+    +'<div id="ttl">'+title+'</div>'
+    +'<div id="vp">'+clone.outerHTML+'</div>'
+    +'<div id="bar"><span id="live" style="align-self:center;color:#27ae60;font-size:11px;font-weight:600;margin-right:4px">&#9679; LIVE</span><button onclick="Z(1/1.4)">&minus;</button><button onclick="Z(1.4)">&plus;</button><button onclick="FIT()">fit</button><button onclick="FS()">&#9974; full screen</button></div>'
+    +'<script>'
+    +'var VW='+VW+',VH='+VH+',ZMAX=8;var svg=document.querySelector("#vp svg");var v={z:1,x:0,y:0};var LIVE=false;'
+    +'function ap(){if(!svg)return;v.z=Math.max(1,Math.min(ZMAX,v.z));var w=VW/v.z,h=VH/v.z;v.x=Math.max(0,Math.min(VW-w,v.x));v.y=Math.max(0,Math.min(VH-h,v.y));svg.setAttribute("viewBox",v.x+" "+v.y+" "+w+" "+h);}'
+    +'window.__rebind=function(mapId,vw,vh,keepView){svg=document.querySelector("#vp svg");VW=vw;VH=vh;if(!keepView){v={z:1,x:0,y:0};}ap();var l=document.getElementById("live");if(l){l.textContent="\u25cf LIVE";}};'
+    +'function Z(f){var cx=v.x+(VW/v.z)/2,cy=v.y+(VH/v.z)/2;v.z=Math.max(1,Math.min(ZMAX,v.z*f));v.x=cx-(VW/v.z)/2;v.y=cy-(VH/v.z)/2;ap();}'
+    +'function FIT(){v={z:1,x:0,y:0};ap();}'
+    +'function FS(){var e=document.documentElement;(e.requestFullscreen||e.webkitRequestFullscreen||function(){}).call(e);}'
+    +'var vp=document.getElementById("vp");'
+    +'vp.addEventListener("wheel",function(e){e.preventDefault();var r=vp.getBoundingClientRect();var px=(e.clientX-r.left)/r.width,py=(e.clientY-r.top)/r.height;var ux=v.x+px*(VW/v.z),uy=v.y+py*(VH/v.z);v.z=Math.max(1,Math.min(ZMAX,v.z*(e.deltaY<0?1.15:1/1.15)));v.x=ux-px*(VW/v.z);v.y=uy-py*(VH/v.z);ap();},{passive:false});'
+    +'var P=new Map(),g=null,pan=null;'
+    +'vp.addEventListener("pointerdown",function(e){P.set(e.pointerId,{x:e.clientX,y:e.clientY});if(P.size===2){var a=[...P.values()];g={d:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1,cx:(a[0].x+a[1].x)/2,cy:(a[0].y+a[1].y)/2,z:v.z,x:v.x,y:v.y};pan=null;}else{pan={x:e.clientX,y:e.clientY,vx:v.x,vy:v.y};}vp.setPointerCapture(e.pointerId);});'
+    +'vp.addEventListener("pointermove",function(e){if(P.has(e.pointerId))P.set(e.pointerId,{x:e.clientX,y:e.clientY});var r=vp.getBoundingClientRect();if(P.size>=2&&g){var a=[...P.values()];var nd=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1,ncx=(a[0].x+a[1].x)/2,ncy=(a[0].y+a[1].y)/2;var nz=Math.max(1,Math.min(ZMAX,g.z*(nd/g.d)));var ux=g.x+(g.cx-r.left)/r.width*(VW/g.z),uy=g.y+(g.cy-r.top)/r.height*(VH/g.z);v.z=nz;v.x=ux-(ncx-r.left)/r.width*(VW/nz);v.y=uy-(ncy-r.top)/r.height*(VH/nz);ap();e.preventDefault();}else if(pan){v.x=pan.vx-(e.clientX-pan.x)/r.width*(VW/v.z);v.y=pan.vy-(e.clientY-pan.y)/r.height*(VH/v.z);ap();}});'
+    +'function up(e){P.delete(e.pointerId);if(P.size<2)g=null;if(P.size===0)pan=null;}vp.addEventListener("pointerup",up);vp.addEventListener("pointercancel",up);'
+    +'ap();'
+    +'<\/script></body></html>');
+  w.document.close();
+  _popouts.push({ win:w, mapId:map.id });
+  toast('🗺 Live map popped out — it follows this map','var(--gold)');
+}
+
 function unpinPlace(id){
   const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const m=_curMap(camp); const p=(camp.places||[]).find(q=>q.id===id);
   if(p&&p.pins&&m){ delete p.pins[m.id]; saveCampaign(camp); renderMap(); }
