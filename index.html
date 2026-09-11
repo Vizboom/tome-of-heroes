@@ -14800,7 +14800,11 @@ function _bindMapDrag(camp, map){
   const rectOf=()=>svg.getBoundingClientRect();
   const pts=new Map(); let gest=null, bgPan=null;
   const zoomAt=(sx,sy,f)=>{ const r=rectOf(); const nz=Math.max(1,Math.min(MAP_ZMAX,view.z*f)); const ux=view.x+(sx-r.left)/r.width*(VW/view.z), uy=view.y+(sy-r.top)/r.height*(VH/view.z); view.z=nz; view.x=ux-(sx-r.left)/r.width*(VW/nz); view.y=uy-(sy-r.top)/r.height*(VH/nz); applyView(); };
-  svg.addEventListener('wheel',e=>{ e.preventDefault(); zoomAt(e.clientX,e.clientY, e.deltaY<0?1.15:1/1.15); },{passive:false});
+  svg.addEventListener('wheel',e=>{
+    // At minimum zoom, a further scroll-out isn't captured — let the page scroll.
+    if(e.deltaY>0 && view.z<=1) return;
+    e.preventDefault(); zoomAt(e.clientX,e.clientY, e.deltaY<0?1.15:1/1.15);
+  },{passive:false});
   svg.addEventListener('pointerdown',e=>{ pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(pts.size===2){ const[a,b]=[...pts.values()]; gest={d:Math.hypot(a.x-b.x,a.y-b.y)||1, cx:(a.x+b.x)/2, cy:(a.y+b.y)/2, z:view.z, x:view.x, y:view.y}; _mapGesture=true; bgPan=null; } });
   svg.addEventListener('pointermove',e=>{ if(pts.has(e.pointerId)) pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(pts.size>=2 && gest){ const[a,b]=[...pts.values()]; const nd=Math.hypot(a.x-b.x,a.y-b.y)||1, ncx=(a.x+b.x)/2, ncy=(a.y+b.y)/2; const r=rectOf(); let nz=Math.max(1,Math.min(MAP_ZMAX, gest.z*(nd/gest.d))); const uw=VW/nz, uh=VH/nz; const ux=gest.x+(gest.cx-r.left)/r.width*(VW/gest.z), uy=gest.y+(gest.cy-r.top)/r.height*(VH/gest.z); view.z=nz; view.x=ux-(ncx-r.left)/r.width*uw; view.y=uy-(ncy-r.top)/r.height*uh; applyView(); e.preventDefault(); }
