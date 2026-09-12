@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v9.20.0 map-scroll-passthrough-fix 2026-09-05 -->
+<!-- Tome of Heroes v9.22.0 map-scroll-touch-fix 2026-09-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -507,9 +507,11 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .board-hint{padding:7px 12px;font-size:11px;color:var(--muted);text-align:center;border-top:1px solid var(--border);background:var(--surface);}
 
 /* Campaign map */
-.map-wrap{background:radial-gradient(ellipse at 50% 40%,#2a2344 0%,var(--bg2) 75%);border:1px solid var(--border2);border-radius:12px;overflow:hidden;margin-bottom:12px;position:relative;touch-action:none;}
+.map-wrap{background:radial-gradient(ellipse at 50% 40%,#2a2344 0%,var(--bg2) 75%);border:1px solid var(--border2);border-radius:12px;overflow:hidden;margin-bottom:12px;position:relative;touch-action:pan-y;}
 .map-wrap svg{display:block;width:100%;height:auto;user-select:none;}
-.map-node{cursor:grab;}
+.map-node{cursor:grab;touch-action:none;}
+#campMapSvg{touch-action:pan-y;}
+.mn-resize{touch-action:none;}
 .map-node:active{cursor:grabbing;}
 .map-node text{font-family:'Cinzel',serif;font-size:9px;fill:var(--text);pointer-events:none;letter-spacing:0.3px;}
 .map-node .mn-icon{font-size:13px;pointer-events:none;}
@@ -14519,6 +14521,7 @@ function _applyMapView(id){
   const vw=v.vw/v.z, vh=v.vh/v.z;
   v.x=Math.max(0,Math.min(v.vw-vw, v.x)); v.y=Math.max(0,Math.min(v.vh-vh, v.y));
   svg.setAttribute('viewBox', `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${vw.toFixed(1)} ${vh.toFixed(1)}`);
+  svg.style.touchAction = (v.z>1 ? 'none' : 'pan-y');  // min zoom → let the page scroll on touch
   const zl=document.getElementById('mapZoomLbl'); if(zl) zl.textContent=Math.round(v.z*100)+'%';
   _applyPinScale(id);
 }
@@ -14833,7 +14836,9 @@ function _bindMapDrag(camp, map){
     // The map can sit inside an overflow:hidden pane (e.g. the Maps screen), so we
     // scroll the real scroll container by hand rather than relying on default bubbling.
     if(e.deltaY>0 && view.z<=1){
-      const sc = svg.closest('.tab-pane.active') || svg.closest('.scroll-region') || document.scrollingElement;
+      let n=svg.parentElement, sc=null;
+      while(n && n!==document.body){ const st=getComputedStyle(n); if(/(auto|scroll)/.test(st.overflowY) && n.scrollHeight>n.clientHeight+1){ sc=n; break; } n=n.parentElement; }
+      sc = sc || document.scrollingElement;
       if(sc){ sc.scrollTop += e.deltaY; e.preventDefault(); }
       return;
     }
@@ -16487,14 +16492,7 @@ function _renderCharHero(char, cls){
     +'<div class="chc-top"><span class="chc-icon">'+classIcon(char.classIdx)+'</span>'
     +'<div style="min-width:0"><div class="chc-name">'+esc(char.name||'')+'</div><div class="chc-sub">'+esc((char.race?char.race+' · ':'')+mcs)+'</div></div>'
     +'<div class="chc-ac">AC<b>'+esc(String(ac))+'</b></div></div>'
-    +'<div class="hp-track" style="margin:8px 0 4px"><div class="hp-fill" style="width:'+pct+'%;background:'+col+'"></div></div>'
-    +'<div class="chc-hp-row">'
-    +'<button onclick="charQuickHP(-1)" title="Damage">−</button>'
-    +'<input id="chcHpAmt" type="number" min="1" value="5" inputmode="numeric">'
-    +'<button onclick="charQuickHP(1)" title="Heal">+</button>'
-    +'<span style="font-size:10px;color:var(--muted)">dmg / heal</span>'
-    +'<span class="chc-hp-num" style="color:'+col+'">'+cur+' <span style="color:var(--muted);font-size:10px">/ '+max+' HP</span>'+(cur===0?' <span style="color:var(--red);font-size:10px">💀 down</span>':'')+'</span>'
-    +'</div></div>';
+    +'</div>';
 }
 
 function charQuickHP(sign){
