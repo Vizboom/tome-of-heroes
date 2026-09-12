@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v9.23.0 maps-normal-scroll 2026-09-05 -->
+<!-- Tome of Heroes v9.24.0 tap-to-scroll-zoom 2026-09-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -532,6 +532,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .map-chip.add{border-style:dashed;color:var(--gold);}
 .map-wrap.placing{outline:2px dashed var(--gold);cursor:crosshair;}
 .map-wrap.painting-fog{outline:2px dashed var(--teal);cursor:crosshair;}
+.map-wrap.zoom-active{outline:2px solid var(--gold);box-shadow:0 0 0 3px rgba(201,162,39,0.15);}
 .map-wrap.painting-fog .map-node{pointer-events:none;}
 .map-wrap.placing .map-node{pointer-events:none;}
 .map-fog{pointer-events:none;}
@@ -14510,6 +14511,17 @@ function _mapLayout(places){
 let _curMapId = null;      // which of camp.maps is displayed (null = auto → home)
 let _placingId = null;     // place being positioned by tap
 let _placingParty = false; // dropping the party marker
+let _mapWheelZoom = false;  // scroll-to-zoom only turns on after a click on the map
+function _mapZoomLegend(on){ const lg=document.querySelector('#campMapWrap .map-legend'); if(lg) lg.textContent = on ? 'scroll to zoom · tap off the map to exit' : 'tap the map to zoom · scroll moves the page'; }
+function _mapZoomAway(e){ const w=document.getElementById('campMapWrap'); if(w && !w.contains(e.target)) _setMapWheelZoom(false); }
+function _setMapWheelZoom(on){
+  _mapWheelZoom = on;
+  const w=document.getElementById('campMapWrap'); if(w) w.classList.toggle('zoom-active', on);
+  const svg=document.getElementById('campMapSvg'); if(svg) svg.style.touchAction = on ? 'none' : ((_mapView[_curMapId]?.z>1)?'none':'pan-y');
+  _mapZoomLegend(on);
+  document.removeEventListener('pointerdown', _mapZoomAway, true);
+  if(on) document.addEventListener('pointerdown', _mapZoomAway, true);
+}
 let _selPinId = null;      // pin selected on the illustrated map (shows resize grip)
 let _paintMode = null;     // 'reveal' | 'refog' | null — fog painting mode
 let _mapGesture = false;   // true while a 2-finger zoom/pan gesture is active
@@ -14521,7 +14533,7 @@ function _applyMapView(id){
   const vw=v.vw/v.z, vh=v.vh/v.z;
   v.x=Math.max(0,Math.min(v.vw-vw, v.x)); v.y=Math.max(0,Math.min(v.vh-vh, v.y));
   svg.setAttribute('viewBox', `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${vw.toFixed(1)} ${vh.toFixed(1)}`);
-  svg.style.touchAction = (v.z>1 ? 'none' : 'pan-y');  // min zoom → let the page scroll on touch
+  svg.style.touchAction = (_mapWheelZoom || v.z>1) ? 'none' : 'pan-y';  // page can scroll unless zoomed or in scroll-zoom mode
   const zl=document.getElementById('mapZoomLbl'); if(zl) zl.textContent=Math.round(v.z*100)+'%';
   _applyPinScale(id);
 }
@@ -14652,7 +14664,7 @@ function renderMap(){
     const parent = map.placeId ? placeById(map.placeId) : null;
     const unplaced = places.filter(p=>!(p.pins&&p.pins[map.id]) && p.id!==map.placeId
       && (!parent || !p.pins || !Object.keys(p.pins).length || (parent.links||[]).some(n=>_fuzzyMatch(n,p.name)>=0.75) || (p.links||[]).some(n=>_fuzzyMatch(n,parent.name)>=0.75)));
-    html += `<div class="map-wrap ${(_placingId||_placingParty)?'placing':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingParty?'tap to drop the party marker':(_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_selPinId?'drag the gold grip to resize · drag pin to move':'tap a pin to resize · pinch/scroll to zoom'))}</div></div>`;
+    html += `<div class="map-wrap ${(_placingId||_placingParty)?'placing':''} ${_mapWheelZoom?'zoom-active':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingParty?'tap to drop the party marker':(_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_selPinId?'drag the gold grip to resize · drag pin to move':(_mapWheelZoom?'scroll to zoom · tap off the map to exit':'tap the map to zoom · scroll moves the page')))}</div></div>`;
     html += `<div class="map-ctrls">
       ${map.placeId?(()=>{ const chain=_mapChain(camp, map);
         if(chain.length>=2){ return `<span class="pc-pill" style="cursor:default;display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;max-width:100%">`
@@ -14832,18 +14844,14 @@ function _bindMapDrag(camp, map){
   const pts=new Map(); let gest=null, bgPan=null;
   const zoomAt=(sx,sy,f)=>{ const r=rectOf(); const nz=Math.max(1,Math.min(MAP_ZMAX,view.z*f)); const ux=view.x+(sx-r.left)/r.width*(VW/view.z), uy=view.y+(sy-r.top)/r.height*(VH/view.z); view.z=nz; view.x=ux-(sx-r.left)/r.width*(VW/nz); view.y=uy-(sy-r.top)/r.height*(VH/nz); applyView(); };
   svg.addEventListener('wheel',e=>{
-    // At minimum zoom, a scroll-down scrolls the surrounding page instead of zooming.
-    // The map can sit inside an overflow:hidden pane (e.g. the Maps screen), so we
-    // scroll the real scroll container by hand rather than relying on default bubbling.
-    if(e.deltaY>0 && view.z<=1){
-      let n=svg.parentElement, sc=null;
-      while(n && n!==document.body){ const st=getComputedStyle(n); if(/(auto|scroll)/.test(st.overflowY) && n.scrollHeight>n.clientHeight+1){ sc=n; break; } n=n.parentElement; }
-      sc = sc || document.scrollingElement;
-      if(sc){ sc.scrollTop += e.deltaY; e.preventDefault(); }
-      return;
-    }
+    // Scroll only zooms once the map is clicked; otherwise the page scrolls normally.
+    if(!_mapWheelZoom) return;
     e.preventDefault(); zoomAt(e.clientX,e.clientY, e.deltaY<0?1.15:1/1.15);
   },{passive:false});
+  // A single stationary tap on the empty map enables scroll-to-zoom (tap off to exit).
+  let _zTap=null;
+  svg.addEventListener('pointerdown',e=>{ if(pts.size>=2||_placingId||_placingParty||_paintMode||e.target.closest('.map-node')||e.target.closest('.mn-resize')){ _zTap=null; return; } _zTap={x:e.clientX,y:e.clientY}; });
+  svg.addEventListener('pointerup',e=>{ if(!_zTap) return; const moved=Math.abs(e.clientX-_zTap.x)>6||Math.abs(e.clientY-_zTap.y)>6; _zTap=null; if(!moved && !_mapWheelZoom && pts.size<=1) _setMapWheelZoom(true); });
   svg.addEventListener('pointerdown',e=>{ pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(pts.size===2){ const[a,b]=[...pts.values()]; gest={d:Math.hypot(a.x-b.x,a.y-b.y)||1, cx:(a.x+b.x)/2, cy:(a.y+b.y)/2, z:view.z, x:view.x, y:view.y}; _mapGesture=true; bgPan=null; } });
   svg.addEventListener('pointermove',e=>{ if(pts.has(e.pointerId)) pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(pts.size>=2 && gest){ const[a,b]=[...pts.values()]; const nd=Math.hypot(a.x-b.x,a.y-b.y)||1, ncx=(a.x+b.x)/2, ncy=(a.y+b.y)/2; const r=rectOf(); let nz=Math.max(1,Math.min(MAP_ZMAX, gest.z*(nd/gest.d))); const uw=VW/nz, uh=VH/nz; const ux=gest.x+(gest.cx-r.left)/r.width*(VW/gest.z), uy=gest.y+(gest.cy-r.top)/r.height*(VH/gest.z); view.z=nz; view.x=ux-(ncx-r.left)/r.width*uw; view.y=uy-(ncy-r.top)/r.height*uh; applyView(); e.preventDefault(); }
@@ -15237,7 +15245,7 @@ function applyPlacesReview(){
 function dismissPlacesReview(){ const camp=_markScanned(); if(camp) saveCampaign(camp); window._pendingPlaceScan=null; closePinModal(); }
 
 /* ── Map management ── */
-function switchMap(id){ _placingId=null; _selPinId=null; _paintMode=null; if(id&&_mapView[id]){ _mapView[id].z=1; _mapView[id].x=0; _mapView[id].y=0; } _curMapId=id||null; renderMap(); }
+function switchMap(id){ _placingId=null; _selPinId=null; _paintMode=null; if(_mapWheelZoom) _setMapWheelZoom(false); if(id&&_mapView[id]){ _mapView[id].z=1; _mapView[id].x=0; _mapView[id].y=0; } _curMapId=id||null; renderMap(); }
 function toggleAddMap(editId, presetPlaceId){
   window._showMapForm = editId ? true : (presetPlaceId ? true : !window._showMapForm);
   window._editMapId = editId||null; window._pendingMapImg=null; window._presetMapPlace=presetPlaceId||null;
