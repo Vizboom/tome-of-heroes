@@ -1,4 +1,4 @@
-<!-- Tome of Heroes v9.22.0 map-scroll-touch-fix 2026-09-05 -->
+<!-- Tome of Heroes v9.23.0 maps-normal-scroll 2026-09-05 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -3509,8 +3509,8 @@ function _openMapsScreen(){
   } else {
     editingCampId=camp.id;
     if(listView) listView.style.display='none';
-    if(detail){ detail.style.display='block'; detail.classList.add('detail-active'); }
-    document.getElementById('scr-campaign')?.classList.add('detail-open');
+    if(detail){ detail.style.display='block'; detail.classList.remove('detail-active'); }
+    document.getElementById('scr-campaign')?.classList.remove('detail-open'); // Maps = normal scrolling page
     if(tr) tr.style.display='none';               // map lives on its own screen now
     renderCampDetailHeader();
     campTab('map');
