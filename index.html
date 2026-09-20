@@ -530,6 +530,14 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .map-chip{flex:0 0 auto;font-family:'Cinzel',serif;font-size:9px;letter-spacing:0.5px;padding:6px 10px;border-radius:14px;border:1px solid var(--border2);background:var(--surface);color:var(--muted);cursor:pointer;white-space:nowrap;}
 .map-chip.on{background:var(--gold);color:var(--bg);border-color:var(--gold);}
 .map-chip.add{border-style:dashed;color:var(--gold);}
+.map-chip.nested{color:var(--text);}
+.map-chip .mc-depth{color:var(--muted2);margin-right:4px;}
+.map-trail{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-bottom:8px;}
+.map-trail .pc-pill{font-size:9px;padding:4px 9px;}
+.map-trail .pc-pill.add{border-style:dashed;color:var(--gold);border-color:var(--gold);}
+.map-trail .trail-sep{color:var(--muted2);font-size:10px;}
+.map-kids{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-bottom:10px;}
+.map-kids .mk-label{font-family:'Cinzel',serif;font-size:8px;letter-spacing:1px;color:var(--muted2);}
 .map-wrap.placing{outline:2px dashed var(--gold);cursor:crosshair;}
 .map-wrap.painting-fog{outline:2px dashed var(--teal);cursor:crosshair;}
 .map-wrap.zoom-active{outline:2px solid var(--gold);box-shadow:0 0 0 3px rgba(201,162,39,0.15);}
@@ -14559,12 +14567,41 @@ function _pinLabelPx(R){ return Math.max(0.1, R*1.3); } // label tracks the pin 
 // ramping to at most 2× at full zoom, so a pin stays a small marker throughout.
 function _pinScreenScale(z){ return 1; } // pins are anchored to the map: they scale with zoom (shrink when zoomed out, grow when zoomed in)
 function _applyPinScale(id){ const v=_mapView[id]; const svg=document.getElementById('campMapSvg'); if(!svg) return; const S=_pinScreenScale(v?v.z:1).toFixed(4); svg.querySelectorAll('.map-node.illus').forEach(g=>{ const cx=g.dataset.cx, cy=g.dataset.cy; if(cx!=null) g.setAttribute('transform',`translate(${cx},${cy}) scale(${S})`); }); }
-function _homeMap(camp){ const ms=_campMaps(camp); return ms.find(m=>m.isHome) || ms.find(m=>!m.placeId) || null; }
-function _parentMap(camp, map){ if(!map||!map.placeId) return null; const pl=(camp.places||[]).find(x=>x.id===map.placeId); const pins=(pl&&pl.pins)||{};
+function _homeMap(camp){ const ms=_campMaps(camp); return ms.find(m=>m.isHome) || ms.find(m=>!m.placeId && !m.parentId) || ms.find(m=>!m.placeId) || null; }
+function _mapById(camp, id){ return id ? (_campMaps(camp).find(m=>m.id===id)||null) : null; }
+/* ── Nesting ───────────────────────────────────────────────────────────────
+   A map can hang under another map, as deep as you like:
+   Home ▸ Map of Barovia Village ▸ Graveyard. The link lives on the child
+   (parentId), so a sub-map can hold its own pinned places, each with their
+   own map again. Campaigns made before parentId existed fall back to the old
+   guess — whichever map carries this map's place pin. */
+function _parentMap(camp, map){
+  if(!map || map.isHome) return null;
+  if(map.parentId){ const p=_mapById(camp, map.parentId); return (p && p!==map) ? p : null; }
+  if(!map.placeId) return null;
+  const pl=(camp.places||[]).find(x=>x.id===map.placeId); const pins=(pl&&pl.pins)||{};
   // Prefer the parent whose own map is the home/overview, else any map holding this place's pin.
-  const cands=(camp.maps||[]).filter(m=>m!==map && pins[m.id]);
-  return cands.find(m=>m.isHome) || cands.find(m=>!m.placeId) || cands[0] || null; }
-function _mapChain(camp, map){ const chain=[map]; let cur=map, guard=0; while(cur && cur.placeId && guard++<16){ const par=_parentMap(camp, cur); if(!par || chain.includes(par)) break; chain.unshift(par); cur=par; } return chain; }
+  const cands=_campMaps(camp).filter(m=>m!==map && pins[m.id]);
+  return cands.find(m=>m.isHome) || cands.find(m=>!m.placeId) || cands[0] || null;
+}
+function _mapChain(camp, map){ const chain=[map]; let cur=map, guard=0; while(cur && guard++<16){ const par=_parentMap(camp, cur); if(!par || chain.includes(par)) break; chain.unshift(par); cur=par; } return chain; }
+function _childMaps(camp, map){ return map ? _campMaps(camp).filter(m=>m!==map && _parentMap(camp,m)===map) : []; }
+/* Every map in tree order (home first), each with its nesting depth. */
+function _mapTree(camp){
+  const ms=_campMaps(camp), out=[], seen=new Set();
+  const walk=(m,d)=>{ if(seen.has(m.id)||d>8) return; seen.add(m.id); out.push({map:m, depth:d}); _childMaps(camp,m).forEach(k=>walk(k,d+1)); };
+  ms.filter(m=>!_parentMap(camp,m)).sort((a,b)=>(b.isHome?1:0)-(a.isHome?1:0)).forEach(m=>walk(m,0));
+  ms.forEach(m=>{ if(!seen.has(m.id)) walk(m,0); });   // stranded maps / broken links
+  return out;
+}
+function _mapGlyph(camp, m){ if(!m) return '🗺'; if(m.isHome) return '🏠'; const pl=m.placeId&&(camp.places||[]).find(p=>p.id===m.placeId); return pl?(PLACE_ICONS[pl.type]||'📍'):'🗺'; }
+/* Maps drawn of one place. Usually one, but a place can be pinned on several
+   maps and hold a map per context, so prefer the one nested under `fromMap`. */
+function _mapsForPlace(camp, placeId){ return _campMaps(camp).filter(m=>m.placeId===placeId); }
+function _subMapFor(camp, placeId, fromMap){
+  const ms=_mapsForPlace(camp, placeId); if(ms.length<2) return ms[0]||null;
+  return ms.find(m=>fromMap && _parentMap(camp,m)===fromMap) || ms[0];
+}
 function _curMap(camp){
   const ms=_campMaps(camp);
   let m = ms.find(x=>x.id===_curMapId);
@@ -14624,14 +14661,29 @@ function renderMap(){
 
   // ── Map selector ──
   if(maps.length){
-    html += '<div class="map-chips">'+maps.map(m=>{
-      const lp = m.placeId ? placeById(m.placeId) : null;
-      return `<button class="map-chip ${map&&m.id===map.id?'on':''}" onclick="switchMap('${m.id}')">${m.isHome?'🏠 ':(lp?(PLACE_ICONS[lp.type]||'📍')+' ':'🗺 ')}${esc(m.name)}</button>`;
-    }).join('')+`<button class="map-chip add" onclick="toggleAddMap()">+ Map</button></div>`;
+    html += '<div class="map-chips">'+_mapTree(camp).map(({map:m, depth})=>{
+      const trail = _mapChain(camp, m).map(x=>x.name).join(' ▸ ');
+      return `<button class="map-chip ${map&&m.id===map.id?'on':''} ${depth?'nested':''}" style="margin-left:${Math.min(depth,4)*8}px" onclick="switchMap('${m.id}')" title="${esc(trail)}">${depth?'<span class="mc-depth">↳</span>':''}${_mapGlyph(camp,m)} ${esc(m.name)}</button>`;
+    }).join('')
+      + `<button class="map-chip add" onclick="toggleAddMap()" title="Add a top-level map — use “＋ sub-map” below to nest one inside this map">+ Map</button></div>`;
   }
 
   // ── Canvas ──
   if(map){
+    // Where you are in the nest: Home ▸ Map of Barovia Village ▸ Graveyard.
+    const chain=_mapChain(camp, map), kids=_childMaps(camp, map);
+    html += `<div class="map-trail">`
+      + chain.map((mm,i)=> i===chain.length-1
+          ? `<span class="pc-pill on gold">${_mapGlyph(camp,mm)} ${esc(mm.name)}</span>`
+          : `<button class="pc-pill" onclick="switchMap('${mm.id}')">${_mapGlyph(camp,mm)} ${esc(mm.name)}</button><span class="trail-sep">▸</span>`
+        ).join('')
+      + `<button class="pc-pill add" onclick="toggleAddMap(null,null,'${map.id}')" title="Add a map nested inside ${esc(map.name)} — e.g. a graveyard inside a village">＋ sub-map</button>`
+      + `</div>`;
+    if(kids.length){
+      html += `<div class="map-kids"><span class="mk-label">INSIDE</span>`
+        + kids.map(k=>`<button class="pc-pill" onclick="switchMap('${k.id}')">↳ ${_mapGlyph(camp,k)} ${esc(k.name)}</button>`).join('')
+        + `</div>`;
+    }
     const src=_mapImgSrc(map);
     const VW=440, VH=Math.round(440*((map.h&&map.w)?map.h/map.w:0.68));
     const _hiddenTypes = new Set(map.hiddenTypes||[]);
@@ -14644,12 +14696,13 @@ function renderMap(){
       ${edges.map(([p,q])=>`<line class="map-edge" x1="${X(p)}" y1="${Y(p)}" x2="${X(q)}" y2="${Y(q)}"/>`).join('')}
       ${(()=>{ const PS=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4);
         const _locked=!!map.pinsLocked;
-        return pinned.map(p=>{ const sub=maps.find(m=>m.placeId===p.id); const seld=(_selPinId===p.id)&&!_locked;
+        return pinned.map(p=>{ const sub=_subMapFor(camp, p.id, map); const seld=(_selPinId===p.id)&&!_locked;
         const R=_placePx(map, p); const _lf=_pinLabelPx(R); const LF=_lf.toFixed(2); const LY=(R+_lf*0.95 + 1).toFixed(2); const gh=R*1.7;
-        return `<g class="map-node illus pinlabel ${p.status||''} ${seld?'selpin':''} ${sub?'hasmap':''}" data-id="${p.id}" data-cx="${X(p)}" data-cy="${Y(p)}" transform="translate(${X(p)},${Y(p)}) scale(${PS})">${sub?`<title>${esc(p.name)} — double-click to open its map</title>`:''}
+        return `<g class="map-node illus pinlabel ${p.status||''} ${seld?'selpin':''} ${sub?'hasmap':''}" data-id="${p.id}" data-cx="${X(p)}" data-cy="${Y(p)}" transform="translate(${X(p)},${Y(p)}) scale(${PS})">${sub?`<title>${esc(p.name)} — tap the ▸ badge (or double-click) to open ${esc(sub.name)}</title>`:''}
         <circle class="pinring" r="${(R*1.5).toFixed(2)}" style="stroke-width:${Math.max(0.12,R*0.35).toFixed(2)}${p.status==='rumoured'?(';stroke-dasharray:'+(R*0.6).toFixed(2)+' '+(R*0.45).toFixed(2)):''}"/>
         ${seld?`<circle r="${(R*2.05).toFixed(2)}" fill="none" stroke="var(--gold)" stroke-width="${Math.max(0.12,R*0.3).toFixed(2)}" stroke-dasharray="${(R*0.5).toFixed(2)} ${(R*0.4).toFixed(2)}" opacity="0.9"/>`:''}
         ${_pinIconSvg(p, R)}
+        ${sub?`<g class="mn-sub" data-sub="${sub.id}" transform="translate(${(R*1.15).toFixed(2)},${(-R*1.15).toFixed(2)})"><circle r="${(R*0.7).toFixed(2)}" fill="var(--gold)" stroke="#0d0a1a" stroke-width="${Math.max(0.05,R*0.13).toFixed(2)}"/><path d="M ${(-R*0.18).toFixed(2)} ${(-R*0.3).toFixed(2)} L ${(R*0.2).toFixed(2)} 0 L ${(-R*0.18).toFixed(2)} ${(R*0.3).toFixed(2)} Z" fill="#0d0a1a"/></g>`:''}
         ${(!map.hidePinLabels && p.hideName!==true)?`<text text-anchor="middle" y="${LY}" style="font-size:${LF}px;stroke-width:${(_lf*0.28).toFixed(2)}px">${esc(String(p.name).slice(0,20))}</text>`:''}
         ${seld?`<g class="mn-resize"><line x1="${(R).toFixed(2)}" y1="${(R).toFixed(2)}" x2="${gh.toFixed(2)}" y2="${gh.toFixed(2)}" stroke="var(--gold)" stroke-width="${(R*0.12).toFixed(2)}" opacity="0.6"/><rect x="${(gh-R*1.6).toFixed(2)}" y="${(gh-R*1.6).toFixed(2)}" width="${(R*3.2).toFixed(2)}" height="${(R*3.2).toFixed(2)}" fill="transparent" style="cursor:nwse-resize"/><rect x="${(gh-R*0.55).toFixed(2)}" y="${(gh-R*0.55).toFixed(2)}" width="${(R*1.1).toFixed(2)}" height="${(R*1.1).toFixed(2)}" rx="${(R*0.2).toFixed(2)}" fill="var(--gold)" stroke="#0d0a1a" stroke-width="${(R*0.1).toFixed(2)}" style="pointer-events:none"/></g>`:''}
       </g>`; }).join(''); })()}
@@ -14659,21 +14712,19 @@ function renderMap(){
           <text text-anchor="middle" y="${ly}" style="font-size:${lf}px;stroke-width:${(R*1.1*0.28).toFixed(2)}px">Party</text>
         </g>`; })():''}
     </svg>`;
-    // On a sub-map only offer places that plausibly belong there: linked to
-    // the map's own place, or not yet pinned anywhere (fresh discoveries).
+    // A sub-map leads with the places that plausibly belong there — linked to
+    // the map's own place, or not yet pinned anywhere (fresh discoveries) —
+    // but every other place is one tap away, so a place already pinned on the
+    // region map can be pinned again inside a sub-map and given a map of its own.
     const parent = map.placeId ? placeById(map.placeId) : null;
-    const unplaced = places.filter(p=>!(p.pins&&p.pins[map.id]) && p.id!==map.placeId
-      && (!parent || !p.pins || !Object.keys(p.pins).length || (parent.links||[]).some(n=>_fuzzyMatch(n,p.name)>=0.75) || (p.links||[]).some(n=>_fuzzyMatch(n,parent.name)>=0.75)));
+    const _near = p => !parent || !p.pins || !Object.keys(p.pins).length
+      || (parent.links||[]).some(n=>_fuzzyMatch(n,p.name)>=0.75) || (p.links||[]).some(n=>_fuzzyMatch(n,parent.name)>=0.75);
+    const _free = places.filter(p=>!(p.pins&&p.pins[map.id]) && p.id!==map.placeId);
+    const _nearby = _free.filter(_near), _rest = _free.filter(p=>!_near(p));
+    const unplaced = window._showAllUnplaced ? _nearby.concat(_rest) : _nearby;
     html += `<div class="map-wrap ${(_placingId||_placingParty)?'placing':''} ${_mapWheelZoom?'zoom-active':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingParty?'tap to drop the party marker':(_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_selPinId?'drag the gold grip to resize · drag pin to move':(_mapWheelZoom?'scroll to zoom · tap off the map to exit':'tap the map to zoom · scroll moves the page')))}</div></div>`;
     html += `<div class="map-ctrls">
-      ${map.placeId?(()=>{ const chain=_mapChain(camp, map);
-        if(chain.length>=2){ return `<span class="pc-pill" style="cursor:default;display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;max-width:100%">`
-          + chain.map((mm,i)=> i===chain.length-1
-              ? `<b style="color:var(--gold)">${esc(mm.name)}</b>`
-              : `<span onclick="switchMap('${mm.id}')" style="cursor:pointer;color:var(--gold);text-decoration:underline">${esc((mm.isHome?'🏠 ':'')+mm.name)}</span><span style="color:var(--muted)">▸</span>`
-            ).join('') + `</span>`; }
-        return `<button class="pc-pill" onclick="switchMap('${_homeMap(camp)?.id||''}')">← home map</button>`;
-      })():''}
+      ${(chain.length>1)?`<button class="pc-pill" onclick="switchMap('${chain[chain.length-2].id}')" title="Back to ${esc(chain[chain.length-2].name)}">↑ up a map</button>`:''}
       <span class="pc-pill" style="display:flex;align-items:center;gap:4px;cursor:default"><button onclick="zoomMap('${map.id}',1/1.4)" style="background:none;border:none;color:var(--text);font-size:15px;cursor:pointer;padding:0 4px">−</button><span id="mapZoomLbl" style="min-width:34px;text-align:center;font-size:11px">${Math.round((_mapView[map.id]?.z||1)*100)}%</span><button onclick="zoomMap('${map.id}',1.4)" style="background:none;border:none;color:var(--text);font-size:15px;cursor:pointer;padding:0 4px">＋</button></span>
       <button class="pc-pill" onclick="zoomReset('${map.id}')" title="Reset zoom">⟲ fit</button>
       <button class="pc-pill" style="border-color:var(--gold);color:var(--gold)" onclick="beginPlaceParty()" title="${map.party?'Reposition the party marker':'Drop a party marker anywhere on the map'}">🚩 ${map.party?'move party':'drop party'}</button>
@@ -14691,9 +14742,9 @@ function renderMap(){
       <button class="pc-pill" onclick="scanSessionsForPlaces()" id="scanPlacesBtn">🔍 scan sessions for places</button>
       <button class="pc-pill ${camp.autoScanPlaces!==false?'on':''}" onclick="toggleAutoScan()" title="Scan every new session for places automatically">auto-scan new sessions</button>
     </div>`;
-    if(unplaced.length){
-      html += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">NOT ON THIS MAP YET — tap one, then tap the map</div>
-      <div class="map-tray">${unplaced.map(p=>`<button class="pc-pill ${_placingId===p.id?'on gold':''}" onclick="beginPlace('${p.id}')">${PLACE_ICONS[p.type]||'📍'} ${esc(p.name)}</button>`).join('')}${_placingId?`<button class="pc-pill" onclick="beginPlace(null)">cancel</button>`:''}</div>`;
+    if(unplaced.length || _rest.length){
+      html += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">${unplaced.length?'NOT ON THIS MAP YET — tap one, then tap the map':'EVERYTHING NEARBY IS PINNED — pull in a place from another map'}</div>
+      <div class="map-tray">${unplaced.map(p=>`<button class="pc-pill ${_placingId===p.id?'on gold':''}" onclick="beginPlace('${p.id}')">${PLACE_ICONS[p.type]||'📍'} ${esc(p.name)}</button>`).join('')}${_placingId?`<button class="pc-pill" onclick="beginPlace(null)">cancel</button>`:''}${_rest.length?`<button class="pc-pill ${window._showAllUnplaced?'on':''}" onclick="toggleAllUnplaced()" title="Places already pinned elsewhere — pin one here too to nest it inside this map">${window._showAllUnplaced?'show fewer':'+ '+_rest.length+' pinned elsewhere'}</button>`:''}</div>`;
     }
   } else if(places.length){
     // No illustrated map yet → the sketch graph
@@ -14712,11 +14763,26 @@ function renderMap(){
 
   // ── Add / edit map form ──
   const em = window._editMapId ? maps.find(m=>m.id===window._editMapId) : null;
+  // Which map this one hangs under: the saved parent when editing, the map you
+  // tapped "+ sub-map" on when adding.
+  const _parId = em ? (_parentMap(camp, em)?.id||'') : (window._presetMapParent||'');
+  const _parMap = _mapById(camp, _parId);
+  // Can't nest a map under itself or under one of its own descendants.
+  const _parOpts = _mapTree(camp).filter(n => !em || (n.map!==em && !_mapChain(camp, n.map).includes(em)));
   html += `<div class="card" id="mapForm" style="margin-bottom:14px;display:${window._showMapForm?'':'none'}">
     <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">${em?'Edit Map':'Add Map'}</div>
     <div class="form-row two">
       <div class="field"><label>Map name</label><input id="mpName" placeholder="e.g. Sword Coast, Barovia" value="${esc(em?.name||'')}"></div>
-      <div class="field"><label>Detailed map of</label><select id="mpPlace"><option value="">— overview / home map —</option>${places.map(p=>`<option value="${p.id}" ${em?.placeId===p.id?'selected':''}>${PLACE_ICONS[p.type]||'📍'} ${esc(p.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>Detailed map of</label><select id="mpPlace"><option value="">— overview / home map —</option>${(()=>{
+        const opt=p=>`<option value="${p.id}" ${em?.placeId===p.id?'selected':''}>${PLACE_ICONS[p.type]||'📍'} ${esc(p.name)}</option>`;
+        const on=_parMap?places.filter(p=>p.pins&&p.pins[_parMap.id]):[];
+        const rest=places.filter(p=>!on.includes(p));
+        return (on.length?`<optgroup label="Pinned on ${esc(_parMap.name)}">${on.map(opt).join('')}</optgroup>`:'')
+             + (rest.length?`<optgroup label="${on.length?'Other places':'All places'}">${rest.map(opt).join('')}</optgroup>`:'');
+      })()}</select></div>
+    </div>
+    <div class="field"><label>Nested under</label><select id="mpParent"><option value="">— top level —</option>${_parOpts.map(n=>`<option value="${n.map.id}" ${_parId===n.map.id?'selected':''}>${'　'.repeat(Math.min(n.depth,4))}${n.depth?'↳ ':''}${esc(n.map.name)}</option>`).join('')}</select>
+      <div style="font-size:10px;color:var(--muted2);margin-top:4px">Sub-maps stack as deep as you need — Home ▸ Map of Barovia Village ▸ Graveyard. The pin for “detailed map of” gets a ▸ badge on the parent map that jumps straight here.</div>
     </div>
     <div class="field"><label>Image</label>
       <input type="file" id="mpFile" accept="image/*" style="font-size:12px;color:var(--muted)">
@@ -14756,7 +14822,7 @@ function renderMap(){
   </div>`;
 
   // Type legend — toggle each place type on/off for this map
-  if(places.length){
+  if(places.length && map){
     const counts={}; places.filter(pp=>pp.pins&&pp.pins[map.id]).forEach(pp=>{ const t=PLACE_TYPES.includes(pp.type)?pp.type:'other'; counts[t]=(counts[t]||0)+1; });
     const present=PLACE_TYPES.filter(t=>counts[t]);
     if(present.length){
@@ -14780,14 +14846,15 @@ function renderMap(){
     const order = {current:0, visited:1, rumoured:2};
     const sorted = [...places].sort((a,b)=>(order[a.status]??1)-(order[b.status]??1) || (b.session||0)-(a.session||0) || a.name.localeCompare(b.name));
     html += `<div class="divider"><span>Travel Log · ${places.length} place${places.length!==1?'s':''}</span></div>` + sorted.map(p=>{
-      const sub=maps.find(m=>m.placeId===p.id);
+      const sub=_subMapFor(camp, p.id, map);
       const onCur = map && p.pins && p.pins[map.id];
+      const nestUnder = (map && onCur) ? map.id : (Object.keys(p.pins||{}).find(mid=>_mapById(camp,mid))||'');
       return `
       <div class="place-card ${p.status==='current'?'current':''}" id="pl_${p.id}">
         <div class="pc-head">
           <span style="flex-shrink:0;display:inline-flex">${_legendIcon(PLACE_TYPES.includes(p.type)?p.type:'other', _placeColor(p), 20)}</span>
           <div style="flex:1;min-width:0">
-            <div class="pc-name">${esc(p.name)}${sub?` <span class="pc-pill on gold" style="font-size:7px;padding:1px 6px;cursor:pointer" onclick="switchMap('${sub.id}')">🗺 own map</span>`:''}</div>
+            <div class="pc-name">${esc(p.name)}${sub?` <span class="pc-pill on gold" style="font-size:7px;padding:1px 6px;cursor:pointer" title="${esc(_mapChain(camp,sub).map(x=>x.name).join(' ▸ '))}" onclick="switchMap('${sub.id}')">🗺 own map</span>`:''}</div>
             <div class="pc-sub">${[p.type,p.region].filter(Boolean).map(esc).join(' · ')}${p.session?` · noted session ${p.session}`:''}${map?(onCur?' · pinned':' · <span style="color:var(--gold)">not on '+esc(map.name)+'</span>'):''}</div>
           </div>
           <button class="icon-btn" style="color:var(--red);font-size:12px" onclick="deletePlace('${p.id}')">✕</button>
@@ -14802,7 +14869,7 @@ function renderMap(){
           ${map&&onCur?`<button class="pc-pill" onclick="unpinPlace('${p.id}')">unpin</button>`:''}
           <button class="pc-pill ${p.hideName?'':'on'}" onclick="togglePlaceName('${p.id}')" title="Show or hide this place's name on the map">${p.hideName?'🏷 name off':'🏷 name on'}</button>
           <span class="pc-swatches" style="display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap">${PIN_COLORS.map(c=>`<span onclick="setPlaceColor('${p.id}','${c}')" title="${c}" style="width:15px;height:15px;border-radius:50%;cursor:pointer;background:${c};border:2px solid ${((p.color||'').toLowerCase()===c.toLowerCase())?'var(--gold)':'rgba(0,0,0,0.35)'}"></span>`).join('')}${p.color?`<span onclick="setPlaceColor('${p.id}','')" title="Reset to status colour" class="pc-pill" style="padding:2px 6px;font-size:9px">reset</span>`:''}</span>
-          ${!sub?`<button class="pc-pill" onclick="toggleAddMap(null,'${p.id}')" style="margin-left:auto">+ own map</button>`:''}
+          ${!sub?`<button class="pc-pill" onclick="toggleAddMap(null,'${p.id}','${nestUnder}')" style="margin-left:auto" title="Give ${esc(p.name)} its own map${nestUnder?', nested under '+esc((_mapById(camp,nestUnder)||{}).name||''):''}">+ own map</button>`:''}
         </div>
       </div>`; }).join('');
   }
@@ -14811,6 +14878,7 @@ function renderMap(){
   const fileIn=document.getElementById('mpFile');
   if(fileIn) fileIn.onchange=()=>{ const f=fileIn.files[0]; if(!f) return; _readMapFile(f,(url,w,h)=>{ window._pendingMapImg={url,w,h}; toast('Image ready — '+w+'×'+h,'var(--gold)'); }); };
   if(window._presetMapPlace){ const sel=document.getElementById('mpPlace'); if(sel) sel.value=window._presetMapPlace; window._presetMapPlace=null; }
+  if(window._presetMapParent){ const psel=document.getElementById('mpParent'); if(psel) psel.value=window._presetMapParent; }
   _pushToPopouts();
 }
 
@@ -14831,6 +14899,7 @@ function _renderSketchSvg(places){
 
 function _bindMapDrag(camp, map){
   const svg=document.getElementById('campMapSvg'); if(!svg) return;
+  if(!map) map={ id:'__sketch__' };   // the sketch graph has no illustrated map behind it
   const VW=+svg.dataset.vw, VH=+svg.dataset.vh, sketch=!!svg.dataset.sketch;
   const toLocal=(e)=>{ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; const m=svg.getScreenCTM(); return m?pt.matrixTransform(m.inverse()):pt; };
   const getPos=p=>{ if(p&&p.__party) return map.party||null; return sketch?{x:p.x,y:p.y}:(p&&p.pins&&p.pins[map.id])||null; };
@@ -14915,11 +14984,16 @@ function _bindMapDrag(camp, map){
     return; // in paint mode, skip pin drag/select wiring
   }
   let drag=null;
-  const subMapFor=id=>(camp.maps||[]).find(m=>m.placeId===id);
+  const subMapFor=id=>_subMapFor(camp, id, map);
+  // The ▸ badge on a pin drops straight into that place's own map.
+  svg.querySelectorAll('.mn-sub').forEach(el=>{
+    el.addEventListener('pointerdown',e=>{ e.stopPropagation(); });
+    el.addEventListener('click',e=>{ e.preventDefault(); e.stopPropagation(); if(el.dataset.sub) switchMap(el.dataset.sub); });
+  });
   svg.querySelectorAll('.map-node').forEach(g=>{
     g.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-sub')||e.target.closest('.mn-resize')||pts.size>=2||_mapGesture) return; drag={g, id:g.dataset.id, moved:false, t:Date.now(), locked:!!map.pinsLocked}; g.setPointerCapture(e.pointerId); e.preventDefault(); });
     // Double-click / double-tap a pin to open its own map, if it has one.
-    g.addEventListener('dblclick',e=>{ e.preventDefault(); e.stopPropagation(); const sub=subMapFor(g.dataset.id); if(sub){ switchMap(sub.id); } else { const pl=(camp.places||[]).find(q=>q.id===g.dataset.id); toast((pl?pl.name:'This place')+' has no map yet — use “+ own map” to add one','var(--muted)'); } });
+    g.addEventListener('dblclick',e=>{ e.preventDefault(); e.stopPropagation(); const sub=subMapFor(g.dataset.id); if(sub){ switchMap(sub.id); } else { const pl=(camp.places||[]).find(q=>q.id===g.dataset.id); toast((pl?pl.name:'This place')+' has no map yet — use “+ sub-map” or “+ own map” to add one','var(--muted)'); } });
   });
   svg.addEventListener('pointermove',e=>{
     if(!drag||pts.size>=2||_mapGesture){ drag=null; return; } if(drag.locked) return; const l=toLocal(e); drag.moved=true;
@@ -15245,10 +15319,14 @@ function applyPlacesReview(){
 function dismissPlacesReview(){ const camp=_markScanned(); if(camp) saveCampaign(camp); window._pendingPlaceScan=null; closePinModal(); }
 
 /* ── Map management ── */
+function toggleAllUnplaced(){ window._showAllUnplaced=!window._showAllUnplaced; renderMap(); }
 function switchMap(id){ _placingId=null; _selPinId=null; _paintMode=null; if(_mapWheelZoom) _setMapWheelZoom(false); if(id&&_mapView[id]){ _mapView[id].z=1; _mapView[id].x=0; _mapView[id].y=0; } _curMapId=id||null; renderMap(); }
-function toggleAddMap(editId, presetPlaceId){
-  window._showMapForm = editId ? true : (presetPlaceId ? true : !window._showMapForm);
-  window._editMapId = editId||null; window._pendingMapImg=null; window._presetMapPlace=presetPlaceId||null;
+function toggleAddMap(editId, presetPlaceId, presetParentId){
+  const open = (editId||presetPlaceId||presetParentId) ? true : !window._showMapForm;
+  window._showMapForm = open;
+  window._editMapId = editId||null; window._pendingMapImg=null;
+  window._presetMapPlace = presetPlaceId||null;
+  window._presetMapParent = open ? (presetParentId||null) : null;   // which map it nests under
   renderMap();
   if(window._showMapForm) document.getElementById('mapForm')?.scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -15262,14 +15340,18 @@ async function saveMapForm(){
   m.name=name;
   m.placeId=document.getElementById('mpPlace')?.value||null; if(!m.placeId) delete m.placeId;
   m.fog=document.getElementById('mpFog')?.value!=='0';
-  if(document.getElementById('mpHome')?.value==='1'){ maps.forEach(x=>x.isHome=false); m.isHome=true; delete m.placeId; }
+  // Nesting: never under itself or one of its own sub-maps (that would loop).
+  const parSel=document.getElementById('mpParent')?.value||'';
+  const parM=_mapById(camp, parSel);
+  if(parM && parM!==m && !_mapChain(camp, parM).includes(m)) m.parentId=parM.id; else delete m.parentId;
+  if(document.getElementById('mpHome')?.value==='1'){ maps.forEach(x=>x.isHome=false); m.isHome=true; delete m.placeId; delete m.parentId; }
   else if(m.isHome){ m.isHome=false; }
   const url=(document.getElementById('mpUrl')?.value||'').trim();
   const pend=window._pendingMapImg;
   if(pend){ m.w=pend.w; m.h=pend.h; toast('Uploading map image…','var(--gold)'); await _storeMapImage(camp, m, pend.url); }
   else if(url && url!==m.imgUrl){ m.imgUrl=url; delete m.imgKey; delete m.w; delete m.h; _probeImg(url, m); }
   if(!m.imgUrl && !m.imgKey){ toast('Add an image (file or URL)','var(--red)'); if(!window._editMapId) maps.pop(); return; }
-  window._showMapForm=false; window._editMapId=null; window._pendingMapImg=null;
+  window._showMapForm=false; window._editMapId=null; window._pendingMapImg=null; window._presetMapParent=null;
   _curMapId=m.id;
   saveCampaign(camp); renderMap(); toast('🗺 Map saved','var(--gold)');
 }
@@ -15279,18 +15361,20 @@ function deleteMap(id){
   const m=_campMaps(camp).find(x=>x.id===id); if(!m) return;
   if(!confirm('Delete the map "'+m.name+'"? Pins on it are removed; places stay.')) return;
   const wasHome=m.isHome;
+  // Sub-maps of the deleted map move up a level rather than being stranded.
+  _campMaps(camp).forEach(x=>{ if(x.parentId===id){ if(m.parentId) x.parentId=m.parentId; else delete x.parentId; } });
   camp.maps=camp.maps.filter(x=>x.id!==id);
   (camp.places||[]).forEach(p=>{ if(p.pins) delete p.pins[id]; });
   if(m.imgKey) supa.from('settings').delete().eq('key', m.imgKey).then(()=>{}).catch(()=>{});
   if(wasHome && camp.maps.length && !camp.maps.some(x=>x.isHome)){ const nh=camp.maps.find(x=>!x.placeId)||camp.maps[0]; nh.isHome=true; }
-  window._showMapForm=false; window._editMapId=null; _curMapId=null;
+  window._showMapForm=false; window._editMapId=null; window._presetMapParent=null; _curMapId=null;
   saveCampaign(camp); renderMap(); toast('Map deleted','var(--red)');
 }
 function toggleHomeMap(id){
   const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
   const m=_campMaps(camp).find(x=>x.id===id); if(!m) return;
   if(m.isHome){ m.isHome=false; toast('Home map unset','var(--muted)'); }
-  else { camp.maps.forEach(x=>x.isHome=false); m.isHome=true; if(m.placeId) delete m.placeId; toast('🏠 '+m.name+' is now the home map','var(--gold)'); }
+  else { camp.maps.forEach(x=>x.isHome=false); m.isHome=true; if(m.placeId) delete m.placeId; delete m.parentId; toast('🏠 '+m.name+' is now the home map','var(--gold)'); }
   saveCampaign(camp); renderMap();
 }
 function toggleFog(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.fog=!(m.fog!==false); if(m.fog===false) _paintMode=null; saveCampaign(camp); renderMap(); }
