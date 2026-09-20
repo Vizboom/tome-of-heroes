@@ -14762,15 +14762,29 @@ function renderMap(){
   }
 
   // ── Add / edit map form ──
+  // On a sub-map you came to nest another map, not to log a place, so the map
+  // form holds the slot the Add Place card holds on a top-level map. The place
+  // form is one pill away.
+  const _onSub = !!(map && _parentMap(camp, map));
+  const _slot = _onSub ? (window._mapSlot==='place' ? 'place' : 'map') : 'place';
+  const _mapFormOpen = !!window._showMapForm || (_onSub && _slot==='map');
   const em = window._editMapId ? maps.find(m=>m.id===window._editMapId) : null;
   // Which map this one hangs under: the saved parent when editing, the map you
-  // tapped "+ sub-map" on when adding.
-  const _parId = em ? (_parentMap(camp, em)?.id||'') : (window._presetMapParent||'');
+  // tapped "+ sub-map" on when adding, and the map you're standing on when the
+  // form is simply sitting in the sub-map slot.
+  const _parId = em ? (_parentMap(camp, em)?.id||'')
+               : (window._presetMapParent || ((_onSub && !window._showMapForm) ? map.id : ''));
   const _parMap = _mapById(camp, _parId);
   // Can't nest a map under itself or under one of its own descendants.
   const _parOpts = _mapTree(camp).filter(n => !em || (n.map!==em && !_mapChain(camp, n.map).includes(em)));
-  html += `<div class="card" id="mapForm" style="margin-bottom:14px;display:${window._showMapForm?'':'none'}">
-    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">${em?'Edit Map':'Add Map'}</div>
+  if(_onSub && !em){
+    html += `<div class="map-tray" style="margin-bottom:8px">
+      <button class="pc-pill ${_slot==='map'?'on gold':''}" onclick="setMapSlot('map')" title="Add a map nested inside ${esc(map.name)}">🗺 sub-map</button>
+      <button class="pc-pill ${_slot==='place'?'on gold':''}" onclick="setMapSlot('place')" title="Log a place in the travel log instead">📍 place</button>
+    </div>`;
+  }
+  html += `<div class="card" id="mapForm" style="margin-bottom:14px;display:${_mapFormOpen?'':'none'}">
+    <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">${em?'Edit Map':(_parMap?'Add Sub-map — inside '+esc(_parMap.name):'Add Map')}</div>
     <div class="form-row two">
       <div class="field"><label>Map name</label><input id="mpName" placeholder="e.g. Sword Coast, Barovia" value="${esc(em?.name||'')}"></div>
       <div class="field"><label>Detailed map of</label><select id="mpPlace"><option value="">— overview / home map —</option>${(()=>{
@@ -14794,14 +14808,15 @@ function renderMap(){
       <div class="field"><label>Fog of war</label><select id="mpFog"><option value="1" ${em?.fog!==false?'selected':''}>on — reveal as you go</option><option value="0" ${em&&em.fog===false?'selected':''}>off</option></select></div>
       <div class="field"><label>Home map</label><select id="mpHome"><option value="0">no</option><option value="1" ${em?.isHome||(!em&&!maps.length)?'selected':''}>yes — shown first</option></select></div>
     </div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-primary" style="flex:1;margin:0" onclick="saveMapForm()">${em?'Save Map':'Add Map'}</button>
-      ${em?`<button class="btn btn-danger" style="flex:0 0 auto;margin:0;padding:13px 16px" onclick="deleteMap('${em.id}')">Delete</button>`:''}
-      <button class="btn btn-outline" style="flex:0 0 auto;margin:0;padding:13px 16px" onclick="toggleAddMap()">✕</button>
+    <div style="display:flex;gap:8px;align-items:stretch">
+      <button class="btn btn-primary" style="flex:1 1 auto;width:auto;min-width:0;margin:0" onclick="saveMapForm()">${em?'Save Map':(_parMap?'Add Sub-map':'Add Map')}</button>
+      ${em?`<button class="btn btn-danger" style="flex:0 0 auto;width:auto;margin:0;padding:13px 16px" onclick="deleteMap('${em.id}')">Delete</button>`:''}
+      <button class="btn btn-outline" style="flex:0 0 auto;width:auto;margin:0;padding:13px 16px" onclick="closeMapForm()">✕</button>
     </div>
   </div>`;
 
   // ── Add place form + travel log ──
+  if(_slot==='place'){
   html += `<div class="card" style="margin-bottom:14px">
     <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--gold);letter-spacing:1px;margin-bottom:10px">Add Place</div>
     <div class="form-row two">
@@ -14812,7 +14827,8 @@ function renderMap(){
     </div>
     <div class="field"><label>Notes</label><textarea id="plDesc" placeholder="What's here, who's here, why it matters…" style="min-height:52px"></textarea></div>
     <button class="btn btn-primary" onclick="addPlace()">Add Place</button>
-    ${(()=>{ const seeded=(places||[]).filter(pp=>pp.seed==='swordcoast').length; const hint=looksLikeSwordCoast(camp);
+    ${_onSub?`<div style="font-size:10px;color:var(--muted2);margin-top:6px;line-height:1.4">Goes into the travel log — pin it here with “📌 pin to map”, or from the tray above the Add Place card.</div>`:''}
+    ${_onSub?'':(()=>{ const seeded=(places||[]).filter(pp=>pp.seed==='swordcoast').length; const hint=looksLikeSwordCoast(camp);
       return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
         <span style="font-size:10px;color:var(--muted);font-family:'Cinzel',serif;letter-spacing:0.5px">STARTER SET</span>
         <button class="pc-pill ${hint?'on':''}" onclick="seedSwordCoast()" title="Seed canonical Sword Coast locations as hidden places">🌊 Sword Coast${hint?' ✦':''}</button>
@@ -14820,6 +14836,7 @@ function renderMap(){
       </div>
       <div style="font-size:10px;color:var(--muted2);margin-top:4px;line-height:1.4">Adds well-known Sword Coast locations to the travel log, hidden and unpinned — pin each as your party finds it. Bring your own map image as the backdrop.</div>`; })()}
   </div>`;
+  }
 
   // Type legend — toggle each place type on/off for this map
   if(places.length && map){
@@ -15320,10 +15337,16 @@ function dismissPlacesReview(){ const camp=_markScanned(); if(camp) saveCampaign
 
 /* ── Map management ── */
 function toggleAllUnplaced(){ window._showAllUnplaced=!window._showAllUnplaced; renderMap(); }
-function switchMap(id){ _placingId=null; _selPinId=null; _paintMode=null; if(_mapWheelZoom) _setMapWheelZoom(false); if(id&&_mapView[id]){ _mapView[id].z=1; _mapView[id].x=0; _mapView[id].y=0; } _curMapId=id||null; renderMap(); }
+/* Which form sits under a sub-map: the sub-map form (default) or Add Place. */
+function setMapSlot(v){ window._mapSlot = (v==='place')?'place':'map';
+  if(v==='place'){ window._showMapForm=false; window._editMapId=null; window._pendingMapImg=null; window._presetMapParent=null; }
+  renderMap(); }
+function closeMapForm(){ window._showMapForm=false; window._editMapId=null; window._pendingMapImg=null; window._presetMapParent=null; window._mapSlot='place'; renderMap(); }
+function switchMap(id){ _placingId=null; _selPinId=null; _paintMode=null; window._mapSlot=null; if(_mapWheelZoom) _setMapWheelZoom(false); if(id&&_mapView[id]){ _mapView[id].z=1; _mapView[id].x=0; _mapView[id].y=0; } _curMapId=id||null; renderMap(); }
 function toggleAddMap(editId, presetPlaceId, presetParentId){
   const open = (editId||presetPlaceId||presetParentId) ? true : !window._showMapForm;
   window._showMapForm = open;
+  if(open) window._mapSlot='map';   // the map form takes the slot under a sub-map
   window._editMapId = editId||null; window._pendingMapImg=null;
   window._presetMapPlace = presetPlaceId||null;
   window._presetMapParent = open ? (presetParentId||null) : null;   // which map it nests under
