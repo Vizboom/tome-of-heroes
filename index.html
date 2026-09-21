@@ -15089,7 +15089,19 @@ function _fogLayerSvg(camp, map, VW, VH, pinned){
   if(!_fogOn(map)) return '';
   const op = _fogOpacity(camp, map);
   if(map.fogFull) return '';                      // fully lifted by the GM
-  const soft = Math.max(2, _brushR(map)*0.22).toFixed(1);
+  // Edge falloff is deliberately tight: a wide blur leaves a broad
+  // half-transparent band around every clearing, and the map reads straight
+  // through it. Fog has to reach full density within a few pixels of a hole.
+  const soft = Math.max(1.2, Math.min(5, _brushR(map)*0.085)).toFixed(1);
+  // …and the boundary is pushed around by noise so it tears like real fog
+  // instead of ending on a perfect circle.
+  const ragged = Math.max(3, Math.min(11, _brushR(map)*0.22)).toFixed(1);
+  // Bleed the fog past the canvas edge. Flush to the viewBox, subpixel
+  // rounding leaves a hairline of bare map showing all round the border.
+  const OS = 4;
+  // Each map gets its own cloud pattern, derived from its id so it stays put
+  // between renders rather than reshuffling on every brush stroke.
+  const seed = (()=>{ let n=0; const id=String(map.id||''); for(let i=0;i<id.length;i++) n=(n*31+id.charCodeAt(i))>>>0; return n%97; })();
   let holes = (map.paint||[]).map(d=>
     `<circle cx="${(d.x*VW).toFixed(1)}" cy="${(d.y*VH).toFixed(1)}" r="${(d.r*VW).toFixed(1)}"/>`).join('');
   if(map.fogPins){
@@ -15099,14 +15111,46 @@ function _fogLayerSvg(camp, map, VW, VH, pinned){
     }).join('');
     if(map.party) holes += `<circle cx="${(map.party.x*VW).toFixed(1)}" cy="${(map.party.y*VH).toFixed(1)}" r="${Math.max(22,_pinPx(map)*24).toFixed(1)}"/>`;
   }
+  /* Two stacked layers share one mask: an opaque base that genuinely hides
+     the ground beneath, and a turbulence-built cloud drifting over it. The
+     base is what conceals; the mist is only what it looks like. */
   return `<defs>
-      <filter id="fogSoft" x="-25%" y="-25%" width="150%" height="150%"><feGaussianBlur stdDeviation="${soft}"/></filter>
-      <mask id="fogMask" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}">
-        <rect x="0" y="0" width="${VW}" height="${VH}" fill="#fff"/>
+      <filter id="fogSoft" x="-35%" y="-35%" width="170%" height="170%">
+        <feGaussianBlur stdDeviation="${soft}" result="b"/>
+        <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="3" seed="9" result="t"/>
+        <feDisplacementMap in="b" in2="t" scale="${ragged}" xChannelSelector="R" yChannelSelector="G" result="d"/>
+        <!-- Steepen the alpha ramp. Blur and displacement together leave a
+             broad half-lit band around each clearing, and bright detail —
+             a label, a road — stays legible through it. This keeps the torn,
+             uneven boundary but makes the fog go dense almost at once. -->
+        <feComponentTransfer in="d">
+          <feFuncA type="table" tableValues="0 0.04 0.55 0.93 1 1"/>
+        </feComponentTransfer>
+      </filter>
+      <filter id="fogMist" x="0%" y="0%" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.0075 0.011" numOctaves="5" seed="${seed}" result="n"/>
+        <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.60
+                                                    0 0 0 0 0.64
+                                                    0 0 0 0 0.79
+                                                    1.15 0 0 0 -0.32"/>
+      </filter>
+      <filter id="fogWisp" x="0%" y="0%" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.021" numOctaves="3" seed="${seed+41}" result="n2"/>
+        <feColorMatrix in="n2" type="matrix" values="0 0 0 0 0.78
+                                                     0 0 0 0 0.80
+                                                     0 0 0 0 0.92
+                                                     0.75 0 0 0 -0.42"/>
+      </filter>
+      <mask id="fogMask" maskUnits="userSpaceOnUse" x="${-OS*2}" y="${-OS*2}" width="${VW+OS*4}" height="${VH+OS*4}">
+        <rect x="${-OS*2}" y="${-OS*2}" width="${VW+OS*4}" height="${VH+OS*4}" fill="#fff"/>
         <g id="fogHoles" fill="#000" filter="url(#fogSoft)">${holes}</g>
       </mask>
     </defs>
-    <rect class="map-fog" x="0" y="0" width="${VW}" height="${VH}" fill="#0b0917" opacity="${op}" mask="url(#fogMask)"/>`;
+    <g class="map-fog" opacity="${op}" mask="url(#fogMask)">
+      <rect x="${-OS}" y="${-OS}" width="${VW+OS*2}" height="${VH+OS*2}" fill="#0a0813"/>
+      <rect x="${-OS}" y="${-OS}" width="${VW+OS*2}" height="${VH+OS*2}" filter="url(#fogMist)" opacity="0.62"/>
+      <rect x="${-OS}" y="${-OS}" width="${VW+OS*2}" height="${VH+OS*2}" filter="url(#fogWisp)" opacity="0.34"/>
+    </g>`;
 }
 function _bindMapDrag(camp, map){
   const svg=document.getElementById('campMapSvg'); if(!svg) return;
