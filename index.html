@@ -550,6 +550,20 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .map-tray{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
 .map-ctrls{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
 .map-legend{position:absolute;left:8px;top:6px;font-size:9px;color:var(--muted);font-family:'Cinzel',serif;letter-spacing:0.5px;pointer-events:none;}
+/* GM control bar + fog / visibility chrome */
+.gm-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:8px 11px;margin-bottom:10px;}
+.gm-bar.is-gm{border-color:var(--gold);background:rgba(201,162,39,0.08);}
+.gm-bar .gm-who{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;color:var(--muted);flex:1;min-width:150px;}
+.gm-bar .gm-who b{color:var(--gold);letter-spacing:0.5px;}
+.gm-fog-ctrls{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:rgba(58,160,160,0.07);border:1px dashed var(--teal);border-radius:10px;padding:8px 10px;margin-bottom:12px;}
+.gm-fog-ctrls .gf-label{font-family:'Cinzel',serif;font-size:8px;letter-spacing:1.2px;color:var(--teal);width:100%;}
+.gm-fog-ctrls input[type=range]{width:96px;accent-color:var(--teal);}
+.map-chip.vis-hidden{opacity:0.62;border-style:dashed;}
+.map-chip.vis-teased{border-color:var(--purple);}
+.map-chip.locked{cursor:not-allowed;opacity:0.5;}
+.vis-tag{font-size:8px;letter-spacing:0.5px;margin-left:4px;opacity:0.85;}
+.map-fog{pointer-events:none;transition:opacity 0.18s;}
+.map-wrap.gm-preview{outline:2px solid var(--purple);}
 .place-card{background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:10px 12px;margin-bottom:8px;}
 .place-card.current{border-color:var(--gold);}
 .pc-head{display:flex;align-items:center;gap:8px;}
@@ -14549,11 +14563,93 @@ function zoomMap(id,f){ const v=_mapView[id]; if(!v) return; const cx=v.x+(v.vw/
 function zoomReset(id){ const v=_mapView[id]; if(!v) return; v.z=1; v.x=0; v.y=0; _applyMapView(id); }
 const _mapImgCache = {};   // mapId → dataURL / url
 const MAP_REVEAL = { small:0.07, medium:0.11, large:0.17 }; // legacy (unused for pin reveal)
-const FOG_AREA_BUFFER = 1.072;   // +15% area over the icon (√1.15)
-function _revealR(map){ return _pinPx(map) * FOG_AREA_BUFFER; }
 function _brushR(map){ return map.brushPx || Math.max(14, _pinPx(map)*2.4); }
 
 function _campMaps(camp){ if(!camp.maps) camp.maps=[]; return camp.maps; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   GM CONTROL — a campaign may nominate one member (by username) as its GM.
+   Until someone is nominated the table runs exactly as it always has:
+   everyone may design maps. Once a GM is named, the GM alone holds the
+   map's *design and reveal* controls — the maps themselves stay live, so
+   players keep pinning places and editing their own notes on them.
+   ══════════════════════════════════════════════════════════════════════ */
+function campGM(camp){ const g = camp && camp.gm; return g ? String(g) : null; }
+function hasGM(camp){ return !!campGM(camp); }
+function isCampGM(camp){ const g=campGM(camp); return !!g && g===getGroupId(); }
+// True when this device may design maps (plot, fog, reveal, nest, delete).
+function canDesignMaps(camp){ return !hasGM(camp) || isCampGM(camp); }
+
+/* ── Per-map visibility: 'hidden' | 'teased' | 'revealed' ───────────────
+   Legacy maps carry no `vis` and stay revealed, so nothing a table already
+   built disappears when a GM is first nominated. */
+const MAP_VIS = ['hidden','teased','revealed'];
+const VIS_META = {
+  hidden:   { icon:'🙈', label:'hidden',   tip:'Only you can see this map — it is not in the party\u2019s list at all' },
+  teased:   { icon:'👁', label:'teased',   tip:'The party sees the name and knows it exists, but cannot open it' },
+  revealed: { icon:'✅', label:'revealed', tip:'The party can open and explore this map' }
+};
+function _mapVis(camp, m){
+  if(!m || !hasGM(camp)) return 'revealed';
+  return MAP_VIS.includes(m.vis) ? m.vis : 'revealed';
+}
+// A sub-map can never be more visible than the map it hangs inside: hiding a
+// region hides the battle maps plotted within it.
+function _effVis(camp, m){
+  if(!m || !hasGM(camp)) return 'revealed';
+  let v='revealed';
+  for(const x of _mapChain(camp, m)){
+    const t=_mapVis(camp, x);
+    if(t==='hidden') return 'hidden';
+    if(t==='teased') v='teased';
+  }
+  return v;
+}
+function _canSeeMap(camp, m){ return canDesignMaps(camp) || _effVis(camp,m)!=='hidden'; }
+function _canOpenMap(camp, m){ return canDesignMaps(camp) || _effVis(camp,m)==='revealed'; }
+
+/* ── Fog of war ─────────────────────────────────────────────────────────
+   `fogEnabled` is a NEW explicit flag. The older `fog` field defaulted to
+   true but was never rendered, so honouring it now would black out every
+   map already built — fog stays strictly opt-in per map instead. */
+function _fogOn(map){ return !!(map && map.fogEnabled); }
+let _gmPeek = true;   // GM sees through their own fog while plotting (session-local)
+function _fogOpacity(camp, map){
+  if(!_fogOn(map)) return 0;
+  return (canDesignMaps(camp) && _gmPeek) ? 0.45 : 1;
+}
+// Reveal radius around an auto-revealing pin, in viewBox units.
+function _pinRevealR(map, p){ return Math.max(16, _placePx(map, p) * 6); }
+// Is this normalised point clear of fog for a player?
+function _ptRevealed(camp, map, nx, ny, VW, VH){
+  if(!_fogOn(map) || map.fogFull) return true;
+  const dabs = map.paint||[];
+  for(let i=0;i<dabs.length;i++){
+    const d=dabs[i];
+    if(Math.hypot(d.x-nx, (d.y-ny)*(VH/VW)) <= d.r) return true;
+  }
+  return false;
+}
+// The viewBox a map is drawn into — fog dabs are stored against these
+// proportions, so anything testing them has to use the same ones.
+function _mapVH(m){ return Math.round(440*((m&&m.h&&m.w)?m.h/m.w:0.68)); }
+/* Fog would be cosmetic if the travel log still named what it covers, so a
+   place the GM has pinned *only* on ground the party cannot see stays out of
+   their log too. A place with no pins, or one pinned on open ground, is the
+   party's own note and always shows. */
+function _placeLitForParty(camp, place){
+  if(canDesignMaps(camp)) return true;
+  const pins = place && place.pins;
+  const mids = pins ? Object.keys(pins).filter(id=>_mapById(camp,id)) : [];
+  if(!mids.length) return true;
+  return mids.some(id=>{
+    const m=_mapById(camp,id);
+    if(!_canOpenMap(camp,m)) return false;
+    if(m.fogPins) return true;
+    return _ptRevealed(camp, m, pins[id].x, pins[id].y, 440, _mapVH(m));
+  });
+}
+
 const PIN_MAX = 1;   // ceiling (icons scale with the map; this is map-unit size)
 const TYPE_SCALE_MIN = 0.3, TYPE_SCALE_MAX = 3, TYPE_SCALE_STEP = 0.15;
 function _typeScale(map, type){ const t=PLACE_TYPES.includes(type)?type:'other'; const v=(map.typeScale||{})[t]; return (typeof v==='number' && v>0)? v : 1; }
@@ -14606,6 +14702,12 @@ function _curMap(camp){
   const ms=_campMaps(camp);
   let m = ms.find(x=>x.id===_curMapId);
   if(!m){ m=_homeMap(camp); _curMapId=m?m.id:null; }
+  // If the GM has pulled this map back out of the party's reach, drop the
+  // player onto the first map they are still allowed to open.
+  if(m && !_canOpenMap(camp, m)){
+    const alt = (_canOpenMap(camp,_homeMap(camp))?_homeMap(camp):null) || ms.find(x=>_canOpenMap(camp,x)) || null;
+    if(alt){ m=alt; _curMapId=alt.id; }
+  }
   return m;
 }
 function _mapImgSrc(map){
@@ -14657,18 +14759,35 @@ function renderMap(){
   const byName = n => places.find(q=>_fuzzyMatch(q.name,n)>=0.75);
   const placeById = id => places.find(p=>p.id===id);
 
-  let html = '';
+  const gm = canDesignMaps(camp);
 
-  // ── Map selector ──
-  if(maps.length){
-    html += '<div class="map-chips">'+_mapTree(camp).map(({map:m, depth})=>{
+  let html = _gmBarHtml(camp);
+
+  // ── Map selector — a player never sees a hidden map at all, and a teased
+  //    one shows as a locked name so they know there is more to come. ──
+  const listable = _mapTree(camp).filter(n=>_canSeeMap(camp, n.map));
+  if(listable.length || gm){
+    html += '<div class="map-chips">'+listable.map(({map:m, depth})=>{
       const trail = _mapChain(camp, m).map(x=>x.name).join(' ▸ ');
-      return `<button class="map-chip ${map&&m.id===map.id?'on':''} ${depth?'nested':''}" style="margin-left:${Math.min(depth,4)*8}px" onclick="switchMap('${m.id}')" title="${esc(trail)}">${depth?'<span class="mc-depth">↳</span>':''}${_mapGlyph(camp,m)} ${esc(m.name)}</button>`;
+      const v = _effVis(camp, m), meta = VIS_META[v];
+      const open = _canOpenMap(camp, m);
+      const tag = (gm && hasGM(camp) && v!=='revealed') ? `<span class="vis-tag">${meta.icon}</span>` : '';
+      const cls = `map-chip ${map&&m.id===map.id?'on':''} ${depth?'nested':''} ${gm&&v!=='revealed'?'vis-'+v:''} ${open?'':'locked'}`;
+      const title = open ? trail : trail+' — the GM has not opened this map yet';
+      return `<button class="${cls}" style="margin-left:${Math.min(depth,4)*8}px" ${open?`onclick="switchMap('${m.id}')"`:'disabled'} title="${esc(title)}">${depth?'<span class="mc-depth">↳</span>':''}${open?_mapGlyph(camp,m):'🔒'} ${esc(m.name)}${tag}</button>`;
     }).join('')
-      + `<button class="map-chip add" onclick="toggleAddMap()" title="Add a top-level map — use “＋ sub-map” below to nest one inside this map">+ Map</button></div>`;
+      + (gm?`<button class="map-chip add" onclick="toggleAddMap()" title="Add a top-level map — use “＋ sub-map” below to nest one inside this map">+ Map</button>`:'')
+      + `</div>`;
   }
 
   // ── Canvas ──
+  // The GM may pull a map back under fog mid-session; bounce any player
+  // currently standing on it rather than leaving it open on their screen.
+  if(map && !_canOpenMap(camp, map)){
+    html += `<div class="empty-state" style="margin-bottom:12px"><div class="es-icon">🔒</div><p><b>${esc(map.name)}</b> is not open to the party yet.<br>Your GM will reveal it when the time comes.</p></div>`;
+    el.innerHTML = html;
+    return;
+  }
   if(map){
     // Where you are in the nest: Home ▸ Map of Barovia Village ▸ Graveyard.
     const chain=_mapChain(camp, map), kids=_childMaps(camp, map);
@@ -14677,17 +14796,23 @@ function renderMap(){
           ? `<span class="pc-pill on gold">${_mapGlyph(camp,mm)} ${esc(mm.name)}</span>`
           : `<button class="pc-pill" onclick="switchMap('${mm.id}')">${_mapGlyph(camp,mm)} ${esc(mm.name)}</button><span class="trail-sep">▸</span>`
         ).join('')
-      + `<button class="pc-pill add" onclick="toggleAddMap(null,null,'${map.id}')" title="Add a map nested inside ${esc(map.name)} — e.g. a graveyard inside a village">＋ sub-map</button>`
+      + (gm?`<button class="pc-pill add" onclick="toggleAddMap(null,null,'${map.id}')" title="Add a map nested inside ${esc(map.name)} — e.g. a graveyard inside a village">＋ sub-map</button>`:'')
       + `</div>`;
-    if(kids.length){
+    const visKids = kids.filter(k=>_canSeeMap(camp, k));
+    if(visKids.length){
       html += `<div class="map-kids"><span class="mk-label">INSIDE</span>`
-        + kids.map(k=>`<button class="pc-pill" onclick="switchMap('${k.id}')">↳ ${_mapGlyph(camp,k)} ${esc(k.name)}</button>`).join('')
+        + visKids.map(k=>{ const open=_canOpenMap(camp,k);
+            return `<button class="pc-pill ${open?'':'locked'}" ${open?`onclick="switchMap('${k.id}')"`:'disabled'} title="${open?'':'Not open to the party yet'}">↳ ${open?_mapGlyph(camp,k):'🔒'} ${esc(k.name)}</button>`;
+          }).join('')
         + `</div>`;
     }
     const src=_mapImgSrc(map);
     const VW=440, VH=Math.round(440*((map.h&&map.w)?map.h/map.w:0.68));
     const _hiddenTypes = new Set(map.hiddenTypes||[]);
-    const pinned = places.filter(p=>p.pins&&p.pins[map.id] && !_hiddenTypes.has(p.type||'other'));
+    // Fogged ground is genuinely empty for a player: a pin the GM has plotted
+    // under the fog is never drawn, so there is nothing to peek at or tap.
+    const _pinLit = p => (gm && _gmPeek) || map.fogPins || _ptRevealed(camp, map, p.pins[map.id].x, p.pins[map.id].y, VW, VH);
+    const pinned = places.filter(p=>p.pins&&p.pins[map.id] && !_hiddenTypes.has(p.type||'other') && _pinLit(p));
     const X=p=>Math.round(p.pins[map.id].x*VW), Y=p=>Math.round(p.pins[map.id].y*VH);
     const edges=[]; pinned.forEach(p=>(p.links||[]).forEach(n=>{ const q=byName(n); if(q&&q!==p&&q.pins&&q.pins[map.id]&&!edges.some(e=>e[0]===q&&e[1]===p)) edges.push([p,q]); }));
     const svg = `<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="campMapSvg" data-vw="${VW}" data-vh="${VH}">
@@ -14711,6 +14836,7 @@ function renderMap(){
           <g class="pinicon" transform="scale(${(R/12).toFixed(3)})" fill="var(--gold)" stroke="#0d0a1a" stroke-width="1.6"><rect x="-1.8" y="-12" width="3.6" height="24" rx="1"/><polygon points="1.8,-12 13,-8 1.8,-4"/></g>
           <text text-anchor="middle" y="${ly}" style="font-size:${lf}px;stroke-width:${(R*1.1*0.28).toFixed(2)}px">Party</text>
         </g>`; })():''}
+      ${_fogLayerSvg(camp, map, VW, VH, pinned)}
     </svg>`;
     // A sub-map leads with the places that plausibly belong there — linked to
     // the map's own place, or not yet pinned anywhere (fresh discoveries) —
@@ -14719,10 +14845,15 @@ function renderMap(){
     const parent = map.placeId ? placeById(map.placeId) : null;
     const _near = p => !parent || !p.pins || !Object.keys(p.pins).length
       || (parent.links||[]).some(n=>_fuzzyMatch(n,p.name)>=0.75) || (p.links||[]).some(n=>_fuzzyMatch(n,parent.name)>=0.75);
-    const _free = places.filter(p=>!(p.pins&&p.pins[map.id]) && p.id!==map.placeId);
+    const _free = places.filter(p=>!(p.pins&&p.pins[map.id]) && p.id!==map.placeId && _placeLitForParty(camp, p));
     const _nearby = _free.filter(_near), _rest = _free.filter(p=>!_near(p));
     const unplaced = window._showAllUnplaced ? _nearby.concat(_rest) : _nearby;
-    html += `<div class="map-wrap ${(_placingId||_placingParty)?'placing':''} ${_mapWheelZoom?'zoom-active':''}" id="campMapWrap">${svg}<div class="map-legend">${_placingParty?'tap to drop the party marker':(_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_selPinId?'drag the gold grip to resize · drag pin to move':(_mapWheelZoom?'scroll to zoom · tap off the map to exit':'tap the map to zoom · scroll moves the page')))}</div></div>`;
+    const _painting = _paintMode && _fogOn(map) && gm;
+    const _legend = _painting
+      ? (_paintMode==='reveal' ? 'drag to rub the fog away · '+Math.round(_brushR(map))+'px brush' : 'drag to paint the fog back · '+Math.round(_brushR(map))+'px brush')
+      : (_placingParty?'tap to drop the party marker':(_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_selPinId?'drag the gold grip to resize · drag pin to move':(_mapWheelZoom?'scroll to zoom · tap off the map to exit':'tap the map to zoom · scroll moves the page'))));
+    html += `<div class="map-wrap ${(_placingId||_placingParty)?'placing':''} ${_painting?'painting-fog':''} ${(gm&&hasGM(camp)&&!_gmPeek)?'gm-preview':''} ${_mapWheelZoom?'zoom-active':''}" id="campMapWrap">${svg}<div class="map-legend">${_legend}</div></div>`;
+    html += _gmMapCtrlsHtml(camp, map);
     html += `<div class="map-ctrls">
       ${(chain.length>1)?`<button class="pc-pill" onclick="switchMap('${chain[chain.length-2].id}')" title="Back to ${esc(chain[chain.length-2].name)}">↑ up a map</button>`:''}
       <span class="pc-pill" style="display:flex;align-items:center;gap:4px;cursor:default"><button onclick="zoomMap('${map.id}',1/1.4)" style="background:none;border:none;color:var(--text);font-size:15px;cursor:pointer;padding:0 4px">−</button><span id="mapZoomLbl" style="min-width:34px;text-align:center;font-size:11px">${Math.round((_mapView[map.id]?.z||1)*100)}%</span><button onclick="zoomMap('${map.id}',1.4)" style="background:none;border:none;color:var(--text);font-size:15px;cursor:pointer;padding:0 4px">＋</button></span>
@@ -14735,9 +14866,9 @@ function renderMap(){
       <button class="pc-pill ${map.hidePinLabels?'on':''}" onclick="togglePinLabels('${map.id}')" title="Master switch — hide every place name on this map">${map.hidePinLabels?'all names off':'all names on'}</button>
       <button class="pc-pill" onclick="resetPinSize('${map.id}')" title="Reset pin size">↺ pin size</button>
       <button class="pc-pill ${map.pinsLocked?'on gold':''}" onclick="togglePinsLock('${map.id}')" title="${map.pinsLocked?'Pins locked — tap to allow moving/resizing':'Lock pin size & position (double-click still opens sub-maps)'}">${map.pinsLocked?'🔒 locked':'🔓 lock pins'}</button>
-      <button class="pc-pill ${map.isHome?'on gold':''}" onclick="toggleHomeMap('${map.id}')" title="${map.isHome?'This is the landing map — tap to unset':'Make this the map shown first'}">${map.isHome?'🏠 home map':'set as home'}</button>
+      ${gm?`<button class="pc-pill ${map.isHome?'on gold':''}" onclick="toggleHomeMap('${map.id}')" title="${map.isHome?'This is the landing map — tap to unset':'Make this the map shown first'}">${map.isHome?'🏠 home map':'set as home'}</button>
       <button class="pc-pill" onclick="toggleAddMap('${map.id}')">✎ edit map</button>
-      <button class="pc-pill" style="color:var(--red);border-color:var(--red)" onclick="deleteMap('${map.id}')">🗑 remove map</button>
+      <button class="pc-pill" style="color:var(--red);border-color:var(--red)" onclick="deleteMap('${map.id}')">🗑 remove map</button>`:''}
       <button class="pc-pill" style="color:var(--teal);border-color:var(--teal)" onclick="openMapBoard()" title="Pop out a shared drawing board over this map (live, not saved)">✎ draw together</button>
       <button class="pc-pill" onclick="scanSessionsForPlaces()" id="scanPlacesBtn">🔍 scan sessions for places</button>
       <button class="pc-pill ${camp.autoScanPlaces!==false?'on':''}" onclick="toggleAutoScan()" title="Scan every new session for places automatically">auto-scan new sessions</button>
@@ -14751,12 +14882,12 @@ function renderMap(){
     if(_mapLayout(places)) saveCampaign(camp);
     html += `<div class="map-wrap" id="campMapWrap">${_renderSketchSvg(places)}<div class="map-legend">sketch map · drag to arrange</div></div>
       <div class="map-ctrls"><button class="pc-pill" onclick="mapResetLayout()">↺ Re-arrange</button>
-      <button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="toggleAddMap()">🖼 Add an illustrated backdrop</button>
+      ${gm?`<button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="toggleAddMap()">🖼 Add an illustrated backdrop</button>`:''}
       <button class="pc-pill" onclick="scanSessionsForPlaces()" id="scanPlacesBtn">🔍 scan sessions for places</button>
       <button class="pc-pill ${camp.autoScanPlaces!==false?'on':''}" onclick="toggleAutoScan()" title="Scan every new session for places automatically">auto-scan new sessions</button></div>`;
   } else {
     html += `<div class="empty-state" style="margin-bottom:12px"><div class="es-icon">🗺</div><p>No places logged yet.<br>Mention a town, dungeon or road in a Quick Jot or session import and it appears here — or add a backdrop map below.</p></div>
-      <div class="map-ctrls"><button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="toggleAddMap()">🖼 Add an illustrated backdrop</button>
+      <div class="map-ctrls">${gm?`<button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="toggleAddMap()">🖼 Add an illustrated backdrop</button>`:''}
       <button class="pc-pill" onclick="scanSessionsForPlaces()" id="scanPlacesBtn">🔍 scan sessions for places</button>
       <button class="pc-pill ${camp.autoScanPlaces!==false?'on':''}" onclick="toggleAutoScan()" title="Scan every new session for places automatically">auto-scan new sessions</button></div>`;
   }
@@ -14767,7 +14898,7 @@ function renderMap(){
   // form is one pill away.
   const _onSub = !!(map && _parentMap(camp, map));
   const _slot = _onSub ? (window._mapSlot==='place' ? 'place' : 'map') : 'place';
-  const _mapFormOpen = !!window._showMapForm || (_onSub && _slot==='map');
+  const _mapFormOpen = gm && (!!window._showMapForm || (_onSub && _slot==='map'));
   const em = window._editMapId ? maps.find(m=>m.id===window._editMapId) : null;
   // Which map this one hangs under: the saved parent when editing, the map you
   // tapped "+ sub-map" on when adding, and the map you're standing on when the
@@ -14777,7 +14908,7 @@ function renderMap(){
   const _parMap = _mapById(camp, _parId);
   // Can't nest a map under itself or under one of its own descendants.
   const _parOpts = _mapTree(camp).filter(n => !em || (n.map!==em && !_mapChain(camp, n.map).includes(em)));
-  if(_onSub && !em){
+  if(_onSub && !em && gm){
     html += `<div class="map-tray" style="margin-bottom:8px">
       <button class="pc-pill ${_slot==='map'?'on gold':''}" onclick="setMapSlot('map')" title="Add a map nested inside ${esc(map.name)}">🗺 sub-map</button>
       <button class="pc-pill ${_slot==='place'?'on gold':''}" onclick="setMapSlot('place')" title="Log a place in the travel log instead">📍 place</button>
@@ -14805,7 +14936,8 @@ function renderMap(){
       <div style="font-size:10px;color:var(--muted2);margin-top:4px">Use your own scan or a map you have the rights to. Uploads are shrunk to ~1600px and shared with campaign members.</div>
     </div>
     <div class="form-row two">
-      <div class="field"><label>Fog of war</label><select id="mpFog"><option value="1" ${em?.fog!==false?'selected':''}>on — reveal as you go</option><option value="0" ${em&&em.fog===false?'selected':''}>off</option></select></div>
+      <div class="field"><label>Fog of war</label><select id="mpFog"><option value="1" ${_fogOn(em)?'selected':''}>on — you reveal it as they explore</option><option value="0" ${_fogOn(em)?'':'selected'}>off — the whole map is visible</option></select></div>
+    <div class="field"><label>Party can see</label><select id="mpVis">${MAP_VIS.map(k=>`<option value="${k}" ${(em?_mapVis(camp,em):(hasGM(camp)?'hidden':'revealed'))===k?'selected':''}>${VIS_META[k].icon} ${VIS_META[k].label} — ${esc(VIS_META[k].tip)}</option>`).join('')}</select></div>
       <div class="field"><label>Home map</label><select id="mpHome"><option value="0">no</option><option value="1" ${em?.isHome||(!em&&!maps.length)?'selected':''}>yes — shown first</option></select></div>
     </div>
     <div style="display:flex;gap:8px;align-items:stretch">
@@ -14859,10 +14991,11 @@ function renderMap(){
     }
   }
 
-  if(places.length){
+  const logged = places.filter(p=>_placeLitForParty(camp, p));
+  if(logged.length){
     const order = {current:0, visited:1, rumoured:2};
-    const sorted = [...places].sort((a,b)=>(order[a.status]??1)-(order[b.status]??1) || (b.session||0)-(a.session||0) || a.name.localeCompare(b.name));
-    html += `<div class="divider"><span>Travel Log · ${places.length} place${places.length!==1?'s':''}</span></div>` + sorted.map(p=>{
+    const sorted = [...logged].sort((a,b)=>(order[a.status]??1)-(order[b.status]??1) || (b.session||0)-(a.session||0) || a.name.localeCompare(b.name));
+    html += `<div class="divider"><span>Travel Log · ${logged.length} place${logged.length!==1?'s':''}</span></div>` + sorted.map(p=>{
       const sub=_subMapFor(camp, p.id, map);
       const onCur = map && p.pins && p.pins[map.id];
       const nestUnder = (map && onCur) ? map.id : (Object.keys(p.pins||{}).find(mid=>_mapById(camp,mid))||'');
@@ -14914,6 +15047,33 @@ function _renderSketchSvg(places){
   </svg>`;
 }
 
+/* Fog of war layer. A mask paints the whole canvas white (fog shown) and
+   punches soft black holes where the GM has erased — plus, optionally, a
+   halo around every pin. Blurring the holes as one group makes overlapping
+   brush strokes merge cleanly instead of re-fogging each other's edges. */
+function _fogLayerSvg(camp, map, VW, VH, pinned){
+  if(!_fogOn(map)) return '';
+  const op = _fogOpacity(camp, map);
+  if(map.fogFull) return '';                      // fully lifted by the GM
+  const soft = Math.max(2, _brushR(map)*0.22).toFixed(1);
+  let holes = (map.paint||[]).map(d=>
+    `<circle cx="${(d.x*VW).toFixed(1)}" cy="${(d.y*VH).toFixed(1)}" r="${(d.r*VW).toFixed(1)}"/>`).join('');
+  if(map.fogPins){
+    holes += (pinned||[]).map(p=>{
+      const pos=p.pins[map.id];
+      return `<circle data-pin="${esc(p.id)}" cx="${(pos.x*VW).toFixed(1)}" cy="${(pos.y*VH).toFixed(1)}" r="${_pinRevealR(map,p).toFixed(1)}"/>`;
+    }).join('');
+    if(map.party) holes += `<circle cx="${(map.party.x*VW).toFixed(1)}" cy="${(map.party.y*VH).toFixed(1)}" r="${Math.max(22,_pinPx(map)*24).toFixed(1)}"/>`;
+  }
+  return `<defs>
+      <filter id="fogSoft" x="-25%" y="-25%" width="150%" height="150%"><feGaussianBlur stdDeviation="${soft}"/></filter>
+      <mask id="fogMask" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}">
+        <rect x="0" y="0" width="${VW}" height="${VH}" fill="#fff"/>
+        <g id="fogHoles" fill="#000" filter="url(#fogSoft)">${holes}</g>
+      </mask>
+    </defs>
+    <rect class="map-fog" x="0" y="0" width="${VW}" height="${VH}" fill="#0b0917" opacity="${op}" mask="url(#fogMask)"/>`;
+}
 function _bindMapDrag(camp, map){
   const svg=document.getElementById('campMapSvg'); if(!svg) return;
   if(!map) map={ id:'__sketch__' };   // the sketch graph has no illustrated map behind it
@@ -14981,14 +15141,16 @@ function _bindMapDrag(camp, map){
     }
   }
   // Fog painting mode: pointer strokes add (reveal) or remove (refog) circles.
-  if(_paintMode && !sketch){
+  if(_paintMode && !sketch && canDesignMaps(camp) && _fogOn(map)){
     const _blocked=()=>pts.size>=2||_mapGesture;
-    const mask=svg.querySelector('#fogMask'); let paintingNow=false;
+    const holes=svg.querySelector('#fogHoles'); let paintingNow=false;
     const dab=(e)=>{ const l=toLocal(e); const nx=l.x/VW, ny=l.y/VH, nr=_brushR(map)/VW;
       if(_paintMode==='reveal'){
         if(!map.paint) map.paint=[];
         map.paint.push({ x:+nx.toFixed(4), y:+ny.toFixed(4), r:+nr.toFixed(4) });
-        if(mask){ const c=document.createElementNS('http://www.w3.org/2000/svg','circle'); c.setAttribute('cx',(l.x).toFixed(1)); c.setAttribute('cy',(l.y).toFixed(1)); c.setAttribute('r',_brushR(map).toFixed(1)); c.setAttribute('fill','url(#holeSoft)'); mask.appendChild(c); }
+        // Mirror the dab straight into the live mask so the eraser feels
+        // immediate; the full re-render happens once the stroke ends.
+        if(holes){ const c=document.createElementNS('http://www.w3.org/2000/svg','circle'); c.setAttribute('cx',(l.x).toFixed(1)); c.setAttribute('cy',(l.y).toFixed(1)); c.setAttribute('r',_brushR(map).toFixed(1)); holes.appendChild(c); }
       } else { // refog: drop painted dabs within the brush; the auto pin-reveal stays
         if(map.paint&&map.paint.length){ const bx=l.x/VW, by=l.y/VH, br=_brushR(map)/VW;
           map.paint=map.paint.filter(d=>Math.hypot((d.x-bx),(d.y-by)*(VH/VW))>br*0.8); }
@@ -14996,7 +15158,7 @@ function _bindMapDrag(camp, map){
     };
     svg.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-resize')||_blocked()) return; paintingNow=true; dab(e); e.preventDefault(); });
     svg.addEventListener('pointermove',e=>{ if(paintingNow&&!_blocked()) dab(e); });
-    const pend=()=>{ if(paintingNow){ paintingNow=false; saveCampaign(camp); if(_paintMode==='refog') renderMap(); } };
+    const pend=()=>{ if(paintingNow){ paintingNow=false; saveCampaign(camp); renderMap(); } };
     svg.addEventListener('pointerup',pend); svg.addEventListener('pointercancel',pend);
     return; // in paint mode, skip pin drag/select wiring
   }
@@ -15026,7 +15188,9 @@ function _bindMapDrag(camp, map){
     const first=svg.querySelector('.map-node');
     edges.forEach(([a,b])=>{ const ln=document.createElementNS('http://www.w3.org/2000/svg','line'); ln.setAttribute('class','map-edge');
       const A=getPos(a),B=getPos(b); ln.setAttribute('x1',Math.round(A.x*VW)); ln.setAttribute('y1',Math.round(A.y*VH)); ln.setAttribute('x2',Math.round(B.x*VW)); ln.setAttribute('y2',Math.round(B.y*VH)); svg.insertBefore(ln, first); });
-    if(!sketch){ const mask=svg.querySelector('#fogMask'); if(mask){ const idx=(camp.places||[]).filter(q=>getPos(q)&&(q.status!=='rumoured'||map.revealRumoured)).findIndex(q=>q.id===drag.id); const circ=mask.querySelectorAll('circle')[idx]; if(circ){ circ.setAttribute('cx',Math.round(x)); circ.setAttribute('cy',Math.round(y)); } } }
+    // Pin-halo fog holes are rebuilt on the next render; nudge only this
+    // pin's own hole so dragging under fog stays smooth.
+    if(!sketch && map.fogPins){ const hole=svg.querySelector('#fogHoles [data-pin="'+CSS.escape(String(drag.id))+'"]'); if(hole){ hole.setAttribute('cx',Math.round(x)); hole.setAttribute('cy',Math.round(y)); } }
   });
   let _lastTap={id:null,t:0};
   const end=()=>{ if(drag){
@@ -15342,7 +15506,11 @@ function setMapSlot(v){ window._mapSlot = (v==='place')?'place':'map';
   if(v==='place'){ window._showMapForm=false; window._editMapId=null; window._pendingMapImg=null; window._presetMapParent=null; }
   renderMap(); }
 function closeMapForm(){ window._showMapForm=false; window._editMapId=null; window._pendingMapImg=null; window._presetMapParent=null; window._mapSlot='place'; renderMap(); }
-function switchMap(id){ _placingId=null; _selPinId=null; _paintMode=null; window._mapSlot=null; if(_mapWheelZoom) _setMapWheelZoom(false); if(id&&_mapView[id]){ _mapView[id].z=1; _mapView[id].x=0; _mapView[id].y=0; } _curMapId=id||null; renderMap(); }
+function switchMap(id){
+  const _c=getCampaigns().find(c=>c.id===editingCampId);
+  const _t=_c&&_mapById(_c,id);
+  if(_t && !_canOpenMap(_c,_t)){ toast('Your GM has not opened that map yet','var(--muted)'); return; }
+  _placingId=null; _selPinId=null; _paintMode=null; window._mapSlot=null; if(_mapWheelZoom) _setMapWheelZoom(false); if(id&&_mapView[id]){ _mapView[id].z=1; _mapView[id].x=0; _mapView[id].y=0; } _curMapId=id||null; renderMap(); }
 function toggleAddMap(editId, presetPlaceId, presetParentId){
   const open = (editId||presetPlaceId||presetParentId) ? true : !window._showMapForm;
   window._showMapForm = open;
@@ -15359,10 +15527,16 @@ async function saveMapForm(){
   const name=(document.getElementById('mpName')?.value||'').trim();
   if(!name){ toast('Give the map a name','var(--red)'); return; }
   let m = window._editMapId ? maps.find(x=>x.id===window._editMapId) : null;
-  if(!m){ m={ id:genItemId(), reveal:'medium', pinPx:4, added:Date.now() }; maps.push(m); }
+  if(!canDesignMaps(camp)){ toast('Only the GM can add or change maps','var(--red)'); return; }
+  // A map the GM builds starts hidden, so a battle can be plotted in the open
+  // without the party seeing it until it is sprung on them.
+  if(!m){ m={ id:genItemId(), reveal:'medium', pinPx:4, added:Date.now(), vis: hasGM(camp)?'hidden':'revealed' }; maps.push(m); }
   m.name=name;
   m.placeId=document.getElementById('mpPlace')?.value||null; if(!m.placeId) delete m.placeId;
-  m.fog=document.getElementById('mpFog')?.value!=='0';
+  m.fogEnabled=document.getElementById('mpFog')?.value==='1';
+  if(!m.fogEnabled) delete m.fogFull;
+  const _vsel=document.getElementById('mpVis')?.value;
+  if(MAP_VIS.includes(_vsel)) m.vis=_vsel;
   // Nesting: never under itself or one of its own sub-maps (that would loop).
   const parSel=document.getElementById('mpParent')?.value||'';
   const parM=_mapById(camp, parSel);
@@ -15400,13 +15574,162 @@ function toggleHomeMap(id){
   else { camp.maps.forEach(x=>x.isHome=false); m.isHome=true; if(m.placeId) delete m.placeId; delete m.parentId; toast('🏠 '+m.name+' is now the home map','var(--gold)'); }
   saveCampaign(camp); renderMap();
 }
-function toggleFog(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.fog=!(m.fog!==false); if(m.fog===false) _paintMode=null; saveCampaign(camp); renderMap(); }
+/* ══════════════════════════════════════════════════════════════════════
+   GM BAR + MAP CONTROL STRIP
+   ══════════════════════════════════════════════════════════════════════ */
+function _gmBarHtml(camp){
+  const gmName = campGM(camp);
+  if(!gmName){
+    return `<div class="gm-bar">
+      <span class="gm-who">NO GM NOMINATED — map design and fog are open to everyone.</span>
+      <button class="pc-pill" style="border-color:var(--gold);color:var(--gold)" onclick="openGmPicker()">👑 Nominate a GM</button>
+    </div>`;
+  }
+  if(!isCampGM(camp)){
+    return `<div class="gm-bar">
+      <span class="gm-who">👑 GM · <b>${esc(gmName)}</b> — they decide which maps the party can open.</span>
+    </div>`;
+  }
+  return `<div class="gm-bar is-gm">
+    <span class="gm-who">👑 YOU ARE THE GM · <b>${esc(gmName)}</b></span>
+    <button class="pc-pill ${_gmPeek?'on gold':''}" onclick="toggleGmPeek()" title="${_gmPeek?'You see through your own fog — tap to check how much of the map the party can actually make out':'Showing the fog at full strength, as the party sees it — tap to see through it again'}">${_gmPeek?'👁 GM view':'🎭 party view'}</button>
+    <button class="pc-pill" onclick="openGmPicker()" title="Hand the GM screen to another member, or step down">⇄ change GM</button>
+  </div>`;
+}
+
+/* The GM's own strip: who may see this map, and the fog over it. */
+function _gmMapCtrlsHtml(camp, map){
+  if(!canDesignMaps(camp) || !map) return '';
+  const v = _mapVis(camp, map), eff = _effVis(camp, map);
+  const fog = _fogOn(map), dabs = (map.paint||[]).length;
+  let h = `<div class="gm-fog-ctrls">`;
+
+  if(hasGM(camp)){
+    h += `<span class="gf-label">WHO CAN SEE “${esc(map.name)}”</span>`
+      + MAP_VIS.map(k=>{ const m2=VIS_META[k];
+          return `<button class="pc-pill ${v===k?'on gold':''}" onclick="setMapVis('${map.id}','${k}')" title="${esc(m2.tip)}">${m2.icon} ${m2.label}</button>`;
+        }).join('');
+    if(eff!==v && eff==='hidden'){
+      h += `<span class="pc-pill" style="cursor:default;color:var(--muted2);border-style:dashed">↳ hidden anyway — a map above it is hidden</span>`;
+    }
+  } else {
+    h += `<span class="gf-label">MAP TOOLS — nominate a GM to hide maps from the party</span>`;
+  }
+
+  h += `<span class="gf-label" style="margin-top:4px">FOG OF WAR</span>
+    <button class="pc-pill ${fog?'on gold':''}" onclick="toggleFog('${map.id}')" title="${fog?'Lift the fog from this map entirely':'Cover this map in fog and reveal it as the party explores'}">${fog?'🌫 fog on':'☀ fog off'}</button>`;
+
+  if(fog){
+    h += `
+    <button class="pc-pill ${_paintMode==='reveal'?'on gold':''}" onclick="setPaintMode('reveal')" title="Drag across the map to rub the fog away">🧽 eraser</button>
+    <button class="pc-pill ${_paintMode==='refog'?'on gold':''}" onclick="setPaintMode('refog')" title="Drag to paint the fog back over ground you have already opened">🖌 re-fog</button>
+    <span class="pc-pill" style="cursor:default;gap:6px;display:flex;align-items:center">brush
+      <input type="range" min="8" max="90" value="${_brushR(map)}" oninput="setBrush('${map.id}',this.value)">
+    </span>
+    <button class="pc-pill" onclick="revealAllFog('${map.id}')" title="Lift every scrap of fog at once — the big reveal">✨ reveal all</button>
+    <button class="pc-pill" ${dabs?'':'disabled style="opacity:0.45"'} onclick="clearPaint('${map.id}')" title="Cover the whole map again and start the reveal from scratch">🌑 re-fog all</button>
+    <button class="pc-pill ${map.fogPins?'on gold':''}" onclick="toggleFogPins('${map.id}')" title="${map.fogPins?'Pins currently clear their own halo of fog — tap to keep them hidden until you erase':'Let every pin (and the party marker) clear a halo of fog around itself'}">📌 pins clear fog</button>
+    <span class="pc-pill" style="cursor:default;color:var(--muted2)">${dabs} stroke${dabs===1?'':'s'}${map.fogFull?' · fully revealed':''}</span>`;
+  }
+  return h + `</div>`;
+}
+
+/* ── GM nomination ─────────────────────────────────────────────────────
+   Members come from the campaign_members table, which is the same list the
+   invite code writes to. The GM is stored as a username so it survives a
+   device change — it is the name the member signs in with. */
+async function openGmPicker(){
+  const camp = getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  const cur = campGM(camp), me = getGroupId()||'';
+  if(cur && cur!==me){
+    toast('Only '+cur+' can hand over the GM screen','var(--red)');
+    return;
+  }
+  _openPinModal('👑 Nominate a GM',
+    '<div id="gmPickBody" style="font-size:12px;color:var(--muted);text-align:center;padding:10px 0">Loading members…</div>');
+  let rows = [];
+  try {
+    const { data, error } = await supa.from('campaign_members')
+      .select('username').eq('campaign_id', String(camp.id));
+    if(!error) rows = data||[];
+  } catch(e){}
+  const names = [...new Set(rows.map(r=>(r.username||'').trim()).filter(Boolean).concat(me?[me]:[]))];
+  const body = document.getElementById('gmPickBody'); if(!body) return;
+  body.style.textAlign='left'; body.style.padding='0';
+  body.innerHTML =
+    '<p style="font-size:12px;color:var(--muted);font-style:italic;line-height:1.55;margin-bottom:12px">'
+      + 'The GM alone decides which maps the party can open and how much fog is lifted. '
+      + 'Everyone keeps editing places and pins on the maps they can see.</p>'
+    + '<div class="owner-pills">'
+      + (names.length
+          ? names.map(n=>`<button class="owner-pill ${cur===n?'active':''}" onclick="setCampGM('${jsq(n)}')">${cur===n?'👑 ':''}${esc(n)}${n===me?' (you)':''}</button>`).join('')
+          : '<span style="font-size:12px;color:var(--muted);font-style:italic">No members found — type a username below.</span>')
+    + '</div>'
+    + '<div style="font-family:\'Cinzel\',serif;font-size:9px;color:var(--muted);letter-spacing:1.5px;margin:14px 0 6px">OR ENTER A USERNAME</div>'
+    + '<input id="gmNameInput" placeholder="username they sign in with" style="width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:14px" '
+      + 'onkeydown="if(event.key===\'Enter\')setCampGM(document.getElementById(\'gmNameInput\').value)">'
+    + '<button class="btn btn-primary" style="margin-top:12px;width:100%" onclick="setCampGM(document.getElementById(\'gmNameInput\').value)">👑 Make GM</button>'
+    + (cur ? '<button class="pc-pill" style="margin-top:10px;width:100%;color:var(--red);border-color:var(--red)" onclick="setCampGM(\'\')">Step down — leave the table without a GM</button>' : '');
+}
+function setCampGM(name){
+  const camp = getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  const cur = campGM(camp), me = getGroupId()||'';
+  if(cur && cur!==me){ toast('Only '+cur+' can hand over the GM screen','var(--red)'); return; }
+  const v = String(name||'').trim();
+  if(v) camp.gm = v; else delete camp.gm;
+  saveCampaign(camp); closePinModal(); renderMap();
+  toast(v ? ('👑 '+v+' is now the GM') : 'GM stepped down — map control is open to everyone', 'var(--gold)');
+}
+function toggleGmPeek(){ _gmPeek = !_gmPeek; renderMap(); }
+
+/* ── Per-map visibility + fog actions (GM only) ─────────────────────── */
+function _gmMap(id){
+  const camp = getCampaigns().find(c=>c.id===editingCampId);
+  const m = camp && _campMaps(camp).find(x=>x.id===id);
+  if(!m) return null;
+  if(!canDesignMaps(camp)){ toast('Only the GM can change the maps','var(--red)'); return null; }
+  return { camp, m };
+}
+function setMapVis(id, v){
+  const g=_gmMap(id); if(!g || !MAP_VIS.includes(v)) return;
+  g.m.vis = v;
+  saveCampaign(g.camp); renderMap();
+  toast(VIS_META[v].icon+' “'+g.m.name+'” is '+VIS_META[v].label+' — '+VIS_META[v].tip.toLowerCase(),'var(--gold)');
+}
+function toggleFog(id){
+  const g=_gmMap(id); if(!g) return;
+  g.m.fogEnabled = !_fogOn(g.m);
+  if(!g.m.fogEnabled) _paintMode=null; else delete g.m.fogFull;
+  saveCampaign(g.camp); renderMap();
+  toast(g.m.fogEnabled?'🌫 Fog drawn over '+g.m.name:'☀ Fog lifted from '+g.m.name,'var(--gold)');
+}
+function revealAllFog(id){
+  const g=_gmMap(id); if(!g) return;
+  g.m.fogFull = true; _paintMode=null;
+  saveCampaign(g.camp); renderMap();
+  toast('✨ '+g.m.name+' revealed in full','var(--gold)');
+}
+function toggleFogPins(id){
+  const g=_gmMap(id); if(!g) return;
+  g.m.fogPins = !g.m.fogPins;
+  saveCampaign(g.camp); renderMap();
+}
 function toggleRumoured(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.revealRumoured=!m.revealRumoured; saveCampaign(camp); renderMap(); }
 function setMapReveal(id,v){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.reveal=v; saveCampaign(camp); renderMap(); }
-function setPaintMode(mode){ _paintMode = (_paintMode===mode)?null:mode; if(_paintMode) _selPinId=null; renderMap(); }
+function setPaintMode(mode){
+  const camp=getCampaigns().find(c=>c.id===editingCampId);
+  if(camp && !canDesignMaps(camp)){ toast('Only the GM can lift the fog','var(--red)'); return; }
+  const m=camp&&_curMap(camp);
+  // Erasing fog that has already been fully lifted would do nothing visible —
+  // fold the full reveal back into ordinary painted fog first.
+  if(m && m.fogFull && mode){ delete m.fogFull; m.paint=[{x:0.5,y:0.5,r:1.6}]; saveCampaign(camp); }
+  _paintMode = (_paintMode===mode)?null:mode;
+  if(_paintMode) _selPinId=null;
+  renderMap();
+}
 let _brushTimer=null;
-function setBrush(id,v){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.brushPx=parseInt(v)||20; const lg=document.querySelector('#campMapWrap .map-legend'); if(lg&&_paintMode==='reveal') lg.textContent='paint to clear fog · '+m.brushPx+'px brush'; clearTimeout(_brushTimer); _brushTimer=setTimeout(()=>saveCampaign(camp),400); }
-function clearPaint(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; if(!confirm('Remove all hand-painted fog reveals on this map?')) return; m.paint=[]; saveCampaign(camp); renderMap(); }
+function setBrush(id,v){ const g=_gmMap(id); if(!g) return; const camp=g.camp, m=g.m; m.brushPx=parseInt(v)||20; const lg=document.querySelector('#campMapWrap .map-legend'); if(lg&&_paintMode==='reveal') lg.textContent='paint to clear fog · '+m.brushPx+'px brush'; clearTimeout(_brushTimer); _brushTimer=setTimeout(()=>saveCampaign(camp),400); }
+function clearPaint(id){ const g=_gmMap(id); if(!g) return; if(!confirm('Cover “'+g.m.name+'” in fog again? Every reveal you have painted on it is lost.')) return; g.m.paint=[]; delete g.m.fogFull; saveCampaign(g.camp); renderMap(); toast('🌑 '+g.m.name+' is back under fog','var(--gold)'); }
 function togglePinsLock(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.pinsLocked=!m.pinsLocked; if(m.pinsLocked) _selPinId=null; saveCampaign(camp); renderMap(); toast(m.pinsLocked?'🔒 Pins locked':'🔓 Pins unlocked','var(--gold)'); }
 function resetPinSize(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.pinPx=0.7; delete m.pinScale; saveCampaign(camp); renderMap(); }
 function setPlaceColor(id, col){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const pl=(camp.places||[]).find(p=>p.id===id); if(!pl) return; if(col) pl.color=col; else delete pl.color; saveCampaign(camp); renderMap(); }
@@ -15414,7 +15737,6 @@ function bumpTypeScale(t, dir){ const camp=getCampaigns().find(c=>c.id===editing
 function toggleTypeVisible(t){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const m=_curMap(camp); if(!m) return; if(!m.hiddenTypes) m.hiddenTypes=[]; const i=m.hiddenTypes.indexOf(t); if(i>=0) m.hiddenTypes.splice(i,1); else m.hiddenTypes.push(t); saveCampaign(camp); renderMap(); }
 function togglePlaceName(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const pl=(camp.places||[]).find(p=>p.id===id); if(!pl) return; pl.hideName=!pl.hideName; saveCampaign(camp); renderMap(); }
 function togglePinLabels(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.hidePinLabels=!m.hidePinLabels; saveCampaign(camp); renderMap(); }
-function peekFog(id,on){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m._peek=on; const fog=document.querySelector('#campMapSvg .map-fog'); if(fog) fog.style.opacity=on?'0':''; }
 function beginPlace(id){ _placingId = (id && _placingId!==id) ? id : null; _placingParty=false; renderMap(); if(_placingId) document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
 function beginPlaceParty(){ _placingParty=true; _placingId=null; _selPinId=null; renderMap(); document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
 function removeParty(){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_curMap(camp); if(!m) return; delete m.party; saveCampaign(camp); renderMap(); toast('Party marker removed','var(--muted)'); }
@@ -15429,6 +15751,9 @@ function _mapSnapshotSvg(){
   c.setAttribute('preserveAspectRatio','xMidYMid meet');
   c.querySelectorAll('.mn-resize').forEach(n=>n.remove());
   c.querySelectorAll('circle[stroke-dasharray]').forEach(n=>{ if(!n.classList.contains('pinring')) n.remove(); });
+  // A pop-out is what the table sees, so fog is always at full strength here
+  // even while the GM is peeking through it on their own screen.
+  c.querySelectorAll('.map-fog').forEach(n=>n.setAttribute('opacity','1'));
   return c;
 }
 // Push the current map into every open pop-out (same-origin direct DOM update).
