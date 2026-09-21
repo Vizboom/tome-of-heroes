@@ -582,7 +582,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .book-contents{font-size:11px;color:var(--muted);margin-top:6px;padding-left:14px;}
 .book-contents li{margin:2px 0;}
 
-/* Quick Jot FAB + sheet */
+/* Quick Note FAB + sheet */
 .jot-fab{position:absolute;right:16px;bottom:calc(var(--nav-h) + 14px);width:50px;height:50px;border-radius:50%;background:var(--purple);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,0.45);z-index:60;border:1px solid rgba(255,255,255,0.15);transition:var(--trans);}
 .jot-fab:active{transform:scale(0.92);}
 .jot-textarea{width:100%;min-height:110px;background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:12px;color:var(--text);font-size:14px;line-height:1.5;resize:vertical;box-sizing:border-box;}
@@ -1199,7 +1199,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <div class="nav-item" id="nav-campaign" onclick="nav('campaign')"><span class="nav-icon">📖</span>CAMPAIGN</div>
   </div>
   <div class="toast" id="toast"></div>
-  <button id="jotFab" class="jot-fab" onclick="openQuickJot()" title="Quick jot — sort a note into Quests / NPCs / Arcs" style="display:none">✎</button>
+  <button id="jotFab" class="jot-fab" onclick="openQuickJot()" title="Quick Note — sort a note into Quests / NPCs / Arcs" style="display:none">✎</button>
   <div id="content-area">
 
   <!-- ROSTER -->
@@ -1602,7 +1602,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
           <span>⚙ CLAUDE API KEY</span><span>▸</span>
         </div>
         <div id="campKeyBody" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px">
-          <div style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:8px">Your personal Claude API key powers the AI features (Quick Jot, imports, blurbs). It's stored on your device.</div>
+          <div style="font-size:11px;color:var(--muted);line-height:1.5;margin-bottom:8px">Your personal Claude API key powers the AI features (Quick Note, imports, blurbs). It's stored on your device.</div>
           <input id="claudeApiKeyInput" type="password" placeholder="sk-ant-api03-…"
             style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:12px;font-family:monospace;box-sizing:border-box"
             oninput="saveClaudeApiKey(this.value)" value="">
@@ -13056,7 +13056,7 @@ function renderSessions() {
     </div>` : ''}
     <button class="btn btn-primary" onclick="addSession()">Log Session</button>
     <button class="btn btn-outline" onclick="showBulkImport()" style="border-color:var(--purple);color:var(--purple)">🤖 Bulk Import</button>
-    <button class="btn btn-outline" onclick="openQuickJot()" style="border-color:var(--purple);color:var(--purple)">✎ Quick Jot — one thing, sorted for you</button>
+    <button class="btn btn-outline" onclick="openQuickJot()" style="border-color:var(--purple);color:var(--purple)">✎ Quick Note — one thing, sorted for you</button>
   </div></div>
 
   <div id="sessFormClaude" style="display:none"><div class="card" style="margin-bottom:14px">
@@ -13072,7 +13072,7 @@ function renderSessions() {
 
   <div id="sessBulkImport" style="display:none"><div class="card" style="margin-bottom:14px">
     <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--purple);letter-spacing:1px;margin-bottom:8px">🤖 Smart Session Import</div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Paste your notes after each session — headings are optional, plain prose works. Claude will log the session, then <strong style="color:var(--text)">update existing</strong> NPCs, quests &amp; arcs — or create new ones — based on what happened. For a single thought mid-session, use <strong style="color:var(--text)">Quick Jot</strong> instead.</p>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6">Paste your notes after each session — headings are optional, plain prose works. Claude will log the session, then <strong style="color:var(--text)">update existing</strong> NPCs, quests &amp; arcs — or create new ones — based on what happened. For a single thought mid-session, use <strong style="color:var(--text)">Quick Note</strong> instead.</p>
     <div style="background:var(--surface);border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:11px;color:var(--muted);line-height:2;font-family:monospace">
       <span style="color:var(--gold)">## SESSION</span> &nbsp;what happened, XP &amp; gold<br>
       <span style="color:var(--purple)">## QUESTS</span> &nbsp;status changes or new quests<br>
@@ -13233,8 +13233,8 @@ function showBulkImport(){
   sb.style.display = sb.style.display==='none' ? '' : 'none';
 }
 
-/* ══ QUICK JOT — one freeform thought, sorted into Quests / NPCs / Arcs ══
-   Players jot a single topic mid-session; Claude classifies it against the
+/* ══ QUICK NOTE — one freeform thought, sorted into Quests / NPCs / Arcs ══
+   Players note a single topic mid-session; Claude classifies it against the
    campaign's existing records and the player approves the diff before it is
    saved. Reuses the bulk importer's merge plan + preview + apply pipeline. */
 const JOT_EXAMPLES = [
@@ -13246,8 +13246,8 @@ function openQuickJot(prefill){
   const camp = getActiveCamp();
   if(!camp){ toast('Pick an active campaign first','var(--red)'); nav('campaign'); return; }
   window._pendingJot = null;
-  _openPinModal('✎ QUICK JOT · '+esc(String(camp.name||'').slice(0,26)),
-    '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:8px">Jot one thing while it\'s fresh — an NPC you met, a job you were offered, a thread you\'re pulling on. Claude sorts it into <span style="color:var(--purple)">Quests</span>, <span style="color:var(--teal)">NPCs</span> and <span style="color:var(--gold)">Arcs</span>; you approve before anything is saved.</div>'
+  _openPinModal('✎ QUICK NOTE · '+esc(String(camp.name||'').slice(0,26)),
+    '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:8px">Note one thing down while it\'s fresh — an NPC you met, a job you were offered, a thread you\'re pulling on. Claude sorts it into <span style="color:var(--purple)">Quests</span>, <span style="color:var(--teal)">NPCs</span> and <span style="color:var(--gold)">Arcs</span>; you approve before anything is saved.</div>'
     +'<textarea id="jotText" class="jot-textarea" placeholder="'+esc(JOT_EXAMPLES[Math.floor(Math.random()*JOT_EXAMPLES.length)])+'"></textarea>'
     +'<div id="jotStatus" style="font-size:11px;text-align:center;min-height:16px;margin-top:6px"></div>'
     +'<div id="jotPreview"></div>'
@@ -13322,7 +13322,7 @@ async function doQuickJot(){
     const upd=[...plan.quests,...plan.npcs,...plan.arcs,...plan.places,...plan.books].filter(x=>x.action==='update').length;
     const nw =[...plan.quests,...plan.npcs,...plan.arcs,...plan.places,...plan.books,...plan.notes].filter(x=>x.action==='new').length;
     if(pv) pv.innerHTML = '<div style="margin-top:10px">'+_renderMergePreview(plan, null)+'</div>'
-      +'<div style="font-size:10px;color:var(--muted2);text-align:center;margin:-6px 0 8px">Not right? Edit your jot above and sort again.</div>';
+      +'<div style="font-size:10px;color:var(--muted2);text-align:center;margin:-6px 0 8px">Not right? Edit your note above and sort again.</div>';
     if(st) st.innerHTML='';
     const act=document.getElementById('jotActions');
     if(act) act.innerHTML='<button class="btn btn-gold" style="flex:1;margin:0;background:var(--purple);color:#fff" onclick="applyQuickJot()">✦ Apply '
@@ -13367,7 +13367,7 @@ function _refreshCampaignViews(campId){
       else renderCampList();
     }
     if(currentScreen==='roster') renderCampaignSwitchBanner();
-  }catch(e){ console.warn('refresh after jot:', e); }
+  }catch(e){ console.warn('refresh after note:', e); }
 }
 
 /* ── Fuzzy name matcher for smart merge ── */
@@ -13954,7 +13954,7 @@ function _applyMergePlan(plan, camp){
   return stats;
 }
 
-/* Place helpers shared by importer, quick jot and the Map tab */
+/* Place helpers shared by importer, quick note and the Map tab */
 function _noteMapAction(camp, x, y){ const m=_curMap(camp); if(!m) return; m.lastAction={ x:+(+x).toFixed(4), y:+(+y).toFixed(4), t:Date.now() }; }
 function _setCurrentPlace(camp, pl){
   (camp.places||[]).forEach(p=>{ if(p.status==='current' && p.id!==pl.id) p.status='visited'; });
@@ -14921,7 +14921,7 @@ function renderMap(){
       <button class="pc-pill" onclick="scanSessionsForPlaces()" id="scanPlacesBtn">🔍 scan sessions for places</button>
       <button class="pc-pill ${camp.autoScanPlaces!==false?'on':''}" onclick="toggleAutoScan()" title="Scan every new session for places automatically">auto-scan new sessions</button></div>`;
   } else {
-    html += `<div class="empty-state" style="margin-bottom:12px"><div class="es-icon">🗺</div><p>No places logged yet.<br>Mention a town, dungeon or road in a Quick Jot or session import and it appears here — or add a backdrop map below.</p></div>
+    html += `<div class="empty-state" style="margin-bottom:12px"><div class="es-icon">🗺</div><p>No places logged yet.<br>Mention a town, dungeon or road in a Quick Note or session import and it appears here — or add a backdrop map below.</p></div>
       <div class="map-ctrls"><button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="toggleAddMap()">🖼 Add an illustrated backdrop</button>
       <button class="pc-pill" onclick="scanSessionsForPlaces()" id="scanPlacesBtn">🔍 scan sessions for places</button>
       <button class="pc-pill ${camp.autoScanPlaces!==false?'on':''}" onclick="toggleAutoScan()" title="Scan every new session for places automatically">auto-scan new sessions</button></div>`;
@@ -16038,7 +16038,7 @@ function renderBooks(){
     <button class="btn btn-primary" onclick="addBook()">Add to Library</button>
   </div>`;
   if(!books.length){
-    html += `<div class="empty-state"><div class="es-icon">📚</div><p>The library is empty.<br>Books, journals, letters and scrolls mentioned in a Quick Jot or session import are shelved here with a blurb.</p></div>`;
+    html += `<div class="empty-state"><div class="es-icon">📚</div><p>The library is empty.<br>Books, journals, letters and scrolls mentioned in a Quick Note or session import are shelved here with a blurb.</p></div>`;
   } else {
     const st = {reading:0, unread:1, read:2};
     const sorted=[...books].sort((a,b)=>(st[a.status]??1)-(st[b.status]??1) || (b.updated||0)-(a.updated||0));
@@ -16109,7 +16109,7 @@ function renderNotes() {
   const notes = camp.notes||[];
   let html = `<div style="display:flex;gap:8px;margin-bottom:14px">
     <button class="btn btn-gold" style="flex:1" onclick="addNote()">+ New Note</button>
-    <button class="btn btn-outline" style="flex:1;margin:0;border-color:var(--purple);color:var(--purple)" onclick="openQuickJot()">✎ Quick Jot</button>
+    <button class="btn btn-outline" style="flex:1;margin:0;border-color:var(--purple);color:var(--purple)" onclick="openQuickJot()">✎ Quick Note</button>
   </div>`;
   if (!notes.length) { html += `<div class="empty-state"><div class="es-icon">📝</div><p>No notes yet.<br>Jot down anything — world lore, player theories, DM secrets…</p></div>`; }
   else {
