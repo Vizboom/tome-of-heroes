@@ -2044,8 +2044,20 @@ function _dedupeByDataId(list, label){
   return [...byId.values()];
 }
 
+/* Supabase echoes our own writes straight back through the realtime channel.
+   Redrawing on that echo throws away whatever the user was doing, so each
+   write is stamped here and the echo for it is ignored. */
+const _ownWrites = new Map();   // campaign id → time we last wrote it
+function _markOwnWrite(id){ _ownWrites.set(String(id), Date.now()); }
+function _isOwnEcho(id){
+  const t=_ownWrites.get(String(id));
+  if(t==null) return false;
+  if(Date.now()-t > 6000){ _ownWrites.delete(String(id)); return false; }
+  return true;
+}
 async function dbSaveCampaign(camp){
   if(!camp || !camp.id) { console.warn('dbSaveCampaign: invalid camp', camp); return; }
+  _markOwnWrite(camp.id);
   const gid = getGroupId(); if(!gid || !_authUid) return;
   // One canonical row per campaign; every member writes the same row.
   const rowId = camp._rowId || String(camp.id);
@@ -2208,6 +2220,8 @@ function subscribeRealtime(campId){
                                            // or the next save inserts a duplicate row
         const i = _db.campaigns.findIndex(c=>String(c.id)===String(updated.id) || c._rowId===payload.new.id);
         if(i>=0) _db.campaigns[i]=updated; else _db.campaigns.push(updated);
+        // Our own save coming back to us: the screen already shows it.
+        if(_isOwnEcho(updated.id)) return;
         if(document.getElementById('campList')) _refreshCampScreen();
         if(document.getElementById('campDetailHeader') && editingCampId===updated.id) renderCampDetailHeader();
       }
@@ -12554,6 +12568,14 @@ function hideCampForm() {
 // Detail-aware campaign refresh: re-renders the detail if open, otherwise shows the list.
 // Use this everywhere instead of calling renderCampList() directly when on the campaign screen.
 function _refreshCampScreen(){
+  // The Maps screen shows the campaign detail without the 'detail-active'
+  // class, so it has to be recognised on its own or an incoming update
+  // bounces the user out to the campaign list mid-edit.
+  if(currentScreen==='maps' && editingCampId){
+    renderCampDetailHeader();
+    if(_currentCampTab==='map') renderMap(); else campTab(_currentCampTab||'map');
+    return;
+  }
   if(editingCampId && document.getElementById('campDetailView')?.classList.contains('detail-active')){
     // Stay in the detail — just update what's visible
     renderCampDetailHeader();
@@ -14577,8 +14599,15 @@ function _campMaps(camp){ if(!camp.maps) camp.maps=[]; return camp.maps; }
 function campGM(camp){ const g = camp && camp.gm; return g ? String(g) : null; }
 function hasGM(camp){ return !!campGM(camp); }
 function isCampGM(camp){ const g=campGM(camp); return !!g && g===getGroupId(); }
-// True when this device may design maps (plot, fog, reveal, nest, delete).
+/* What the GM holds is the *reveal*: which maps the party can open, and how
+   much fog sits over them. It is not a lock on the maps themselves. A player
+   can only ever open a map that is already revealed, so on everything they
+   can reach they get full editing — pins, places, points of interest, even
+   new maps of their own. Deleting a map someone else built is the one
+   exception, since it cannot be undone. */
 function canDesignMaps(camp){ return !hasGM(camp) || isCampGM(camp); }
+// Removing a map another member authored is destructive, so it stays with the GM.
+function canDeleteMaps(camp){ return canDesignMaps(camp); }
 
 /* ── Per-map visibility: 'hidden' | 'teased' | 'revealed' ───────────────
    Legacy maps carry no `vis` and stay revealed, so nothing a table already
@@ -14776,7 +14805,7 @@ function renderMap(){
       const title = open ? trail : trail+' — the GM has not opened this map yet';
       return `<button class="${cls}" style="margin-left:${Math.min(depth,4)*8}px" ${open?`onclick="switchMap('${m.id}')"`:'disabled'} title="${esc(title)}">${depth?'<span class="mc-depth">↳</span>':''}${open?_mapGlyph(camp,m):'🔒'} ${esc(m.name)}${tag}</button>`;
     }).join('')
-      + (gm?`<button class="map-chip add" onclick="toggleAddMap()" title="Add a top-level map — use “＋ sub-map” below to nest one inside this map">+ Map</button>`:'')
+      + `<button class="map-chip add" onclick="toggleAddMap()" title="Add a top-level map — use “＋ sub-map” below to nest one inside this map">+ Map</button>`
       + `</div>`;
   }
 
@@ -14796,7 +14825,7 @@ function renderMap(){
           ? `<span class="pc-pill on gold">${_mapGlyph(camp,mm)} ${esc(mm.name)}</span>`
           : `<button class="pc-pill" onclick="switchMap('${mm.id}')">${_mapGlyph(camp,mm)} ${esc(mm.name)}</button><span class="trail-sep">▸</span>`
         ).join('')
-      + (gm?`<button class="pc-pill add" onclick="toggleAddMap(null,null,'${map.id}')" title="Add a map nested inside ${esc(map.name)} — e.g. a graveyard inside a village">＋ sub-map</button>`:'')
+      + `<button class="pc-pill add" onclick="toggleAddMap(null,null,'${map.id}')" title="Add a map nested inside ${esc(map.name)} — e.g. a graveyard inside a village">＋ sub-map</button>`
       + `</div>`;
     const visKids = kids.filter(k=>_canSeeMap(camp, k));
     if(visKids.length){
@@ -14866,9 +14895,9 @@ function renderMap(){
       <button class="pc-pill ${map.hidePinLabels?'on':''}" onclick="togglePinLabels('${map.id}')" title="Master switch — hide every place name on this map">${map.hidePinLabels?'all names off':'all names on'}</button>
       <button class="pc-pill" onclick="resetPinSize('${map.id}')" title="Reset pin size">↺ pin size</button>
       <button class="pc-pill ${map.pinsLocked?'on gold':''}" onclick="togglePinsLock('${map.id}')" title="${map.pinsLocked?'Pins locked — tap to allow moving/resizing':'Lock pin size & position (double-click still opens sub-maps)'}">${map.pinsLocked?'🔒 locked':'🔓 lock pins'}</button>
-      ${gm?`<button class="pc-pill ${map.isHome?'on gold':''}" onclick="toggleHomeMap('${map.id}')" title="${map.isHome?'This is the landing map — tap to unset':'Make this the map shown first'}">${map.isHome?'🏠 home map':'set as home'}</button>
+      <button class="pc-pill ${map.isHome?'on gold':''}" onclick="toggleHomeMap('${map.id}')" title="${map.isHome?'This is the landing map — tap to unset':'Make this the map shown first'}">${map.isHome?'🏠 home map':'set as home'}</button>
       <button class="pc-pill" onclick="toggleAddMap('${map.id}')">✎ edit map</button>
-      <button class="pc-pill" style="color:var(--red);border-color:var(--red)" onclick="deleteMap('${map.id}')">🗑 remove map</button>`:''}
+      ${canDeleteMaps(camp)?`<button class="pc-pill" style="color:var(--red);border-color:var(--red)" onclick="deleteMap('${map.id}')">🗑 remove map</button>`:''}
       <button class="pc-pill" style="color:var(--teal);border-color:var(--teal)" onclick="openMapBoard()" title="Pop out a shared drawing board over this map (live, not saved)">✎ draw together</button>
       <button class="pc-pill" onclick="scanSessionsForPlaces()" id="scanPlacesBtn">🔍 scan sessions for places</button>
       <button class="pc-pill ${camp.autoScanPlaces!==false?'on':''}" onclick="toggleAutoScan()" title="Scan every new session for places automatically">auto-scan new sessions</button>
@@ -14882,12 +14911,12 @@ function renderMap(){
     if(_mapLayout(places)) saveCampaign(camp);
     html += `<div class="map-wrap" id="campMapWrap">${_renderSketchSvg(places)}<div class="map-legend">sketch map · drag to arrange</div></div>
       <div class="map-ctrls"><button class="pc-pill" onclick="mapResetLayout()">↺ Re-arrange</button>
-      ${gm?`<button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="toggleAddMap()">🖼 Add an illustrated backdrop</button>`:''}
+      <button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="toggleAddMap()">🖼 Add an illustrated backdrop</button>
       <button class="pc-pill" onclick="scanSessionsForPlaces()" id="scanPlacesBtn">🔍 scan sessions for places</button>
       <button class="pc-pill ${camp.autoScanPlaces!==false?'on':''}" onclick="toggleAutoScan()" title="Scan every new session for places automatically">auto-scan new sessions</button></div>`;
   } else {
     html += `<div class="empty-state" style="margin-bottom:12px"><div class="es-icon">🗺</div><p>No places logged yet.<br>Mention a town, dungeon or road in a Quick Jot or session import and it appears here — or add a backdrop map below.</p></div>
-      <div class="map-ctrls">${gm?`<button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="toggleAddMap()">🖼 Add an illustrated backdrop</button>`:''}
+      <div class="map-ctrls"><button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="toggleAddMap()">🖼 Add an illustrated backdrop</button>
       <button class="pc-pill" onclick="scanSessionsForPlaces()" id="scanPlacesBtn">🔍 scan sessions for places</button>
       <button class="pc-pill ${camp.autoScanPlaces!==false?'on':''}" onclick="toggleAutoScan()" title="Scan every new session for places automatically">auto-scan new sessions</button></div>`;
   }
@@ -14898,7 +14927,7 @@ function renderMap(){
   // form is one pill away.
   const _onSub = !!(map && _parentMap(camp, map));
   const _slot = _onSub ? (window._mapSlot==='place' ? 'place' : 'map') : 'place';
-  const _mapFormOpen = gm && (!!window._showMapForm || (_onSub && _slot==='map'));
+  const _mapFormOpen = !!window._showMapForm || (_onSub && _slot==='map');
   const em = window._editMapId ? maps.find(m=>m.id===window._editMapId) : null;
   // Which map this one hangs under: the saved parent when editing, the map you
   // tapped "+ sub-map" on when adding, and the map you're standing on when the
@@ -14908,7 +14937,7 @@ function renderMap(){
   const _parMap = _mapById(camp, _parId);
   // Can't nest a map under itself or under one of its own descendants.
   const _parOpts = _mapTree(camp).filter(n => !em || (n.map!==em && !_mapChain(camp, n.map).includes(em)));
-  if(_onSub && !em && gm){
+  if(_onSub && !em){
     html += `<div class="map-tray" style="margin-bottom:8px">
       <button class="pc-pill ${_slot==='map'?'on gold':''}" onclick="setMapSlot('map')" title="Add a map nested inside ${esc(map.name)}">🗺 sub-map</button>
       <button class="pc-pill ${_slot==='place'?'on gold':''}" onclick="setMapSlot('place')" title="Log a place in the travel log instead">📍 place</button>
@@ -14936,8 +14965,8 @@ function renderMap(){
       <div style="font-size:10px;color:var(--muted2);margin-top:4px">Use your own scan or a map you have the rights to. Uploads are shrunk to ~1600px and shared with campaign members.</div>
     </div>
     <div class="form-row two">
-      <div class="field"><label>Fog of war</label><select id="mpFog"><option value="1" ${_fogOn(em)?'selected':''}>on — you reveal it as they explore</option><option value="0" ${_fogOn(em)?'':'selected'}>off — the whole map is visible</option></select></div>
-    <div class="field"><label>Party can see</label><select id="mpVis">${MAP_VIS.map(k=>`<option value="${k}" ${(em?_mapVis(camp,em):(hasGM(camp)?'hidden':'revealed'))===k?'selected':''}>${VIS_META[k].icon} ${VIS_META[k].label} — ${esc(VIS_META[k].tip)}</option>`).join('')}</select></div>
+      ${gm?`<div class="field"><label>Fog of war</label><select id="mpFog"><option value="1" ${_fogOn(em)?'selected':''}>on — you reveal it as they explore</option><option value="0" ${_fogOn(em)?'':'selected'}>off — the whole map is visible</option></select></div>`:''}
+    ${gm?`<div class="field"><label>Party can see</label><select id="mpVis">${MAP_VIS.map(k=>`<option value="${k}" ${(em?_mapVis(camp,em):(hasGM(camp)?'hidden':'revealed'))===k?'selected':''}>${VIS_META[k].icon} ${VIS_META[k].label} — ${esc(VIS_META[k].tip)}</option>`).join('')}</select></div>`:''}
       <div class="field"><label>Home map</label><select id="mpHome"><option value="0">no</option><option value="1" ${em?.isHome||(!em&&!maps.length)?'selected':''}>yes — shown first</option></select></div>
     </div>
     <div style="display:flex;gap:8px;align-items:stretch">
@@ -15023,7 +15052,12 @@ function renderMap(){
         </div>
       </div>`; }).join('');
   }
+  // Rebuilding the tab resets the page scroll, which on a long map screen
+  // throws the GM away from whatever control they just used. Put it back.
+  const _scroller = el.closest('.scroll-region') || document.getElementById('scr-campaign');
+  const _scrollTop = _scroller ? _scroller.scrollTop : 0;
   el.innerHTML = html;
+  if(_scroller && _scrollTop) _scroller.scrollTop = _scrollTop;
   _bindMapDrag(camp, map);
   const fileIn=document.getElementById('mpFile');
   if(fileIn) fileIn.onchange=()=>{ const f=fileIn.files[0]; if(!f) return; _readMapFile(f,(url,w,h)=>{ window._pendingMapImg={url,w,h}; toast('Image ready — '+w+'×'+h,'var(--gold)'); }); };
@@ -15527,16 +15561,19 @@ async function saveMapForm(){
   const name=(document.getElementById('mpName')?.value||'').trim();
   if(!name){ toast('Give the map a name','var(--red)'); return; }
   let m = window._editMapId ? maps.find(x=>x.id===window._editMapId) : null;
-  if(!canDesignMaps(camp)){ toast('Only the GM can add or change maps','var(--red)'); return; }
   // A map the GM builds starts hidden, so a battle can be plotted in the open
-  // without the party seeing it until it is sprung on them.
-  if(!m){ m={ id:genItemId(), reveal:'medium', pinPx:4, added:Date.now(), vis: hasGM(camp)?'hidden':'revealed' }; maps.push(m); }
+  // without the party seeing it until it is sprung on them. A map a player
+  // builds is their own contribution and is open to the table right away.
+  if(!m){ m={ id:genItemId(), reveal:'medium', pinPx:4, added:Date.now(),
+              vis: (hasGM(camp) && isCampGM(camp)) ? 'hidden' : 'revealed' }; maps.push(m); }
   m.name=name;
   m.placeId=document.getElementById('mpPlace')?.value||null; if(!m.placeId) delete m.placeId;
-  m.fogEnabled=document.getElementById('mpFog')?.value==='1';
-  if(!m.fogEnabled) delete m.fogFull;
-  const _vsel=document.getElementById('mpVis')?.value;
-  if(MAP_VIS.includes(_vsel)) m.vis=_vsel;
+  if(canDesignMaps(camp)){
+    m.fogEnabled=document.getElementById('mpFog')?.value==='1';
+    if(!m.fogEnabled) delete m.fogFull;
+    const _vsel=document.getElementById('mpVis')?.value;
+    if(MAP_VIS.includes(_vsel)) m.vis=_vsel;
+  }
   // Nesting: never under itself or one of its own sub-maps (that would loop).
   const parSel=document.getElementById('mpParent')?.value||'';
   const parM=_mapById(camp, parSel);
@@ -15556,6 +15593,7 @@ function _probeImg(url, m){ const img=new Image(); img.onload=()=>{ const camp=g
 function deleteMap(id){
   const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
   const m=_campMaps(camp).find(x=>x.id===id); if(!m) return;
+  if(!canDeleteMaps(camp)){ toast('Only the GM can remove a map — ask them, or hide it instead','var(--red)'); return; }
   if(!confirm('Delete the map "'+m.name+'"? Pins on it are removed; places stay.')) return;
   const wasHome=m.isHome;
   // Sub-maps of the deleted map move up a level rather than being stranded.
