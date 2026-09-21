@@ -14642,7 +14642,10 @@ function _canOpenMap(camp, m){ return canDesignMaps(camp) || _effVis(camp,m)==='
    true but was never rendered, so honouring it now would black out every
    map already built — fog stays strictly opt-in per map instead. */
 function _fogOn(map){ return !!(map && map.fogEnabled); }
-let _gmPeek = true;   // GM sees through their own fog while plotting (session-local)
+/* Off by default, and reset every session: fog that conceals is the whole
+   point, so seeing through it has to be something you deliberately turn on
+   and can see is on — never the state you happen to find the map in. */
+let _gmPeek = false;
 function _fogOpacity(camp, map){
   if(!_fogOn(map)) return 0;
   return (canDesignMaps(camp) && _gmPeek) ? 0.45 : 1;
@@ -14881,7 +14884,10 @@ function renderMap(){
     const _legend = _painting
       ? (_paintMode==='reveal' ? 'drag to rub the fog away · '+Math.round(_brushR(map))+'px brush' : 'drag to paint the fog back · '+Math.round(_brushR(map))+'px brush')
       : (_placingParty?'tap to drop the party marker':(_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_selPinId?'drag the gold grip to resize · drag pin to move':(_mapWheelZoom?'scroll to zoom · tap off the map to exit':'tap the map to zoom · scroll moves the page'))));
-    html += `<div class="map-wrap ${(_placingId||_placingParty)?'placing':''} ${_painting?'painting-fog':''} ${(gm&&hasGM(camp)&&!_gmPeek)?'gm-preview':''} ${_mapWheelZoom?'zoom-active':''}" id="campMapWrap">${svg}<div class="map-legend">${_legend}</div></div>`;
+    // Peeking is the odd state, so it is the one that gets marked.
+    const _peeking = gm && _fogOn(map) && !map.fogFull && _gmPeek;
+    const _legend2 = _peeking ? 'you are seeing through the fog — the party sees it solid' : _legend;
+    html += `<div class="map-wrap ${(_placingId||_placingParty)?'placing':''} ${_painting?'painting-fog':''} ${_peeking?'gm-preview':''} ${_mapWheelZoom?'zoom-active':''}" id="campMapWrap">${svg}<div class="map-legend">${_legend2}</div></div>`;
     html += _gmMapCtrlsHtml(camp, map);
     html += `<div class="map-ctrls">
       ${(chain.length>1)?`<button class="pc-pill" onclick="switchMap('${chain[chain.length-2].id}')" title="Back to ${esc(chain[chain.length-2].name)}">↑ up a map</button>`:''}
@@ -15659,11 +15665,17 @@ function toggleHomeMap(id){
 /* ══════════════════════════════════════════════════════════════════════
    GM BAR + MAP CONTROL STRIP
    ══════════════════════════════════════════════════════════════════════ */
+// Whoever controls the fog can look under it; the label says which way round
+// it currently is, because a GM who forgets is a GM who thinks fog is broken.
+function _peekBtnHtml(){
+  return `<button class="pc-pill ${_gmPeek?'on gold':''}" onclick="toggleGmPeek()" title="${_gmPeek?'You are seeing through your own fog. The party still sees it solid — tap to look at what they see':'The fog is at full strength, exactly as the party sees it. Tap to see through it while you plot'}">${_gmPeek?'👁 seeing through fog':'🌫 see through fog'}</button>`;
+}
 function _gmBarHtml(camp){
   const gmName = campGM(camp);
   if(!gmName){
     return `<div class="gm-bar">
       <span class="gm-who">NO GM NOMINATED — map design and fog are open to everyone.</span>
+      ${_peekBtnHtml()}
       <button class="pc-pill" style="border-color:var(--gold);color:var(--gold)" onclick="openGmPicker()">👑 Nominate a GM</button>
     </div>`;
   }
@@ -15674,7 +15686,7 @@ function _gmBarHtml(camp){
   }
   return `<div class="gm-bar is-gm">
     <span class="gm-who">👑 YOU ARE THE GM · <b>${esc(gmName)}</b></span>
-    <button class="pc-pill ${_gmPeek?'on gold':''}" onclick="toggleGmPeek()" title="${_gmPeek?'You see through your own fog — tap to check how much of the map the party can actually make out':'Showing the fog at full strength, as the party sees it — tap to see through it again'}">${_gmPeek?'👁 GM view':'🎭 party view'}</button>
+    ${_peekBtnHtml()}
     <button class="pc-pill" onclick="openGmPicker()" title="Hand the GM screen to another member, or step down">⇄ change GM</button>
   </div>`;
 }
