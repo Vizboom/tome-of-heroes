@@ -7949,75 +7949,87 @@ function levelUp(charId){
   gwOpenLevelUp(charId);
 }
 
-function removeLevelUp(charId){
-  const chars = getChars();
-  const ci = chars.findIndex(c=>c.id===charId);
-  if(ci<0) return;
-  const char = chars[ci];
-  if(char.level <= 1){ toast('Already at Level 1 — cannot go lower.','var(--red)'); return; }
+function removeLevelUp(charId){ undoLastLevel(charId); }
 
-  const levelToRemove = char.level;
-  const cls = CLASSES[char.classIdx];
+// Remove the character's last level, reversing what it granted. Levels gained
+// through the wizard are recorded in char.levelLog and undone exactly (HP,
+// class level, subclass, choices, spells); older levels fall back to an
+// estimate (average HP, the primary class) as before.
+function undoLastLevel(charId){
+  const char = _gwResolveChar(charId);
+  if(!char) return;
+  if((char.level||1) <= 1){ toast('Already at Level 1 — cannot go lower.','var(--red)'); return; }
+  const lvl = char.level;
+  const entry = (char.levelLog||[]).find(e=>e.level===lvl);
+  const classes = _gwCharClasses(char);
+  const target = entry ? classes.find(c=>c.classIdx===entry.classIdx) : (classes.find(c=>c.classIdx===char.classIdx)||classes[0]);
+  const tcls = CLASSES[target ? target.classIdx : char.classIdx];
+  const conMod = parseInt(getMod((char.abilities||{}).CON))||0;
+  const hpLoss = entry ? entry.hp : Math.max(1, Math.floor(tcls.hit/2)+1+conMod);
+  if(!confirm(`Remove level ${lvl} from ${char.name}?\n\nThis will:\n• Drop them to level ${lvl-1}${classes.length>1?` (${tcls.name} ${target.level} → ${target.level-1})`:''}\n• Undo any ability increase or feat gained at this level\n• Reduce max HP by ${hpLoss}${entry?'':' (estimated)'}\n• Remove choices${entry?' and spells':''} gained at this level\n• Set XP to the level ${lvl-1} floor`)) return;
 
-  if(!confirm(`Remove Level ${levelToRemove} from ${esc(char.name)}?\n\nThis will:\n• Drop them to Level ${levelToRemove-1}\n• Undo any ASI or feat gained at this level\n• Reduce max HP by the amount gained\n• Set XP to the Level ${levelToRemove-1} floor\n\nThis cannot be undone automatically.`)) return;
-
-  // ── 1. Undo ASI / Feat from this level ──
-  const asiEntry = (char.asiHistory||[]).filter(e=>e.level===levelToRemove).pop();
-  if(asiEntry){
-    if(asiEntry.desc.startsWith('ASI:')){
-      // Parse e.g. "ASI: STR+1, CON+1" and reverse
-      const parts = asiEntry.desc.replace('ASI: ','').split(', ');
-      parts.forEach(p=>{
-        const m = p.match(/^([A-Z]+)\+(\d+)$/);
-        if(m) char.abilities[m[1]] = Math.max(1, (char.abilities[m[1]]||10) - parseInt(m[2]));
-      });
-    } else if(asiEntry.desc.startsWith('Feat: ')){
-      const featName = asiEntry.desc.replace('Feat: ','');
-      char.feats = (char.feats||[]).filter(f=>f!==featName);
+  // 1. Ability increase / feat
+  const ai = (char.asiHistory||[]).map(e=>e.level).lastIndexOf(lvl);
+  if(ai>=0){
+    const e = char.asiHistory[ai];
+    if(e.desc.startsWith('ASI:')) e.desc.replace('ASI: ','').split(', ').forEach(p=>{ const m=p.match(/^([A-Z]+)\+(\d+)$/); if(m) char.abilities[m[1]] = Math.max(1,(char.abilities[m[1]]||10)-parseInt(m[2])); });
+    else if(e.desc.startsWith('Feat: ')){ const f=e.desc.slice(6); char.feats=(char.feats||[]).filter(x=>x!==f); }
+    char.asiHistory.splice(ai,1);
+  }
+  // 2. Feature choices
+  const tLevel = target ? target.level : lvl;
+  const undoChoices = entry ? entry.choices : (char.featureChoiceLog||[]).filter(e=>e.cls ? (e.cls===tcls.name && e.level===tLevel) : e.level===lvl);
+  undoChoices.forEach(e=>_undoChoiceEffects(char, e));
+  // 3. Spells learned at this level
+  if(entry && entry.spells.length){ const rm = new Set(entry.spells); char.spells = (char.spells||[]).filter(x=>!rm.has(x.name)); }
+  // 4. Class level (multiclass-aware) and subclass picked at this level
+  if(Array.isArray(char.multiclasses) && char.multiclasses.length>1){
+    const mi = char.multiclasses.findIndex(m=>m.classIdx===(target?target.classIdx:char.classIdx));
+    if(mi>=0){
+      const mc = char.multiclasses[mi];
+      if(entry && entry.sub && mc.subclass===entry.sub) mc.subclass = '';
+      mc.level = (mc.level||1)-1;
+      if(mc.level<=0) char.multiclasses.splice(mi,1);
     }
-    // Remove this asiHistory entry
-    const idx = char.asiHistory.map(e=>e.level).lastIndexOf(levelToRemove);
-    if(idx>=0) char.asiHistory.splice(idx,1);
+    if(char.multiclasses.length===1){
+      char.classIdx = char.multiclasses[0].classIdx; char.subclass = char.multiclasses[0].subclass||''; char.multiclasses = [];
+    } else {
+      let best = char.multiclasses[0]; char.multiclasses.forEach(m=>{ if(m.level>best.level) best=m; });
+      char.classIdx = best.classIdx; char.subclass = best.subclass||'';
+    }
+  } else if(entry && entry.sub && char.subclass===entry.sub){
+    char.subclass = '';
   }
-
-  // ── 2. Undo featureChoiceLog entries for this level ──
-  char.featureChoiceLog = (char.featureChoiceLog||[]).filter(e=>e.level!==levelToRemove);
-
-  // ── 3. Undo metamagic / invocations added at this level ──
-  // (These were logged in featureChoiceLog which we just cleared — nothing more needed
-  //  since we can't know the exact picks without the log. Notify user.)
-
-  // ── 4. Reduce max HP ──
-  // Estimate HP gained at this level: avg = floor(hit/2)+1+CON mod at time of level-up
-  // Use current CON mod as best approximation
-  const conMod = parseInt(getMod(char.abilities.CON))||0;
-  const avgHPGain = Math.floor(cls.hit/2)+1+conMod;
-  char.maxHP = Math.max(1, (char.maxHP||1) - avgHPGain);
+  // 5. HP, level, XP
+  char.maxHP = Math.max(1, (char.maxHP||1) - hpLoss);
   char.currentHP = Math.min(char.currentHP||1, char.maxHP);
+  char.level = lvl-1;
+  if((char.xp||0) >= xpForLevel(lvl)) char.xp = xpForLevel(char.level);
+  char.levelLog = (char.levelLog||[]).filter(e=>e.level!==lvl);
 
-  // ── 5. Set level ──
-  char.level = levelToRemove - 1;
-
-  // ── 6. Set XP to floor for new level ──
-  const xpFloor = xpForLevel(char.level);
-  if((char.xp||0) > xpForLevel(levelToRemove)-1) char.xp = xpFloor;
-
-  chars[ci] = char;
-  saveChars(chars);
-  toast(`↓ ${char.name} is now Level ${char.level}.`,'var(--muted)');
-
-  // Refresh all affected UI
-  const updatedChar = getChars().find(c=>c.id===charId);
-  if(updatedChar){
-    const updatedCls = CLASSES[updatedChar.classIdx];
-    renderSheetHero(updatedChar, updatedCls, 'sheetHero');
-    renderCombatTab(updatedChar, updatedCls, 'stab-combat', true);
-    renderSkillsTab(updatedChar, updatedCls, 'stab-skills');
-    renderProgressTab(updatedChar, updatedCls);
-    sheetTab('progress');
-    if(document.getElementById('diceCharPanel')) renderDiceCharPanel();
-    renderRoster();
+  saveChar(char);
+  toast(`↓ ${char.name} is now level ${char.level}.`,'var(--muted)');
+  _gwRefreshAfterLevel(char);
+  try{ if(currentScreen==='sheet') sheetTab('progress'); }catch(e){}
+}
+// Reverse the sheet effects of one recorded choice (mirror of _gwApplyChoice).
+function _undoChoiceEffects(char, e){
+  const picks = e.picks||[];
+  const lower = new Set(picks.map(p=>String(p).toLowerCase()));
+  char.featureChoiceLog = (char.featureChoiceLog||[]).filter(x=>!(x.level===e.level && x.choice===e.choice && (!x.cls || !e.cls || x.cls===e.cls)));
+  const drop = arr => (arr||[]).filter(x=>!lower.has(String(x).toLowerCase()));
+  if(char.metamagic) char.metamagic = drop(char.metamagic);
+  if(char.invocations) char.invocations = drop(char.invocations);
+  if(/expertise/i.test(e.choice) && char.expertiseSkills) char.expertiseSkills = drop(char.expertiseSkills);
+  const lines = new Set([`${e.choice}: ${picks.join(' / ')}`, 'Expertise: '+picks.join(', '), ...picks.map(p=>'Fighting Style: '+p)]);
+  char.equipment = (char.equipment||[]).filter(x=>!lines.has(x));
+  if(char.fightingStyle && lower.has(String(char.fightingStyle).toLowerCase())){
+    const other = (char.equipment||[]).find(x=>/^Fighting Style:/i.test(x));
+    char.fightingStyle = other ? other.replace(/^Fighting Style:\s*/i,'') : '';
   }
+  const sc = char.subclassChoices||{};
+  const key = e.subName || e.choice;
+  if(key in sc && lower.has(String(sc[key]).toLowerCase())) sc[key] = '';
 }
 
 
@@ -15435,59 +15447,182 @@ function renderCharProgressTab(char, cls){
     </select>`;
   }
 
-  // ── Undo last level ── (level-ups now happen via the guided panel below)
+  // ── Undo last level (same full reversal as the roster sheet's Remove) ──
   if(level > 1){
     h += `<div style="margin-bottom:18px;text-align:right">
-      <button onclick="csAdjustLevel('${char.id}',-1)" title="Step total level down by one"
+      <button onclick="undoLastLevel('${jsq(String(char.id))}')" title="Remove the last level gained, reversing its HP, ability increase or feat, choices and spells"
         style="background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:11px;letter-spacing:0.5px;padding:6px 12px;cursor:pointer">↓ Undo last level</button>
     </div>`;
   }
 
-  // ── Features at current level ──
-  const ld = (LEVEL_FEATURES[cls.name]||{})[level]||{};
-
-  // ── Subclass Choices ──
-  const subFeatures = char.subclass ? (getSubFeatures(char.subclass)) : {};
-  const choices = char.subclassChoices || {};
-  Object.values(subFeatures).flat().filter(ft=>ft.choice).forEach(ft=>{
-    h += `<div style="margin-bottom:12px">
-      <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">${esc(ft.n)}</div>
-      <select onchange="csUpdateSubclassChoice('${char.id}','${esc(ft.n)}',this.value)"
-        style="width:100%;background:var(--surface);border:1px solid ${cc};border-radius:8px;color:var(--text);padding:8px 12px;font-size:12px">
-        <option value="">— Choose —</option>
-        ${ft.options.map(opt=>`<option value="${opt.value}" ${choices[ft.n]===opt.value?'selected':''}>${esc(opt.label)}</option>`).join('')}
-      </select>
-    </div>`;
-  });
-  h += `<div style="margin-bottom:8px"></div>`;
-
-  // ── Features ──
-  const allFeatures = [];
-  if(ld.features) allFeatures.push(...ld.features);
-  if(subFeatures.length) allFeatures.push(...subFeatures);
-
-  if(ld.asi){
-    h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">ABILITY SCORE IMPROVEMENT</div>`;
-    h += `<div style="background:${cc}11;border:1px solid ${cc};border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--text)">
-      At level ${level}, choose: increase one ability by 2, two abilities by 1, or take a Feat.
-      <br><small style="color:var(--muted)">Edit your ability scores in the Stats tab.</small>
-    </div>`;
-  }
-
-  if(allFeatures.length){
-    h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">FEATURES AT LEVEL ${level}</div>`;
-    allFeatures.forEach(f=>{
-      const name = typeof f==='object'?(f.n||f.name):f;
-      const desc = typeof f==='object'?(f.d||f.desc):'';
-      h += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:6px">
-        <div style="font-family:'Cinzel',serif;font-size:11px;color:${cc};margin-bottom:${desc?'4px':'0'}">${name}</div>
-        ${desc?`<div style="font-size:11px;color:var(--muted);line-height:1.5">${desc}</div>`:''}
-      </div>`;
-    });
-  }
+  h += _lvTimelineHTML(char);
+  h += _lvXpHTML(char);
+  h += _lvSubclassChoicesHTML(char);
+  h += _lvCurrentFeaturesHTML(char);
+  h += _lvHistoryHTML(char);
 
   // ── Level up launcher (the guided wizard opens as a large popup) ──
   el.innerHTML = _levelUpLauncherHTML(char, cls) + h;
+}
+
+/* ── Level tab sections ─────────────────────────────────────────────────── */
+const _lvLabel = t => `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin:18px 0 8px">${t}</div>`;
+
+// 1–20 roadmap per class: subclass, ASIs, new spell levels and other features.
+function _lvTimelineHTML(char){
+  const rows = _gwCharClasses(char);
+  let h = _lvLabel('ROADMAP');
+  h += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 12px 8px;margin-bottom:6px">`;
+  rows.forEach(r=>{
+    const c = CLASSES[r.classIdx]; if(!c) return;
+    const lf = LEVEL_FEATURES[c.name]||{};
+    const subLv = getSubclassLevelFor(c.name);
+    const ct = c.spellcaster ? (CASTER_TYPE[c.name]||'full') : null;
+    const sf = r.sub ? getSubFeatures(r.sub) : {};
+    let cells = '';
+    for(let l=1;l<=20;l++){
+      const d = lf[l]||{}, marks = [], info = [];
+      const feats = (d.features||[]).map(f=>describeClassFeature(f,c)).filter(Boolean).map(f=>f.name).filter(n=>!/Ability Score Improvement/.test(n));
+      (sf[l]||[]).forEach(f=>feats.push(f.n));
+      if(subLv===l){ marks.push('⚜'); info.push('Subclass'+(r.sub?': '+cleanSub(r.sub):'')); }
+      if(d.asi){ marks.push('⭐'); info.push('Ability Score Improvement or feat'); }
+      if(ct){
+        const sl = (MAX_SPELL_LEVEL_BY_LEVEL[ct]||{})[l]||0, prev = l>1 ? ((MAX_SPELL_LEVEL_BY_LEVEL[ct]||{})[l-1]||0) : 0;
+        if(sl>prev){ marks.push('📖'); info.push('Spell level '+sl+' unlocked'); }
+      }
+      if(feats.length) info.push(...feats);
+      const done = l<=r.level, now = l===r.level, nxt = l===r.level+1;
+      const tip = `${c.name} ${l}: ${info.join(' · ')||'Improvements to existing features'}`;
+      cells += `<button onclick="_lvTimelineShow(this)" data-info="${esc(tip)}" title="${esc(tip)}"
+        style="flex:1 0 34px;min-width:34px;height:46px;border-radius:7px;border:1px solid ${now?c.color:nxt?'var(--gold)':'var(--border)'};background:${done?c.color+'33':'var(--surface)'};color:${done?'var(--text)':'var(--muted)'};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:0;cursor:pointer${now?';box-shadow:0 0 0 1px '+c.color:''}">
+        <span style="font-family:'Cinzel',serif;font-size:10px">${l}</span><span style="font-size:10px;line-height:1">${marks.join('')||(feats.length?'•':'&nbsp;')}</span></button>`;
+    }
+    h += `<div style="font-family:'Cinzel',serif;font-size:10px;color:${c.color};margin-bottom:5px">${c.icon} ${esc(c.name)} ${r.level}</div>
+      <div style="display:flex;gap:3px;overflow-x:auto;padding-bottom:6px;margin-bottom:6px">${cells}</div>`;
+  });
+  h += `<div id="lvTimelineInfo" style="font-size:12px;color:var(--text);line-height:1.5;min-height:18px;margin-bottom:4px">Tap a level to see what it brings.</div>
+    <div style="font-size:10px;color:var(--muted)">⚜ subclass · ⭐ ability increase / feat · 📖 new spell level · • other features</div></div>`;
+  return h;
+}
+function _lvTimelineShow(btn){ const el = document.getElementById('lvTimelineInfo'); if(el) el.textContent = btn.dataset.info; }
+
+function _lvXpHTML(char){
+  const xp = char.xp||0;
+  let bar = '';
+  if(char.level < 20){
+    const cur = xpForLevel(char.level), nxt = xpForLevel(char.level+1);
+    const pct = Math.max(0, Math.min(100, Math.round((xp-cur)/Math.max(1,nxt-cur)*100)));
+    bar = `<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:6px">
+        <span style="font-family:'Cinzel',serif;font-size:10px">XP TO LEVEL ${char.level+1}</span><span>${xp.toLocaleString()} / ${nxt.toLocaleString()}</span></div>
+      <div style="height:6px;background:var(--surface);border-radius:3px;overflow:hidden;margin-bottom:10px"><div style="height:100%;width:${pct}%;background:var(--gold);border-radius:3px"></div></div>`;
+  }
+  return _lvLabel('EXPERIENCE') + `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px">${bar}
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="csXpAward_${esc(String(char.id))}" type="number" min="0" placeholder="Award XP, e.g. 300" onkeydown="if(event.key==='Enter')csAwardXP('${jsq(String(char.id))}')"
+        style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:14px">
+      <button class="btn btn-primary" style="width:auto;padding:8px 14px;margin:0" onclick="csAwardXP('${jsq(String(char.id))}')">+XP</button>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">Total XP: <strong style="color:var(--gold)">${xp.toLocaleString()}</strong></div></div>`;
+}
+function csAwardXP(id){
+  const el = document.getElementById('csXpAward_'+id);
+  const amount = parseInt(el && el.value)||0;
+  if(!amount){ toast('Enter an XP amount','var(--red)'); return; }
+  const char = _gwResolveChar(id); if(!char) return;
+  char.xp = (char.xp||0) + amount;
+  saveChar(char);
+  toast(`+${amount} XP awarded!`);
+  if(char.level < 20 && char.xp >= xpForLevel(char.level+1)) setTimeout(()=>toast(`⬆ ${char.name} has enough XP for level ${char.level+1}!`,'var(--gold)'), 900);
+  renderCharProgressTab(char, CLASSES[char.classIdx]);
+}
+
+// Subclass options (Totem Spirit, etc.) as described cards, for every class.
+function _lvSubclassChoicesHTML(char){
+  const choices = char.subclassChoices||{};
+  let h = '';
+  _gwCharClasses(char).forEach(r=>{
+    if(!r.sub) return;
+    const c = CLASSES[r.classIdx], sf = getSubFeatures(r.sub);
+    Object.keys(sf).map(Number).sort((a,b)=>a-b).forEach(lvl=>{
+      (sf[lvl]||[]).filter(ft=>ft&&ft.choice&&Array.isArray(ft.options)).forEach(ft=>{
+        const locked = lvl > r.level;
+        h += `<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid ${locked?'var(--border2)':c.color};border-radius:12px;padding:12px 14px;margin-bottom:10px;${locked?'opacity:0.55':''}">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+            <span style="font-family:'Cinzel',serif;font-size:12px;flex:1">${esc(ft.n)}</span>
+            <span class="gw-badge">${esc(cleanSub(r.sub))} · level ${lvl}${locked?' (not yet)':''}</span></div>
+          ${ft.d?`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${esc(ft.d)}</div>`:''}
+          <div class="gw-optgrid">${ft.options.map(o=>`<button class="gw-opt ${choices[ft.n]===o.value?'sel':''}" onclick="csPickSubclassChoice('${jsq(String(char.id))}','${jsq(ft.n)}','${jsq(o.value)}')"><b>${esc(o.label)}</b>${o.desc?`<span>${esc(o.desc)}</span>`:''}</button>`).join('')}</div>
+        </div>`;
+      });
+    });
+  });
+  return h ? _lvLabel('SUBCLASS CHOICES') + h : '';
+}
+function csPickSubclassChoice(id, name, val){
+  const char = _gwResolveChar(id); if(!char) return;
+  char.subclassChoices = char.subclassChoices||{};
+  char.subclassChoices[name] = char.subclassChoices[name]===val ? '' : val;
+  saveChar(char);
+  renderCharProgressTab(char, CLASSES[char.classIdx]);
+}
+
+// What each class grants at its CURRENT class level (multiclass-aware).
+function _lvCurrentFeaturesHTML(char){
+  let h = '';
+  _gwCharClasses(char).forEach(r=>{
+    const c = CLASSES[r.classIdx]; if(!c) return;
+    const ld = (LEVEL_FEATURES[c.name]||{})[r.level]||{};
+    const items = (ld.features||[]).filter(f=>!/ASI or Feat/.test(String(f))).map(f=>describeClassFeature(f,c)).filter(Boolean);
+    (r.sub ? (getSubFeatures(r.sub)[r.level]||[]) : []).forEach(f=>items.push({name:f.n, desc:f.choice?'See your subclass choices above.':(f.d||'')}));
+    h += _lvLabel(`${esc(c.name.toUpperCase())} LEVEL ${r.level} FEATURES`);
+    if(ld.asi){
+      const got = (char.asiHistory||[]).find(e=>e.level===char.level);
+      h += `<div style="background:${c.color}11;border:1px solid ${c.color};border-radius:10px;padding:12px;margin-bottom:8px;font-size:12px;color:var(--text)">
+        ⭐ Ability Score Improvement at ${esc(c.name)} ${r.level}: +2 to one ability, +1 to two, or a feat.
+        <br><small style="color:var(--muted)">${got?'Taken: '+esc(got.desc):'Choose it in the Level Up wizard, or edit scores on the Stats tab.'}</small></div>`;
+    }
+    if(!items.length && !ld.asi) h += `<div style="font-size:12px;color:var(--muted);font-style:italic;margin-bottom:8px">No new features at this level — existing ones improve.</div>`;
+    items.forEach(f=>{
+      h += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:6px">
+        <div style="font-family:'Cinzel',serif;font-size:11px;color:${c.color};margin-bottom:${f.desc?'4px':'0'}">${esc(f.name)}</div>
+        ${f.desc?`<div style="font-size:11px;color:var(--muted);line-height:1.5">${esc(f.desc)}</div>`:''}</div>`;
+    });
+  });
+  return h;
+}
+
+// Choice history, ability score history and feats.
+function _lvHistoryHTML(char){
+  let h = '';
+  const log = (char.featureChoiceLog||[]).filter(e=>(e.picks||[]).length);
+  const loggedPicks = new Set(log.flatMap(e=>e.picks.map(p=>String(p).toLowerCase())));
+  const extras = [];
+  if(char.fightingStyle && !loggedPicks.has(String(char.fightingStyle).toLowerCase())) extras.push(['Fighting Style', char.fightingStyle]);
+  const em = (char.metamagic||[]).filter(m=>!loggedPicks.has(String(m).toLowerCase())); if(em.length) extras.push(['Metamagic', em.join(' · ')]);
+  const ei = (char.invocations||[]).filter(m=>!loggedPicks.has(String(m).toLowerCase())); if(ei.length) extras.push(['Eldritch Invocations', ei.join(' · ')]);
+  const ex = (char.expertiseSkills||[]).filter(m=>!loggedPicks.has(String(m).toLowerCase())); if(ex.length) extras.push(['Expertise', ex.join(' · ')]);
+  if(log.length || extras.length){
+    h += _lvLabel('YOUR CHOICES');
+    h += log.slice().sort((a,b)=>a.level-b.level).map(e=>`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:9px 12px;margin-bottom:6px">
+        <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:3px">${e.cls?esc(e.cls.toUpperCase())+' ':''}LV ${e.level} — ${esc(String(e.choice).toUpperCase())}</div>
+        ${e.picks.map(p=>{ const o=_gwSplitOpt(p); return `<div style="font-size:12px;color:var(--purple)">${esc(o.t)}${o.d?` <span style="color:var(--muted)">— ${esc(o.d)}</span>`:''}</div>`; }).join('')}</div>`).join('');
+    h += extras.map(([k,v])=>`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:9px 12px;margin-bottom:6px">
+        <div style="font-family:'Cinzel',serif;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:3px">${esc(k.toUpperCase())}</div><div style="font-size:12px;color:var(--purple)">${esc(v)}</div></div>`).join('');
+  }
+  const asi = char.asiHistory||[];
+  if(asi.length){
+    h += _lvLabel('ABILITY SCORE HISTORY');
+    h += asi.slice().sort((a,b)=>a.level-b.level).map(a=>`<div style="font-size:12px;color:var(--muted);padding:5px 0;border-bottom:1px solid var(--border)"><span style="color:var(--gold);font-family:'Cinzel',serif;font-size:10px;margin-right:8px">LV ${a.level}</span>${esc(a.desc)}</div>`).join('');
+  }
+  const feats = char.feats||[];
+  h += _lvLabel('FEATS');
+  if(feats.length){
+    h += feats.map(f=>{ const db = FEATS_DB.find(x=>x.name===f)||{};
+      return `<div style="background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:10px 12px;margin-bottom:6px">
+        <div style="font-family:'Cinzel',serif;font-size:12px;color:var(--purple)">⚡ ${esc(f)}</div>${db.desc?`<div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:3px">${esc(db.desc)}</div>`:''}</div>`; }).join('');
+  } else h += `<div style="font-size:12px;color:var(--muted);font-style:italic">No feats yet.</div>`;
+  h += `<div style="font-size:11px;color:var(--muted);margin:6px 0 12px">Add or remove feats on the <a style="color:var(--gold);cursor:pointer;text-decoration:underline" onclick="charTab('stats')">Stats & Profs</a> tab.</div>`;
+  return h;
 }
 
 // Card at the top of the Level tab that launches the step-by-step level-up.
@@ -15687,6 +15822,7 @@ function csRemoveFeat(id, idx){
   if(char) renderCharProfsTab(char, CLASSES[char.classIdx]);
 }
 function csAdjustLevel(id, delta){
+  if(delta<0){ undoLastLevel(id); return; }
   _csSaveChar(id, c=>{
     const newLevel = Math.max(1, Math.min(20, (c.level||1)+delta));
     c.level = newLevel;
@@ -17251,6 +17387,7 @@ const RACE_DB = [
     {v:'Elf (Eladrin)',n:'Eladrin',src:'MToF',asi:{CHA:1},d:'Fey Step: teleport 30 ft as a bonus action, with a seasonal extra effect.'},
     {v:'Elf (Sea)',n:'Sea Elf',src:'MToF',asi:{CON:1},d:'Swim speed 30 ft, breathe air and water, speak with sea creatures.'},
     {v:'Elf (Shadar-kai)',n:'Shadar-kai',src:'MToF',asi:{CON:1},d:'Necrotic resistance and Blessing of the Raven Queen: teleport 30 ft and gain resistance to all damage until your next turn.'},
+    {v:'Bladesinging Elf',n:'Bladesinging Elf',src:'Other',asi:{INT:1},d:'An elf raised in the bladesong tradition — graceful with sword and spell. Check with your GM before choosing.'},
     {v:'Pallid Elf',n:'Pallid Elf',src:'EGtW',asi:{WIS:1},d:'Advantage on Investigation and Insight checks; innate Light, Sleep and Invisibility (self).'}]},
   {n:'Dwarf',src:'PHB',icon:'⛏',size:'Medium',speed:25,asi:{CON:2},desc:'Bold, hardy folk of mountain halls, known as skilled warriors, miners and craftsmen. Speed isn\'t reduced by heavy armour.',
    traits:['Darkvision 60 ft','Dwarven Resilience: advantage vs poison, resistance to poison damage','Dwarven Combat Training (axes & hammers)','Stonecunning'],
@@ -17524,6 +17661,19 @@ const BG_DB = [
    d:'You sue adventurers who wronged you — and now you are one.',f:'Legalese — you can navigate legal systems and threaten litigation.'},
   {n:'Rival Intern',src:'AI',sk:['History','Investigation'],tools:'One artisan\'s tool',lang:'One language',gp:10,gear:['Ledger','Common Clothes'],
    d:'You worked for a rival franchise and know its secrets.',f:'Inside Informant — you have a contact inside a rival organisation.'},
+  // Extra options kept from the original forge list — the GM decides whether they're allowed.
+  {n:'Oracle',src:'Other',sk:['Insight','Religion'],lang:'Two languages',gp:10,gear:['Set of Omen Tokens','Incense×5','Common Clothes'],
+   d:'You were touched by prophecy — visions, dreams or signs that others seek out and fear.',f:'Portents — people seek your counsel, and temples of fate offer you shelter.'},
+  {n:'Locked Away',src:'Other',sk:['Stealth','Insight'],tools:"Thieves' tools",lang:'One language',gp:5,gear:['Scrap of Your Cell','Common Clothes'],
+   d:'You spent years imprisoned — in a cell, a tower or a magical prison — and the world moved on without you.',f:'Out of Time — you notice escape routes and hidden spaces others miss.'},
+  {n:'Ruined',src:'Other',sk:['Survival','Deception'],tools:'One gaming set',gp:5,gear:['Memento of Better Days','Traveler\'s Clothes'],
+   d:'Your fortune, family or reputation was destroyed, and you have been scraping by ever since.',f:'Nothing Left to Lose — commoners in hard times recognise one of their own and help you.'},
+  {n:'Revelry Pirate',src:'Other',sk:['Athletics','Performance'],tools:"Navigator's tools, water vehicles",gp:10,gear:['Belaying Pin (club)','Flask of Rum','Common Clothes'],
+   d:'You sailed with a crew of carousing buccaneers who plundered with a song on their lips.',f:'Crew Contacts — former shipmates in port towns will hide or help you.'},
+  {n:'Mirkur Deepstone Diver',src:'Other',sk:['Athletics','Survival'],tools:"Mason's tools",lang:'Dwarvish or Undercommon',gp:10,gear:['Climbing Pick','Lantern','Common Clothes'],
+   d:'You worked the deep shafts and flooded tunnels, diving for ore and relics in the dark.',f:'Deep Knowledge — you can find safe paths and air pockets underground.'},
+  {n:'Soldier (Wildemount)',src:'Other',sk:['Athletics','Intimidation'],tools:'Gaming set, land vehicles',gp:10,gear:['Insignia of Rank','Trophy from a Fallen Enemy','Common Clothes'],
+   d:'You served in one of Wildemount\'s armies — Dwendalian or Kryn — during the war.',f:'Military Rank — soldiers loyal to your former army recognise your authority.'},
   {n:'Custom Background',src:'TCE',sk:[],anySk:2,gp:10,custom:true,gear:[],
    d:'Build your own: choose any two skills plus a feature from another background. Name it below.',f:'Choose a feature from any background with your DM.'},
 ];
@@ -18626,7 +18776,7 @@ function gwFinishCreate(s){
     statuses:[], shareCode:genCode(), created:Date.now(), xp:xpForLevel(s.level),
     age:s.app.age, height:s.app.height, weight:s.app.weight, eyes:s.app.eyes, hair:s.app.hair,
     traits:s.story.traits, ideals:s.story.ideals, bonds:s.story.bonds, flaws:s.story.flaws, backstory:s.story.backstory, allies:s.story.allies,
-    attacks:[], spells:[], equipment:[], subclassChoices:{}, featureChoiceLog:[], asiHistory:[],
+    attacks:[], spells:[], equipment:[], subclassChoices:{}, featureChoiceLog:[], asiHistory:[], levelLog:[],
   };
   // Subclass choice slots so the Level tab can show/edit them
   bcs.forEach(b=>{ if(b.sub) Object.values(getSubFeatures(b.sub)).flat().filter(ft=>ft&&ft.choice).forEach(ft=>{ if(!(ft.n in char.subclassChoices)) char.subclassChoices[ft.n]=''; }); });
@@ -18641,6 +18791,21 @@ function gwFinishCreate(s){
     if(k==='race' || slot.mode==='feat'){ if(slot.feat){ char.feats.push(slot.feat); if(k!=='race') char.asiHistory.push({level:lvl, desc:'Feat: '+slot.feat}); } }
     else char.asiHistory.push({level:lvl, desc:_gwAsiSlotText(slot,true)});
   });
+  // Per-level record so "Undo last level" can reverse exactly what each level gave
+  {
+    const con = parseInt(_gwMod(sc.CON))||0, hill = s.race==='Dwarf (Hill)' ? 1 : 0;
+    const applied = _gwChoicesFor(s).filter(({key})=>(s.choices[key]||[]).length);
+    let total = 0;
+    bcs.forEach(b=>{
+      const c = CLASSES[b.classIdx], subLv = getSubclassLevelFor(c.name);
+      for(let l=1;l<=b.level;l++){
+        total++;
+        char.levelLog.push({level:total, classIdx:b.classIdx, classLevel:l, newClass:l===1&&!b.first, sub:subLv===l?(b.sub||''):'',
+          hp:Math.max(1,(total===1?c.hit:Math.floor(c.hit/2)+1)+con)+hill, spells:[],
+          choices:applied.filter(x=>x.bc.key===b.key && x.ch.level===l).map(({key,ch})=>({level:ch.level, choice:ch.label, picks:[...new Set(s.choices[key])], cls:c.name, type:ch.type, subName:ch.subName||''}))});
+      }
+    });
+  }
   // Spells
   bcs.forEach(b=>{
     const p = _gwSpellPlan(b, sc); if(!p) return;
@@ -18931,10 +19096,14 @@ function gwFinishLevelUp(s){
     char.subclassChoices = char.subclassChoices||{};
     Object.values(getSubFeatures(s.sub)).flat().filter(ft=>ft&&ft.choice).forEach(ft=>{ if(!(ft.n in char.subclassChoices)) char.subclassChoices[ft.n]=''; });
   }
+  const entry = {level:newLevel, classIdx:t.classIdx, classLevel:t.to, newClass:t.isNew, sub:s.sub||'', hp:gain, choices:[], spells:[]};
   // Feature choices (this level, plus any earlier ones filled in)
   chs.forEach(({key,ch})=>{
     const uniq = [...new Set((s.choices[key]||[]).filter(Boolean))];
-    if(uniq.length>=ch.count) _gwApplyChoice(char, ch, uniq, cls.name);
+    if(uniq.length>=ch.count){
+      _gwApplyChoice(char, ch, uniq, cls.name);
+      entry.choices.push({level:ch.level, choice:ch.label, picks:uniq, cls:cls.name, type:ch.type, subName:ch.subName||''});
+    }
   });
   // ASI / feat
   if(ld.asi){
@@ -18956,7 +19125,10 @@ function gwFinishLevelUp(s){
     if(s.spells.c) _gwSpellObjs(s.spells.c, t.classIdx, true).forEach(x=>{ if(!have.has(x.name)) char.spells.push(x); });
     if(s.spells.s) _gwSpellObjs(s.spells.s, t.classIdx, plan.mode!=='book').forEach(x=>{ if(!have.has(x.name)) char.spells.push(x); });
     char.spells.sort((a,b)=>(a.level==='cantrip'?0:+a.level)-(b.level==='cantrip'?0:+b.level)||a.name.localeCompare(b.name));
+    entry.spells = [...(s.spells.c||[]), ...(s.spells.s||[])].filter(n=>!have.has(n));
   }
+  char.levelLog = (char.levelLog||[]).filter(e=>e.level!==newLevel);
+  char.levelLog.push(entry);
   // Hit points & XP floor
   char.maxHP = (char.maxHP||0)+gain;
   char.currentHP = Math.min((char.currentHP||0)+gain, char.maxHP);
