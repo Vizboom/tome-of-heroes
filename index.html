@@ -1494,7 +1494,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
         <button class="tab-btn active" onclick="charTab('equip')">⚔ Equip</button>
         <button class="tab-btn" onclick="charTab('spells')">✨ Spells</button>
         <button class="tab-btn" onclick="charTab('progress')">⬆ Level</button>
-        <button class="tab-btn" onclick="charTab('stats')">📊 Stats & Profs</button>
         <button class="tab-btn" onclick="charTab('sheet')">📋 Sheet</button>
       </div>
       <!-- Equip tab (existing paperdoll + inventory) -->
@@ -1520,25 +1519,25 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
           <div class="char-right-pane" id="charStatsPane"></div>
         </div>
       </div>
-      <!-- Stats & Profs tab (combined) -->
-      <div class="tab-pane" id="cstab-stats" style="padding:16px">
-        <div id="cstab-stats-inner"></div>
-        <div class="divider" style="margin:20px 0 14px"><span>Proficiencies &amp; Feats</span></div>
-        <div id="cstab-profs"></div>
-      </div>
       <!-- Progress / Level Up tab -->
       <div class="tab-pane" id="cstab-progress" style="padding:16px"></div>
       <!-- Spells tab -->
       <div class="tab-pane" id="cstab-spells" style="padding:16px"></div>
-      <!-- Character Sheet tab (combat / skills / lore — same view as Party ▸ Overview) -->
+      <!-- Character Sheet tab: Combat (in play) · Stats & Skills (edit) · Lore.
+           Stats & Skills is the old Stats & Profs tab; the read-only copies of the
+           same numbers were dropped from Combat so each lives in one place. -->
       <div class="tab-pane" id="cstab-sheet" style="padding:16px">
         <div class="tab-row" id="csSheetTabs">
           <button class="tab-btn active" onclick="charSheetTab('combat')">Combat</button>
-          <button class="tab-btn" onclick="charSheetTab('skills')">Skills</button>
+          <button class="tab-btn" onclick="charSheetTab('stats')">Stats &amp; Skills</button>
           <button class="tab-btn" onclick="charSheetTab('lore')">Lore</button>
         </div>
         <div class="cs-sheet-pane active" id="cshtab-combat"></div>
-        <div class="cs-sheet-pane" id="cshtab-skills"></div>
+        <div class="cs-sheet-pane" id="cshtab-stats">
+          <div id="cstab-stats-inner"></div>
+          <div class="divider" style="margin:20px 0 14px"><span>Skills, Feats &amp; Proficiencies</span></div>
+          <div id="cstab-profs"></div>
+        </div>
         <div class="cs-sheet-pane" id="cshtab-lore"></div>
       </div>
     </div>
@@ -3297,6 +3296,12 @@ function getCharCampaign(charId){
 
 /* ══ HELPERS ══ */
 const getMod=s=>{const m=Math.floor((s-10)/2);return(m>=0?'+':'')+m;};
+// Saving throws the character is proficient in: the ones set on the sheet,
+// or the class defaults for characters that never edited them.
+function getSaveProfs(char){
+  if(Array.isArray(char?.savingThrowProfs)) return char.savingThrowProfs;
+  return CLASSES[char?.classIdx]?.saves||[];
+}
 const getPB=l=>Math.ceil(l/4)+1;
 // Spell slots are based on the primary spellcasting class' own level (safest for multiclass —
 // avoids over-counting slots from total character level). Falls back to total level for single-class.
@@ -3943,6 +3948,8 @@ function sheetTab(t){
 
 /* ══ COMBAT TAB ══ */
 function renderCombatTab(char,cls,elId,editable){
+  // On Character ▸ Sheet, ability scores, saves and feats live in Stats & Skills
+  const compact = elId==='cshtab-combat';
   const pb=getPB(char.level);
   const dex=parseInt(getMod(char.abilities.DEX))||0;
   const str=parseInt(getMod(char.abilities.STR))||0;
@@ -3958,7 +3965,7 @@ function renderCombatTab(char,cls,elId,editable){
       <div class="cs-box"><div class="cs-val">${displayAC}</div><div class="cs-label">AC${hasAcBoost?(' <span style=\'font-size:9px;color:var(--gold)\'>✦</span>'):''}</div></div>
       <div class="cs-box"><div class="cs-val">${getMod(char.abilities.DEX)}</div><div class="cs-label">Initiative</div></div>
       <div class="cs-box"><div class="cs-val">+${pb}</div><div class="cs-label">Prof Bonus</div></div>
-      <div class="cs-box"><div class="cs-val">30</div><div class="cs-label">Speed</div></div>
+      <div class="cs-box"><div class="cs-val">${char.speed||30}</div><div class="cs-label">Speed</div></div>
     </div>
     <div class="hp-block" style="--cc:${cls.color}">
       <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">HIT POINTS</div>
@@ -3968,7 +3975,9 @@ function renderCombatTab(char,cls,elId,editable){
         <span style="color:${hpC};font-family:'Cinzel',serif;font-size:12px">${pct}%</span>
       </div>
     </div>
-    <div class="divider"><span>Ability Scores</span></div>
+`;
+  if(!compact){
+  html+=`<div class="divider"><span>Ability Scores</span></div>
     <div class="ab-display-grid">`;
   ABILITIES.forEach(ab=>{
     const isPri=cls.primary.includes(ab);
@@ -3981,14 +3990,16 @@ function renderCombatTab(char,cls,elId,editable){
   html+=`</div><div class="divider"><span>Saving Throws</span></div><div class="saves-grid">`;
   ABILITIES.forEach(ab=>{
     const base=parseInt(getMod(char.abilities[ab]))||0;
-    const isPro=cls.saves.includes(ab);
+    const isPro=getSaveProfs(char).includes(ab);
     const bonus=isPro?base+pb:base;
     html+=`<div class="save-box ${isPro?'proficient':''}" style="--cc:${cls.color};--cc-dim:${cls.color}22">
       <div class="save-val">${bonus>=0?'+':''}${bonus}</div>
       <div class="save-label">${ab}</div>
     </div>`;
   });
-  html+=`</div><div class="divider"><span>Attacks</span></div><div id="attackList_${char.id}">`;
+  html+=`</div>`;
+  }
+  html+=`<div class="divider"><span>Attacks</span></div><div id="attackList_${char.id}">`;
   const attacks=char.attacks||[];
   const lootWeapons = getCharLootWeapons(char);
   const allAttacks = [...attacks, ...lootWeapons];
@@ -4028,7 +4039,7 @@ function renderCombatTab(char,cls,elId,editable){
     html+=`<div class="feature-card" style="--cc:${s.color};border-color:${s.color}33"><div class="feature-name" style="color:${s.color}">${s.level?('L'+s.level+' · '):''}${esc(s.title)}</div>${s.desc?`<div class="feature-desc">${esc(s.desc)}</div>`:''}</div>`;
   });
   // Show feats as feature cards
-  (char.feats||[]).forEach(featName=>{
+  if(!compact) (char.feats||[]).forEach(featName=>{
     const featData = FEATS_DB.find(f=>f.name===featName);
     html+=`<div class="feature-card" style="--cc:var(--gold);border-color:var(--gold)22">
       <div class="feature-name" style="color:var(--gold)">⚡ ${featName}</div>
@@ -9858,7 +9869,7 @@ function renderDiceCharPanel(){
   ];
 
   const profs = char.proficiencies||[];
-  const saves = cls.saves||[];
+  const saves = getSaveProfs(char);
 
   // Active DM effects on this char
   const effects = char.effects||{};
@@ -15323,9 +15334,10 @@ function getCurrentCharItems(){
 
 /* ── Render entry point ── */
 function charTab(t){
-  if(t==='profs') t='stats';   // legacy: profs now lives inside the combined Stats & Profs tab
+  // legacy: Stats & Profs now lives inside Sheet ▸ Stats & Skills
+  if(t==='profs' || t==='stats'){ t='sheet'; _charSheetTab='stats'; }
   _charTab = t;
-  const order = ['equip','spells','progress','stats','sheet'];
+  const order = ['equip','spells','progress','sheet'];
   document.querySelectorAll('#scr-character .tab-bar .tab-btn').forEach((b,i)=>b.classList.toggle('active',order[i]===t));
   document.querySelectorAll('#scr-character .tab-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('cstab-'+t)?.classList.add('active');
@@ -15334,7 +15346,6 @@ function charTab(t){
   if(!char) return;
   const cls = CLASSES[char.classIdx];
   if(t==='equip'){   renderPaperdoll(char,cls); renderInvBag(char,cls); renderCharStats(char,cls); initDragAndDrop(); }
-  if(t==='stats'){   renderCharStatsTab(char, cls); renderCharProfsTab(char, cls); }
   if(t==='progress') renderCharProgressTab(char, cls);
   if(t==='spells')   renderSpellsTab(char, cls, 'cstab-spells', true);
   if(t==='sheet')    charSheetTab(_charSheetTab);
@@ -15345,8 +15356,9 @@ let _charTab = 'equip';
 /* ══ CHAR SCREEN — CHARACTER SHEET TAB (combat / skills / lore) ══ */
 let _charSheetTab = 'combat';
 function charSheetTab(t){
+  if(t==='skills') t='stats';   // legacy name
   _charSheetTab = t;
-  const order = ['combat','skills','lore'];
+  const order = ['combat','stats','lore'];
   document.querySelectorAll('#csSheetTabs .tab-btn').forEach((b,i)=>b.classList.toggle('active',order[i]===t));
   document.querySelectorAll('#cstab-sheet .cs-sheet-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('cshtab-'+t)?.classList.add('active');
@@ -15359,7 +15371,7 @@ function charSheetTab(t){
     const stale = document.getElementById('stab-combat'); if(stale) stale.innerHTML='';
     renderCombatTab(char, cls, 'cshtab-combat', true);
   }
-  if(t==='skills') renderSkillsTab(char, cls, 'cshtab-skills');
+  if(t==='stats'){ renderCharStatsTab(char, cls); renderCharProfsTab(char, cls); }
   if(t==='lore')   renderLoreTab(char, cls, 'cshtab-lore', true);
 }
 
@@ -15424,13 +15436,15 @@ function renderCharStatsTab(char, cls){
   h += `</div>`;
 
   // Saving throw proficiencies
-  h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">SAVING THROW PROFICIENCIES</div>`;
+  h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">SAVING THROWS <span style="opacity:.7">· tick if proficient</span></div>`;
   h += `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px">`;
   ABILITY_LIST.forEach(ab=>{
-    const isProf = (char.savingThrowProfs||cls.saves||[]).includes(ab);
+    const isProf = getSaveProfs(char).includes(ab);
+    const sv = Math.floor(((char.abilities?.[ab]||10)-10)/2) + (isProf?pb:0);
     h += `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;background:var(--surface2);border:1px solid ${isProf?cc:'var(--border)'};border-radius:8px;padding:5px 10px">
       <input type="checkbox" ${isProf?'checked':''} onchange="csToggleSaveProf('${char.id}','${ab}',this.checked)" style="accent-color:${cc}">
       <span style="font-size:12px;color:${isProf?cc:'var(--muted)'}">${ab}</span>
+      <span style="font-family:'Cinzel',serif;font-size:11px;color:${isProf?cc:'var(--muted)'}">${sv>=0?'+':''}${sv}</span>
     </label>`;
   });
   h += `</div>`;
@@ -15649,7 +15663,7 @@ function _lvCurrentFeaturesHTML(char){
       const got = (char.asiHistory||[]).find(e=>e.level===char.level);
       h += `<div style="background:${c.color}11;border:1px solid ${c.color};border-radius:10px;padding:12px;margin-bottom:8px;font-size:12px;color:var(--text)">
         ⭐ Ability Score Improvement at ${esc(c.name)} ${r.level}: +2 to one ability, +1 to two, or a feat.
-        <br><small style="color:var(--muted)">${got?'Taken: '+esc(got.desc):'Choose it in the Level Up wizard, or edit scores on the Stats tab.'}</small></div>`;
+        <br><small style="color:var(--muted)">${got?'Taken: '+esc(got.desc):'Choose it in the Level Up wizard, or edit scores on Sheet ▸ Stats &amp; Skills.'}</small></div>`;
     }
     if(!items.length && !ld.asi) h += `<div style="font-size:12px;color:var(--muted);font-style:italic;margin-bottom:8px">No new features at this level — existing ones improve.</div>`;
     items.forEach(f=>{
@@ -15691,7 +15705,7 @@ function _lvHistoryHTML(char){
       return `<div style="background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:10px 12px;margin-bottom:6px">
         <div style="font-family:'Cinzel',serif;font-size:12px;color:var(--purple)">⚡ ${esc(f)}</div>${db.desc?`<div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:3px">${esc(db.desc)}</div>`:''}</div>`; }).join('');
   } else h += `<div style="font-size:12px;color:var(--muted);font-style:italic">No feats yet.</div>`;
-  h += `<div style="font-size:11px;color:var(--muted);margin:6px 0 12px">Add or remove feats on the <a style="color:var(--gold);cursor:pointer;text-decoration:underline" onclick="charTab('stats')">Stats & Profs</a> tab.</div>`;
+  h += `<div style="font-size:11px;color:var(--muted);margin:6px 0 12px">Add or remove feats on the <a style="color:var(--gold);cursor:pointer;text-decoration:underline" onclick="charTab('stats')">Sheet ▸ Stats &amp; Skills</a>.</div>`;
   return h;
 }
 
@@ -15752,6 +15766,11 @@ function renderCharProfsTab(char, cls){
     </label>`;
   });
   h += `</div>`;
+  const _hasProf = n => profs.some(p=>p.toLowerCase()===n.toLowerCase());
+  h += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:-8px 0 18px">
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;display:flex;align-items:center"><span style="font-size:11px;flex:1;color:var(--muted)">Passive Perception</span><b style="font-family:'Cinzel',serif">${10+ABILITY_MODS.WIS+(_hasProf('Perception')?pb:0)}</b></div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;display:flex;align-items:center"><span style="font-size:11px;flex:1;color:var(--muted)">Passive Insight</span><b style="font-family:'Cinzel',serif">${10+ABILITY_MODS.WIS+(_hasProf('Insight')?pb:0)}</b></div>
+  </div>`;
 
   // Feats
   h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">FEATS</div>`;
@@ -15812,6 +15831,9 @@ function renderCharProfsTab(char, cls){
   h += `<textarea onchange="csUpdateField('${char.id}','otherProfs',this.value)"
     placeholder="Languages, tools, weapons, armour…"
     style="width:100%;min-height:80px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:12px;resize:vertical;box-sizing:border-box">${char.otherProfs||''}</textarea>`;
+  [['Tool Proficiencies',char.toolProficiencies],['Weapon Proficiencies',char.weaponProficiencies],['Languages',char.languageProficiencies]].forEach(([label,list])=>{
+    if(Array.isArray(list) && list.length) h += `<div class="prof-block" style="margin-top:10px"><h4>${label}</h4><div class="prof-tags">${list.map(p=>`<span class="prof-tag">${esc(String(p))}</span>`).join('')}</div></div>`;
+  });
 
   el.innerHTML = h;
 }
@@ -15828,7 +15850,7 @@ function csUpdateAbility(id, ab, val){
   _csSaveChar(id, c=>{ if(!c.abilities) c.abilities={}; c.abilities[ab]=Math.max(1,Math.min(30,val)); });
   const chars = getVisibleChars();
   const char = chars.find(c=>String(c.id)===String(id));
-  if(char) renderCharStatsTab(char, CLASSES[char.classIdx]);
+  if(char){ renderCharStatsTab(char, CLASSES[char.classIdx]); renderCharProfsTab(char, CLASSES[char.classIdx]); }
 }
 function csUpdateField(id, field, val){
   _csSaveChar(id, c=>{ c[field]=val; });
@@ -15847,6 +15869,8 @@ function csToggleSaveProf(id, ab, on){
     if(on && !c.savingThrowProfs.includes(ab)) c.savingThrowProfs.push(ab);
     else if(!on) c.savingThrowProfs = c.savingThrowProfs.filter(x=>x!==ab);
   });
+  const char = getVisibleChars().find(c=>String(c.id)===String(id));
+  if(char) renderCharStatsTab(char, CLASSES[char.classIdx]);
 }
 function csToggleSkillProf(id, skill, on){
   _csSaveChar(id, c=>{
