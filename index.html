@@ -9592,6 +9592,7 @@ function _bootContinue(mode, nav_bar){
   // Already logged in — restore active campaign
   if(!getActiveCampId() && _db.campaigns.length) setActiveCampId(_db.campaigns[0].id);
   if(nav_bar) nav_bar.style.display='flex';
+  const fab=document.getElementById('jotFab'); if(fab) fab.style.display='';
   _applyUserBadge();
   // Land on Campaign if no active campaign, otherwise Roster
   if(!getActiveCampId() || !_db.campaigns.filter(c=>!c._ownerGid).length){
