@@ -586,8 +586,10 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .jot-fab{position:absolute;right:16px;bottom:calc(var(--nav-h) + 14px);width:50px;height:50px;border-radius:50%;background:var(--purple);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,0.45);z-index:60;border:1px solid rgba(255,255,255,0.15);transition:var(--trans);}
 .jot-fab:active{transform:scale(0.92);}
 .jot-textarea{width:100%;min-height:110px;background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:12px;color:var(--text);font-size:14px;line-height:1.5;resize:vertical;box-sizing:border-box;}
-.jot-chip{display:inline-block;font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:2px 8px;border-radius:8px;border:1px solid var(--border2);color:var(--muted);margin:0 4px 6px 0;cursor:pointer;}
-.jot-chip:active{background:var(--surface2);}
+.jot-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+.jot-chip{display:inline-flex;align-items:center;gap:4px;font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:6px 11px;border-radius:14px;border:1px solid var(--border2);background:none;color:var(--muted);cursor:pointer;transition:var(--trans);}
+.jot-chip:active{transform:scale(0.95);}
+.jot-chip.on{border-color:var(--kc,var(--purple));color:var(--kc,var(--purple));background:var(--surface2);box-shadow:inset 0 0 0 1px var(--kc,var(--purple));}
 
 /* Character hero card */
 .char-hero-card{background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--cc,var(--purple));border-radius:12px;padding:10px 12px;margin:0 14px 10px;}
@@ -12041,12 +12043,32 @@ const JOT_EXAMPLES = [
   'The mayor is lying about the goblin raids — the tracks lead toward the old keep, not the forest.',
   'Sister Garaele asked us to find the banshee Agatha and ask about a lost spellbook.',
 ];
+/* Pills that tell the sorter what a note is. None picked = Claude decides. */
+const JOT_KINDS = [
+  { k:'npcs',   label:'NPC',   icon:'👥', color:'var(--teal)' },
+  { k:'places', label:'Place', icon:'🗺', color:'var(--teal)' },
+  { k:'quests', label:'Quest', icon:'⚔', color:'var(--purple)' },
+  { k:'loot',   label:'Loot',  icon:'💰', color:'var(--gold)' },
+  { k:'arcs',   label:'Arc',   icon:'🧵', color:'var(--gold)' },
+  { k:'books',  label:'Book',  icon:'📚', color:'var(--gold)' },
+  { k:'notes',  label:'Note',  icon:'📝', color:'var(--blue)' },
+];
+function toggleJotKind(k, el){
+  const kinds = window._jotKinds || (window._jotKinds = new Set());
+  if(kinds.has(k)) kinds.delete(k); else kinds.add(k);
+  if(el) el.classList.toggle('on', kinds.has(k));
+  const hint=document.getElementById('jotKindHint');
+  if(hint) hint.textContent = kinds.size ? 'Filed only as: '+JOT_KINDS.filter(x=>kinds.has(x.k)).map(x=>x.label).join(', ') : 'No tag picked — Claude decides what it is.';
+}
 function openQuickJot(prefill){
   const camp = getActiveCamp();
   if(!camp){ toast('Pick an active campaign first','var(--red)'); nav('campaign'); return; }
   window._pendingJot = null;
+  window._jotKinds = new Set();
   _openPinModal('✎ QUICK NOTE · '+esc(String(camp.name||'').slice(0,26)),
-    '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:8px">Note one thing down while it\'s fresh — an NPC you met, a job you were offered, a thread you\'re pulling on. Claude sorts it into <span style="color:var(--purple)">Quests</span>, <span style="color:var(--teal)">NPCs</span> and <span style="color:var(--gold)">Arcs</span>; you approve before anything is saved.</div>'
+    '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:8px">Note one thing down while it\'s fresh — an NPC you met, a job you were offered, loot you picked up. Tag it below, or leave it untagged and Claude will sort it; you approve before anything is saved.</div>'
+    +'<div class="jot-chips">'+JOT_KINDS.map(x=>'<button type="button" class="jot-chip" style="--kc:'+x.color+'" onclick="toggleJotKind(\''+x.k+'\',this)">'+x.icon+' '+x.label.toUpperCase()+'</button>').join('')+'</div>'
+    +'<div id="jotKindHint" style="font-size:10px;color:var(--muted2);margin:-2px 0 8px">No tag picked — Claude decides what it is.</div>'
     +'<textarea id="jotText" class="jot-textarea" placeholder="'+esc(JOT_EXAMPLES[Math.floor(Math.random()*JOT_EXAMPLES.length)])+'"></textarea>'
     +'<div id="jotStatus" style="font-size:11px;text-align:center;min-height:16px;margin-top:6px"></div>'
     +'<div id="jotPreview"></div>'
@@ -12067,6 +12089,8 @@ function _jotSystemPrompt(camp){
     books:  (camp.books||[]).map(b=>({title:b.title,type:b.type,status:b.status})),
     partyCharacters: getVisibleChars().map(c=>c.name),
   };
+  const kinds = [...(window._jotKinds||[])];
+  const tagRule = kinds.length ? `\n\nThe player has TAGGED this note as: ${JOT_KINDS.filter(x=>kinds.includes(x.k)).map(x=>x.label).join(', ')}. File it ONLY into ${kinds.map(k=>k==='loot'?'loot/coins':k).join(', ')}; leave every other list empty.` : '';
   return `You are the scribe for a D&D 5e campaign. A player has jotted a short, freeform note — usually about ONE thing they just learned or did. Sort its contents into the campaign's records. Return ONLY valid JSON, no markdown, no backticks.
 
 Return exactly this shape (omit any field you have nothing for; arrays may be empty):
@@ -12076,7 +12100,9 @@ Return exactly this shape (omit any field you have nothing for; arrays may be em
   "arcs":   [ { "title": "string", "matchExisting": bool, "status": "active|upcoming|resolved", "description": "string", "appendNote": "string" } ],
   "places": [ { "name": "string", "matchExisting": bool, "type": "city|town|village|dungeon|wilderness|landmark|region|building|other", "region": "string or omit", "desc": "string or omit", "connectedTo": ["names of places it is adjacent to / has a route to"] or omit, "partyIsHere": bool or omit, "appendNote": "string or omit" } ],
   "books":  [ { "title": "string", "matchExisting": bool, "author": "string or omit", "type": "tome|spellbook|journal|letter|scroll|map|scripture|ledger|other", "foundAt": "string or omit", "blurb": "3-5 sentence detailed description", "contents": ["notable entries, spells, secrets"] or omit, "status": "unread|reading|read or omit", "appendNote": "string or omit" } ],
-  "notes":  [ { "title": "string", "body": "string" } ]
+  "notes":  [ { "title": "string", "body": "string" } ],
+  "loot":   [ { "name": "string", "type": "weapon|armor|potion|scroll|wondrous|ring|rod|staff|wand|gem|treasure|tool|misc", "rarity": "common|uncommon|rare|very-rare|legendary|artifact", "qty": number, "value": number in gp or omit, "desc": "string or omit" } ],
+  "coins":  { "gp": number, "sp": number, "ep": number, "cp": number }
 }
 
 How to classify:
@@ -12085,13 +12111,14 @@ How to classify:
 - ARC — a plot thread bigger than one task: a conspiracy, a villain's plan, a mystery that spans quests. Only create a NEW arc when the note clearly points at something bigger; otherwise attach what was learned to an existing arc via appendNote. Most jots produce no arc.
 - PLACE — any named location the party visits, hears about, or is heading to (towns, dungeons, inns, regions). connectedTo = places it is adjacent to or has a road/route to, if the note says so. partyIsHere = the party is currently there.
 - BOOK — any written work found or read: tome, spellbook, journal, letter, scroll, ledger, map. Write blurb as a detailed, evocative 3-5 sentence description: what it is, its condition, what it contains or hints at, who wrote it, why it matters. Descriptive flavour (binding, script, wear) is welcome; invented plot facts, names or contents are not.
-- NOTE — anything that fits nowhere: rumours, theories, lore, reminders, loot to sell.
+- LOOT — physical items the party picked up, bought or was given (weapons, armour, potions, gems, trinkets). Use common rarity for mundane gear. Loose coins go in coins (omit coins if none), not loot. A readable book or letter is a BOOK, not loot.
+- NOTE — anything that fits nowhere: rumours, theories, lore, reminders.
 - The same jot can feed several lists (an NPC who gives a quest that belongs to an arc). Cross-reference by name.
 - Prefer matching EXISTING records (fuzzy name match is fine) and set matchExisting:true; then include only what changed, using appendNote for newly-learned facts.
 - Do not invent details that are not in the note. Do not return a session.
 
 Existing campaign records:
-${JSON.stringify(existingCtx, null, 1)}`;
+${JSON.stringify(existingCtx, null, 1)}${tagRule}`;
 }
 
 async function doQuickJot(){
@@ -12110,8 +12137,13 @@ async function doQuickJot(){
     if(!m) throw new Error('Could not read the response');
     const parsed = JSON.parse(m[0]);
     parsed.session = null;
+    const kinds = window._jotKinds;
+    if(kinds?.size){
+      ['quests','npcs','arcs','places','books','notes','loot'].forEach(k=>{ if(!kinds.has(k)) delete parsed[k]; });
+      if(!kinds.has('loot')) delete parsed.coins;
+    }
     const plan = _buildMergePlan(parsed, camp);
-    const total = plan.quests.length + plan.npcs.length + plan.arcs.length + plan.places.length + plan.books.length + plan.notes.length;
+    const total = plan.quests.length + plan.npcs.length + plan.arcs.length + plan.places.length + plan.books.length + plan.notes.length + plan.loot.length + (plan.coins?1:0);
     if(!total){
       if(st) st.innerHTML='<span style="color:var(--muted)">Nothing to file — save it as a plain note instead?</span>';
       if(btn){ btn.disabled=false; btn.textContent='✦ Sort it'; }
@@ -12119,7 +12151,7 @@ async function doQuickJot(){
     }
     window._pendingJot = { plan, text };
     const upd=[...plan.quests,...plan.npcs,...plan.arcs,...plan.places,...plan.books].filter(x=>x.action==='update').length;
-    const nw =[...plan.quests,...plan.npcs,...plan.arcs,...plan.places,...plan.books,...plan.notes].filter(x=>x.action==='new').length;
+    const nw =[...plan.quests,...plan.npcs,...plan.arcs,...plan.places,...plan.books,...plan.notes,...plan.loot].filter(x=>x.action==='new').length + (plan.coins?1:0);
     if(pv) pv.innerHTML = '<div style="margin-top:10px">'+_renderMergePreview(plan, null)+'</div>'
       +'<div style="font-size:10px;color:var(--muted2);text-align:center;margin:-6px 0 8px">Not right? Edit your note above and sort again.</div>';
     if(st) st.innerHTML='';
@@ -12133,9 +12165,13 @@ async function doQuickJot(){
   }
 }
 
-function applyQuickJot(){
+async function applyQuickJot(){
   const p=window._pendingJot; if(!p?.plan) return;
   const camp = getActiveCamp(); if(!camp) return;
+  // Loot is stored whole — load it first so new items aren't saved over it
+  if((p.plan.loot.length || p.plan.coins) && !_db.items[camp.id]){
+    try{ await dbGetItems(camp.id); }catch(e){ toast('Couldn\'t load loot — try again','var(--red)'); return; }
+  }
   const stats = _applyMergePlan(p.plan, camp);
   saveCampaign(camp);
   window._pendingJot=null;
@@ -12166,6 +12202,7 @@ function _refreshCampaignViews(campId){
       else renderCampList();
     }
     if(currentScreen==='roster') renderCampaignSwitchBanner();
+    if(currentScreen==='loot'){ renderInventory(); renderPool(); }
   }catch(e){ console.warn('refresh after note:', e); }
 }
 
@@ -12194,7 +12231,7 @@ function _findExisting(name, arr, key='name') {
 
 /* ── Smart diff preview builder ── */
 function _buildMergePlan(parsed, camp) {
-  const plan = { session: null, quests:[], npcs:[], arcs:[], places:[], books:[], notes:[] };
+  const plan = { session: null, quests:[], npcs:[], arcs:[], places:[], books:[], notes:[], loot:[], coins:null };
 
   // Session — always new
   if(parsed.session) plan.session = { action:'new', data: parsed.session };
@@ -12295,6 +12332,12 @@ function _buildMergePlan(parsed, camp) {
 
   // Notes — always new
   (parsed.notes||[]).forEach(n => plan.notes.push({ action:'new', incoming: n }));
+
+  // Loot — always new, lands in the party pool
+  (parsed.loot||[]).forEach(i => { if(i?.name) plan.loot.push({ action:'new', incoming: i }); });
+  const c = parsed.coins||{}, coins = {};
+  ['gp','sp','ep','cp'].forEach(k=>{ const v=Math.floor(+c[k]||0); if(v>0) coins[k]=v; });
+  if(Object.keys(coins).length) plan.coins = coins;
 
   return plan;
 }
@@ -12468,6 +12511,12 @@ function _renderMergePreview(plan, sessionNum) {
   html += section(plan.books||[], '📚 BOOKS', 'var(--gold)', 'title', b =>
     `${(b.type||b.author||b.foundAt)?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${[b.type,b.author?'by '+b.author:'',b.foundAt?'found: '+b.foundAt:''].filter(Boolean).map(esc).join(' · ')}</div>`:''}
      ${b.blurb?`<div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">${esc(b.blurb)}</div>`:''}`);
+
+  html += section(plan.loot||[], '💰 LOOT → PARTY POOL', 'var(--gold)', 'name', i =>
+    `<div style="font-size:10px;color:var(--muted);margin-top:2px">${[TYPE_ICONS[i.type]?i.type:'misc',String(i.rarity||'common').replace('-',' '),(+i.qty>1?'×'+(+i.qty):''),(+i.value>0?(+i.value)+' gp':'')].filter(Boolean).map(esc).join(' · ')}</div>
+     ${i.desc?`<div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">${esc(i.desc)}</div>`:''}`);
+  if(plan.coins) html += `<div style="background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:10px 12px;font-size:11px;color:var(--text)">
+      <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);letter-spacing:1px">🪙 COINS</span>&nbsp; +${Object.entries(plan.coins).map(([k,v])=>v+' '+k).join(', ')} to party purse</div>`;
 
   // ── NOTES ──
   if(plan.notes.length) {
@@ -12750,6 +12799,26 @@ function _applyMergePlan(plan, camp){
     camp.notes.unshift({ id:genItemId(), title:n.title||'Note', body:n.body||'', updated:Date.now() });
     stats.newCount++;
   });
+
+  // ── Loot & coins (party pool of this campaign) ──
+  if((plan.loot||[]).length || plan.coins){
+    const items = (_db.items[camp.id]||[]).slice();
+    const wealth = _db.wealth[camp.id]||{};
+    const rarities = ['common','uncommon','rare','very-rare','legendary','artifact'];
+    plan.loot.forEach(({incoming:i}) => {
+      items.push({ id:'i'+Date.now()+Math.random().toString(36).slice(2,6), name:String(i.name).slice(0,80),
+        type:TYPE_ICONS[i.type]?i.type:'misc', rarity:rarities.includes(i.rarity)?i.rarity:'common',
+        qty:Math.max(1,parseInt(i.qty)||1), weight:0, value:Math.max(0,+i.value||0), attune:'none', desc:i.desc||'', owner:'pool' });
+      stats.newCount++;
+    });
+    if(plan.coins){
+      if(!wealth.party) wealth.party={gp:0,sp:0,ep:0,cp:0};
+      Object.entries(plan.coins).forEach(([k,v])=>{ wealth.party[k]=(wealth.party[k]||0)+v; });
+      stats.newCount++;
+    }
+    _db.items[camp.id]=items; _db.wealth[camp.id]=wealth;
+    schedulePush('loot', camp.id, {items, wealth});
+  }
   return stats;
 }
 
