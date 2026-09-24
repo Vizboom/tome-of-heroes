@@ -586,8 +586,10 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .jot-fab{position:absolute;right:16px;bottom:calc(var(--nav-h) + 14px);width:50px;height:50px;border-radius:50%;background:var(--purple);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,0.45);z-index:60;border:1px solid rgba(255,255,255,0.15);transition:var(--trans);}
 .jot-fab:active{transform:scale(0.92);}
 .jot-textarea{width:100%;min-height:110px;background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:12px;color:var(--text);font-size:14px;line-height:1.5;resize:vertical;box-sizing:border-box;}
-.jot-chip{display:inline-block;font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;padding:2px 8px;border-radius:8px;border:1px solid var(--border2);color:var(--muted);margin:0 4px 6px 0;cursor:pointer;}
-.jot-chip:active{background:var(--surface2);}
+.jot-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
+.jot-chip{display:inline-flex;align-items:center;gap:4px;font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;padding:6px 11px;border-radius:14px;border:1px solid var(--border2);background:none;color:var(--muted);cursor:pointer;transition:var(--trans);}
+.jot-chip:active{transform:scale(0.95);}
+.jot-chip.on{border-color:var(--kc,var(--purple));color:var(--kc,var(--purple));background:var(--surface2);box-shadow:inset 0 0 0 1px var(--kc,var(--purple));}
 
 /* Character hero card */
 .char-hero-card{background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--cc,var(--purple));border-radius:12px;padding:10px 12px;margin:0 14px 10px;}
@@ -1511,7 +1513,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
         <button class="tab-btn active" onclick="charTab('equip')">⚔ Equip</button>
         <button class="tab-btn" onclick="charTab('spells')">✨ Spells</button>
         <button class="tab-btn" onclick="charTab('progress')">⬆ Level</button>
-        <button class="tab-btn" onclick="charTab('stats')">📊 Stats & Profs</button>
         <button class="tab-btn" onclick="charTab('sheet')">📋 Sheet</button>
       </div>
       <!-- Equip tab (existing paperdoll + inventory) -->
@@ -1538,25 +1539,25 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
           <div class="char-right-pane" id="charStatsPane"></div>
         </div>
       </div>
-      <!-- Stats & Profs tab (combined) -->
-      <div class="tab-pane" id="cstab-stats" style="padding:16px">
-        <div id="cstab-stats-inner"></div>
-        <div class="divider" style="margin:20px 0 14px"><span>Proficiencies &amp; Feats</span></div>
-        <div id="cstab-profs"></div>
-      </div>
       <!-- Progress / Level Up tab -->
       <div class="tab-pane" id="cstab-progress" style="padding:16px"></div>
       <!-- Spells tab -->
       <div class="tab-pane" id="cstab-spells" style="padding:16px"></div>
-      <!-- Character Sheet tab (combat / skills / lore — same view as Party ▸ Overview) -->
+      <!-- Character Sheet tab: Combat (in play) · Stats & Skills (edit) · Lore.
+           Stats & Skills is the old Stats & Profs tab; the read-only copies of the
+           same numbers were dropped from Combat so each lives in one place. -->
       <div class="tab-pane" id="cstab-sheet" style="padding:16px">
         <div class="tab-row" id="csSheetTabs">
           <button class="tab-btn active" onclick="charSheetTab('combat')">Combat</button>
-          <button class="tab-btn" onclick="charSheetTab('skills')">Skills</button>
+          <button class="tab-btn" onclick="charSheetTab('stats')">Stats &amp; Skills</button>
           <button class="tab-btn" onclick="charSheetTab('lore')">Lore</button>
         </div>
         <div class="cs-sheet-pane active" id="cshtab-combat"></div>
-        <div class="cs-sheet-pane" id="cshtab-skills"></div>
+        <div class="cs-sheet-pane" id="cshtab-stats">
+          <div id="cstab-stats-inner"></div>
+          <div class="divider" style="margin:20px 0 14px"><span>Skills, Feats &amp; Proficiencies</span></div>
+          <div id="cstab-profs"></div>
+        </div>
         <div class="cs-sheet-pane" id="cshtab-lore"></div>
       </div>
     </div>
@@ -3315,6 +3316,12 @@ function getCharCampaign(charId){
 
 /* ══ HELPERS ══ */
 const getMod=s=>{const m=Math.floor((s-10)/2);return(m>=0?'+':'')+m;};
+// Saving throws the character is proficient in: the ones set on the sheet,
+// or the class defaults for characters that never edited them.
+function getSaveProfs(char){
+  if(Array.isArray(char?.savingThrowProfs)) return char.savingThrowProfs;
+  return CLASSES[char?.classIdx]?.saves||[];
+}
 const getPB=l=>Math.ceil(l/4)+1;
 // Spell slots are based on the primary spellcasting class' own level (safest for multiclass —
 // avoids over-counting slots from total character level). Falls back to total level for single-class.
@@ -3961,6 +3968,8 @@ function sheetTab(t){
 
 /* ══ COMBAT TAB ══ */
 function renderCombatTab(char,cls,elId,editable){
+  // On Character ▸ Sheet, ability scores, saves and feats live in Stats & Skills
+  const compact = elId==='cshtab-combat';
   const pb=getPB(char.level);
   const dex=parseInt(getMod(char.abilities.DEX))||0;
   const str=parseInt(getMod(char.abilities.STR))||0;
@@ -3976,7 +3985,7 @@ function renderCombatTab(char,cls,elId,editable){
       <div class="cs-box"><div class="cs-val">${displayAC}</div><div class="cs-label">AC${hasAcBoost?(' <span style=\'font-size:9px;color:var(--gold)\'>✦</span>'):''}</div></div>
       <div class="cs-box"><div class="cs-val">${getMod(char.abilities.DEX)}</div><div class="cs-label">Initiative</div></div>
       <div class="cs-box"><div class="cs-val">+${pb}</div><div class="cs-label">Prof Bonus</div></div>
-      <div class="cs-box"><div class="cs-val">30</div><div class="cs-label">Speed</div></div>
+      <div class="cs-box"><div class="cs-val">${char.speed||30}</div><div class="cs-label">Speed</div></div>
     </div>
     <div class="hp-block" style="--cc:${cls.color}">
       <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:2px">HIT POINTS</div>
@@ -3986,7 +3995,9 @@ function renderCombatTab(char,cls,elId,editable){
         <span style="color:${hpC};font-family:'Cinzel',serif;font-size:12px">${pct}%</span>
       </div>
     </div>
-    <div class="divider"><span>Ability Scores</span></div>
+`;
+  if(!compact){
+  html+=`<div class="divider"><span>Ability Scores</span></div>
     <div class="ab-display-grid">`;
   ABILITIES.forEach(ab=>{
     const isPri=cls.primary.includes(ab);
@@ -3999,14 +4010,16 @@ function renderCombatTab(char,cls,elId,editable){
   html+=`</div><div class="divider"><span>Saving Throws</span></div><div class="saves-grid">`;
   ABILITIES.forEach(ab=>{
     const base=parseInt(getMod(char.abilities[ab]))||0;
-    const isPro=cls.saves.includes(ab);
+    const isPro=getSaveProfs(char).includes(ab);
     const bonus=isPro?base+pb:base;
     html+=`<div class="save-box ${isPro?'proficient':''}" style="--cc:${cls.color};--cc-dim:${cls.color}22">
       <div class="save-val">${bonus>=0?'+':''}${bonus}</div>
       <div class="save-label">${ab}</div>
     </div>`;
   });
-  html+=`</div><div class="divider"><span>Attacks</span></div><div id="attackList_${char.id}">`;
+  html+=`</div>`;
+  }
+  html+=`<div class="divider"><span>Attacks</span></div><div id="attackList_${char.id}">`;
   const attacks=char.attacks||[];
   const lootWeapons = getCharLootWeapons(char);
   const allAttacks = [...attacks, ...lootWeapons];
@@ -4046,7 +4059,7 @@ function renderCombatTab(char,cls,elId,editable){
     html+=`<div class="feature-card" style="--cc:${s.color};border-color:${s.color}33"><div class="feature-name" style="color:${s.color}">${s.level?('L'+s.level+' · '):''}${esc(s.title)}</div>${s.desc?`<div class="feature-desc">${esc(s.desc)}</div>`:''}</div>`;
   });
   // Show feats as feature cards
-  (char.feats||[]).forEach(featName=>{
+  if(!compact) (char.feats||[]).forEach(featName=>{
     const featData = FEATS_DB.find(f=>f.name===featName);
     html+=`<div class="feature-card" style="--cc:var(--gold);border-color:var(--gold)22">
       <div class="feature-name" style="color:var(--gold)">⚡ ${featName}</div>
@@ -9612,6 +9625,7 @@ function _bootContinue(mode, nav_bar){
   // Already logged in — restore active campaign
   if(!getActiveCampId() && _db.campaigns.length) setActiveCampId(_db.campaigns[0].id);
   if(nav_bar) nav_bar.style.display='flex';
+  const fab=document.getElementById('jotFab'); if(fab) fab.style.display='';
   _applyUserBadge();
   // Land on Campaign if no active campaign, otherwise Roster
   if(!getActiveCampId() || !_db.campaigns.filter(c=>!c._ownerGid).length){
@@ -9875,7 +9889,7 @@ function renderDiceCharPanel(){
   ];
 
   const profs = char.proficiencies||[];
-  const saves = cls.saves||[];
+  const saves = getSaveProfs(char);
 
   // Active DM effects on this char
   const effects = char.effects||{};
@@ -12060,12 +12074,32 @@ const JOT_EXAMPLES = [
   'The mayor is lying about the goblin raids — the tracks lead toward the old keep, not the forest.',
   'Sister Garaele asked us to find the banshee Agatha and ask about a lost spellbook.',
 ];
+/* Pills that tell the sorter what a note is. None picked = Claude decides. */
+const JOT_KINDS = [
+  { k:'npcs',   label:'NPC',   icon:'👥', color:'var(--teal)' },
+  { k:'places', label:'Place', icon:'🗺', color:'var(--teal)' },
+  { k:'quests', label:'Quest', icon:'⚔', color:'var(--purple)' },
+  { k:'loot',   label:'Loot',  icon:'💰', color:'var(--gold)' },
+  { k:'arcs',   label:'Arc',   icon:'🧵', color:'var(--gold)' },
+  { k:'books',  label:'Book',  icon:'📚', color:'var(--gold)' },
+  { k:'notes',  label:'Note',  icon:'📝', color:'var(--blue)' },
+];
+function toggleJotKind(k, el){
+  const kinds = window._jotKinds || (window._jotKinds = new Set());
+  if(kinds.has(k)) kinds.delete(k); else kinds.add(k);
+  if(el) el.classList.toggle('on', kinds.has(k));
+  const hint=document.getElementById('jotKindHint');
+  if(hint) hint.textContent = kinds.size ? 'Filed only as: '+JOT_KINDS.filter(x=>kinds.has(x.k)).map(x=>x.label).join(', ') : 'No tag picked — Claude decides what it is.';
+}
 function openQuickJot(prefill){
   const camp = getActiveCamp();
   if(!camp){ toast('Pick an active campaign first','var(--red)'); nav('campaign'); return; }
   window._pendingJot = null;
+  window._jotKinds = new Set();
   _openPinModal('✎ QUICK NOTE · '+esc(String(camp.name||'').slice(0,26)),
-    '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:8px">Note one thing down while it\'s fresh — an NPC you met, a job you were offered, a thread you\'re pulling on. Claude sorts it into <span style="color:var(--purple)">Quests</span>, <span style="color:var(--teal)">NPCs</span> and <span style="color:var(--gold)">Arcs</span>; you approve before anything is saved.</div>'
+    '<div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:8px">Note one thing down while it\'s fresh — an NPC you met, a job you were offered, loot you picked up. Tag it below, or leave it untagged and Claude will sort it; you approve before anything is saved.</div>'
+    +'<div class="jot-chips">'+JOT_KINDS.map(x=>'<button type="button" class="jot-chip" style="--kc:'+x.color+'" onclick="toggleJotKind(\''+x.k+'\',this)">'+x.icon+' '+x.label.toUpperCase()+'</button>').join('')+'</div>'
+    +'<div id="jotKindHint" style="font-size:10px;color:var(--muted2);margin:-2px 0 8px">No tag picked — Claude decides what it is.</div>'
     +'<textarea id="jotText" class="jot-textarea" placeholder="'+esc(JOT_EXAMPLES[Math.floor(Math.random()*JOT_EXAMPLES.length)])+'"></textarea>'
     +'<div id="jotStatus" style="font-size:11px;text-align:center;min-height:16px;margin-top:6px"></div>'
     +'<div id="jotPreview"></div>'
@@ -12086,6 +12120,8 @@ function _jotSystemPrompt(camp){
     books:  (camp.books||[]).map(b=>({title:b.title,type:b.type,status:b.status})),
     partyCharacters: getVisibleChars().map(c=>c.name),
   };
+  const kinds = [...(window._jotKinds||[])];
+  const tagRule = kinds.length ? `\n\nThe player has TAGGED this note as: ${JOT_KINDS.filter(x=>kinds.includes(x.k)).map(x=>x.label).join(', ')}. File it ONLY into ${kinds.map(k=>k==='loot'?'loot/coins':k).join(', ')}; leave every other list empty.` : '';
   return `You are the scribe for a D&D 5e campaign. A player has jotted a short, freeform note — usually about ONE thing they just learned or did. Sort its contents into the campaign's records. Return ONLY valid JSON, no markdown, no backticks.
 
 Return exactly this shape (omit any field you have nothing for; arrays may be empty):
@@ -12095,7 +12131,9 @@ Return exactly this shape (omit any field you have nothing for; arrays may be em
   "arcs":   [ { "title": "string", "matchExisting": bool, "status": "active|upcoming|resolved", "description": "string", "appendNote": "string" } ],
   "places": [ { "name": "string", "matchExisting": bool, "type": "city|town|village|dungeon|wilderness|landmark|region|building|other", "region": "string or omit", "desc": "string or omit", "connectedTo": ["names of places it is adjacent to / has a route to"] or omit, "partyIsHere": bool or omit, "appendNote": "string or omit" } ],
   "books":  [ { "title": "string", "matchExisting": bool, "author": "string or omit", "type": "tome|spellbook|journal|letter|scroll|map|scripture|ledger|other", "foundAt": "string or omit", "blurb": "3-5 sentence detailed description", "contents": ["notable entries, spells, secrets"] or omit, "status": "unread|reading|read or omit", "appendNote": "string or omit" } ],
-  "notes":  [ { "title": "string", "body": "string" } ]
+  "notes":  [ { "title": "string", "body": "string" } ],
+  "loot":   [ { "name": "string", "type": "weapon|armor|potion|scroll|wondrous|ring|rod|staff|wand|gem|treasure|tool|misc", "rarity": "common|uncommon|rare|very-rare|legendary|artifact", "qty": number, "value": number in gp or omit, "desc": "string or omit" } ],
+  "coins":  { "gp": number, "sp": number, "ep": number, "cp": number }
 }
 
 How to classify:
@@ -12104,13 +12142,14 @@ How to classify:
 - ARC — a plot thread bigger than one task: a conspiracy, a villain's plan, a mystery that spans quests. Only create a NEW arc when the note clearly points at something bigger; otherwise attach what was learned to an existing arc via appendNote. Most jots produce no arc.
 - PLACE — any named location the party visits, hears about, or is heading to (towns, dungeons, inns, regions). connectedTo = places it is adjacent to or has a road/route to, if the note says so. partyIsHere = the party is currently there.
 - BOOK — any written work found or read: tome, spellbook, journal, letter, scroll, ledger, map. Write blurb as a detailed, evocative 3-5 sentence description: what it is, its condition, what it contains or hints at, who wrote it, why it matters. Descriptive flavour (binding, script, wear) is welcome; invented plot facts, names or contents are not.
-- NOTE — anything that fits nowhere: rumours, theories, lore, reminders, loot to sell.
+- LOOT — physical items the party picked up, bought or was given (weapons, armour, potions, gems, trinkets). Use common rarity for mundane gear. Loose coins go in coins (omit coins if none), not loot. A readable book or letter is a BOOK, not loot.
+- NOTE — anything that fits nowhere: rumours, theories, lore, reminders.
 - The same jot can feed several lists (an NPC who gives a quest that belongs to an arc). Cross-reference by name.
 - Prefer matching EXISTING records (fuzzy name match is fine) and set matchExisting:true; then include only what changed, using appendNote for newly-learned facts.
 - Do not invent details that are not in the note. Do not return a session.
 
 Existing campaign records:
-${JSON.stringify(existingCtx, null, 1)}`;
+${JSON.stringify(existingCtx, null, 1)}${tagRule}`;
 }
 
 async function doQuickJot(){
@@ -12129,8 +12168,13 @@ async function doQuickJot(){
     if(!m) throw new Error('Could not read the response');
     const parsed = JSON.parse(m[0]);
     parsed.session = null;
+    const kinds = window._jotKinds;
+    if(kinds?.size){
+      ['quests','npcs','arcs','places','books','notes','loot'].forEach(k=>{ if(!kinds.has(k)) delete parsed[k]; });
+      if(!kinds.has('loot')) delete parsed.coins;
+    }
     const plan = _buildMergePlan(parsed, camp);
-    const total = plan.quests.length + plan.npcs.length + plan.arcs.length + plan.places.length + plan.books.length + plan.notes.length;
+    const total = plan.quests.length + plan.npcs.length + plan.arcs.length + plan.places.length + plan.books.length + plan.notes.length + plan.loot.length + (plan.coins?1:0);
     if(!total){
       if(st) st.innerHTML='<span style="color:var(--muted)">Nothing to file — save it as a plain note instead?</span>';
       if(btn){ btn.disabled=false; btn.textContent='✦ Sort it'; }
@@ -12138,7 +12182,7 @@ async function doQuickJot(){
     }
     window._pendingJot = { plan, text };
     const upd=[...plan.quests,...plan.npcs,...plan.arcs,...plan.places,...plan.books].filter(x=>x.action==='update').length;
-    const nw =[...plan.quests,...plan.npcs,...plan.arcs,...plan.places,...plan.books,...plan.notes].filter(x=>x.action==='new').length;
+    const nw =[...plan.quests,...plan.npcs,...plan.arcs,...plan.places,...plan.books,...plan.notes,...plan.loot].filter(x=>x.action==='new').length + (plan.coins?1:0);
     if(pv) pv.innerHTML = '<div style="margin-top:10px">'+_renderMergePreview(plan, null)+'</div>'
       +'<div style="font-size:10px;color:var(--muted2);text-align:center;margin:-6px 0 8px">Not right? Edit your note above and sort again.</div>';
     if(st) st.innerHTML='';
@@ -12152,9 +12196,13 @@ async function doQuickJot(){
   }
 }
 
-function applyQuickJot(){
+async function applyQuickJot(){
   const p=window._pendingJot; if(!p?.plan) return;
   const camp = getActiveCamp(); if(!camp) return;
+  // Loot is stored whole — load it first so new items aren't saved over it
+  if((p.plan.loot.length || p.plan.coins) && !_db.items[camp.id]){
+    try{ await dbGetItems(camp.id); }catch(e){ toast('Couldn\'t load loot — try again','var(--red)'); return; }
+  }
   const stats = _applyMergePlan(p.plan, camp);
   saveCampaign(camp);
   window._pendingJot=null;
@@ -12185,6 +12233,7 @@ function _refreshCampaignViews(campId){
       else renderCampList();
     }
     if(currentScreen==='roster') renderCampaignSwitchBanner();
+    if(currentScreen==='loot'){ renderInventory(); renderPool(); }
   }catch(e){ console.warn('refresh after note:', e); }
 }
 
@@ -12213,7 +12262,7 @@ function _findExisting(name, arr, key='name') {
 
 /* ── Smart diff preview builder ── */
 function _buildMergePlan(parsed, camp) {
-  const plan = { session: null, quests:[], npcs:[], arcs:[], places:[], books:[], notes:[] };
+  const plan = { session: null, quests:[], npcs:[], arcs:[], places:[], books:[], notes:[], loot:[], coins:null };
 
   // Session — always new
   if(parsed.session) plan.session = { action:'new', data: parsed.session };
@@ -12314,6 +12363,12 @@ function _buildMergePlan(parsed, camp) {
 
   // Notes — always new
   (parsed.notes||[]).forEach(n => plan.notes.push({ action:'new', incoming: n }));
+
+  // Loot — always new, lands in the party pool
+  (parsed.loot||[]).forEach(i => { if(i?.name) plan.loot.push({ action:'new', incoming: i }); });
+  const c = parsed.coins||{}, coins = {};
+  ['gp','sp','ep','cp'].forEach(k=>{ const v=Math.floor(+c[k]||0); if(v>0) coins[k]=v; });
+  if(Object.keys(coins).length) plan.coins = coins;
 
   return plan;
 }
@@ -12487,6 +12542,12 @@ function _renderMergePreview(plan, sessionNum) {
   html += section(plan.books||[], '📚 BOOKS', 'var(--gold)', 'title', b =>
     `${(b.type||b.author||b.foundAt)?`<div style="font-size:10px;color:var(--muted);margin-top:2px">${[b.type,b.author?'by '+b.author:'',b.foundAt?'found: '+b.foundAt:''].filter(Boolean).map(esc).join(' · ')}</div>`:''}
      ${b.blurb?`<div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">${esc(b.blurb)}</div>`:''}`);
+
+  html += section(plan.loot||[], '💰 LOOT → PARTY POOL', 'var(--gold)', 'name', i =>
+    `<div style="font-size:10px;color:var(--muted);margin-top:2px">${[TYPE_ICONS[i.type]?i.type:'misc',String(i.rarity||'common').replace('-',' '),(+i.qty>1?'×'+(+i.qty):''),(+i.value>0?(+i.value)+' gp':'')].filter(Boolean).map(esc).join(' · ')}</div>
+     ${i.desc?`<div style="font-size:10px;color:var(--muted);margin-top:2px;line-height:1.4">${esc(i.desc)}</div>`:''}`);
+  if(plan.coins) html += `<div style="background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:10px 12px;font-size:11px;color:var(--text)">
+      <span style="font-family:'Cinzel',serif;font-size:11px;color:var(--gold);letter-spacing:1px">🪙 COINS</span>&nbsp; +${Object.entries(plan.coins).map(([k,v])=>v+' '+k).join(', ')} to party purse</div>`;
 
   // ── NOTES ──
   if(plan.notes.length) {
@@ -12769,6 +12830,26 @@ function _applyMergePlan(plan, camp){
     camp.notes.unshift({ id:genItemId(), title:n.title||'Note', body:n.body||'', updated:Date.now() });
     stats.newCount++;
   });
+
+  // ── Loot & coins (party pool of this campaign) ──
+  if((plan.loot||[]).length || plan.coins){
+    const items = (_db.items[camp.id]||[]).slice();
+    const wealth = _db.wealth[camp.id]||{};
+    const rarities = ['common','uncommon','rare','very-rare','legendary','artifact'];
+    plan.loot.forEach(({incoming:i}) => {
+      items.push({ id:'i'+Date.now()+Math.random().toString(36).slice(2,6), name:String(i.name).slice(0,80),
+        type:TYPE_ICONS[i.type]?i.type:'misc', rarity:rarities.includes(i.rarity)?i.rarity:'common',
+        qty:Math.max(1,parseInt(i.qty)||1), weight:0, value:Math.max(0,+i.value||0), attune:'none', desc:i.desc||'', owner:'pool' });
+      stats.newCount++;
+    });
+    if(plan.coins){
+      if(!wealth.party) wealth.party={gp:0,sp:0,ep:0,cp:0};
+      Object.entries(plan.coins).forEach(([k,v])=>{ wealth.party[k]=(wealth.party[k]||0)+v; });
+      stats.newCount++;
+    }
+    _db.items[camp.id]=items; _db.wealth[camp.id]=wealth;
+    schedulePush('loot', camp.id, {items, wealth});
+  }
   return stats;
 }
 
@@ -15313,9 +15394,10 @@ function getCurrentCharItems(){
 
 /* ── Render entry point ── */
 function charTab(t){
-  if(t==='profs') t='stats';   // legacy: profs now lives inside the combined Stats & Profs tab
+  // legacy: Stats & Profs now lives inside Sheet ▸ Stats & Skills
+  if(t==='profs' || t==='stats'){ t='sheet'; _charSheetTab='stats'; }
   _charTab = t;
-  const order = ['equip','spells','progress','stats','sheet'];
+  const order = ['equip','spells','progress','sheet'];
   document.querySelectorAll('#scr-character .tab-bar .tab-btn').forEach((b,i)=>b.classList.toggle('active',order[i]===t));
   document.querySelectorAll('#scr-character .tab-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('cstab-'+t)?.classList.add('active');
@@ -15324,7 +15406,6 @@ function charTab(t){
   if(!char) return;
   const cls = CLASSES[char.classIdx];
   if(t==='equip'){   renderPaperdoll(char,cls); renderInvBag(char,cls); renderCharStats(char,cls); initDragAndDrop(); }
-  if(t==='stats'){   renderCharStatsTab(char, cls); renderCharProfsTab(char, cls); }
   if(t==='progress') renderCharProgressTab(char, cls);
   if(t==='spells')   renderSpellsTab(char, cls, 'cstab-spells', true);
   if(t==='sheet')    charSheetTab(_charSheetTab);
@@ -15335,8 +15416,9 @@ let _charTab = 'equip';
 /* ══ CHAR SCREEN — CHARACTER SHEET TAB (combat / skills / lore) ══ */
 let _charSheetTab = 'combat';
 function charSheetTab(t){
+  if(t==='skills') t='stats';   // legacy name
   _charSheetTab = t;
-  const order = ['combat','skills','lore'];
+  const order = ['combat','stats','lore'];
   document.querySelectorAll('#csSheetTabs .tab-btn').forEach((b,i)=>b.classList.toggle('active',order[i]===t));
   document.querySelectorAll('#cstab-sheet .cs-sheet-pane').forEach(p=>p.classList.remove('active'));
   document.getElementById('cshtab-'+t)?.classList.add('active');
@@ -15349,7 +15431,7 @@ function charSheetTab(t){
     const stale = document.getElementById('stab-combat'); if(stale) stale.innerHTML='';
     renderCombatTab(char, cls, 'cshtab-combat', true);
   }
-  if(t==='skills') renderSkillsTab(char, cls, 'cshtab-skills');
+  if(t==='stats'){ renderCharStatsTab(char, cls); renderCharProfsTab(char, cls); }
   if(t==='lore')   renderLoreTab(char, cls, 'cshtab-lore', true);
 }
 
@@ -15414,13 +15496,15 @@ function renderCharStatsTab(char, cls){
   h += `</div>`;
 
   // Saving throw proficiencies
-  h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">SAVING THROW PROFICIENCIES</div>`;
+  h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">SAVING THROWS <span style="opacity:.7">· tick if proficient</span></div>`;
   h += `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px">`;
   ABILITY_LIST.forEach(ab=>{
-    const isProf = (char.savingThrowProfs||cls.saves||[]).includes(ab);
+    const isProf = getSaveProfs(char).includes(ab);
+    const sv = Math.floor(((char.abilities?.[ab]||10)-10)/2) + (isProf?pb:0);
     h += `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;background:var(--surface2);border:1px solid ${isProf?cc:'var(--border)'};border-radius:8px;padding:5px 10px">
       <input type="checkbox" ${isProf?'checked':''} onchange="csToggleSaveProf('${char.id}','${ab}',this.checked)" style="accent-color:${cc}">
       <span style="font-size:12px;color:${isProf?cc:'var(--muted)'}">${ab}</span>
+      <span style="font-family:'Cinzel',serif;font-size:11px;color:${isProf?cc:'var(--muted)'}">${sv>=0?'+':''}${sv}</span>
     </label>`;
   });
   h += `</div>`;
@@ -15639,7 +15723,7 @@ function _lvCurrentFeaturesHTML(char){
       const got = (char.asiHistory||[]).find(e=>e.level===char.level);
       h += `<div style="background:${c.color}11;border:1px solid ${c.color};border-radius:10px;padding:12px;margin-bottom:8px;font-size:12px;color:var(--text)">
         ⭐ Ability Score Improvement at ${esc(c.name)} ${r.level}: +2 to one ability, +1 to two, or a feat.
-        <br><small style="color:var(--muted)">${got?'Taken: '+esc(got.desc):'Choose it in the Level Up wizard, or edit scores on the Stats tab.'}</small></div>`;
+        <br><small style="color:var(--muted)">${got?'Taken: '+esc(got.desc):'Choose it in the Level Up wizard, or edit scores on Sheet ▸ Stats &amp; Skills.'}</small></div>`;
     }
     if(!items.length && !ld.asi) h += `<div style="font-size:12px;color:var(--muted);font-style:italic;margin-bottom:8px">No new features at this level — existing ones improve.</div>`;
     items.forEach(f=>{
@@ -15681,7 +15765,7 @@ function _lvHistoryHTML(char){
       return `<div style="background:var(--surface2);border:1px solid var(--purple);border-radius:10px;padding:10px 12px;margin-bottom:6px">
         <div style="font-family:'Cinzel',serif;font-size:12px;color:var(--purple)">⚡ ${esc(f)}</div>${db.desc?`<div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:3px">${esc(db.desc)}</div>`:''}</div>`; }).join('');
   } else h += `<div style="font-size:12px;color:var(--muted);font-style:italic">No feats yet.</div>`;
-  h += `<div style="font-size:11px;color:var(--muted);margin:6px 0 12px">Add or remove feats on the <a style="color:var(--gold);cursor:pointer;text-decoration:underline" onclick="charTab('stats')">Stats & Profs</a> tab.</div>`;
+  h += `<div style="font-size:11px;color:var(--muted);margin:6px 0 12px">Add or remove feats on the <a style="color:var(--gold);cursor:pointer;text-decoration:underline" onclick="charTab('stats')">Sheet ▸ Stats &amp; Skills</a>.</div>`;
   return h;
 }
 
@@ -15742,6 +15826,11 @@ function renderCharProfsTab(char, cls){
     </label>`;
   });
   h += `</div>`;
+  const _hasProf = n => profs.some(p=>p.toLowerCase()===n.toLowerCase());
+  h += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:-8px 0 18px">
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;display:flex;align-items:center"><span style="font-size:11px;flex:1;color:var(--muted)">Passive Perception</span><b style="font-family:'Cinzel',serif">${10+ABILITY_MODS.WIS+(_hasProf('Perception')?pb:0)}</b></div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;display:flex;align-items:center"><span style="font-size:11px;flex:1;color:var(--muted)">Passive Insight</span><b style="font-family:'Cinzel',serif">${10+ABILITY_MODS.WIS+(_hasProf('Insight')?pb:0)}</b></div>
+  </div>`;
 
   // Feats
   h += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">FEATS</div>`;
@@ -15802,6 +15891,9 @@ function renderCharProfsTab(char, cls){
   h += `<textarea onchange="csUpdateField('${char.id}','otherProfs',this.value)"
     placeholder="Languages, tools, weapons, armour…"
     style="width:100%;min-height:80px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px 10px;font-size:12px;resize:vertical;box-sizing:border-box">${char.otherProfs||''}</textarea>`;
+  [['Tool Proficiencies',char.toolProficiencies],['Weapon Proficiencies',char.weaponProficiencies],['Languages',char.languageProficiencies]].forEach(([label,list])=>{
+    if(Array.isArray(list) && list.length) h += `<div class="prof-block" style="margin-top:10px"><h4>${label}</h4><div class="prof-tags">${list.map(p=>`<span class="prof-tag">${esc(String(p))}</span>`).join('')}</div></div>`;
+  });
 
   el.innerHTML = h;
 }
@@ -15818,7 +15910,7 @@ function csUpdateAbility(id, ab, val){
   _csSaveChar(id, c=>{ if(!c.abilities) c.abilities={}; c.abilities[ab]=Math.max(1,Math.min(30,val)); });
   const chars = getVisibleChars();
   const char = chars.find(c=>String(c.id)===String(id));
-  if(char) renderCharStatsTab(char, CLASSES[char.classIdx]);
+  if(char){ renderCharStatsTab(char, CLASSES[char.classIdx]); renderCharProfsTab(char, CLASSES[char.classIdx]); }
 }
 function csUpdateField(id, field, val){
   _csSaveChar(id, c=>{ c[field]=val; });
@@ -15837,6 +15929,8 @@ function csToggleSaveProf(id, ab, on){
     if(on && !c.savingThrowProfs.includes(ab)) c.savingThrowProfs.push(ab);
     else if(!on) c.savingThrowProfs = c.savingThrowProfs.filter(x=>x!==ab);
   });
+  const char = getVisibleChars().find(c=>String(c.id)===String(id));
+  if(char) renderCharStatsTab(char, CLASSES[char.classIdx]);
 }
 function csToggleSkillProf(id, skill, on){
   _csSaveChar(id, c=>{
