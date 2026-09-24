@@ -19891,7 +19891,7 @@ function dollSpec(char){
   if(ok) weapons.push({hand:'l',kind:ok,glow:glow(eq.offhand)});
   const horns=M.horns===false?null:(F.horns||null);
   const hornCol=F.skin==='dragon'?skin:'#2b2226';
-  return {cls:cls.name, body, skin, hairCol, eyeCol, brows:!noHair, hair:hooded?null:hair, beard, parts, dyes, height, build:{w:RB.w,legs:RB.legs,head:RB.head},
+  return {cls:cls.name, body, skin, hairCol, eyeCol, brows:!noHair, hair:hooded?null:hair, beard, parts, dyes, ears:hooded?null:(F.ears||null), tusks:!!F.tusks&&!hooded, tail:_raceTail(char.race), height, build:{w:RB.w,legs:RB.legs,head:RB.head},
     props:M.props!==false, stance:M.stance==='neutral'?null:cls.name, aura:M.aura===false?null:cls.name, armoured:metal, cape:/cloak|cape|mantle/.test(allNames), headFree:!head, clothCol:cls.color||'#554a3a', horns:hooded&&horns!=='ridge'?null:horns, hornCol,
     weapons, portrait:M.light==='class'?null:(char.portrait||null)};
 }
@@ -20360,6 +20360,104 @@ function buildAura(kind, root, B, floor, top){
   return {group:g, update};
 }
 
+/* ── Race features: ear shapes, tusks, tails ──────────────────────────
+   Ear and tusk flags come from the portrait generator's race table; tails
+   from RACE_TAILS. Everything is placed in figure space from bone positions
+   and then attached to the bone it should follow. */
+const RACE_TAILS=[
+  {k:['tiefling'], kind:'spade'},
+  {k:['dragonborn','lizardfolk','kobold'], kind:'reptile'},
+  {k:['tabaxi','leonin'], kind:'cat'},
+  {k:['minotaur'], kind:'tuft'},
+];
+function _raceTail(race){ const r=String(race||'').toLowerCase(); const t=RACE_TAILS.find(t=>t.k.some(k=>r.indexOf(k)>=0)); return t?t.kind:null; }
+// A tube along a curve whose radius runs from r0 at the start to r1 at the end.
+function _taperTube(curve, r0, r1, seg, rad){
+  const geo=new T.TubeGeometry(curve, seg, 1, rad, false);
+  const pos=geo.attributes.position, v=new T.Vector3();
+  for(let i=0;i<pos.count;i++){
+    const ring=Math.floor(i/(rad+1)), u=Math.min(1,ring/seg), c=curve.getPointAt(u);
+    v.fromBufferAttribute(pos,i).sub(c).multiplyScalar(r0+(r1-r0)*u).add(c); pos.setXYZ(i,v.x,v.y,v.z);
+  }
+  geo.computeVertexNormals(); return geo;
+}
+// A flattened cone from `base` pointing along `dir` (figure space).
+function _blade(base, dir, len, rad, flat, mat, flatAxis){
+  const m=new T.Mesh(new T.ConeGeometry(rad,len,10,1), mat); m.castShadow=true;
+  const d=new T.Vector3(...dir).normalize();
+  const side=new T.Vector3(...(flatAxis||[0,0,1])).projectOnPlane(d).normalize();
+  const x=new T.Vector3().crossVectors(d,side).normalize();
+  m.quaternion.setFromRotationMatrix(new T.Matrix4().makeBasis(x,d,side));
+  m.scale.set(1,1,flat);
+  m.position.copy(base).add(d.clone().multiplyScalar(len/2));
+  return m;
+}
+const EAR_SHAPES={
+  // at: ear position from the head bone (x is mirrored), dir: where the tip points
+  long:  {at:[0.072,0.1,-0.005], dir:[0.75,0.55,-0.45], len:0.11, rad:0.022, flat:0.32},
+  point: {at:[0.072,0.1,-0.005], dir:[0.7,0.6,-0.35],  len:0.06, rad:0.02,  flat:0.35},
+  huge:  {at:[0.07,0.085,-0.01], dir:[1,0.2,-0.25],    len:0.13, rad:0.04,  flat:0.3},
+  animal:{at:[0.07,0.12,-0.01],  dir:[1,0.05,-0.2],    len:0.085,rad:0.034, flat:0.35, flatAxis:[0,1,0]},
+  fin:   {at:[0.075,0.1,-0.02],  dir:[0.85,0.35,-0.55],len:0.1,  rad:0.05,  flat:0.16, flatAxis:[0,1,0]},
+  cat:   {at:[0.05,0.2,-0.015], dir:[0.3,1,-0.05],    len:0.07, rad:0.034, flat:0.35},
+};
+function addRaceFeatures(spec, B, root){
+  const head=B.Head, pelvis=B.pelvis;
+  const hp=new T.Vector3(); if(head) head.getWorldPosition(hp);
+  const skinMat=new T.MeshStandardMaterial({color:new T.Color(spec.skin).multiplyScalar(0.62), roughness:0.6});
+  if(head && spec.ears && EAR_SHAPES[spec.ears]){
+    const E=EAR_SHAPES[spec.ears];
+    const mat=spec.ears==='cat'?new T.MeshStandardMaterial({color:new T.Color(spec.skin).multiplyScalar(0.62), roughness:0.9}):skinMat;
+    [1,-1].forEach(sx=>{
+      const base=hp.clone().add(new T.Vector3(E.at[0]*sx,E.at[1],E.at[2]));
+      const m=_blade(base,[E.dir[0]*sx,E.dir[1],E.dir[2]],E.len,E.rad,E.flat,mat,E.flatAxis);
+      head.attach(m);
+      if(spec.ears==='cat'){ // pink inner ear
+        const inner=_blade(base.clone().add(new T.Vector3(0,0.004,0.006)),[E.dir[0]*sx,E.dir[1],E.dir[2]],E.len*0.7,E.rad*0.6,E.flat*0.6,
+          new T.MeshStandardMaterial({color:0x8a4a52, roughness:0.8}),E.flatAxis);
+        head.attach(inner);
+      }
+    });
+  }
+  if(head && spec.tusks){
+    const ivory=new T.MeshStandardMaterial({color:0xe8dfc8, roughness:0.45});
+    [1,-1].forEach(sx=>{
+      const base=hp.clone().add(new T.Vector3(0.024*sx,0.035,0.088));
+      const m=new T.Mesh(new T.ConeGeometry(0.0085,0.034,8), ivory); m.castShadow=true;
+      const d=new T.Vector3(0.25*sx,1,0.3).normalize();
+      m.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),d); m.position.copy(base).add(d.multiplyScalar(0.017));
+      head.attach(m);
+    });
+  }
+  let tail=null;
+  if(pelvis && spec.tail){
+    const pp=new T.Vector3(); pelvis.getWorldPosition(pp);
+    const g=new T.Group(); g.position.copy(pp.clone().add(new T.Vector3(0,0.03,-0.11)));   // base of the spine
+    const P=pts=>new T.CatmullRomCurve3(pts.map(p=>new T.Vector3(...p)));
+    const tailMat=spec.tail==='reptile'?new T.MeshStandardMaterial({color:new T.Color(spec.skin).multiplyScalar(0.62), roughness:0.45}):skinMat;
+    if(spec.tail==='spade'){
+      const c=P([[0,0,0],[0.02,-0.22,-0.14],[0.1,-0.5,-0.14],[0.2,-0.66,-0.02],[0.26,-0.64,0.1]]);
+      g.add(_mesh(_taperTube(c,0.016,0.009,24,6),tailMat));
+      const end=c.getPointAt(1), dir=c.getTangentAt(1);
+      g.add(_blade(end,dir.toArray(),0.07,0.04,0.25,tailMat,[0,1,0]));
+    } else if(spec.tail==='reptile'){
+      const c=P([[0,0,0],[0,-0.2,-0.2],[0.04,-0.52,-0.4],[0.12,-0.78,-0.46],[0.2,-0.88,-0.4]]);
+      g.add(_mesh(_taperTube(c,0.075,0.012,26,10),tailMat));
+    } else if(spec.tail==='cat'){
+      const c=P([[0,0,0],[0.01,-0.22,-0.12],[0.06,-0.48,-0.2],[0.12,-0.56,-0.36],[0.14,-0.42,-0.5]]);
+      g.add(_mesh(_taperTube(c,0.03,0.022,24,8),tailMat));
+    } else if(spec.tail==='tuft'){
+      const c=P([[0,0,0],[0.01,-0.25,-0.1],[0.04,-0.55,-0.14],[0.07,-0.72,-0.1]]);
+      g.add(_mesh(_taperTube(c,0.014,0.01,18,6),tailMat));
+      const t=new T.Mesh(new T.SphereGeometry(0.035,10,8),new T.MeshStandardMaterial({color:new T.Color(spec.hairCol), roughness:1}));
+      t.scale.set(0.8,1.4,0.8); t.position.copy(c.getPointAt(1)).add(new T.Vector3(0,-0.03,0)); g.add(t);
+    }
+    pelvis.attach(g);
+    tail={g, rest:g.quaternion.clone()};
+  }
+  return tail;
+}
+
 /* ── Build a posed figure ──────────────────────────────────────────── */
 function trimToHead(mesh){
   const bones=mesh.skeleton.bones, geo=mesh.geometry;
@@ -20459,6 +20557,7 @@ async function buildFigure(spec, L){
     hb.add(holder);
   });
   if(spec.horns && B.Head) addHorns(B.Head, spec.horns, spec.hornCol);
+  const tail=addRaceFeatures(spec, B, root);
   // Curl the fingers of a hand that holds something
   ['r','l'].forEach(sd=>{ if(!held[sd]) return;
     ['index','middle','ring','pinky'].forEach(fn=>{ [1,2,3].forEach(j=>{ const b=B[fn+'_0'+j+'_'+sd]; if(b) b.rotateZ(FIST.curl*(j===1?0.8:1)); }); });
@@ -20478,7 +20577,7 @@ async function buildFigure(spec, L){
   const k=spec.height/top0, w=spec.build.w;
   root.scale.set(k*w, k, k*w);
   root.updateMatrixWorld(true);
-  return {root, bones:boneBy, aura, rest:{spine:boneBy.spine_03?.quaternion.clone(), head:boneBy.Head?.quaternion.clone()}};
+  return {root, bones:boneBy, aura, tail, rest:{spine:boneBy.spine_03?.quaternion.clone(), head:boneBy.Head?.quaternion.clone()}};
 }
 
 /* ── Stage: one shared renderer, moved into whichever doll is showing ── */
@@ -20545,6 +20644,7 @@ function _tick(t){
     const s=(t-S.t0)/1000, dt=Math.min(0.05,Math.max(0,(t-(S.lastT||t))/1000)); S.lastT=t;
     S.fig.root.rotation.y=S.yaw;
     if(S.fig.aura) S.fig.aura.update(dt,s);
+    if(S.fig.tail){ const tg=S.fig.tail.g; tg.quaternion.copy(S.fig.tail.rest); tg.rotateY(Math.sin(s*1.1)*0.14); tg.rotateX(Math.sin(s*0.7)*0.04); }
     const b=S.fig.bones, br=Math.sin(s*1.6);
     if(b.spine_03&&S.fig.rest.spine){ b.spine_03.quaternion.copy(S.fig.rest.spine); b.spine_03.rotateX(br*0.012); }
     if(b.Head&&S.fig.rest.head){ b.Head.quaternion.copy(S.fig.rest.head); b.Head.rotateY(Math.sin(s*0.37)*0.06); b.Head.rotateX(Math.sin(s*0.23)*0.025); }
