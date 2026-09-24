@@ -13778,29 +13778,33 @@ function renderMap(){
         ${seld?`<g class="mn-resize"><line x1="${(R).toFixed(2)}" y1="${(R).toFixed(2)}" x2="${gh.toFixed(2)}" y2="${gh.toFixed(2)}" stroke="var(--gold)" stroke-width="${(R*0.12).toFixed(2)}" opacity="0.6"/><rect x="${(gh-R*1.6).toFixed(2)}" y="${(gh-R*1.6).toFixed(2)}" width="${(R*3.2).toFixed(2)}" height="${(R*3.2).toFixed(2)}" fill="transparent" style="cursor:nwse-resize"/><rect x="${(gh-R*0.55).toFixed(2)}" y="${(gh-R*0.55).toFixed(2)}" width="${(R*1.1).toFixed(2)}" height="${(R*1.1).toFixed(2)}" rx="${(R*0.2).toFixed(2)}" fill="var(--gold)" stroke="#0d0a1a" stroke-width="${(R*0.1).toFixed(2)}" style="pointer-events:none"/></g>`:''}
       </g>`; }).join(''); })()}
       <defs><clipPath id="mtokClip"><circle r="10"/></clipPath></defs>
-      ${map.party?(()=>{ const PS2=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4); const R=Math.max(0.6,_pinPx(map)*2.2); const px=(map.party.x*VW).toFixed(1), py=(map.party.y*VH).toFixed(1); const lf=(R*1.1).toFixed(2), ly=(R+R*1.1*0.95+1).toFixed(2);
+      ${map.party?(()=>{ const PS2=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4); const R=Math.max(0.6,_pinPx(map)*2.2)*_tokScale(map); const pSel=_selPinId==='__party__'&&!map.pinsLocked; const px=(map.party.x*VW).toFixed(1), py=(map.party.y*VH).toFixed(1); const lf=(R*1.1).toFixed(2), ly=(R+R*1.1*0.95+1).toFixed(2);
         // The party marker shows each member's mini (those not placed on their own)
         const solo=map.tokens||{}; const mem=_campMembers(camp).filter(c=>!solo[String(c.id)]);
-        if(!mem.length) return `<g class="map-node party pinlabel" data-id="__party__" data-cx="${px}" data-cy="${py}" transform="translate(${px},${py}) scale(${PS2})">
+        if(!mem.length) return `<g class="map-node party pinlabel ${pSel?'selpin':''}" data-id="__party__" data-cx="${px}" data-cy="${py}" transform="translate(${px},${py}) scale(${PS2})"><g class="tokbody">
           <g class="pinicon" transform="scale(${(R/12).toFixed(3)})" fill="var(--gold)" stroke="#0d0a1a" stroke-width="1.6"><rect x="-1.8" y="-12" width="3.6" height="24" rx="1"/><polygon points="1.8,-12 13,-8 1.8,-4"/></g>
           <text text-anchor="middle" y="${ly}" style="font-size:${lf}px;stroke-width:${(R*1.1*0.28).toFixed(2)}px">Party</text>
-        </g>`;
-        const tr=_tokR(map,VW,R), perRow=Math.min(4,mem.length), rows=Math.ceil(mem.length/perRow), gap=tr*1.6;
+          ${pSel?_tokSelSvg(R*1.1, R*0.45):''}
+        </g></g>`;
+        const tr=_tokR(map,VW,R/_tokScale(map))*_tokScale(map), perRow=Math.min(4,mem.length), rows=Math.ceil(mem.length/perRow), gap=tr*1.6;
         const toks=mem.map((c,i)=>{ const row=Math.floor(i/perRow), inRow=Math.min(perRow, mem.length-row*perRow), col=i-row*perRow;
           const tx=(col-(inRow-1)/2)*gap, ty=(row-(rows-1)/2)*gap;
           return `<g transform="translate(${tx.toFixed(2)},${ty.toFixed(2)}) scale(${(tr/10).toFixed(3)})"><title>${esc(c.name)}</title>${_tokSvg(c)}</g>`; }).join('');
         const tlf=Math.max(R*1.1, tr*0.42), lyy=((rows-1)/2*gap+tr*1.15+tlf).toFixed(2);
-        return `<g class="map-node party pinlabel" data-id="__party__" data-cx="${px}" data-cy="${py}" transform="translate(${px},${py}) scale(${PS2})">
+        const ext=Math.max((perRow-1)/2*gap, (rows-1)/2*gap)+tr;
+        return `<g class="map-node party pinlabel ${pSel?'selpin':''}" data-id="__party__" data-cx="${px}" data-cy="${py}" transform="translate(${px},${py}) scale(${PS2})"><g class="tokbody">
           ${toks}
           <text text-anchor="middle" y="${lyy}" style="font-size:${tlf.toFixed(2)}px;stroke-width:${(tlf*0.28).toFixed(2)}px">${esc(camp.partyName||'Party')}</text>
-        </g>`; })():''}
+          ${pSel?_tokSelSvg(ext, tr*0.3):''}
+        </g></g>`; })():''}
       ${Object.entries(map.tokens||{}).map(([cid,pos])=>{ const c=_campMembers(camp).find(x=>String(x.id)===cid); if(!c||!pos) return '';
-        const PS3=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4); const R=Math.max(0.6,_pinPx(map)*2.2); const tr=_tokR(map,VW,R);
-        const px=(pos.x*VW).toFixed(1), py=(pos.y*VH).toFixed(1); const lf=Math.max(R*1.0, tr*0.42).toFixed(2);
-        return `<g class="map-node party token pinlabel ${_placingTok===cid?'selpin':''}" data-id="__tok_${esc(cid)}" data-cx="${px}" data-cy="${py}" transform="translate(${px},${py}) scale(${PS3})">
+        const PS3=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4); const R=Math.max(0.6,_pinPx(map)*2.2); const tr=_tokR(map,VW,R)*_tokScale(map); const tSel=_selPinId==='__tok_'+cid&&!map.pinsLocked;
+        const px=(pos.x*VW).toFixed(1), py=(pos.y*VH).toFixed(1); const lf=Math.max(R*1.0*_tokScale(map), tr*0.42).toFixed(2);
+        return `<g class="map-node party token pinlabel ${(_placingTok===cid||tSel)?'selpin':''}" data-id="__tok_${esc(cid)}" data-cx="${px}" data-cy="${py}" transform="translate(${px},${py}) scale(${PS3})"><g class="tokbody">
           <g transform="scale(${(tr/10).toFixed(3)})"><title>${esc(c.name)}</title>${_tokSvg(c)}</g>
           <text text-anchor="middle" y="${(tr*1.15+(+lf)).toFixed(2)}" style="font-size:${lf}px;stroke-width:${(lf*0.28).toFixed(2)}px">${esc(String(c.name).split(' ')[0].slice(0,14))}</text>
-        </g>`; }).join('')}
+          ${tSel?_tokSelSvg(tr, tr*0.3):''}
+        </g></g>`; }).join('')}
       ${_fogLayerSvg(camp, map, VW, VH, pinned)}
     </svg>`;
     // A sub-map leads with the places that plausibly belong there — linked to
@@ -14178,6 +14182,23 @@ function _bindMapDrag(camp, map){
       grip.addEventListener('pointerup',rzEnd); grip.addEventListener('pointercancel',rzEnd);
     }
   }
+  // Resize grip on the selected party marker or mini: one size for all of them
+  if(!sketch && _selPinId && String(_selPinId).startsWith('__')){
+    const selG=[...svg.querySelectorAll('.map-node')].find(n=>n.dataset.id===_selPinId);
+    const tg=selG&&selG.querySelector('.tok-resize'), body=selG&&selG.querySelector('.tokbody');
+    if(tg && body){
+      let rz=null;
+      tg.addEventListener('pointerdown',e=>{ const l=toLocal(e); const cx=+selG.dataset.cx, cy=+selG.dataset.cy;
+        rz={cx, cy, d0:Math.max(1e-3,Math.hypot(l.x-cx,l.y-cy)), s0:_tokScale(map), s:_tokScale(map)};
+        tg.setPointerCapture(e.pointerId); e.preventDefault(); e.stopPropagation(); });
+      svg.addEventListener('pointermove',e=>{ if(!rz) return; const l=toLocal(e);
+        rz.s=Math.max(TOK_SCALE_MIN, Math.min(TOK_SCALE_MAX, rz.s0*Math.hypot(l.x-rz.cx,l.y-rz.cy)/rz.d0));
+        body.setAttribute('transform',`scale(${(rz.s/rz.s0).toFixed(4)})`);
+        const lg=svg.parentElement.querySelector('.map-legend'); if(lg) lg.textContent='token size: '+Math.round(rz.s*100)+'%'; e.preventDefault(); });
+      const rzEnd=()=>{ if(rz){ map.tokScale=Math.round(rz.s*20)/20; saveCampaign(camp); renderMap(); } rz=null; };
+      tg.addEventListener('pointerup',rzEnd); tg.addEventListener('pointercancel',rzEnd);
+    }
+  }
   // Fog painting mode: pointer strokes add (reveal) or remove (refog) circles.
   if(_paintMode && !sketch && canDesignMaps(camp) && _fogOn(map)){
     const _blocked=()=>pts.size>=2||_mapGesture;
@@ -14235,7 +14256,10 @@ function _bindMapDrag(camp, map){
       if(drag.moved){ const pp=(camp.places||[]).find(q=>q.id===drag.id); const gp=pp&&getPos(pp); if(gp) _noteMapAction(camp, gp.x, gp.y); saveCampaign(camp); }
       else if(!sketch){
         const now=Date.now();
-        if(drag.id==='__party__' || String(drag.id).startsWith('__tok_')){ drag=null; return; }
+        if(drag.id==='__party__' || String(drag.id).startsWith('__tok_')){
+          // Tap selects the marker so its resize grip shows, like a place pin
+          if(!map.pinsLocked && _selPinId!==drag.id){ _selPinId=drag.id; drag=null; renderMap(); return; }
+          drag=null; return; }
         if(_lastTap.id===drag.id && now-_lastTap.t<380){ // double-tap → open sub-map
           _lastTap={id:null,t:0};
           const sub=subMapFor(drag.id);
@@ -16429,6 +16453,8 @@ function openDollModelModal(){
     +'<div class="dm-row"><label>Outfit</label>'+chip('outfit','','By gear',!cur.outfit)+['Knight','Noble','Wizard','Ranger','Peasant'].map(function(f){return chip('outfit',f,f,cur.outfit===f);}).join('')+'</div>'
     +'<div class="dm-row"><label>Colours</label>'+chip('dye','','By class',!cur.dye)+chip('dye','1','I',cur.dye==='1')+chip('dye','2','II',cur.dye==='2')+chip('dye','3','III',cur.dye==='3')+'</div>'
     +'<div class="dm-row"><label>Class props</label>'+chip('props','1','Show',M.props!==false)+chip('props','0','Hide',M.props===false)+'</div>'
+    +'<div class="dm-row"><label>Stance</label>'+chip('stance','','Class',M.stance!=='neutral')+chip('stance','neutral','Neutral',M.stance==='neutral')+'</div>'
+    +'<div class="dm-row"><label>Aura</label>'+chip('aura','1','Show',M.aura!==false)+chip('aura','0','Off',M.aura===false)+'</div>'
     +'<div class="dm-row"><label>Lighting</label>'+chip('light','','Portrait mood',!cur.light)+chip('light','class','Class colours',cur.light==='class')+'</div>'
     +'<div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:10px">Skin, hair and eye colours follow race and the hair/eye details from creation, same as the portrait. Height uses the Height from creation when it can be read (e.g. 4\'2" or 127 cm), otherwise the race\'s usual height and build. '
     +'With Outfit on “By gear”, body armour picks the look (plate → Knight, leather → Ranger, robes → Wizard, fine clothes → Noble, none → your class’s clothes). Gauntlets, boots, helms, hoods, crowns, gorgets, cloaks and weapons show when equipped.</div>'
@@ -16455,6 +16481,8 @@ function dollModelSet(group,val){
     if(group==='dye'){ if(val) m.dye=val; else delete m.dye; }
     if(group==='outfit'){ if(val) m.outfit=val; else delete m.outfit; }
     if(group==='props'){ if(val==='0') m.props=false; else delete m.props; }
+    if(group==='stance'){ if(val) m.stance=val; else delete m.stance; }
+    if(group==='aura'){ if(val==='0') m.aura=false; else delete m.aura; }
     if(group==='light'){ if(val) m.light=val; else delete m.light; }
     char.model=m;
   }
@@ -19680,6 +19708,17 @@ let _placingTok = null, _tokMenu = false;
 // Token radius on the map: a little larger than a pin so faces read, and
 // never smaller than ~2% of the map width.
 function _tokR(map, VW, R){ return Math.max(R*1.5, VW*0.02); }
+// Party marker and character minis share one size per map, the way place pins
+// share pinPx. Selected (tap) → dashed ring + gold grip; drag the grip to resize.
+const TOK_SCALE_MIN=0.35, TOK_SCALE_MAX=3;
+function _tokScale(map){ return Math.max(TOK_SCALE_MIN, Math.min(TOK_SCALE_MAX, +map.tokScale||1)); }
+function _tokSelSvg(ext, u){ // u: stroke/handle unit, ext: half-size of the marker
+  const gh=ext*1.12;
+  return `<circle r="${(ext*1.3).toFixed(2)}" style="fill:none;stroke:var(--gold);stroke-width:${Math.max(0.12,u*0.3).toFixed(2)}px;stroke-dasharray:${(u*0.5).toFixed(2)} ${(u*0.4).toFixed(2)};opacity:0.9;pointer-events:none"/>`
+    +`<g class="mn-resize tok-resize"><line x1="${(ext*0.7).toFixed(2)}" y1="${(ext*0.7).toFixed(2)}" x2="${gh.toFixed(2)}" y2="${gh.toFixed(2)}" stroke="var(--gold)" stroke-width="${(u*0.12).toFixed(2)}" opacity="0.6"/>`
+    +`<rect x="${(gh-u*1.6).toFixed(2)}" y="${(gh-u*1.6).toFixed(2)}" width="${(u*3.2).toFixed(2)}" height="${(u*3.2).toFixed(2)}" fill="transparent" style="cursor:nwse-resize"/>`
+    +`<rect x="${(gh-u*0.55).toFixed(2)}" y="${(gh-u*0.55).toFixed(2)}" width="${(u*1.1).toFixed(2)}" height="${(u*1.1).toFixed(2)}" rx="${(u*0.2).toFixed(2)}" fill="var(--gold)" stroke="#0d0a1a" stroke-width="${(u*0.1).toFixed(2)}" style="pointer-events:none"/></g>`;
+}
 function beginPlaceTok(id){ _placingTok = _placingTok===String(id) ? null : String(id); _placingId=null; _placingParty=false; _selPinId=null; renderMap(); document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
 function removeTok(id){
   const camp = getCampaigns().find(c=>c.id===editingCampId); const m = camp && _curMap(camp); if(!m || !m.tokens) return;
@@ -19853,7 +19892,7 @@ function dollSpec(char){
   const horns=M.horns===false?null:(F.horns||null);
   const hornCol=F.skin==='dragon'?skin:'#2b2226';
   return {cls:cls.name, body, skin, hairCol, eyeCol, brows:!noHair, hair:hooded?null:hair, beard, parts, dyes, height, build:{w:RB.w,legs:RB.legs,head:RB.head},
-    props:M.props!==false, armoured:metal, cape:/cloak|cape|mantle/.test(allNames), headFree:!head, clothCol:cls.color||'#554a3a', horns:hooded&&horns!=='ridge'?null:horns, hornCol,
+    props:M.props!==false, stance:M.stance==='neutral'?null:cls.name, aura:M.aura===false?null:cls.name, armoured:metal, cape:/cloak|cape|mantle/.test(allNames), headFree:!head, clothCol:cls.color||'#554a3a', horns:hooded&&horns!=='ridge'?null:horns, hornCol,
     weapons, portrait:M.light==='class'?null:(char.portrait||null)};
 }
 
@@ -20177,6 +20216,150 @@ function addClassProps(spec, B, clothCol){
   }
 }
 
+/* ── Class stances ─────────────────────────────────────────────────────
+   Directions are in figure space (+X the figure's left, +Z the front) and
+   written for the LEFT side; the right side mirrors X. Arm poses only apply
+   to a hand that isn't holding anything.
+   spine: lean of the lower back · neck: head carriage
+   thigh/calf: leg per side (l/r) · arm: {up, fore, hand} per side */
+const STANCES={
+  Barbarian:{spine:[0,1,0.22], neck:[0,1,0.1],
+    thigh:{l:[0.32,-1,0.06], r:[0.32,-1,0.06]}, calf:{l:[0.1,-1,-0.03], r:[0.1,-1,-0.03]},
+    arm:{l:{up:[0.42,-1,0.08], fore:[0.1,-1,0.25]}, r:{up:[0.42,-1,0.08], fore:[0.1,-1,0.25]}}},
+  Fighter:{spine:[0,1,0.06],
+    thigh:{l:[0.16,-1,0.2], r:[0.14,-1,-0.14]}, calf:{l:[0.05,-1,0.02], r:[0.05,-1,-0.04]}},
+  Paladin:{thigh:{l:[0.12,-1,0.02], r:[0.12,-1,0.02]}, calf:{l:[0.04,-1,0], r:[0.04,-1,0]}},
+  Rogue:{spine:[0,1,0.42], neck:[0,1,0.12],
+    thigh:{l:[0.2,-0.75,0.62], r:[0.2,-0.85,0.42]}, calf:{l:[0.04,-1,-0.42], r:[0.04,-1,-0.5]},
+    arm:{l:{up:[0.28,-0.9,0.35], fore:[0.05,-0.55,0.85]}, r:{up:[0.28,-0.9,0.35], fore:[0.05,-0.55,0.85]}}},
+  Monk:{spine:[0,1,0.12],
+    thigh:{l:[0.24,-1,0.34], r:[0.22,-1,-0.3]}, calf:{l:[0.06,-1,0.04], r:[0.06,-1,-0.1]},
+    arm:{l:{up:[0.25,-0.7,0.55], fore:[-0.35,0.65,0.7], hand:[-0.2,0.9,0.3]},
+         r:{up:[0.3,-0.75,-0.3], fore:[-0.15,0.1,1]}}},
+  Ranger:{thigh:{l:[0.1,-1,0.3], r:[0.1,-1,-0.04]}, calf:{l:[0.03,-1,0.02], r:[0.04,-1,-0.02]}},
+  Bard:{spine:[-0.08,1,0.02], neck:[0.12,1,0.05],
+    thigh:{l:[0.12,-1,0.2], r:[0.06,-1,0]}, calf:{l:[0.12,-1,-0.3], r:[0.03,-1,0]},
+    arm:{l:{up:[0.55,-0.85,-0.15], fore:[-0.65,-0.35,0.2], hand:[-0.5,-0.8,0.1]}}},
+  Druid:{neck:[0.07,1,0.06], thigh:{l:[0.1,-1,0.05], r:[0.1,-1,0.05]},
+    arm:{l:{up:[0.38,-1,0.12], fore:[0.35,-0.75,0.5]}, r:{up:[0.38,-1,0.12], fore:[0.35,-0.75,0.5]}}},
+  Wizard:{thigh:{l:[0.1,-1,0.1], r:[0.1,-1,-0.04]},
+    arm:{l:{up:[0.35,-0.75,0.45], fore:[0.05,0.15,1], hand:[0,0.35,1]}}},
+  Sorcerer:{thigh:{l:[0.14,-1,0.06], r:[0.14,-1,0.06]},
+    arm:{l:{up:[0.45,-0.9,0.12], fore:[0.4,-0.45,0.65]}, r:{up:[0.45,-0.9,0.12], fore:[0.4,-0.45,0.65]}}},
+  Warlock:{neck:[0,1,0.12], thigh:{l:[0.1,-1,0.08], r:[0.1,-1,0]},
+    arm:{l:{up:[0.3,-0.9,0.32], fore:[0.1,-0.15,1], hand:[0.05,0.1,1]}}},
+  Cleric:{thigh:{l:[0.1,-1,0.04], r:[0.1,-1,0.04]},
+    arm:{l:{up:[0.3,-0.6,0.55], fore:[0,0.6,0.8], hand:[0,1,0.25]}}},
+};
+const _mx=(v,sd)=>sd==='r'?[-v[0],v[1],v[2]]:v;
+
+/* ── Class auras (particles, animated in the render loop) ─────────────── */
+const AURAS={
+  Warlock:  {kind:'swirl',    col:0x7dffb0, n:54, size:0.153, light:0x7dffb0},
+  Cleric:   {kind:'halo',     col:0xffe6a0, n:26, size:0.108, light:0xffe6a0},
+  Paladin:  {kind:'rise',     col:0xffd66b, n:56, size:0.126, light:0xffd66b},
+  Druid:    {kind:'leaves',   col:0x6fbf4a, n:26, size:0.18},
+  Sorcerer: {kind:'hands',    col:0xff5ad0, n:60, size:0.108, light:0xff5ad0},
+  Wizard:   {kind:'runes',    col:0x5aa8ff, n:22, size:0.108},
+  Barbarian:{kind:'embers',   col:0xff6a2a, n:52, size:0.108},
+  Bard:     {kind:'notes',    col:0xffd98a, n:12, size:0.288},
+  Ranger:   {kind:'fireflies',col:0xd8ff7a, n:18, size:0.126},
+  Monk:     {kind:'rise',     col:0x6fe0d8, n:36, size:0.108},
+  Rogue:    {kind:'smoke',    col:0x4a3b6e, n:30, size:0.576},
+};
+const _auraTex={};
+function _canvasTex(key, draw){
+  if(_auraTex[key]) return _auraTex[key];
+  const c=document.createElement('canvas'); c.width=c.height=64; draw(c.getContext('2d'));
+  const t=new T.CanvasTexture(c); t.colorSpace=T.SRGBColorSpace; return _auraTex[key]=t;
+}
+const _dot=()=>_canvasTex('dot',x=>{ const g=x.createRadialGradient(32,32,0,32,32,32); g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(0.35,'rgba(255,255,255,0.6)'); g.addColorStop(1,'rgba(255,255,255,0)'); x.fillStyle=g; x.fillRect(0,0,64,64); });
+const _leaf=()=>_canvasTex('leaf',x=>{ x.fillStyle='#fff'; x.beginPath(); x.moveTo(32,6); x.quadraticCurveTo(58,30,32,58); x.quadraticCurveTo(6,30,32,6); x.fill(); x.strokeStyle='rgba(0,0,0,0.35)'; x.lineWidth=2; x.beginPath(); x.moveTo(32,10); x.lineTo(32,56); x.stroke(); });
+const _note=()=>_canvasTex('note',x=>{ // drawn, not a font glyph, so it shows everywhere
+  x.fillStyle='#fff'; x.strokeStyle='#fff'; x.lineWidth=5;
+  x.beginPath(); x.ellipse(22,48,11,8,-0.4,0,Math.PI*2); x.fill();
+  x.beginPath(); x.moveTo(31,46); x.lineTo(31,10); x.stroke();
+  x.beginPath(); x.moveTo(31,10); x.quadraticCurveTo(44,16,48,30); x.quadraticCurveTo(42,22,31,20); x.fill(); });
+function _runeCircle(){
+  if(_auraTex.circle) return _auraTex.circle;
+  const c=document.createElement('canvas'); c.width=c.height=512; const x=c.getContext('2d');
+  x.translate(256,256); x.strokeStyle='#fff'; x.fillStyle='#fff';
+  [236,200,120].forEach((r,i)=>{ x.lineWidth=i===1?3:5; x.beginPath(); x.arc(0,0,r,0,Math.PI*2); x.stroke(); });
+  const G='ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ';
+  x.font='bold 30px serif'; x.textAlign='center'; x.textBaseline='middle';
+  for(let i=0;i<24;i++){ x.save(); x.rotate(i/24*Math.PI*2); x.fillText(G[i],0,-218); x.restore(); }
+  for(let i=0;i<6;i++){ const a=i/6*Math.PI*2, b=a+Math.PI*2/3; x.lineWidth=2; x.beginPath(); x.moveTo(Math.cos(a)*200,Math.sin(a)*200); x.lineTo(Math.cos(b)*200,Math.sin(b)*200); x.stroke(); }
+  const t=new T.CanvasTexture(c); t.colorSpace=T.SRGBColorSpace; return _auraTex.circle=t;
+}
+// Particles live in the figure's own (unscaled) space: feet at y≈floor, head at top.
+function buildAura(kind, root, B, floor, top){
+  const A=AURAS[kind]; if(!A) return null;
+  const g=new T.Group(); root.add(g);
+  const add=A.kind==='smoke'||A.kind==='leaves'?T.NormalBlending:T.AdditiveBlending;
+  const tex=A.kind==='leaves'?_leaf():A.kind==='notes'?_note():_dot();
+  const n=A.n, pos=new Float32Array(n*3), col=new Float32Array(n*3);
+  const geo=new T.BufferGeometry(); geo.setAttribute('position',new T.BufferAttribute(pos,3)); geo.setAttribute('color',new T.BufferAttribute(col,3));
+  const mat=new T.PointsMaterial({size:A.size, map:tex, vertexColors:true, transparent:true, depthWrite:false, blending:add,
+    opacity:A.kind==='smoke'?0.55:1, alphaTest:A.kind==='leaves'?0.3:0});
+  const pts=new T.Points(geo,mat); pts.frustumCulled=false; g.add(pts);
+  const base=new T.Color(A.col), H=top-floor, P=[];
+  const rnd=(a,b)=>a+Math.random()*(b-a);
+  const hands=()=>['hand_l','hand_r'].map(n=>{ const v=new T.Vector3(); B[n].getWorldPosition(v); return root.worldToLocal(v); });
+  const spawn=(p,first)=>{
+    p.age=0; p.life=rnd(1.6,3.6); p.ph=Math.random()*6.28;
+    switch(A.kind){
+      case 'swirl': p.r=rnd(0.32,0.55); p.a=Math.random()*6.28; p.y=floor+rnd(0.1,H*0.9); p.vy=rnd(0.05,0.18); p.life=rnd(2.5,5); break;
+      case 'rise': case 'halo': case 'runes': case 'embers':
+        { const a=Math.random()*6.28, r=rnd(0.1,A.kind==='embers'?0.4:0.45); p.x=Math.cos(a)*r; p.z=Math.sin(a)*r; p.y=floor+rnd(0,H*(first?1:0.25)); p.vy=rnd(0.12,A.kind==='embers'?0.5:0.3); } break;
+      case 'leaves': p.x=rnd(-0.6,0.6); p.z=rnd(-0.5,0.5); p.y=first?rnd(floor,top+0.3):top+rnd(0.1,0.4); p.vy=-rnd(0.08,0.18); p.life=99; break;
+      case 'hands': { const hs=hands(), h=hs[Math.random()<0.5?0:1]; p.x=h.x; p.y=h.y; p.z=h.z; p.vx=rnd(-0.25,0.25); p.vy=rnd(-0.1,0.35); p.vz=rnd(-0.25,0.25); p.life=rnd(0.3,0.8); } break;
+      case 'notes': p.x=rnd(-0.45,0.45); p.z=rnd(-0.2,0.3); p.y=floor+H*rnd(0.4,0.8); p.vy=rnd(0.08,0.16); p.life=rnd(2.5,4); break;
+      case 'fireflies': p.cx=rnd(-0.7,0.7); p.cz=rnd(-0.5,0.5); p.cy=floor+rnd(0.2,H*0.9); p.life=rnd(2,5); break;
+      case 'smoke': { const a=Math.random()*6.28, r=rnd(0.15,0.5); p.x=Math.cos(a)*r; p.z=Math.sin(a)*r; p.y=floor+rnd(0,0.15); p.vy=rnd(0.03,0.08); p.life=rnd(2,4); } break;
+    }
+    if(first) p.age=Math.random()*Math.min(p.life,4);
+  };
+  for(let i=0;i<n;i++){ const p={}; spawn(p,true); P.push(p); }
+  let halo=null, ring=null, light=null;
+  if(A.kind==='halo' && B.Head){
+    const hp=new T.Vector3(); B.Head.getWorldPosition(hp); root.worldToLocal(hp);
+    halo=new T.Mesh(new T.RingGeometry(0.15,0.19,48), new T.MeshBasicMaterial({color:base, transparent:true, opacity:0.55, blending:T.AdditiveBlending, depthWrite:false, side:T.DoubleSide}));
+    halo.position.set(hp.x, hp.y+0.14, hp.z-0.13); g.add(halo);
+  }
+  if(A.kind==='runes'){
+    ring=new T.Mesh(new T.CircleGeometry(0.75,48), new T.MeshBasicMaterial({map:_runeCircle(), color:base, transparent:true, opacity:0.6, blending:T.AdditiveBlending, depthWrite:false}));
+    ring.rotation.x=-Math.PI/2; ring.position.y=floor+0.012; g.add(ring);
+  }
+  if(A.light){ light=new T.PointLight(A.light,0.9,2.2,1.5); light.position.set(0,floor+H*0.55,0.35); g.add(light); }
+  const update=(dt,t)=>{
+    for(let i=0;i<n;i++){
+      const p=P[i]; p.age+=dt; if(p.age>p.life) spawn(p,false);
+      const u=p.age/p.life, fade=A.kind==='leaves'?1:Math.sin(Math.PI*Math.min(1,u));
+      let x=p.x, y=p.y, z=p.z;
+      switch(A.kind){
+        case 'swirl': p.a+=dt*0.9; p.y+=p.vy*dt; x=Math.cos(p.a)*p.r; z=Math.sin(p.a)*p.r; y=p.y+Math.sin(t*2+p.ph)*0.03; break;
+        case 'rise': case 'halo': case 'runes': p.y+=p.vy*dt; x=p.x+Math.sin(t*1.3+p.ph)*0.03; y=p.y; z=p.z; break;
+        case 'embers': p.y+=p.vy*dt; x=p.x+Math.sin(t*3+p.ph)*0.05; y=p.y; z=p.z+Math.cos(t*2.3+p.ph)*0.04; break;
+        case 'leaves': p.y+=p.vy*dt; if(p.y<floor) { spawn(p,false); } x=p.x+Math.sin(t*0.9+p.ph)*0.18; y=p.y; z=p.z+Math.cos(t*0.7+p.ph)*0.1; break;
+        case 'hands': p.x+=p.vx*dt; p.y+=p.vy*dt; p.z+=p.vz*dt; x=p.x; y=p.y; z=p.z; break;
+        case 'notes': p.y+=p.vy*dt; x=p.x+Math.sin(t*1.5+p.ph)*0.08; y=p.y; z=p.z; break;
+        case 'fireflies': x=p.cx+Math.sin(t*0.7+p.ph)*0.12; y=p.cy+Math.sin(t*1.1+p.ph*2)*0.08; z=p.cz+Math.cos(t*0.6+p.ph)*0.12; break;
+        case 'smoke': p.y+=p.vy*dt; x=p.x*(1+u*0.4); y=p.y; z=p.z*(1+u*0.4); break;
+      }
+      pos[i*3]=x; pos[i*3+1]=y; pos[i*3+2]=z;
+      const k=A.kind==='fireflies'?Math.max(0,Math.sin(t*2.2+p.ph*3))*fade:A.kind==='smoke'?1:fade;
+      const c=A.kind==='leaves'?base.clone().offsetHSL((p.ph-3)*0.02,0,(p.ph-3)*0.03):base;
+      col[i*3]=c.r*k; col[i*3+1]=c.g*k; col[i*3+2]=c.b*k;
+    }
+    geo.attributes.position.needsUpdate=true; geo.attributes.color.needsUpdate=true;
+    if(halo) halo.material.opacity=0.4+0.18*Math.sin(t*1.7);
+    if(ring){ ring.rotation.z=t*0.25; ring.material.opacity=0.45+0.15*Math.sin(t*1.3); }
+    if(light) light.intensity=0.75+0.25*Math.sin(t*2.1);
+  };
+  update(0,0);
+  return {group:g, update};
+}
+
 /* ── Build a posed figure ──────────────────────────────────────────── */
 function trimToHead(mesh){
   const bones=mesh.skeleton.bones, geo=mesh.geometry;
@@ -20226,9 +20409,12 @@ async function buildFigure(spec, L){
   // Race proportions on the skeleton: leg length and head size.
   ['thigh_l','thigh_r'].forEach(n=>boneBy[n]?.scale.setScalar(spec.build.legs));
   boneBy.Head?.scale.setScalar(spec.build.head);
-  // Relaxed stance. Bone axes differ per side and per export, so each bone is
-  // aimed at a direction in figure space (+Z is the front, +X the figure's left).
+  // Height is measured standing, before any stance bends the figure.
   root.updateMatrixWorld(true);
+  const hp0=new T.Vector3(); boneBy.Head.getWorldPosition(hp0);
+  const top0=hp0.y+0.21*spec.build.head;
+  // Stance. Bone axes differ per side and per export, so each bone is
+  // aimed at a direction in figure space (+Z is the front, +X the figure's left).
   const aim=(bone, child, dir)=>{
     if(!bone||!child) return;
     const a=new T.Vector3(), b=new T.Vector3(); bone.getWorldPosition(a); child.getWorldPosition(b);
@@ -20239,10 +20425,20 @@ async function buildFigure(spec, L){
     bone.quaternion.copy(qp.invert().multiply(dq.multiply(qw)));
     bone.updateMatrixWorld(true);
   };
-  const B=boneBy;
-  aim(B.upperarm_r,B.lowerarm_r,[-0.2,-1,0.02]);  aim(B.lowerarm_r,B.hand_r,[-0.1,-1,0.32]);
-  aim(B.upperarm_l,B.lowerarm_l,[0.2,-1,0.02]);   aim(B.lowerarm_l,B.hand_l,[0.1,-1,0.32]);
-  aim(B.hand_r,B.middle_01_r,[-0.12,-1,0.18]);    aim(B.hand_l,B.middle_01_l,[0.12,-1,0.18]);
+  const B=boneBy, ST=(spec.stance&&STANCES[spec.stance])||{};
+  const busy={r:spec.weapons.some(w=>w.hand==='r'), l:spec.weapons.some(w=>w.hand==='l')};
+  if(ST.spine) aim(B.spine_01,B.spine_02,ST.spine);
+  if(ST.neck) aim(B.neck_01,B.Head,ST.neck);
+  ['l','r'].forEach(sd=>{
+    const th=ST.thigh&&ST.thigh[sd], ca=ST.calf&&ST.calf[sd];
+    if(th) aim(B['thigh_'+sd],B['calf_'+sd],_mx(th,sd));
+    if(ca) aim(B['calf_'+sd],B['foot_'+sd],_mx(ca,sd));
+    if(th||ca) aim(B['foot_'+sd],B['ball_'+sd],_mx([0.12,-0.25,1],sd));   // keep the foot flat
+    const A=(!busy[sd]&&ST.arm&&ST.arm[sd])||{};   // a hand holding something keeps its grip pose
+    aim(B['upperarm_'+sd],B['lowerarm_'+sd],_mx(A.up||[0.2,-1,0.02],sd));
+    aim(B['lowerarm_'+sd],B['hand_'+sd],_mx(A.fore||[0.1,-1,0.32],sd));
+    aim(B['hand_'+sd],B['middle_01_'+sd],_mx(A.hand||[0.12,-1,0.18],sd));
+  });
   const held={r:false,l:false};
   spec.weapons.forEach(w=>{
     const sd=w.hand, hb=B['hand_'+sd], mid=B['middle_01_'+sd]; if(!hb||!mid) return;
@@ -20270,14 +20466,19 @@ async function buildFigure(spec, L){
   });
   root.updateMatrixWorld(true);
   addClassProps(spec, B, spec.clothCol);
-  // Overall height and breadth: scale the whole figure so the top of the head
-  // lands at the character's height.
   root.updateMatrixWorld(true);
-  const hp=new T.Vector3(); B.Head.getWorldPosition(hp);
-  const top=hp.y+0.21*spec.build.head, k=spec.height/top, w=spec.build.w;
+  let aura=null;
+  if(spec.aura){
+    const wy=n=>{ const v=new T.Vector3(); B[n].getWorldPosition(v); return v.y; };
+    const floor=Math.min(...['ball_l','ball_r','foot_l','foot_r'].filter(n=>B[n]).map(wy))-0.04;
+    aura=buildAura(spec.aura, root, B, floor, wy('Head')+0.2);
+  }
+  // Overall height and breadth: scale the whole figure so the top of the head
+  // (standing) lands at the character's height.
+  const k=spec.height/top0, w=spec.build.w;
   root.scale.set(k*w, k, k*w);
   root.updateMatrixWorld(true);
-  return {root, bones:boneBy, rest:{spine:boneBy.spine_03?.quaternion.clone(), head:boneBy.Head?.quaternion.clone()}};
+  return {root, bones:boneBy, aura, rest:{spine:boneBy.spine_03?.quaternion.clone(), head:boneBy.Head?.quaternion.clone()}};
 }
 
 /* ── Stage: one shared renderer, moved into whichever doll is showing ── */
@@ -20298,6 +20499,7 @@ function ensureStage(){
   el.addEventListener('pointerup',()=>{ drag=null; });
   el.addEventListener('pointercancel',()=>{ drag=null; });
   el.addEventListener('dblclick',()=>{ S.yaw=0.4; _kick(); });
+  el.addEventListener('pointerenter',()=>_kick());   // wake the idle animation and aura
   S.ro=new ResizeObserver(()=>{ _resize(); _kick(); });
   S.io=new IntersectionObserver(es=>{ S.visible=es.some(e=>e.isIntersecting); if(S.visible) _kick(); });
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) _kick(); });
@@ -20340,8 +20542,9 @@ function _tick(t){
   S.raf=0;
   if(!S.host||!S.host.isConnected||document.hidden||!S.visible) return;   // parked until shown again
   if(S.fig){
-    const s=(t-S.t0)/1000;
+    const s=(t-S.t0)/1000, dt=Math.min(0.05,Math.max(0,(t-(S.lastT||t))/1000)); S.lastT=t;
     S.fig.root.rotation.y=S.yaw;
+    if(S.fig.aura) S.fig.aura.update(dt,s);
     const b=S.fig.bones, br=Math.sin(s*1.6);
     if(b.spine_03&&S.fig.rest.spine){ b.spine_03.quaternion.copy(S.fig.rest.spine); b.spine_03.rotateX(br*0.012); }
     if(b.Head&&S.fig.rest.head){ b.Head.quaternion.copy(S.fig.rest.head); b.Head.rotateY(Math.sin(s*0.37)*0.06); b.Head.rotateX(Math.sin(s*0.23)*0.025); }
