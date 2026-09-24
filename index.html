@@ -16411,7 +16411,7 @@ function openDollModelModal(){
   if(!char){ toast('No character selected','var(--red)'); return; }
   const spec=window.Doll3D ? window.Doll3D.spec(char) : {body:'Female',hair:null,beard:false};
   const M=char.model||{};
-  const cur={body:spec.body, hair:(M.hair!==undefined?M.hair:spec.hair)||'', beard:spec.beard, dye:M.dye||'', light:M.light||''};
+  const cur={body:spec.body, hair:(M.hair!==undefined?M.hair:spec.hair)||'', beard:spec.beard, dye:String(({a:1,b:2})[M.dye]||M.dye||''), outfit:M.outfit||'', light:M.light||''};
   const chip=function(group,val,label,on){
     return '<button class="dm-chip'+(on?' on':'')+'" onclick="dollModelSet(\''+group+'\',\''+val+'\')">'+label+'</button>';
   };
@@ -16424,10 +16424,11 @@ function openDollModelModal(){
     +'<div class="dm-row"><label>Build</label>'+chip('body','Female','Slender',cur.body==='Female')+chip('body','Male','Broad',cur.body==='Male')+'</div>'
     +'<div class="dm-row"><label>Hair</label>'+styles.map(function(h){return chip('hair',h,labels[h]||h,cur.hair===h);}).join('')+chip('hair','none','None',!cur.hair)+'</div>'
     +'<div class="dm-row"><label>Beard</label>'+chip('beard','1','Yes',cur.beard)+chip('beard','0','No',!cur.beard)+'</div>'
-    +'<div class="dm-row"><label>Outfit dye</label>'+chip('dye','','By class',!cur.dye)+chip('dye','a','Earth',cur.dye==='a')+chip('dye','b','Moss & ink',cur.dye==='b')+'</div>'
+    +'<div class="dm-row"><label>Outfit</label>'+chip('outfit','','By gear',!cur.outfit)+['Knight','Noble','Wizard','Ranger','Peasant'].map(function(f){return chip('outfit',f,f,cur.outfit===f);}).join('')+'</div>'
+    +'<div class="dm-row"><label>Colours</label>'+chip('dye','','By class',!cur.dye)+chip('dye','1','I',cur.dye==='1')+chip('dye','2','II',cur.dye==='2')+chip('dye','3','III',cur.dye==='3')+'</div>'
     +'<div class="dm-row"><label>Lighting</label>'+chip('light','','Portrait mood',!cur.light)+chip('light','class','Class colours',cur.light==='class')+'</div>'
     +'<div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:10px">Skin, hair and eye colours follow race and the hair/eye details from creation, same as the portrait. '
-    +'Armour, gloves, boots, headgear and weapons change with what is equipped. A hood or helm hides the hair.</div>'
+    +'With Outfit on “By gear”, body armour picks the look (plate → Knight, leather → Ranger, robes → Wizard, fine clothes → Noble, none → your class’s clothes). Gauntlets, boots, helms, hoods, crowns, gorgets, cloaks and weapons show when equipped.</div>'
     +'<button class="btn btn-outline" style="margin-top:12px;width:100%" onclick="dollModelSet(\'reset\',\'\')">↺ Back to defaults</button>'
     +'</div>';
   closeDollModelModal();
@@ -16448,6 +16449,7 @@ function dollModelSet(group,val){
     if(group==='hair') m.hair=(val==='none'?null:val);
     if(group==='beard') m.beard=(val==='1');
     if(group==='dye'){ if(val) m.dye=val; else delete m.dye; }
+    if(group==='outfit'){ if(val) m.outfit=val; else delete m.outfit; }
     if(group==='light'){ if(val) m.light=val; else delete m.light; }
     char.model=m;
   }
@@ -19741,11 +19743,28 @@ const RARITY_GLOW={uncommon:'#1eff00',rare:'#2f8cff','very-rare':'#b35cff',legen
 function _armourKind(it){
   if(!it) return null;
   const n=((it.name||'')+' '+(it.subtype||'')).toLowerCase();
-  if(/plate|splint|chain mail|chainmail|ring mail|breastplate|scale mail|chain shirt|mithral|adamantine|mail\b/.test(n)) return 'metal';
-  if(/leather|studded|hide|padded|brigandine|armou?r/.test(n)) return 'leather';
-  if(/robe|clothes|vestment|tunic|coat|cloak|garb|attire/.test(n)) return 'cloth';
-  return it.type==='armor'?'leather':'cloth';
+  if(/robe/.test(n)) return 'robe';
+  if(/half.?plate|breastplate|scale|chain shirt|cuirass/.test(n)) return 'medium';
+  if(/plate|splint|chain ?mail|ring mail|banded/.test(n)) return 'heavy';
+  if(/mithral|adamantine|\bmail\b/.test(n)) return 'medium';
+  if(/\bhide\b|fur|pelt/.test(n)) return 'hide';
+  if(/leather|studded|padded|brigandine/.test(n)) return 'light';
+  if(/fine clothes|noble|royal|courtier|finery|doublet/.test(n)) return 'fine';
+  if(/clothes|vestment|tunic|coat|garb|attire/.test(n)) return 'cloth';
+  return it.type==='armor'?'light':'cloth';
 }
+// Everyday clothes per class, and which of each family's three colourways a
+// class wears. Families: Knight, Noble, Wizard, Ranger, Peasant.
+const CLASS_CLOTHES={Wizard:'Wizard',Sorcerer:'Wizard',Warlock:'Wizard',Cleric:'Noble',Bard:'Noble',Artificer:'Noble',
+  Paladin:'Knight',Fighter:'Knight',Ranger:'Ranger',Rogue:'Ranger',Druid:'Peasant',Monk:'Peasant',Barbarian:'Peasant'};
+const CLASS_DYE={
+  Wizard: {Wizard:1,Sorcerer:3,Warlock:2,Cleric:3,Bard:2},
+  Noble:  {Bard:1,Cleric:2,Artificer:2,Paladin:1,Druid:3,Ranger:3,Sorcerer:1,Warlock:2,Wizard:2},
+  Knight: {Paladin:1,Cleric:2,Fighter:3,Barbarian:3,Warlock:3,Artificer:2,Ranger:3,Rogue:3},
+  Ranger: {Ranger:1,Druid:1,Rogue:2,Warlock:2,Monk:3,Barbarian:3,Bard:3,Fighter:3},
+  Peasant:{Barbarian:1,Druid:2,Monk:3,Bard:3,Cleric:3},
+};
+const OUTFIT_FAMILIES=['Knight','Noble','Wizard','Ranger','Peasant'];
 function _weaponKind(it){
   if(!it) return null;
   const n=(it.name||'').toLowerCase();
@@ -19781,27 +19800,39 @@ function dollSpec(char){
   const beard=M.beard!==undefined?!!M.beard:(body==='Male'&&!noHair&&(dwarf||(h>>5)%5<2));
 
   const eq=(typeof getEquippedItems==='function')?getEquippedItems(char):{};
+  const nm=it=>((it&&it.name)||'').toLowerCase();
+  const allNames=Object.keys(eq).map(k=>nm(eq[k])).join(' | ');
   const chest=_armourKind(eq.chest);
-  const armoured=chest==='leather'||chest==='metal';
-  const hn=((eq.head&&eq.head.name)||'').toLowerCase();
-  const hooded=/hood|helm|hat\b|cap\b|cowl|coif|mask/.test(hn);
-  const gloves=!!eq.gloves||armoured;
-  const boots=!!eq.boots||armoured;
-  const pre=body+'_';
-  const parts=[
-    pre+(armoured?'Ranger':'Peasant')+'_Body',
-    pre+(armoured?'Ranger':'Peasant')+'_Legs',
-    pre+(gloves?'Ranger':'Peasant')+'_Arms',
-    pre+(boots?'Ranger':'Peasant')+'_Feet',
-  ];
-  if(chest==='metal') parts.push(pre+'Ranger_Acc_Pauldrons');
-  if(hooded) parts.push(pre+'Ranger_Head_Hood');
-  // Outfit colourways: woodland classes get the olive Ranger dye, casters the
-  // second Peasant cloth. The player can override either.
-  const wood=/Ranger|Druid|Rogue|Monk/.test(cls.name);
-  const caster=/Wizard|Sorcerer|Warlock|Cleric|Bard/.test(cls.name);
-  const ranger=M.dye==='a'?'Ranger':M.dye==='b'?'Ranger_3':(wood?'Ranger_3':'Ranger');
-  const peasant=M.dye==='a'?'Peasant':M.dye==='b'?'Peasant_2':(caster?'Peasant_2':'Peasant');
+  const metal=chest==='heavy'||chest==='medium';
+  const fam=OUTFIT_FAMILIES.indexOf(M.outfit)>=0?M.outfit:
+    metal?'Knight': (chest==='light'||chest==='hide')?'Ranger': chest==='robe'?'Wizard': chest==='fine'?'Noble': (CLASS_CLOTHES[cls.name]||'Peasant');
+  const pre=body+'_', parts=[];
+  parts.push(pre+(fam==='Knight'?(metal||M.outfit==='Knight'?'Knight_Body_Armor':'Knight_Body_Cloth'):fam+'_Body'));
+  parts.push(pre+fam+'_Legs');
+  const gl=nm(eq.gloves);
+  parts.push(pre+(/gauntlet|vambrace/.test(gl)||chest==='heavy'?'Knight':eq.gloves&&fam!=='Knight'&&fam!=='Noble'?'Ranger':fam)+'_Arms');
+  const bt=nm(eq.boots);
+  parts.push(pre+(/greave|sabaton|plated|iron/.test(bt)||chest==='heavy'?'Knight':eq.boots&&(fam==='Peasant'||fam==='Wizard')?'Ranger':fam)+'_Feet');
+  if(chest==='heavy') parts.push(pre+'Knight_Acc_Pauldrons_'+(/Barbarian|Warlock|Rogue/.test(cls.name)?'Spike':'Round'));
+  else if(chest==='medium') parts.push(pre+(cls.name==='Paladin'?'Noble_Acc_Pauldron_Lion':'Noble_Acc_Pauldrons'));
+  else if(chest==='hide') parts.push(pre+'Ranger_Acc_Pauldrons');
+  if(/gorget/.test(allNames)) parts.push(pre+'Noble_Acc_Gorget');
+  if(/cloak|cape|mantle|scarf|shawl/.test(allNames)) parts.push(pre+'Knight_Acc_Scarf');
+  const hn=nm(eq.head);
+  let head=null;
+  if(/hood|cowl/.test(hn)) head='Ranger_Head_Hood';
+  else if(/horn/.test(hn)||(/helm|armet|bascinet/.test(hn)&&cls.name==='Barbarian')) head='Knight_Head_Horns';
+  else if(/helm|armet|bascinet|visor|coif/.test(hn)) head='Knight_Head_Armet';
+  else if(/crown|circlet|tiara|diadem/.test(hn)) head='Noble_Head_Crown';
+  if(head) parts.push(pre+head);
+  const hooded=!!head&&head!=='Noble_Head_Crown';
+  // Colourway for every family in use: the player's pick, else the class's.
+  const legacy={a:1,b:2};
+  const forced=+(legacy[M.dye]||M.dye)||0;
+  const dyes={};
+  parts.forEach(p=>{ const f=p.split('_')[1]; if(dyes[f]) return;
+    const d=forced||(CLASS_DYE[f]&&CLASS_DYE[f][cls.name])||1+((h>>7)%3);
+    dyes[f]=f+(d>1?'_'+d:''); });
   const weapons=[];
   const mk=_weaponKind(eq.mainhand), ok=_weaponKind(eq.offhand);
   const glow=it=>it?(RARITY_GLOW[it.rarity]||(/\+\d/.test(it.name||'')?'#8fb4ff':null)):null;
@@ -19809,8 +19840,8 @@ function dollSpec(char){
   if(ok) weapons.push({hand:'l',kind:ok,glow:glow(eq.offhand)});
   const horns=M.horns===false?null:(F.horns||null);
   const hornCol=F.skin==='dragon'?skin:'#2b2226';
-  return {cls:cls.name, body, skin, hairCol, eyeCol, brows:!noHair, hair:hooded?null:hair, beard, parts, ranger, peasant, horns:hooded&&horns!=='ridge'?null:horns, hornCol,
-    weapons, metal:chest==='metal', portrait:M.light==='class'?null:(char.portrait||null)};
+  return {cls:cls.name, body, skin, hairCol, eyeCol, brows:!noHair, hair:hooded?null:hair, beard, parts, dyes, horns:hooded&&horns!=='ridge'?null:horns, hornCol,
+    weapons, portrait:M.light==='class'?null:(char.portrait||null)};
 }
 
 /* ── Portrait mood → colour scheme ─────────────────────────────────── */
@@ -19974,10 +20005,11 @@ async function buildFigure(spec, L){
     hair1:tintedMat('Hair_1','Hair_1_N', spec.hairCol, 0.1, 0.55),
     hair2:tintedMat('Hair_2','Hair_2_N', spec.hairCol, 0.1, 0.55),
     eye: tintedMat('Eye', null, spec.eyeCol, 0.35, 0.15),
-    ranger:gradedMat(spec.ranger, spec.metal?Object.assign({},L,{desat:0.8,tint:L.tint.map((v,i)=>v*[0.92,0.96,1.05][i])}):L, spec.metal),
-    peasant:gradedMat(spec.peasant, L, false),
   };
-  const pick=n=>/Superhero/.test(n)?mats.skin:/Regular/.test(n)?mats.reg:/Eyes/.test(n)?mats.eye:/Hair_2/.test(n)?mats.hair2:/Hair_1/.test(n)?mats.hair1:/Ranger/.test(n)?mats.ranger:mats.peasant;
+  const cloth={};
+  const clothMat=f=>cloth[f]||(cloth[f]=gradedMat(spec.dyes[f]||f, L, f==='Knight'));
+  const pick=n=>{ const f=/MI_(Knight|Noble|Wizard|Ranger|Peasant)/.exec(n);
+    return /Superhero/.test(n)?mats.skin:/Regular/.test(n)?mats.reg:/Eyes/.test(n)?mats.eye:/Hair_2/.test(n)?mats.hair2:/Hair_1/.test(n)?mats.hair1:clothMat(f?f[1]:'Peasant'); };
   const assign=o=>{ o.castShadow=true; o.frustumCulled=false;
     if(Array.isArray(o.material)) o.material=o.material.map(m=>pick(m.name)); else o.material=pick(o.material.name); };
   root.traverse(o=>{ if(!o.isSkinnedMesh) return;
