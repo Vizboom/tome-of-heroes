@@ -4521,9 +4521,10 @@ function renderLoreTab(char,cls,elId,editable){
     {key:'flaws',label:'Flaws',icon:'💔'},
   ];
   let html=``;
-  if(char.age||char.height||char.eyes||char.hair){
+  if(char.gender||char.age||char.height||char.eyes||char.hair){
     html+=`<div class="divider"><span>Appearance</span></div>
     <div class="appearance-grid">
+      ${char.gender?('<div class="appearance-item"><label>GENDER</label><span>'+esc(char.gender)+'</span></div>'):''}
       ${char.age?('<div class="appearance-item"><label>AGE</label><span>'+char.age+'</span></div>'):''}
       ${char.height?('<div class="appearance-item"><label>HEIGHT</label><span>'+char.height+'</span></div>'):''}
       ${char.weight?('<div class="appearance-item"><label>WEIGHT</label><span>'+char.weight+'</span></div>'):''}
@@ -16421,7 +16422,8 @@ function openDollModelModal(){
     +'<div class="slot-picker-title">✎ 3D MODEL</div>'
     +'<button onclick="closeDollModelModal()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px">✕</button>'
     +'</div><div style="padding:14px 18px 18px">'
-    +'<div class="dm-row"><label>Build</label>'+chip('body','Female','Slender',cur.body==='Female')+chip('body','Male','Broad',cur.body==='Male')+'</div>'
+    +'<div class="dm-row"><label>Gender</label>'+GENDERS.map(function(g){return chip('gender',g,g||'Unspecified',(char.gender||'')===g);}).join('')+'</div>'
+    +'<div class="dm-row"><label>Build</label>'+chip('body','','By gender',!M.body)+chip('body','Female','Slender',M.body==='Female')+chip('body','Male','Broad',M.body==='Male')+'</div>'
     +'<div class="dm-row"><label>Hair</label>'+styles.map(function(h){return chip('hair',h,labels[h]||h,cur.hair===h);}).join('')+chip('hair','none','None',!cur.hair)+'</div>'
     +'<div class="dm-row"><label>Beard</label>'+chip('beard','1','Yes',cur.beard)+chip('beard','0','No',!cur.beard)+'</div>'
     +'<div class="dm-row"><label>Outfit</label>'+chip('outfit','','By gear',!cur.outfit)+['Knight','Noble','Wizard','Ranger','Peasant'].map(function(f){return chip('outfit',f,f,cur.outfit===f);}).join('')+'</div>'
@@ -16443,10 +16445,11 @@ function closeDollModelModal(){ const el=document.getElementById('dollModelOverl
 function dollModelSet(group,val){
   const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
   if(!char) return;
-  if(group==='reset') delete char.model;
+  if(group==='gender'){ char.gender=val; }
+  else if(group==='reset') delete char.model;
   else {
     const m=Object.assign({}, char.model||{});
-    if(group==='body') m.body=val;
+    if(group==='body'){ if(val) m.body=val; else delete m.body; }
     if(group==='hair') m.hair=(val==='none'?null:val);
     if(group==='beard') m.beard=(val==='1');
     if(group==='dye'){ if(val) m.dye=val; else delete m.dye; }
@@ -16822,6 +16825,7 @@ function _shade(hex,amt){
 const _HAIR_WORDS={black:'#1e1c24',ebony:'#1e1c24',brown:'#5b3a24',brunette:'#4a2f1d',chestnut:'#6b4226',auburn:'#7a3b1e',red:'#a83c1e',ginger:'#b5561f',crimson:'#8e2418',scarlet:'#a02a1a',copper:'#a85a2a',blonde:'#d9b45b',blond:'#d9b45b',golden:'#cfa53f',gold:'#cfa53f',yellow:'#d4b04a',sandy:'#c9a26b',platinum:'#e8e2d0',white:'#ece9e2',snow:'#f0eee8',grey:'#b8b8c2',gray:'#b8b8c2',silver:'#c8c8d4',blue:'#3a5ab0',navy:'#2a3f7d',green:'#2e7d4f',emerald:'#2a8e58',purple:'#6a3d9e',violet:'#7a4ab5',lavender:'#9a7ac5',pink:'#c95b8e',rose:'#c06a85',teal:'#2a8e8e',cyan:'#3aa0b5',orange:'#c96b2e',dark:'#2a2430'};
 const _EYE_WORDS={blue:'#4a7ab5',sapphire:'#3a5ab5',green:'#3f8e5a',emerald:'#2fa060',brown:'#6b4226',dark:'#3a2a1c',black:'#24202a',hazel:'#8a6b32',amber:'#c98a2e',grey:'#9aa0ae',gray:'#9aa0ae',silver:'#b5bac5',red:'#b03a3a',crimson:'#a02a2a',violet:'#7a4ab5',purple:'#6a3d9e',gold:'#c9a227',golden:'#c9a227',yellow:'#c9b02e',orange:'#c9762e',white:'#e8e8ee',pink:'#c56b9a',teal:'#2a9e9e'};
 
+const GENDERS=['Female','Male','Non-binary',''];
 function _parseColorWord(text,map,fallback){
   const words=String(text||'').toLowerCase().split(/[^a-z]+/);
   for(let i=0;i<words.length;i++){ if(map[words[i]]) return map[words[i]]; }
@@ -17082,6 +17086,7 @@ function buildPortraitPrompt(char){
 
   // ── Physical description ──
   const phys=[];
+  if(char.gender) phys.push(String(char.gender).toLowerCase());
   if(char.age) phys.push(char.age+' years old');
   if(char.height) phys.push(char.height+' tall');
   if(char.weight) phys.push('weighing '+char.weight);
@@ -18415,7 +18420,7 @@ function gwOpenCreate(){
   const s = {
     name:'', level:1, cls:null, sub:'', mc:{on:false, cls:null, level:1, sub:''},
     raceBase:'', race:'', raceCustom:'', flex:[], bg:'', bgCustom:'',
-    app:{age:'',height:'',weight:'',eyes:'',hair:''},
+    app:{gender:'',age:'',height:'',weight:'',eyes:'',hair:''},
     ab:{method:'array', assign:{}, pb:{STR:8,DEX:8,CON:8,INT:8,WIS:8,CHA:8}, man:{STR:10,DEX:10,CON:10,INT:10,WIS:10,CHA:10}, rolls:[], rollDice:[]},
     skills:{cls:[], race:[], bg:[]}, choices:{}, asi:{}, spells:{},
     equip:{mode:'kit', picks:{}, bgGear:true, gold:0, extra:[], q:''},
@@ -18519,6 +18524,7 @@ const GW_CREATE_STEPS = [
      const f = (k,label,ph)=>`<div class="field"><label>${label}</label><input value="${esc(s.app[k])}" placeholder="${esc(ph)}" oninput="GW.s.app.${k}=this.value"></div>`;
      return `<div class="gw-narrow">
        ${r.n?`<div class="gw-note">${r.icon||''} <b>${esc(r.n)}</b> — ${esc(r.age||'')}. Height ${esc(r.ht||'—')}, weight ${esc(r.wt||'—')}.</div>`:''}
+       <div class="field"><label>Gender</label><div>${GENDERS.map(g=>`<button type="button" class="gw-chip${(s.app.gender||'')===g?' sel':''}" onclick="GW.s.app.gender=${JSON.stringify(g).replace(/"/g,"'")};gwRefresh()">${g||'Unspecified'}</button>`).join('')}</div></div>
        <div class="gw-form3">${f('age','Age','e.g. 28')}${f('height','Height',r.ht||"e.g. 5'8\"")}${f('weight','Weight',r.wt||'e.g. 150 lb')}</div>
        <div class="gw-form2">${f('eyes','Eyes','e.g. Storm grey')}${f('hair','Hair','e.g. Copper, braided')}</div></div>`;
    }},
@@ -18998,7 +19004,7 @@ function _gwReview(s){
     h += sec('spells','Spells', `<div class="gw-mini">${spellN} chosen${warn.length?`<br><span style="color:var(--gold)">⚠ ${esc(warn.join('; '))} — you can add them later on the Spells tab.</span>`:''}</div>`);
   }
   h += sec('equip','Equipment', `<div class="gw-mini">${_gwEquipList(s).length} item(s) · ${_gwStartGold(s)} gp</div>`);
-  const ap = s.app; const looks = [ap.age&&'Age '+ap.age, ap.height, ap.weight, ap.eyes&&ap.eyes+' eyes', ap.hair&&ap.hair+' hair'].filter(Boolean);
+  const ap = s.app; const looks = [ap.gender, ap.age&&'Age '+ap.age, ap.height, ap.weight, ap.eyes&&ap.eyes+' eyes', ap.hair&&ap.hair+' hair'].filter(Boolean);
   h += sec('looks','Appearance', `<div class="gw-mini">${esc(looks.join(' · '))||'—'}</div>`);
   return h + `</div>`;
 }
@@ -19029,7 +19035,7 @@ function gwFinishCreate(s){
     abilities:sc, savingThrowProfs:[...(fcls.saves||[])], proficiencies:[..._gwAllSkills(s)],
     feats:[], otherProfs:other, equippedSlots:{}, ac, maxHP:_gwMaxHP(s,sc), currentHP:_gwMaxHP(s,sc), speed,
     statuses:[], shareCode:genCode(), created:Date.now(), xp:xpForLevel(s.level),
-    age:s.app.age, height:s.app.height, weight:s.app.weight, eyes:s.app.eyes, hair:s.app.hair,
+    gender:s.app.gender||'', age:s.app.age, height:s.app.height, weight:s.app.weight, eyes:s.app.eyes, hair:s.app.hair,
     traits:s.story.traits, ideals:s.story.ideals, bonds:s.story.bonds, flaws:s.story.flaws, backstory:s.story.backstory, allies:s.story.allies,
     attacks:[], spells:[], equipment:[], subclassChoices:{}, featureChoiceLog:[], asiHistory:[], levelLog:[],
   };
@@ -19793,7 +19799,9 @@ function dollSpec(char){
   const eyeCol=_parseColorWord(char.eyes,_EYE_WORDS, _pick(rng,['#4a7ab5','#3f8e5a','#6b4226','#8a6b32','#9aa0ae']));
   const M=char.model||{};
   const h=_hashStr(String(char.id||char.name||'x'))>>>0;   // non-negative, so every % pick lands in range
-  const body=M.body||(h%2?'Male':'Female');
+  // Gender picks the body; Build in ✎ Model overrides it; otherwise the ID decides.
+  const gd=String(char.gender||'').toLowerCase();
+  const body=M.body||(/^(f|woman|girl|female)/.test(gd)?'Female':/^(m|man|boy|male)/.test(gd)?'Male':(h%2?'Male':'Female'));
   const noHair=!!F.noHair;
   let hair=M.hair!==undefined?M.hair:(noHair?null:(F.baldBias&&h%3===0)?null:
     (body==='Female'?['Hair_Long','Hair_Buns','Hair_SimpleParted','Hair_Long'][(h>>>3)%4]:['Hair_SimpleParted','Hair_Buzzed','Hair_Long','Hair_SimpleParted'][(h>>>3)%4]));
