@@ -880,6 +880,17 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   pointer-events: none; position: relative;
 }
 .paperdoll-body svg { width: 96px; height: 310px; overflow: visible; }
+.paperdoll-body.doll3d-host { pointer-events: auto; border-radius: 12px; overflow: hidden; background: #07060d; touch-action: pan-y; }
+.paperdoll-body.doll3d-host canvas.doll3d-canvas { display: block; cursor: grab; position: relative; z-index: 1; }
+.paperdoll-body.doll3d-host canvas.doll3d-canvas:active { cursor: grabbing; }
+.paperdoll-body.doll3d-host .doll3d-msg { position: absolute; inset: auto 0 10px 0; text-align: center; font-size: 10px; letter-spacing: 1px; color: var(--muted); z-index: 2; pointer-events: none; font-family: 'Cinzel', serif; }
+.paperdoll-body.doll3d-host:not(.doll3d-loading):not(.doll3d-failed) .doll3d-msg { display: none; }
+.paperdoll-body.doll3d-host.doll3d-loading canvas.doll3d-canvas { opacity: 0.35; }
+.doll3d-hint { position: absolute; top: 6px; right: 8px; font-size: 9px; color: rgba(255,255,255,0.35); z-index: 2; pointer-events: none; }
+.dm-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
+.dm-row label { width: 78px; font-family: 'Cinzel', serif; font-size: 9px; letter-spacing: 1.2px; color: var(--gold); text-transform: uppercase; }
+.dm-chip { background: none; border: 1px solid var(--border2); border-radius: 14px; color: var(--muted); font-size: 11px; padding: 4px 10px; cursor: pointer; }
+.dm-chip.on { border-color: var(--gold); color: var(--gold); background: var(--gold-dim); }
 .paperdoll-body img.paperdoll-portrait {
   max-width: 100%; max-height: 310px; object-fit: contain;
   border-radius: 10px; position: relative; z-index: 1;
@@ -1376,7 +1387,27 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   .gw-btn{padding:10px 14px;}
   .gw-spellbar{top:-16px;}
 }
+
+/* ══ MINIATURE STUDIO ══ */
+.ms-dialog{width:min(820px,100%);max-height:100%;display:flex;flex-direction:column;background:var(--bg2);border:1px solid rgba(201,162,39,0.35);border-radius:18px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.6);}
+.ms-body{overflow-y:auto;padding:18px 22px;}
+.ms-steps{display:grid;gap:8px;margin-bottom:14px;}
+.ms-step{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:15px;line-height:1.4;}
+.ms-step b{width:26px;height:26px;border-radius:50%;background:var(--gold);color:#0d0a1a;font-family:'Cinzel',serif;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;}
+.ms-step span{flex:1;}
+.ms-step .gw-btn{flex-shrink:0;}
+.ms-zone{border:2px dashed var(--border2);border-radius:12px;padding:22px;text-align:center;color:var(--muted);font-size:15px;cursor:pointer;margin-bottom:14px;transition:var(--trans);}
+.ms-zone:hover,.ms-zone:focus{border-color:var(--gold);color:var(--gold);outline:none;}
+.ms-preview{display:flex;align-items:flex-end;justify-content:center;gap:26px;flex-wrap:wrap;background:radial-gradient(ellipse at 50% 30%,#2a2344,var(--bg));border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:12px;}
+.ms-pv{display:flex;flex-direction:column;align-items:center;gap:8px;}
+.ms-pv span{font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;}
+.ms-ctrls{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:center;margin-bottom:10px;}
+.ms-ctrls label{display:flex;flex-direction:column;gap:4px;font-family:'Cinzel',serif;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;min-width:150px;flex:1;}
+.ms-ctrls input[type=range]{accent-color:var(--gold);width:100%;}
+.ms-ctrls label.gw-toggle{flex-direction:row;align-items:center;text-transform:none;font-family:inherit;letter-spacing:0;font-size:14px;color:var(--text);}
+@media (max-width:760px){ .ms-dialog{border-radius:0;height:100%;} .ms-body{padding:14px;} .ms-step{flex-wrap:wrap;} }
 </style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head>
 <body>
 <div id="app">
@@ -1504,7 +1535,10 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
               <div class="paperdoll-section-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
                 <span>EQUIPMENT SLOTS</span>
                 <span style="display:flex;gap:6px">
-                  <button onclick="openPortraitModal()" title="Set a character portrait (e.g. from HeroForge)" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">🖼 Portrait</button>
+                  <button id="dollModeBtn" onclick="toggleDollMode()" title="Switch between the 3D model and the portrait picture" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">⇄ 2D</button>
+                  <button id="dollModelBtn" onclick="openDollModelModal()" title="Build, hair and outfit dye for the 3D model" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">✎ Model</button>
+                  <button onclick="openMiniStudio()" title="Frame this character's round token for the campaign map" style="background:none;border:1px solid var(--gold);border-radius:6px;color:var(--gold);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">🎯 Map Token</button>
+                  <button onclick="openPortraitModal()" title="Set a character portrait" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">🖼 Portrait</button>
                   <button onclick="resetCharEquipment()" title="Unequip everything" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">↺ Reset</button>
                 </span>
               </div>
@@ -13742,11 +13776,30 @@ function renderMap(){
         ${(!map.hidePinLabels && p.hideName!==true)?`<text text-anchor="middle" y="${LY}" style="font-size:${LF}px;stroke-width:${(_lf*0.28).toFixed(2)}px">${esc(String(p.name).slice(0,20))}</text>`:''}
         ${seld?`<g class="mn-resize"><line x1="${(R).toFixed(2)}" y1="${(R).toFixed(2)}" x2="${gh.toFixed(2)}" y2="${gh.toFixed(2)}" stroke="var(--gold)" stroke-width="${(R*0.12).toFixed(2)}" opacity="0.6"/><rect x="${(gh-R*1.6).toFixed(2)}" y="${(gh-R*1.6).toFixed(2)}" width="${(R*3.2).toFixed(2)}" height="${(R*3.2).toFixed(2)}" fill="transparent" style="cursor:nwse-resize"/><rect x="${(gh-R*0.55).toFixed(2)}" y="${(gh-R*0.55).toFixed(2)}" width="${(R*1.1).toFixed(2)}" height="${(R*1.1).toFixed(2)}" rx="${(R*0.2).toFixed(2)}" fill="var(--gold)" stroke="#0d0a1a" stroke-width="${(R*0.1).toFixed(2)}" style="pointer-events:none"/></g>`:''}
       </g>`; }).join(''); })()}
+      <defs><clipPath id="mtokClip"><circle r="10"/></clipPath></defs>
       ${map.party?(()=>{ const PS2=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4); const R=Math.max(0.6,_pinPx(map)*2.2); const px=(map.party.x*VW).toFixed(1), py=(map.party.y*VH).toFixed(1); const lf=(R*1.1).toFixed(2), ly=(R+R*1.1*0.95+1).toFixed(2);
-        return `<g class="map-node party pinlabel" data-id="__party__" data-cx="${px}" data-cy="${py}" transform="translate(${px},${py}) scale(${PS2})">
+        // The party marker shows each member's mini (those not placed on their own)
+        const solo=map.tokens||{}; const mem=_campMembers(camp).filter(c=>!solo[String(c.id)]);
+        if(!mem.length) return `<g class="map-node party pinlabel" data-id="__party__" data-cx="${px}" data-cy="${py}" transform="translate(${px},${py}) scale(${PS2})">
           <g class="pinicon" transform="scale(${(R/12).toFixed(3)})" fill="var(--gold)" stroke="#0d0a1a" stroke-width="1.6"><rect x="-1.8" y="-12" width="3.6" height="24" rx="1"/><polygon points="1.8,-12 13,-8 1.8,-4"/></g>
           <text text-anchor="middle" y="${ly}" style="font-size:${lf}px;stroke-width:${(R*1.1*0.28).toFixed(2)}px">Party</text>
+        </g>`;
+        const tr=_tokR(map,VW,R), perRow=Math.min(4,mem.length), rows=Math.ceil(mem.length/perRow), gap=tr*1.6;
+        const toks=mem.map((c,i)=>{ const row=Math.floor(i/perRow), inRow=Math.min(perRow, mem.length-row*perRow), col=i-row*perRow;
+          const tx=(col-(inRow-1)/2)*gap, ty=(row-(rows-1)/2)*gap;
+          return `<g transform="translate(${tx.toFixed(2)},${ty.toFixed(2)}) scale(${(tr/10).toFixed(3)})"><title>${esc(c.name)}</title>${_tokSvg(c)}</g>`; }).join('');
+        const tlf=Math.max(R*1.1, tr*0.42), lyy=((rows-1)/2*gap+tr*1.15+tlf).toFixed(2);
+        return `<g class="map-node party pinlabel" data-id="__party__" data-cx="${px}" data-cy="${py}" transform="translate(${px},${py}) scale(${PS2})">
+          ${toks}
+          <text text-anchor="middle" y="${lyy}" style="font-size:${tlf.toFixed(2)}px;stroke-width:${(tlf*0.28).toFixed(2)}px">${esc(camp.partyName||'Party')}</text>
         </g>`; })():''}
+      ${Object.entries(map.tokens||{}).map(([cid,pos])=>{ const c=_campMembers(camp).find(x=>String(x.id)===cid); if(!c||!pos) return '';
+        const PS3=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4); const R=Math.max(0.6,_pinPx(map)*2.2); const tr=_tokR(map,VW,R);
+        const px=(pos.x*VW).toFixed(1), py=(pos.y*VH).toFixed(1); const lf=Math.max(R*1.0, tr*0.42).toFixed(2);
+        return `<g class="map-node party token pinlabel ${_placingTok===cid?'selpin':''}" data-id="__tok_${esc(cid)}" data-cx="${px}" data-cy="${py}" transform="translate(${px},${py}) scale(${PS3})">
+          <g transform="scale(${(tr/10).toFixed(3)})"><title>${esc(c.name)}</title>${_tokSvg(c)}</g>
+          <text text-anchor="middle" y="${(tr*1.15+(+lf)).toFixed(2)}" style="font-size:${lf}px;stroke-width:${(lf*0.28).toFixed(2)}px">${esc(String(c.name).split(' ')[0].slice(0,14))}</text>
+        </g>`; }).join('')}
       ${_fogLayerSvg(camp, map, VW, VH, pinned)}
     </svg>`;
     // A sub-map leads with the places that plausibly belong there — linked to
@@ -13762,11 +13815,12 @@ function renderMap(){
     const _painting = _paintMode && _fogOn(map) && gm;
     const _legend = _painting
       ? (_paintMode==='reveal' ? 'drag to rub the fog away · '+Math.round(_brushR(map))+'px brush' : 'drag to paint the fog back · '+Math.round(_brushR(map))+'px brush')
+      : _placingTok ? 'tap where '+esc((_campMembers(camp).find(c=>String(c.id)===_placingTok)||{}).name||'the mini')+' goes'
       : (_placingParty?'tap to drop the party marker':(_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_selPinId?'drag the gold grip to resize · drag pin to move':(_mapWheelZoom?'scroll to zoom · tap off the map to exit':'tap the map to zoom · scroll moves the page'))));
     // Peeking is the odd state, so it is the one that gets marked.
     const _peeking = gm && _fogOn(map) && !map.fogFull && _gmPeek;
     const _legend2 = _peeking ? 'you are seeing through the fog — the party sees it solid' : _legend;
-    html += `<div class="map-wrap ${(_placingId||_placingParty)?'placing':''} ${_painting?'painting-fog':''} ${_peeking?'gm-preview':''} ${_mapWheelZoom?'zoom-active':''}" id="campMapWrap">${svg}<div class="map-legend">${_legend2}</div></div>`;
+    html += `<div class="map-wrap ${(_placingId||_placingParty||_placingTok)?'placing':''} ${_painting?'painting-fog':''} ${_peeking?'gm-preview':''} ${_mapWheelZoom?'zoom-active':''}" id="campMapWrap">${svg}<div class="map-legend">${_legend2}</div></div>`;
     html += _gmMapCtrlsHtml(camp, map);
     html += `<div class="map-ctrls">
       ${(chain.length>1)?`<button class="pc-pill" onclick="switchMap('${chain[chain.length-2].id}')" title="Back to ${esc(chain[chain.length-2].name)}">↑ up a map</button>`:''}
@@ -13774,6 +13828,7 @@ function renderMap(){
       <button class="pc-pill" onclick="zoomReset('${map.id}')" title="Reset zoom">⟲ fit</button>
       <button class="pc-pill" style="border-color:var(--gold);color:var(--gold)" onclick="beginPlaceParty()" title="${map.party?'Reposition the party marker':'Drop a party marker anywhere on the map'}">🚩 ${map.party?'move party':'drop party'}</button>
       ${map.party?`<button class="pc-pill" onclick="removeParty()">✕ party</button>`:''}
+      ${_campMembers(camp).length?`<button class="pc-pill ${_tokMenu?'on':''}" onclick="toggleTokMenu()" title="Place characters' minis on their own, away from the party marker">🧍 minis</button>`:''}
       <button class="pc-pill" onclick="popOutMap()" title="Open this map full-screen in its own window">⛶ pop out</button>
 
 <span class="pc-pill" style="cursor:default">📌 ${_pinPx(map)}px</span>
@@ -13787,6 +13842,15 @@ function renderMap(){
       <button class="pc-pill" onclick="scanSessionsForPlaces()" id="scanPlacesBtn">🔍 scan sessions for places</button>
       <button class="pc-pill ${camp.autoScanPlaces!==false?'on':''}" onclick="toggleAutoScan()" title="Scan every new session for places automatically">auto-scan new sessions</button>
     </div>`;
+    if(_tokMenu){
+      const mem=_campMembers(camp), solo=map.tokens||{};
+      html += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin:2px 0 6px">MINIS — tap a hero, then tap the map. Minis not placed travel with the party marker.</div>
+      <div class="map-tray">${mem.map(c=>{ const k=String(c.id), placed=!!solo[k];
+        return `<span style="display:inline-flex;gap:4px;align-items:center"><button class="pc-pill ${_placingTok===k?'on gold':''}" onclick="beginPlaceTok('${jsq(k)}')" style="display:inline-flex;align-items:center;gap:6px">
+          ${c.token||c.portrait?`<img src="${c.token||c.portrait}" alt="" style="width:20px;height:20px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 1.5px ${classColor(c.classIdx)}">`:classIcon(c.classIdx)} ${esc(c.name)}${placed?' · move':''}</button>
+          ${placed?`<button class="pc-pill" onclick="removeTok('${jsq(k)}')" title="Back to the party">✕</button>`:''}</span>`; }).join('')}
+        <button class="pc-pill" onclick="openMiniStudio()" title="Frame the selected character's token">🎯 frame my token</button></div>`;
+    }
     if(unplaced.length || _rest.length){
       html += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">${unplaced.length?'NOT ON THIS MAP YET — tap one, then tap the map':'EVERYTHING NEARBY IS PINNED — pull in a place from another map'}</div>
       <div class="map-tray">${unplaced.map(p=>`<button class="pc-pill ${_placingId===p.id?'on gold':''}" onclick="beginPlace('${p.id}')">${PLACE_ICONS[p.type]||'📍'} ${esc(p.name)}</button>`).join('')}${_placingId?`<button class="pc-pill" onclick="beginPlace(null)">cancel</button>`:''}${_rest.length?`<button class="pc-pill ${window._showAllUnplaced?'on':''}" onclick="toggleAllUnplaced()" title="Places already pinned elsewhere — pin one here too to nest it inside this map">${window._showAllUnplaced?'show fewer':'+ '+_rest.length+' pinned elsewhere'}</button>`:''}</div>`;
@@ -13995,6 +14059,7 @@ function _fogLayerSvg(camp, map, VW, VH, pinned){
       return `<circle data-pin="${esc(p.id)}" cx="${(pos.x*VW).toFixed(1)}" cy="${(pos.y*VH).toFixed(1)}" r="${_pinRevealR(map,p).toFixed(1)}"/>`;
     }).join('');
     if(map.party) holes += `<circle cx="${(map.party.x*VW).toFixed(1)}" cy="${(map.party.y*VH).toFixed(1)}" r="${Math.max(22,_pinPx(map)*24).toFixed(1)}"/>`;
+    Object.values(map.tokens||{}).forEach(t=>{ if(t) holes += `<circle cx="${(t.x*VW).toFixed(1)}" cy="${(t.y*VH).toFixed(1)}" r="${Math.max(14,_pinPx(map)*14).toFixed(1)}"/>`; });
   }
   /* Two stacked layers share one mask: an opaque base that genuinely hides
      the ground beneath, and a turbulence-built cloud drifting over it. The
@@ -14042,9 +14107,9 @@ function _bindMapDrag(camp, map){
   if(!map) map={ id:'__sketch__' };   // the sketch graph has no illustrated map behind it
   const VW=+svg.dataset.vw, VH=+svg.dataset.vh, sketch=!!svg.dataset.sketch;
   const toLocal=(e)=>{ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; const m=svg.getScreenCTM(); return m?pt.matrixTransform(m.inverse()):pt; };
-  const getPos=p=>{ if(p&&p.__party) return map.party||null; return sketch?{x:p.x,y:p.y}:(p&&p.pins&&p.pins[map.id])||null; };
-  const setPos=(p,x,y)=>{ if(p&&p.__party){ map.party={x,y}; return; } if(sketch){ p.x=x; p.y=y; } else { if(!p.pins) p.pins={}; p.pins[map.id]={x,y}; } };
-  const nodeObj=id=> id==='__party__' ? {__party:true, id:'__party__'} : (camp.places||[]).find(q=>q.id===id);
+  const getPos=p=>{ if(p&&p.__party) return map.party||null; if(p&&p.__tok) return (map.tokens||{})[p.__tok]||null; return sketch?{x:p.x,y:p.y}:(p&&p.pins&&p.pins[map.id])||null; };
+  const setPos=(p,x,y)=>{ if(p&&p.__party){ map.party={x,y}; return; } if(p&&p.__tok){ if(!map.tokens) map.tokens={}; map.tokens[p.__tok]={x,y}; return; } if(sketch){ p.x=x; p.y=y; } else { if(!p.pins) p.pins={}; p.pins[map.id]={x,y}; } };
+  const nodeObj=id=> id==='__party__' ? {__party:true, id:'__party__'} : String(id).startsWith('__tok_') ? {__tok:String(id).slice(6), id} : (camp.places||[]).find(q=>q.id===id);
 
   // ── Pan & zoom (viewBox). Icons live in the SVG, so they scale with zoom. ──
   const view=_mapView[map.id]||(_mapView[map.id]={z:1,x:0,y:0}); view.vw=VW; view.vh=VH;
@@ -14059,7 +14124,7 @@ function _bindMapDrag(camp, map){
   },{passive:false});
   // A single stationary tap on the empty map enables scroll-to-zoom (tap off to exit).
   let _zTap=null;
-  svg.addEventListener('pointerdown',e=>{ if(pts.size>=2||_placingId||_placingParty||_paintMode||e.target.closest('.map-node')||e.target.closest('.mn-resize')){ _zTap=null; return; } _zTap={x:e.clientX,y:e.clientY}; });
+  svg.addEventListener('pointerdown',e=>{ if(pts.size>=2||_placingId||_placingParty||_placingTok||_paintMode||e.target.closest('.map-node')||e.target.closest('.mn-resize')){ _zTap=null; return; } _zTap={x:e.clientX,y:e.clientY}; });
   svg.addEventListener('pointerup',e=>{ if(!_zTap) return; const moved=Math.abs(e.clientX-_zTap.x)>6||Math.abs(e.clientY-_zTap.y)>6; _zTap=null; if(!moved && !_mapWheelZoom && pts.size<=1) _setMapWheelZoom(true); });
   svg.addEventListener('pointerdown',e=>{ pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(pts.size===2){ const[a,b]=[...pts.values()]; gest={d:Math.hypot(a.x-b.x,a.y-b.y)||1, cx:(a.x+b.x)/2, cy:(a.y+b.y)/2, z:view.z, x:view.x, y:view.y}; _mapGesture=true; bgPan=null; } });
   svg.addEventListener('pointermove',e=>{ if(pts.has(e.pointerId)) pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
@@ -14068,11 +14133,20 @@ function _bindMapDrag(camp, map){
   const gestUp=e=>{ pts.delete(e.pointerId); if(pts.size<2){ gest=null; setTimeout(()=>{ _mapGesture=false; },60); } };
   svg.addEventListener('pointerup',gestUp); svg.addEventListener('pointercancel',gestUp);
   // Single-finger pan on empty backdrop when zoomed in (pins/paint/place take priority)
-  svg.addEventListener('pointerdown',e=>{ if(pts.size>=2||view.z<=1||_placingId||_placingParty||_paintMode) return; if(e.target.closest('.map-node')) return; bgPan={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y}; });
+  svg.addEventListener('pointerdown',e=>{ if(pts.size>=2||view.z<=1||_placingId||_placingParty||_placingTok||_paintMode) return; if(e.target.closest('.map-node')) return; bgPan={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y}; });
   svg.addEventListener('pointermove',e=>{ if(!bgPan||pts.size>=2) return; const r=rectOf(); view.x=bgPan.vx-(e.clientX-bgPan.x)/r.width*(VW/view.z); view.y=bgPan.vy-(e.clientY-bgPan.y)/r.height*(VH/view.z); applyView(); e.preventDefault(); });
   const bgEnd=()=>{ bgPan=null; }; svg.addEventListener('pointerup',bgEnd); svg.addEventListener('pointercancel',bgEnd);
 
   // Tap-to-place mode (party marker or a place)
+  if(_placingTok && !sketch){
+    svg.addEventListener('pointerup',e=>{
+      const l=toLocal(e); const nx=Math.max(0.02,Math.min(0.98,l.x/VW)), ny=Math.max(0.02,Math.min(0.98,l.y/VH));
+      if(!map.tokens) map.tokens={}; map.tokens[_placingTok]={x:nx,y:ny};
+      const who=_campMembers(camp).find(c=>String(c.id)===_placingTok);
+      _placingTok=null; saveCampaign(camp); renderMap(); toast('🧍 '+(who?who.name:'Mini')+' placed','var(--gold)');
+    });
+    return;
+  }
   if(_placingParty && !sketch){
     svg.addEventListener('pointerup',e=>{
       const l=toLocal(e); const nx=Math.max(0.02,Math.min(0.98,l.x/VW)), ny=Math.max(0.02,Math.min(0.98,l.y/VH));
@@ -14160,7 +14234,7 @@ function _bindMapDrag(camp, map){
       if(drag.moved){ const pp=(camp.places||[]).find(q=>q.id===drag.id); const gp=pp&&getPos(pp); if(gp) _noteMapAction(camp, gp.x, gp.y); saveCampaign(camp); }
       else if(!sketch){
         const now=Date.now();
-        if(drag.id==='__party__'){ drag=null; return; }
+        if(drag.id==='__party__' || String(drag.id).startsWith('__tok_')){ drag=null; return; }
         if(_lastTap.id===drag.id && now-_lastTap.t<380){ // double-tap → open sub-map
           _lastTap={id:null,t:0};
           const sub=subMapFor(drag.id);
@@ -14710,8 +14784,8 @@ function bumpTypeScale(t, dir){ const camp=getCampaigns().find(c=>c.id===editing
 function toggleTypeVisible(t){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const m=_curMap(camp); if(!m) return; if(!m.hiddenTypes) m.hiddenTypes=[]; const i=m.hiddenTypes.indexOf(t); if(i>=0) m.hiddenTypes.splice(i,1); else m.hiddenTypes.push(t); saveCampaign(camp); renderMap(); }
 function togglePlaceName(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const pl=(camp.places||[]).find(p=>p.id===id); if(!pl) return; pl.hideName=!pl.hideName; saveCampaign(camp); renderMap(); }
 function togglePinLabels(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.hidePinLabels=!m.hidePinLabels; saveCampaign(camp); renderMap(); }
-function beginPlace(id){ _placingId = (id && _placingId!==id) ? id : null; _placingParty=false; renderMap(); if(_placingId) document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
-function beginPlaceParty(){ _placingParty=true; _placingId=null; _selPinId=null; renderMap(); document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
+function beginPlace(id){ _placingId = (id && _placingId!==id) ? id : null; _placingParty=false; _placingTok=null; renderMap(); if(_placingId) document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
+function beginPlaceParty(){ _placingParty=true; _placingId=null; _placingTok=null; _selPinId=null; renderMap(); document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
 function removeParty(){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_curMap(camp); if(!m) return; delete m.party; saveCampaign(camp); renderMap(); toast('Party marker removed','var(--muted)'); }
 /* Open the current map full-screen in its own window — a self-contained,
    interactive (pan/zoom) snapshot that runs independently of the app. */
@@ -16051,8 +16125,9 @@ function _renderCharHero(char, cls){
     : (cls?.name||'')+' '+(char.level||1)+(char.subclass?' · '+char.subclass:'');
   let ac=''; try{ ac=getEquipSlotAC(char); }catch(e){ ac=char.ac||''; }
   return '<div class="char-hero-card" style="--cc:'+cc+'">'
-    +'<div class="chc-top"><span class="chc-icon">'+classIcon(char.classIdx)+'</span>'
-    +'<div style="min-width:0"><div class="chc-name">'+esc(char.name||'')+'</div><div class="chc-sub">'+esc((char.race?char.race+' · ':'')+mcs)+'</div></div>'
+    +'<div class="chc-top">'+(char.token?'<img src="'+char.token+'" alt="" onclick="openMiniStudio()" title="Edit mini" style="width:40px;height:40px;border-radius:50%;box-shadow:0 0 0 2px '+cc+';cursor:pointer;flex-shrink:0">':'<span class="chc-icon">'+classIcon(char.classIdx)+'</span>')
+    +'<div style="min-width:0"><div class="chc-name">'+esc(char.name||'')+'</div><div class="chc-sub">'+esc((char.race?char.race+' · ':'')+mcs)+'</div>'
+    +(hfLinkOk(char.heroForgeUrl)?'<a href="'+esc(char.heroForgeUrl)+'" target="_blank" rel="noopener" style="font-size:10px;color:var(--gold);letter-spacing:0.5px">🧍 Hero Forge design ↗</a>':'')+'</div>'
     +'<div class="chc-ac">AC<b>'+esc(String(ac))+'</b></div></div>'
     +'</div>';
 }
@@ -16259,7 +16334,11 @@ function renderPaperdoll(char, cls){
     section.style.borderBottom = '1px solid '+cc+'44';
   }
 
-  let html = '<div class="paperdoll-body" style="grid-column:2;grid-row:1/6">'
+  const use3d = _dollMode()==='3d';
+  _syncDollButtons(use3d);
+  let html = use3d
+    ? '<div class="paperdoll-body doll3d-host doll3d-loading" id="doll3dHost" style="grid-column:2;grid-row:1/6" title="Drag to turn · double-click to face front"><div class="doll3d-msg">SUMMONING…</div><div class="doll3d-hint">⟲ drag</div></div>'
+    : '<div class="paperdoll-body" style="grid-column:2;grid-row:1/6">'
     + '<div class="doll-glow" style="background:radial-gradient(ellipse at center, '+cc+'28 0%, transparent 70%)"></div>'
     + (char.portrait
         ? '<img class="paperdoll-portrait" src="'+char.portrait+'" alt="'+esc(char.name||'Character')+' portrait">'
@@ -16299,6 +16378,82 @@ function renderPaperdoll(char, cls){
     html+='</div>';
   });
   gridEl.innerHTML = html;
+  if(use3d) _mountDoll3D(char);
+}
+
+/* ── 3D paperdoll glue (the viewer itself is the module near </body>) ── */
+function _dollMode(){
+  try{ return localStorage.getItem('toh_doll_mode')||'3d'; }catch(e){ return '3d'; }
+}
+function _syncDollButtons(use3d){
+  const b=document.getElementById('dollModeBtn'); if(b) b.textContent = use3d ? '⇄ 2D' : '⇄ 3D';
+  const m=document.getElementById('dollModelBtn'); if(m) m.style.display = use3d ? '' : 'none';
+}
+function toggleDollMode(){
+  try{ localStorage.setItem('toh_doll_mode', _dollMode()==='3d' ? 'portrait' : '3d'); }catch(e){}
+  const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
+  if(char) renderPaperdoll(char, CLASSES[char.classIdx]);
+}
+function _mountDoll3D(char){
+  const go=function(){
+    const host=document.getElementById('doll3dHost');
+    if(!host || !window.Doll3D) return;
+    window.Doll3D.mount(host, char).catch(function(e){
+      console.warn('3D paperdoll unavailable', e);
+      host.classList.remove('doll3d-loading'); host.classList.add('doll3d-failed');
+      const m=host.querySelector('.doll3d-msg'); if(m) m.textContent='3D VIEW UNAVAILABLE — TAP 🖼 PORTRAIT';
+    });
+  };
+  if(window.Doll3D) go(); else window.addEventListener('doll3d-ready', go, {once:true});
+}
+function openDollModelModal(){
+  const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
+  if(!char){ toast('No character selected','var(--red)'); return; }
+  const spec=window.Doll3D ? window.Doll3D.spec(char) : {body:'Female',hair:null,beard:false};
+  const M=char.model||{};
+  const cur={body:spec.body, hair:(M.hair!==undefined?M.hair:spec.hair)||'', beard:spec.beard, dye:M.dye||'', light:M.light||''};
+  const chip=function(group,val,label,on){
+    return '<button class="dm-chip'+(on?' on':'')+'" onclick="dollModelSet(\''+group+'\',\''+val+'\')">'+label+'</button>';
+  };
+  const styles=(window.Doll3D?window.Doll3D.HAIR_STYLES:[]);
+  const labels=(window.Doll3D?window.Doll3D.HAIR_LABEL:{});
+  const inner='<div class="slot-picker-header">'
+    +'<div class="slot-picker-title">✎ 3D MODEL</div>'
+    +'<button onclick="closeDollModelModal()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px">✕</button>'
+    +'</div><div style="padding:14px 18px 18px">'
+    +'<div class="dm-row"><label>Build</label>'+chip('body','Female','Slender',cur.body==='Female')+chip('body','Male','Broad',cur.body==='Male')+'</div>'
+    +'<div class="dm-row"><label>Hair</label>'+styles.map(function(h){return chip('hair',h,labels[h]||h,cur.hair===h);}).join('')+chip('hair','none','None',!cur.hair)+'</div>'
+    +'<div class="dm-row"><label>Beard</label>'+chip('beard','1','Yes',cur.beard)+chip('beard','0','No',!cur.beard)+'</div>'
+    +'<div class="dm-row"><label>Outfit dye</label>'+chip('dye','','By class',!cur.dye)+chip('dye','a','Earth',cur.dye==='a')+chip('dye','b','Moss & ink',cur.dye==='b')+'</div>'
+    +'<div class="dm-row"><label>Lighting</label>'+chip('light','','Portrait mood',!cur.light)+chip('light','class','Class colours',cur.light==='class')+'</div>'
+    +'<div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:10px">Skin, hair and eye colours follow race and the hair/eye details from creation, same as the portrait. '
+    +'Armour, gloves, boots, headgear and weapons change with what is equipped. A hood or helm hides the hair.</div>'
+    +'<button class="btn btn-outline" style="margin-top:12px;width:100%" onclick="dollModelSet(\'reset\',\'\')">↺ Back to defaults</button>'
+    +'</div>';
+  closeDollModelModal();
+  const overlay=document.createElement('div');
+  overlay.className='slot-picker-overlay'; overlay.id='dollModelOverlay';
+  overlay.onclick=function(e){if(e.target===overlay)closeDollModelModal();};
+  overlay.innerHTML='<div class="slot-picker-sheet">'+inner+'</div>';
+  document.body.appendChild(overlay);
+}
+function closeDollModelModal(){ const el=document.getElementById('dollModelOverlay'); if(el) el.remove(); }
+function dollModelSet(group,val){
+  const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
+  if(!char) return;
+  if(group==='reset') delete char.model;
+  else {
+    const m=Object.assign({}, char.model||{});
+    if(group==='body') m.body=val;
+    if(group==='hair') m.hair=(val==='none'?null:val);
+    if(group==='beard') m.beard=(val==='1');
+    if(group==='dye'){ if(val) m.dye=val; else delete m.dye; }
+    if(group==='light'){ if(val) m.light=val; else delete m.light; }
+    char.model=m;
+  }
+  saveChar(char);
+  renderPaperdoll(char, CLASSES[char.classIdx]);
+  openDollModelModal();
 }
 
 /* ── Inventory bag ── */
@@ -17035,6 +17190,7 @@ function openPortraitModal(){
     +'Generate a portrait from your character\'s details — race, class, hair, and eyes from character creation shape the result. '
     +'Tap again for a different look. Or upload/paste your own art below.</div>'
     +'<button class="btn btn-gold" style="margin:0 0 8px;width:100%" onclick="genPortraitFromChar()">✨ Generate from Character'+(char.portrait&&char.portraitGen?' (reroll)':'')+'</button>'
+    +'<button class="btn btn-outline" style="margin:0 0 8px;width:100%;border-color:var(--gold);color:var(--gold)" onclick="closePortraitModal();openMiniStudio()">🎯 Frame Map Token</button>'
     +'<button class="btn btn-outline" style="margin:0 0 8px;width:100%;border-color:var(--purple);color:var(--purple)" onclick="openPortraitPromptView()">🤖 AI Art Prompt (for ChatGPT)</button>'
     +'<input type="file" id="portraitFileInput" accept="image/*" style="display:none" onchange="if(this.files[0])handlePortraitBlob(this.files[0])">'
     +'<button class="btn btn-outline" style="margin:0 0 8px;width:100%" onclick="document.getElementById(\'portraitFileInput\').click()">⬆ Upload Custom Art</button>'
@@ -17117,6 +17273,7 @@ function setCharPortrait(dataUrl){
   const ci=chars.findIndex(function(c){return String(c.id)===String(charScreenId||'');});
   if(ci<0){ toast('Character not found','var(--red)'); return; }
   if(dataUrl) chars[ci].portrait=dataUrl; else delete chars[ci].portrait;
+  if(chars[ci].tokenSrc!=='custom'){ delete chars[ci].token; delete chars[ci].tokenCfg; }
   delete chars[ci].portraitGen;
   if(!dataUrl) delete chars[ci].portraitSeed;
   saveChars(chars);
@@ -19242,9 +19399,748 @@ function _gwRefreshAfterLevel(char){
   try{ if(document.getElementById('diceCharPanel')) renderDiceCharPanel(); }catch(e){}
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   MINIATURE STUDIO — bring in a Hero Forge render (or any image), cut out a
+   plain background, frame it, and produce the character's portrait plus a
+   round map token. Used by the creator's Appearance step and the Character
+   screen's 🧍 Mini button. Only images are stored — never 3D files.
+══════════════════════════════════════════════════════════════════════════ */
+const HF_URL = 'https://www.heroforge.com/';
+function hfLinkOk(u){ return /^https:\/\/(www\.)?heroforge\.com\/[^\s"'<>]*$/i.test(String(u||'').trim()); }
+function _msBlank(){ return {src:'', work:'', transparent:false, cfg:{z:1, x:0, y:0, cut:true, tol:34}, url:''}; }
+
+// The studio currently on screen: {st, color, rerender}
+let MS = null;
+
+function _msImg(url){ return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; }); }
+
+// Load an uploaded/pasted image: downscale, then (optionally) cut out the backdrop.
+async function msLoadBlob(blob){
+  if(!MS || !blob) return;
+  if(blob.size > 15*1024*1024){ toast('Image too large (max 15 MB)','var(--red)'); return; }
+  const url = URL.createObjectURL(blob);
+  try{
+    const img = await _msImg(url);
+    const MAX = 900, sc = Math.min(1, MAX/img.naturalWidth, MAX/img.naturalHeight);
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1,Math.round(img.naturalWidth*sc)); cv.height = Math.max(1,Math.round(img.naturalHeight*sc));
+    cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+    MS.st.src = cv.toDataURL('image/png'); MS.st.custom = true;
+    MS.st.cfg.z = 1; MS.st.cfg.x = 0; MS.st.cfg.y = 0; MS.st.cfg.cut = true;
+    await _msProcess(MS.st);
+    toast('✦ Miniature loaded','var(--green)');
+    MS.rerender();
+  }catch(e){ toast('Could not read that image','var(--red)'); }
+  finally{ URL.revokeObjectURL(url); }
+}
+// Build st.work (the image used for portrait & token) from st.src.
+async function _msProcess(st){
+  const img = await _msImg(st.src);
+  st._srcImg = img;
+  let out = null;
+  if(st.cfg.cut){ try{ out = _msCutout(img, st.cfg.tol); }catch(e){ out = null; } }
+  if(out){ st.work = out.toDataURL('image/png'); st.transparent = true; }
+  else { st.work = st.src; st.transparent = _msHasAlpha(img); }
+  st._img = await _msImg(st.work);
+}
+function _msHasAlpha(img){
+  try{ const c=document.createElement('canvas'); c.width=Math.min(200,img.naturalWidth); c.height=Math.min(200,img.naturalHeight);
+    const x=c.getContext('2d'); x.drawImage(img,0,0,c.width,c.height); const d=x.getImageData(0,0,c.width,c.height).data;
+    for(let i=3;i<d.length;i+=16) if(d[i]<250) return true; }catch(e){}
+  return false;
+}
+// Remove a plain or gently graded backdrop by flood-filling in from the
+// edges, then trim to the figure. Returns null if nothing sensible was found.
+function _msCutout(img, tol){
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const cv = document.createElement('canvas'); cv.width=w; cv.height=h;
+  const ctx = cv.getContext('2d', {willReadFrequently:true}); ctx.drawImage(img,0,0);
+  const id = ctx.getImageData(0,0,w,h), d = id.data;
+  // Backdrop colours sampled from the four corners
+  const samp = [];
+  [[0,0],[w-8,0],[0,h-8],[w-8,h-8]].forEach(([sx,sy])=>{ let r=0,g=0,b=0,n=0;
+    for(let y=Math.max(0,sy);y<Math.min(h,sy+8);y++) for(let x=Math.max(0,sx);x<Math.min(w,sx+8);x++){ const i=(y*w+x)*4; r+=d[i];g+=d[i+1];b+=d[i+2];n++; }
+    samp.push([r/n,g/n,b/n]); });
+  const bgDist = i=>{ let m=1e9; for(const s of samp){ const dr=d[i]-s[0],dg=d[i+1]-s[1],db=d[i+2]-s[2]; const v=Math.sqrt(dr*dr+dg*dg+db*db); if(v<m) m=v; } return m; };
+  const pd = (i,j)=>{ const dr=d[i]-d[j],dg=d[i+1]-d[j+1],db=d[i+2]-d[j+2]; return Math.sqrt(dr*dr+dg*dg+db*db); };
+  const bg = new Uint8Array(w*h), q = new Int32Array(w*h); let qh=0, qt=0;
+  const seed = p=>{ if(!bg[p] && d[p*4+3]>0 && bgDist(p*4)<tol*1.4){ bg[p]=1; q[qt++]=p; } };
+  for(let x=0;x<w;x++){ seed(x); seed((h-1)*w+x); }
+  for(let y=0;y<h;y++){ seed(y*w); seed(y*w+w-1); }
+  // step: colour change allowed between neighbours; cap: how far from the
+  // sampled backdrop colours a pixel may drift (keeps skin tones safe)
+  const step = tol*0.35, cap = tol*1.5;
+  while(qh<qt){
+    const p=q[qh++], x=p%w, y=(p-x)/w;
+    const nb = [x>0?p-1:-1, x<w-1?p+1:-1, y>0?p-w:-1, y<h-1?p+w:-1];
+    for(const n of nb){ if(n<0||bg[n]) continue; if(pd(n*4,p*4)<step && bgDist(n*4)<cap){ bg[n]=1; q[qt++]=n; } }
+  }
+  const removed = qt/(w*h);
+  if(removed<0.08 || removed>0.97) return null; // no clear backdrop — keep the image as it is
+  let x0=w,y0=h,x1=-1,y1=-1;
+  for(let p=0;p<w*h;p++){
+    if(bg[p]){ d[p*4+3]=0; continue; }
+    const x=p%w, y=(p-x)/w;
+    // Soften the edge: pixels touching the backdrop fade a little
+    if((x>0&&bg[p-1])||(x<w-1&&bg[p+1])||(y>0&&bg[p-w])||(y<h-1&&bg[p+w])) d[p*4+3]=Math.min(d[p*4+3],170);
+    if(d[p*4+3]>16){ if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; }
+  }
+  if(x1<0) return null;
+  ctx.putImageData(id,0,0);
+  const pad = 6; x0=Math.max(0,x0-pad); y0=Math.max(0,y0-pad); x1=Math.min(w-1,x1+pad); y1=Math.min(h-1,y1+pad);
+  const out = document.createElement('canvas'); out.width=x1-x0+1; out.height=y1-y0+1;
+  out.getContext('2d').drawImage(cv, x0,y0,out.width,out.height, 0,0,out.width,out.height);
+  return out;
+}
+// Round token (transparent outside the circle). Cut-out minis stand on a
+// class-coloured disc; full images fill the circle.
+function _msTokenCanvas(st, color, S){
+  S = S||160;
+  const cv = document.createElement('canvas'); cv.width=S; cv.height=S;
+  const img = st._img; if(!img) return cv;
+  const x = cv.getContext('2d'), r = S/2;
+  x.save(); x.beginPath(); x.arc(r,r,r-1,0,Math.PI*2); x.clip();
+  if(st.transparent){
+    const g = x.createRadialGradient(r,r*0.8,r*0.1,r,r,r);
+    g.addColorStop(0,(color||'#7b5ea7')+'cc'); g.addColorStop(1,'#0d0a1a');
+    x.fillStyle=g; x.fillRect(0,0,S,S);
+  } else { x.fillStyle='#13102a'; x.fillRect(0,0,S,S); }
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  // Default framing: whole figure for cut-outs, fill the circle otherwise
+  let sc = st.transparent ? Math.min(S*0.9/ih, S*0.9/iw) : Math.max(S/iw, S/ih);
+  sc *= st.cfg.z||1;
+  const dw = iw*sc, dh = ih*sc;
+  const dx = r - dw/2 + (st.cfg.x||0)*r, dy = r - dh/2 + (st.cfg.y||0)*r;
+  x.drawImage(img, dx, dy, dw, dh);
+  x.restore();
+  return cv;
+}
+// Portrait: the cut-out (or original) scaled to at most 640px.
+function _msPortraitData(st){
+  const img = st._img; if(!img) return '';
+  const sc = Math.min(1, 640/img.naturalWidth, 640/img.naturalHeight);
+  const cv = document.createElement('canvas'); cv.width=Math.max(1,Math.round(img.naturalWidth*sc)); cv.height=Math.max(1,Math.round(img.naturalHeight*sc));
+  const x = cv.getContext('2d'); x.drawImage(img,0,0,cv.width,cv.height);
+  let url = st.transparent ? cv.toDataURL('image/png') : cv.toDataURL('image/jpeg',0.82);
+  if(url.length>600000){ x.globalCompositeOperation='destination-over'; x.fillStyle='#13102a'; x.fillRect(0,0,cv.width,cv.height); url = cv.toDataURL('image/jpeg',0.75); }
+  return url;
+}
+function _msTokenData(st, color){ return st._img ? _msTokenCanvas(st, color, 160).toDataURL('image/png') : ''; }
+
+// Studio UI. Everything reads/writes MS.st; sliders update previews in place.
+function _msHTML(){
+  const st = MS.st, c = st.cfg;
+  let h = `<div class="ms">`;
+  if(st._img){
+    h += `<div class="gw-help" style="margin-bottom:10px">${st.custom?'Using the image you added.':'Made from the character\'s portrait.'} Frame it so the face reads at map size.</div>
+      <div class="ms-preview">
+        <div class="ms-pv"><img id="msTokBig" alt="Token preview" style="width:150px;height:150px;border-radius:50%;box-shadow:0 0 0 3px ${MS.color||'var(--gold)'}"><span>Map token</span></div>
+        <div class="ms-pv"><img id="msTokSmall" alt="" style="width:44px;height:44px;border-radius:50%;box-shadow:0 0 0 2px ${MS.color||'var(--gold)'}"><span>Actual map size</span></div>
+      </div>
+      <div class="ms-ctrls">
+        <label>Zoom<input type="range" min="0.4" max="3.5" step="0.05" value="${c.z}" oninput="MS.st.cfg.z=+this.value;msPreview()"></label>
+        <label>Left / right<input type="range" min="-1" max="1" step="0.02" value="${c.x}" oninput="MS.st.cfg.x=+this.value;msPreview()"></label>
+        <label>Up / down<input type="range" min="-1" max="1" step="0.02" value="${c.y}" oninput="MS.st.cfg.y=+this.value;msPreview()"></label>
+        <button class="gw-link" style="margin:0" onclick="Object.assign(MS.st.cfg, MS.st.custom?{z:1,x:0,y:0}:{z:1.35,x:0,y:0.18});MS.rerender()">↺ Reset framing</button>
+      </div>
+      <div class="ms-ctrls">
+        <label class="gw-toggle" style="font-size:14px"><input type="checkbox" ${c.cut?'checked':''} onchange="msSetCut(this.checked)"> <span>Remove plain background (stands the figure on a class-coloured disc)</span></label>
+        ${c.cut?`<label>Background tolerance<input type="range" min="10" max="80" step="2" value="${c.tol}" onchange="msSetTol(+this.value)"></label>`:''}
+      </div>
+      ${c.cut && !st.transparent?`<div class="gw-help" style="font-size:13px">No plain background found — the image is used as it is.</div>`:''}`;
+  } else {
+    h += `<div class="gw-note">This character has no portrait yet. Set one with the 🖼 Portrait button, or add an image below.</div>`;
+  }
+  h += `<details class="gw-details" ${st.custom||!st._img?'open':''}><summary>Use a different image for the token (e.g. a Hero Forge mini)</summary>
+    <div class="ms-steps" style="margin-top:10px">
+      <div class="ms-step"><b>1</b><span>Design a mini in Hero Forge — designing is free.</span>
+        <button class="gw-btn" onclick="window.open('${HF_URL}','_blank','noopener')">Open Hero Forge ↗</button></div>
+      <div class="ms-step"><b>2</b><span>Screenshot it (a plain background cuts out best), then paste it here (Ctrl/Cmd+V) or upload it.</span></div>
+    </div>
+    <div class="field"><label>Hero Forge link <span style="text-transform:none;letter-spacing:0">(optional — so anyone can reopen the design)</span></label>
+      <input value="${esc(st.url)}" placeholder="https://www.heroforge.com/…" oninput="MS.st.url=this.value.trim();this.style.borderColor=(!this.value||hfLinkOk(this.value))?'':'var(--red)'"></div>
+    <input type="file" id="msFile" accept="image/*" style="display:none" onchange="if(this.files[0])msLoadBlob(this.files[0]);this.value=''">
+    <div class="ms-zone" id="msZone" tabindex="0" onclick="document.getElementById('msFile').click()">📋 Paste an image here, or tap to upload</div>
+    ${st.custom?`<button class="gw-link" style="margin:0" onclick="msUsePortrait()">↩ Go back to using the portrait</button>`:''}
+  </details>`;
+  return h + `</div>`;
+}
+function msPreview(){
+  if(!MS || !MS.st._img) return;
+  const big = document.getElementById('msTokBig'), small = document.getElementById('msTokSmall');
+  const url = _msTokenCanvas(MS.st, MS.color, 160).toDataURL('image/png');
+  if(big) big.src = url; if(small) small.src = url;
+}
+async function msSetCut(on){ MS.st.cfg.cut = on; if(MS.st.src){ await _msProcess(MS.st); } MS.rerender(); }
+async function msSetTol(v){ MS.st.cfg.tol = v; if(MS.st.src){ await _msProcess(MS.st); } MS.rerender(); }
+async function msUsePortrait(){
+  if(!MS || !MS.portrait) return;
+  Object.assign(MS.st, {src:MS.portrait, custom:false}); Object.assign(MS.st.cfg, {z:1,x:0,y:0,cut:false});
+  await _msProcess(MS.st); MS.rerender();
+}
+// One paste listener for whichever studio is on screen
+document.addEventListener('paste', e=>{
+  if(!MS || !document.getElementById('msZone')) return;
+  const items = (e.clipboardData||{}).items||[];
+  for(const it of items){ if(it.type && it.type.indexOf('image')===0){ const b=it.getAsFile(); if(b){ e.preventDefault(); msLoadBlob(b); } return; } }
+});
+
+/* ── Character screen: 🎯 Map Token dialog ─────────────────────────────── */
+// The token is framed from the portrait by default; the portrait itself is
+// never changed here.
+async function openMiniStudio(charId){
+  const char = _gwResolveChar(charId!=null ? charId : (charScreenId || _userSettings['active_char_'+getActiveCampId()] || _userSettings['dice_char']));
+  if(!char){ toast('No character selected','var(--red)'); return; }
+  const st = _msBlank();
+  st.url = char.heroForgeUrl||'';
+  // Portraits are head-and-shoulders: start zoomed onto the face
+  Object.assign(st.cfg, {cut:false, z:1.35, y:0.18});
+  if(char.tokenCfg) Object.assign(st.cfg, char.tokenCfg);
+  const custom = char.tokenSrc==='custom' && char.tokenImg;
+  st.src = custom ? char.tokenImg : (char.portrait||'');
+  st.custom = !!custom;
+  if(st.src){ try{ await _msProcess(st); }catch(e){ st.src=''; st._img=null; } }
+  document.getElementById('msModal')?.remove();
+  const m = document.createElement('div');
+  m.id = 'msModal'; m.className = 'gw-backdrop';
+  m.innerHTML = `<div class="ms-dialog" role="dialog" aria-modal="true" aria-label="Map token">
+    <div class="gw-head"><div class="gw-emblem" style="border-color:${classColor(char.classIdx)}">🎯</div>
+      <div style="min-width:0"><div class="gw-title">${esc(char.name)}'s map token</div><div class="gw-sub">Shown on the campaign map</div></div>
+      <button class="gw-x" onclick="closeMiniStudio()" aria-label="Close">✕</button></div>
+    <div class="ms-body" id="msBody"></div>
+    <div class="gw-foot">${char.token?`<button class="gw-btn" style="border-color:var(--red);color:var(--red)" onclick="clearMiniToken('${jsq(String(char.id))}')">Reset token</button>`:''}
+      <div class="gw-count"></div><button class="gw-btn" onclick="closeMiniStudio()">Cancel</button>
+      <button class="gw-btn pri" onclick="saveMiniStudio('${jsq(String(char.id))}')">Save</button></div></div>`;
+  m.addEventListener('click', e=>{ if(e.target===m) closeMiniStudio(); });
+  document.body.appendChild(m);
+  MS = {st, portrait:char.portrait||'', color:classColor(char.classIdx), rerender:()=>{ const b=document.getElementById('msBody'); if(b){ b.innerHTML=_msHTML(); msPreview(); } }};
+  MS.rerender();
+}
+function closeMiniStudio(){ document.getElementById('msModal')?.remove(); MS = null; }
+function saveMiniStudio(charId){
+  const char = _gwResolveChar(charId); if(!char || !MS) return;
+  const st = MS.st;
+  if(st.url && !hfLinkOk(st.url)){ toast('That doesn\'t look like a Hero Forge link','var(--red)'); return; }
+  char.heroForgeUrl = st.url || '';
+  if(st._img){
+    char.token = _msTokenData(st, MS.color);
+    char.tokenCfg = {z:st.cfg.z, x:st.cfg.x, y:st.cfg.y, cut:st.cfg.cut, tol:st.cfg.tol};
+    if(st.custom){ char.tokenSrc = 'custom'; char.tokenImg = _msPortraitData({_img:st._srcImg||st._img, transparent:false}); /* downscaled source, so it can be re-framed later */ }
+    else { char.tokenSrc = 'portrait'; delete char.tokenImg; }
+  }
+  saveChar(char);
+  closeMiniStudio();
+  toast('✦ Map token saved','var(--green)');
+  _miniRefresh(char);
+}
+function clearMiniToken(charId){
+  const char = _gwResolveChar(charId); if(!char) return;
+  delete char.token; delete char.tokenCfg; delete char.tokenSrc; delete char.tokenImg;
+  saveChar(char); closeMiniStudio(); toast('Token reset — the map uses the portrait','var(--muted)'); _miniRefresh(char);
+}
+function _miniRefresh(char){
+  try{ if(currentScreen==='character'){ renderCharacterScreen(); } }catch(e){}
+  try{ if(document.getElementById('sheetHero') && String(sheetCharId)===String(char.id)) renderSheetHero(char, CLASSES[char.classIdx], 'sheetHero'); }catch(e){}
+  try{ if(document.getElementById('campMapSvg')) renderMap(); }catch(e){}
+  try{ renderRoster(); }catch(e){}
+}
+
+/* ── Map tokens ─────────────────────────────────────────────────────────── */
+// Characters belonging to a campaign (own and joined players)
+function _campMembers(camp){
+  if(!camp) return [];
+  const ids = new Set((camp.charIds||[]).map(String)), seen = new Set();
+  return getChars().filter(c=>{
+    const k = String(c.id);
+    if(seen.has(k)) return false;
+    const ok = ids.has(k) || String(c._sharedCampId)===String(camp.id) || String(c._playerInCamp)===String(camp.id);
+    if(ok) seen.add(k);
+    return ok;
+  });
+}
+// One round mini, drawn at radius 10 and scaled by the caller.
+function _tokSvg(c){
+  const cc = classColor(c.classIdx);
+  const src = c.token || c.portrait;
+  return `<circle r="11.2" style="fill:#0d0a1a;stroke:${cc};stroke-width:1.8"/>`
+    + (src ? `<image href="${src}" x="-10" y="-10" width="20" height="20" preserveAspectRatio="xMidYMid slice" clip-path="url(#mtokClip)"/>`
+           : `<circle r="10" style="fill:${cc}44"/><text text-anchor="middle" dy="4" style="font-size:11px;stroke:none;fill:#fff">${classIcon(c.classIdx)}</text>`);
+}
+let _placingTok = null, _tokMenu = false;
+// Token radius on the map: a little larger than a pin so faces read, and
+// never smaller than ~2% of the map width.
+function _tokR(map, VW, R){ return Math.max(R*1.5, VW*0.02); }
+function beginPlaceTok(id){ _placingTok = _placingTok===String(id) ? null : String(id); _placingId=null; _placingParty=false; _selPinId=null; renderMap(); document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
+function removeTok(id){
+  const camp = getCampaigns().find(c=>c.id===editingCampId); const m = camp && _curMap(camp); if(!m || !m.tokens) return;
+  delete m.tokens[String(id)]; saveCampaign(camp); renderMap(); toast('Mini returned to the party','var(--muted)');
+}
+function toggleTokMenu(){ _tokMenu = !_tokMenu; renderMap(); }
+
 bootApp();
 </script>
 
+
+<script type="module">
+/* ══════════════════════════════════════════════════════════════════
+   3D PAPERDOLL — Quaternius Universal Base Characters + Modular Outfits
+   (CC0, models/). Equipped armour picks the outfit parts, weapons are
+   built in code and put in the hands, and the lighting takes its mood
+   from the portrait (75%) and the class (25%).
+   three.js is only fetched the first time a 3D doll is shown.
+   ══════════════════════════════════════════════════════════════════ */
+const DOLL_DIR = 'models/';
+let T=null, loader=null, texLoader=null, cloneScene=null, _libP=null;
+function lib(){
+  if(!_libP) _libP=(async()=>{
+    T=await import('three');
+    const [{GLTFLoader},{MeshoptDecoder},SU]=await Promise.all([
+      import('three/addons/loaders/GLTFLoader.js'),
+      import('three/addons/libs/meshopt_decoder.module.js'),
+      import('three/addons/utils/SkeletonUtils.js')]);
+    loader=new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
+    texLoader=new T.TextureLoader(); cloneScene=SU.clone;
+  })();
+  return _libP;
+}
+const _glb={}, _tex={};
+function glb(name){ return _glb[name]||(_glb[name]=loader.loadAsync(DOLL_DIR+name+'.glb')); }
+function tex(name, color){
+  const k=name+(color?'':'#d');
+  if(_tex[k]) return _tex[k];
+  const t=texLoader.load(DOLL_DIR+'tex/'+name+'.webp', ()=>_kick());
+  t.flipY=false; t.colorSpace=color?T.SRGBColorSpace:T.NoColorSpace; t.anisotropy=4;
+  return _tex[k]=t;
+}
+
+/* ── Look tables ───────────────────────────────────────────────────── */
+// key = warm near light, rim = cold edge light, bg = backdrop & fog, tint = cloth grade
+const GRADES={
+  Barbarian:{key:0xff7a3a,rim:0xff9d6a,bg:0x0d0605,tint:[0.72,0.58,0.52]},
+  Bard:     {key:0xffc27a,rim:0xc98bff,bg:0x0a0610,tint:[0.68,0.6,0.7]},
+  Cleric:   {key:0xffe0a0,rim:0xfff0c8,bg:0x0c0a06,tint:[0.72,0.68,0.6]},
+  Druid:    {key:0xffc070,rim:0x86e08e,bg:0x050a06,tint:[0.6,0.66,0.55]},
+  Fighter:  {key:0xffb070,rim:0x9fc4ff,bg:0x07060d,tint:[0.62,0.6,0.66]},
+  Monk:     {key:0xffcf8a,rim:0x6fe0d8,bg:0x050a0a,tint:[0.66,0.64,0.6]},
+  Paladin:  {key:0xffe6b0,rim:0xffd66b,bg:0x0b0906,tint:[0.7,0.66,0.6]},
+  Ranger:   {key:0xffb070,rim:0x8fd0a0,bg:0x050908,tint:[0.6,0.64,0.58]},
+  Rogue:    {key:0xff6a5a,rim:0x7f8cff,bg:0x040308,tint:[0.5,0.48,0.54]},
+  Sorcerer: {key:0xffa46a,rim:0xff5ad0,bg:0x0c050c,tint:[0.68,0.58,0.66]},
+  Warlock:  {key:0xa06bff,rim:0x7dffb0,bg:0x070510,tint:[0.56,0.52,0.62]},
+  Wizard:   {key:0xffc58a,rim:0x5aa8ff,bg:0x05070e,tint:[0.6,0.62,0.7]},
+};
+// Average linear luminance of each tintable texture, so a tint lands on the
+// requested colour rather than a darker version of it.
+const TEX_LUM={Skin_Female:0.235,Skin_Male:0.23,Regular_Female:0.216,Regular_Male:0.199,Hair_1:0.287,Hair_2:0.275,Eye:0.203};
+const HAIR_STYLES=['Hair_Long','Hair_Buns','Hair_SimpleParted','Hair_Buzzed','Hair_BuzzedFemale'];
+const HAIR_LABEL={Hair_Long:'Long',Hair_Buns:'Buns',Hair_SimpleParted:'Parted',Hair_Buzzed:'Buzzed',Hair_BuzzedFemale:'Cropped'};
+const HAIR_TEX={Hair_Long:'Hair_2',Hair_Buns:'Hair_2',Hair_SimpleParted:'Hair_1',Hair_Buzzed:'Hair_1',Hair_BuzzedFemale:'Hair_1',Hair_Beard:'Hair_1'};
+const RARITY_GLOW={uncommon:'#1eff00',rare:'#2f8cff','very-rare':'#b35cff',legendary:'#ff8a1a',artifact:'#ffd98a'};
+
+/* ── Character → model spec ────────────────────────────────────────── */
+function _armourKind(it){
+  if(!it) return null;
+  const n=((it.name||'')+' '+(it.subtype||'')).toLowerCase();
+  if(/plate|splint|chain mail|chainmail|ring mail|breastplate|scale mail|chain shirt|mithral|adamantine|mail\b/.test(n)) return 'metal';
+  if(/leather|studded|hide|padded|brigandine|armou?r/.test(n)) return 'leather';
+  if(/robe|clothes|vestment|tunic|coat|cloak|garb|attire/.test(n)) return 'cloth';
+  return it.type==='armor'?'leather':'cloth';
+}
+function _weaponKind(it){
+  if(!it) return null;
+  const n=(it.name||'').toLowerCase();
+  if(/shield/.test(n)) return 'shield';
+  if(/crossbow/.test(n)) return 'crossbow';
+  if(/\bbow\b|longbow|shortbow/.test(n)) return 'bow';
+  if(/staff|quarterstaff/.test(n)) return 'staff';
+  if(/spear|pike|halberd|glaive|trident|lance|javelin|polearm/.test(n)) return 'spear';
+  if(/great ?axe|battleaxe|battle axe|handaxe|hand axe|\baxe/.test(n)) return 'axe';
+  if(/maul|warhammer|war hammer|light hammer|\bhammer|mace|morningstar|flail|club|greatclub/.test(n)) return 'mace';
+  if(/dagger|knife|sickle|dart/.test(n)) return 'dagger';
+  if(/wand|rod|orb|focus|crystal|totem|symbol|amulet|holy/.test(n)) return 'wand';
+  if(/sword|scimitar|rapier|blade|katana|sabre|saber|cutlass|whip/.test(n)) return 'sword';
+  return it.type==='weapon'?'sword':null;
+}
+function dollSpec(char){
+  const cls=(typeof CLASSES!=='undefined'&&CLASSES[char.classIdx])||{name:'Fighter'};
+  const F=(typeof _raceFeatures==='function')?_raceFeatures(char.race):{skin:'human'};
+  // Same seeded picks, in the same order, as generateCharPortrait so the model
+  // and the portrait agree on skin, hair and eye colour.
+  const rng=_makeRng(_hashStr(String(char.name||'hero')+'|'+String(char.id||'')+'|'+String(char.portraitSeed||0)));
+  const skin=_pick(rng,_SKIN[F.skin]||_SKIN.human);
+  const hairCol=_parseColorWord(char.hair,_HAIR_WORDS, F.hairDef||_pick(rng,['#1e1c24','#5b3a24','#7a3b1e','#d9b45b','#b8b8c2','#3d2718']));
+  const eyeCol=_parseColorWord(char.eyes,_EYE_WORDS, _pick(rng,['#4a7ab5','#3f8e5a','#6b4226','#8a6b32','#9aa0ae']));
+  const M=char.model||{};
+  const h=_hashStr(String(char.id||char.name||'x'));
+  const body=M.body||(h%2?'Male':'Female');
+  const noHair=!!F.noHair;
+  let hair=M.hair!==undefined?M.hair:(noHair?null:(F.baldBias&&h%3===0)?null:
+    (body==='Female'?['Hair_Long','Hair_Buns','Hair_SimpleParted','Hair_Long'][(h>>3)%4]:['Hair_SimpleParted','Hair_Buzzed','Hair_Long','Hair_SimpleParted'][(h>>3)%4]));
+  if(hair && HAIR_STYLES.indexOf(hair)<0) hair=null;
+  const dwarf=/dwarf|duergar/i.test(char.race||'');
+  const beard=M.beard!==undefined?!!M.beard:(body==='Male'&&!noHair&&(dwarf||(h>>5)%5<2));
+
+  const eq=(typeof getEquippedItems==='function')?getEquippedItems(char):{};
+  const chest=_armourKind(eq.chest);
+  const armoured=chest==='leather'||chest==='metal';
+  const hn=((eq.head&&eq.head.name)||'').toLowerCase();
+  const hooded=/hood|helm|hat\b|cap\b|cowl|coif|mask/.test(hn);
+  const gloves=!!eq.gloves||armoured;
+  const boots=!!eq.boots||armoured;
+  const pre=body+'_';
+  const parts=[
+    pre+(armoured?'Ranger':'Peasant')+'_Body',
+    pre+(armoured?'Ranger':'Peasant')+'_Legs',
+    pre+(gloves?'Ranger':'Peasant')+'_Arms',
+    pre+(boots?'Ranger':'Peasant')+'_Feet',
+  ];
+  if(chest==='metal') parts.push(pre+'Ranger_Acc_Pauldrons');
+  if(hooded) parts.push(pre+'Ranger_Head_Hood');
+  // Outfit colourways: woodland classes get the olive Ranger dye, casters the
+  // second Peasant cloth. The player can override either.
+  const wood=/Ranger|Druid|Rogue|Monk/.test(cls.name);
+  const caster=/Wizard|Sorcerer|Warlock|Cleric|Bard/.test(cls.name);
+  const ranger=M.dye==='a'?'Ranger':M.dye==='b'?'Ranger_3':(wood?'Ranger_3':'Ranger');
+  const peasant=M.dye==='a'?'Peasant':M.dye==='b'?'Peasant_2':(caster?'Peasant_2':'Peasant');
+  const weapons=[];
+  const mk=_weaponKind(eq.mainhand), ok=_weaponKind(eq.offhand);
+  const glow=it=>it?(RARITY_GLOW[it.rarity]||(/\+\d/.test(it.name||'')?'#8fb4ff':null)):null;
+  if(mk) weapons.push({hand:'r',kind:mk,glow:glow(eq.mainhand)});
+  if(ok) weapons.push({hand:'l',kind:ok,glow:glow(eq.offhand)});
+  const horns=M.horns===false?null:(F.horns||null);
+  const hornCol=F.skin==='dragon'?skin:'#2b2226';
+  return {cls:cls.name, body, skin, hairCol, eyeCol, brows:!noHair, hair:hooded?null:hair, beard, parts, ranger, peasant, horns:hooded&&horns!=='ridge'?null:horns, hornCol,
+    weapons, metal:chest==='metal', portrait:M.light==='class'?null:(char.portrait||null)};
+}
+
+/* ── Portrait mood → colour scheme ─────────────────────────────────── */
+const _palCache={};
+async function portraitPalette(url){
+  const key=url.length>200?url.length+':'+url.slice(-120):url;
+  if(key in _palCache) return _palCache[key];
+  let out=null;
+  try{
+    const img=new Image(); img.crossOrigin='anonymous'; img.src=url; await img.decode();
+    const N=48, cv=document.createElement('canvas'); cv.width=cv.height=N;
+    const x=cv.getContext('2d'); const iw=img.naturalWidth, ih=img.naturalHeight;
+    x.drawImage(img, iw*0.1, ih*0.08, iw*0.8, ih*0.84, 0,0,N,N); // skip any frame
+    const d=x.getImageData(0,0,N,N).data, px=[];
+    for(let i=0;i<d.length;i+=4){ if(d[i+3]<128) continue; const c=new T.Color().setRGB(d[i]/255,d[i+1]/255,d[i+2]/255,T.SRGBColorSpace); const hsl={}; c.getHSL(hsl); px.push({c,h:hsl.h,s:hsl.s,l:hsl.l}); }
+    if(px.length<50) throw 0;
+    const avg=a=>{ const o=new T.Color(0,0,0); a.forEach(p=>o.add(p.c)); return a.length?o.multiplyScalar(1/a.length):o; };
+    const byL=[...px].sort((a,b)=>a.l-b.l); const dark=avg(byL.slice(0,Math.max(1,byL.length/5|0)));
+    const bins=Array.from({length:12},()=>({w:0,a:[]}));
+    px.forEach(p=>{ const w=p.s*p.s*(1-Math.abs(p.l-0.5)*2); if(w<0.05) return; const b=bins[Math.floor(p.h*12)%12]; b.w+=w; b.a.push(p); });
+    const top=[...bins].sort((a,b)=>b.w-a.w);
+    // Rim takes the most vivid hue that isn't a warm skin/torch tone; an
+    // all-warm portrait leaves the rim to the class.
+    const coolTop=top.find(b=>b.a.length && b.w>top[0].w*0.15 && [0,1,11].indexOf(bins.indexOf(b))<0);
+    const warmBin=bins.filter((b,i)=>(i<=1||i===11)&&b.a.length).sort((a,b)=>b.w-a.w)[0];
+    const mid=avg(px.filter(p=>p.l>0.2&&p.l<0.75));
+    const norm=(c,s,l)=>{ const h={}; c.getHSL(h); return new T.Color().setHSL(h.h, Math.max(h.s,s), l); };
+    const m={}; mid.getHSL(m); const tc=new T.Color().setHSL(m.h, Math.min(m.s,0.16), 0.62);
+    out={ bg:norm(dark,0.3,0.006), rim:coolTop?norm(avg(coolTop.a),0.55,0.62):null,
+      key:warmBin?norm(avg(warmBin.a),0.5,0.66):null, tint:[tc.r,tc.g,tc.b] };
+  }catch(e){ out=null; }
+  return _palCache[key]=out;
+}
+async function lookFor(spec){
+  const G=GRADES[spec.cls]||GRADES.Fighter;
+  const L={bg:new T.Color(G.bg), key:new T.Color(G.key), rim:new T.Color(G.rim), tint:G.tint.map(v=>0.5+v*0.5), desat:0.38};
+  const pal=spec.portrait?await portraitPalette(spec.portrait):null;
+  if(pal){
+    L.bg=pal.bg.clone().lerp(new T.Color(G.bg),0.25);
+    if(pal.key) L.key=pal.key.clone().lerp(new T.Color(G.key),0.25);
+    if(pal.rim) L.rim=pal.rim.clone().lerp(new T.Color(G.rim),0.25);
+    L.tint=pal.tint.map((v,i)=>0.5+(v*0.75+G.tint[i]*0.25)*0.5);
+  }
+  // Keep the key light a torch, not a stage gel
+  L.key.lerp(new T.Color(0xfff1dc),0.35);
+  return L;
+}
+
+/* ── Materials ─────────────────────────────────────────────────────── */
+// Tinted: keep the texture's shading and detail, recolour it (skin, hair, eyes).
+function tintedMat(texName, normName, color, keep, rough){
+  const m=new T.MeshStandardMaterial({map:tex(texName,true), normalMap:normName?tex(normName):null, roughness:rough, metalness:0});
+  const u={uCol:{value:new T.Color(color)}, uGain:{value:1/(TEX_LUM[texName]||0.22)}, uKeep:{value:keep}};
+  m.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,u);
+    sh.fragmentShader='uniform vec3 uCol; uniform float uGain; uniform float uKeep;\n'+sh.fragmentShader.replace('#include <map_fragment>',
+      '#include <map_fragment>\n float _l=dot(diffuseColor.rgb,vec3(0.2126,0.7152,0.0722));\n diffuseColor.rgb = mix(vec3(_l), diffuseColor.rgb, uKeep) * uGain * uCol * 0.55;'); };
+  m.customProgramCacheKey=()=>'toh-tinted';
+  return m;
+}
+// Graded: outfit textures, desaturated and pulled toward the scene's mood.
+function gradedMat(base, L, metal){
+  const m=new T.MeshStandardMaterial({map:tex(base,true), normalMap:tex(base.replace(/_\d$/,'')+'_N'),
+    roughnessMap:tex(base.replace(/_\d$/,'')+'_ORM'), metalnessMap:tex(base.replace(/_\d$/,'')+'_ORM'),
+    aoMap:tex(base.replace(/_\d$/,'')+'_ORM'), roughness:1, metalness:metal?1:0.85});
+  const u={uDesat:{value:L.desat}, uTint:{value:new T.Vector3(...L.tint)}};
+  m.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,u);
+    sh.fragmentShader='uniform float uDesat; uniform vec3 uTint;\n'+sh.fragmentShader.replace('#include <map_fragment>',
+      '#include <map_fragment>\n float _l=dot(diffuseColor.rgb,vec3(0.299,0.587,0.114));\n diffuseColor.rgb = mix(diffuseColor.rgb, vec3(_l), uDesat) * uTint * 1.25;'); };
+  m.customProgramCacheKey=()=>'toh-graded';
+  return m;
+}
+
+/* ── Weapons (built in code, parented to the hand bones) ───────────── */
+function weaponMesh(w){
+  const g=new T.Group();
+  const steel=new T.MeshStandardMaterial({color:0xb8bcc6, metalness:1, roughness:0.32});
+  const dark=new T.MeshStandardMaterial({color:0x2a2018, metalness:0.1, roughness:0.8});
+  const wood=new T.MeshStandardMaterial({color:0x5a3a22, metalness:0, roughness:0.75});
+  const brass=new T.MeshStandardMaterial({color:0xb08a3a, metalness:1, roughness:0.4});
+  if(w.glow){ steel.emissive=new T.Color(w.glow); steel.emissiveIntensity=0.14; }
+  const box=(x,y,z,m,py,px=0,pz=0)=>{ const o=new T.Mesh(new T.BoxGeometry(x,y,z),m); o.position.set(px,py,pz); g.add(o); return o; };
+  const cyl=(r1,r2,h,m,py,seg=10)=>{ const o=new T.Mesh(new T.CylinderGeometry(r1,r2,h,seg),m); o.position.y=py; g.add(o); return o; };
+  // Built along +Y with the grip at the origin.
+  switch(w.kind){
+    case 'sword':  cyl(0.014,0.014,0.13,dark,0); box(0.16,0.022,0.03,brass,0.075); box(0.05,0.62,0.008,steel,0.4);
+                   { const tip=new T.Mesh(new T.ConeGeometry(0.035,0.09,4),steel); tip.scale.z=0.2; tip.rotation.y=Math.PI/4; tip.position.y=0.755; g.add(tip); } break;
+    case 'dagger': cyl(0.012,0.012,0.09,dark,0); box(0.08,0.018,0.024,brass,0.05); box(0.032,0.2,0.007,steel,0.155); break;
+    case 'axe':    cyl(0.016,0.016,0.62,wood,0.22); { const hd=new T.Mesh(new T.CylinderGeometry(0.11,0.11,0.014,14,1,false,0,Math.PI),steel); hd.rotation.x=Math.PI/2; hd.rotation.y=Math.PI/2; hd.position.set(0.012,0.44,0); g.add(hd); box(0.04,0.06,0.03,steel,0.44); } break;
+    case 'mace':   cyl(0.016,0.016,0.5,wood,0.16); { const hd=new T.Mesh(new T.IcosahedronGeometry(0.065,0),steel); hd.position.y=0.44; g.add(hd); } break;
+    case 'staff':  cyl(0.018,0.022,1.55,wood,0.25); { const o=new T.Mesh(new T.OctahedronGeometry(0.05),new T.MeshStandardMaterial({color:w.glow||0x8fb4ff,emissive:w.glow||0x5a8aff,emissiveIntensity:1.4,roughness:0.2})); o.position.y=1.08; g.add(o); } break;
+    case 'spear':  cyl(0.015,0.015,1.7,wood,0.3); { const tip=new T.Mesh(new T.ConeGeometry(0.03,0.2,4),steel); tip.position.y=1.25; g.add(tip); } break;
+    case 'bow':    { // arc bulges toward +X with the grip at the middle; string on -X
+                     const R=0.55, half=0.95;
+                     const arc=new T.Mesh(new T.TorusGeometry(R,0.013,6,24,half*2),wood); arc.rotation.z=-half; arc.position.x=-R; g.add(arc);
+                     const sx=R*Math.cos(half)-R, sy=R*Math.sin(half);
+                     const str=new T.Mesh(new T.CylinderGeometry(0.0025,0.0025,sy*2,4),new T.MeshBasicMaterial({color:0xd8d0c0})); str.position.x=sx; g.add(str);
+                     cyl(0.018,0.018,0.1,dark,0); } break;
+    case 'crossbow': box(0.05,0.05,0.5,wood,0,0,0.12); { const arc=new T.Mesh(new T.TorusGeometry(0.22,0.012,6,16,Math.PI*0.7),steel); arc.rotation.x=Math.PI/2; arc.rotation.z=Math.PI*0.15; arc.position.z=0.33; g.add(arc); } break;
+    case 'shield': { const s=new T.Mesh(new T.CylinderGeometry(0.26,0.26,0.03,24),new T.MeshStandardMaterial({color:0x4a3322,roughness:0.7}));
+                     s.rotation.z=Math.PI/2; g.add(s); const rim=new T.Mesh(new T.TorusGeometry(0.26,0.014,6,24),steel); rim.rotation.y=Math.PI/2; g.add(rim);
+                     const boss=new T.Mesh(new T.SphereGeometry(0.05,10,8,0,Math.PI*2,0,Math.PI/2),steel); boss.rotation.z=-Math.PI/2; boss.position.x=0.018; g.add(boss); } break;
+    case 'wand':   cyl(0.008,0.012,0.3,wood,0.08); { const o=new T.Mesh(new T.OctahedronGeometry(0.028),new T.MeshStandardMaterial({color:w.glow||0xb58aff,emissive:w.glow||0x8a5aff,emissiveIntensity:1.6})); o.position.y=0.25; g.add(o); } break;
+  }
+  g.traverse(o=>{ if(o.isMesh) o.castShadow=true; });
+  return g;
+}
+// Where each weapon points, in figure space (+Z front, +X the figure's left),
+// for a right hand; the left hand mirrors X. y = the weapon's length axis.
+const WEAPON_FRAME={
+  sword:{y:[0,-0.7,0.72], x:[1,0,0]}, dagger:{y:[0,-0.5,0.85], x:[1,0,0]},
+  axe:{y:[0,-0.85,0.5], x:[0,0,1]},   mace:{y:[0,-0.85,0.5], x:[1,0,0]},
+  wand:{y:[0,0.2,1], x:[1,0,0]},
+  staff:{y:[0,1,0.06], x:[1,0,0]},  spear:{y:[0,1,0.06], x:[1,0,0]},
+  bow:{y:[0,1,0.3], x:[0,0,1], off:[-0.04,0,0.03]},      crossbow:{y:[0,1,0], x:[1,0,0]},
+  shield:{y:[0,1,0], x:[-1,0,0], off:[-0.07,0.1,0.02]},
+};
+const FIST={curl:1.1, thumb:0.5};
+
+// Horns from the race table (the same flags the portrait generator uses),
+// built in figure space and then attached to the head bone.
+function addHorns(head, kind, col){
+  const mat=new T.MeshStandardMaterial({color:new T.Color(col||'#2b2226'), roughness:0.45, metalness:0.1});
+  const hp=new T.Vector3(); head.getWorldPosition(hp);
+  const P=(x,y,z)=>new T.Vector3(x,y,z);
+  [1,-1].forEach(sx=>{
+    let pts, r0=0.022;
+    if(kind==='bull'){ pts=[P(0.07,0.2,0.04),P(0.16,0.22,0.05),P(0.22,0.3,0.08)]; r0=0.03; }
+    else if(kind==='curl'){ pts=[P(0.065,0.2,0.05),P(0.11,0.26,-0.02),P(0.15,0.19,-0.07),P(0.13,0.13,-0.01)]; r0=0.028; }
+    else if(kind==='ridge'){ pts=[P(0.035,0.17,0.03),P(0.05,0.2,-0.06),P(0.06,0.18,-0.15)]; r0=0.02; }
+    else { pts=[P(0.05,0.2,0.075),P(0.075,0.27,0.04),P(0.095,0.3,-0.05),P(0.095,0.25,-0.13)]; r0=0.026; }
+    const curve=new T.CatmullRomCurve3(pts.map(v=>new T.Vector3(v.x*sx,v.y,v.z).add(hp)));
+    const geo=new T.TubeGeometry(curve,16,r0,8,false);
+    // taper toward the tip
+    const pos=geo.attributes.position, c=new T.Vector3();
+    for(let i=0;i<pos.count;i++){ const u=Math.floor(i/9)/16; const p=curve.getPointAt(Math.min(1,u)); c.fromBufferAttribute(pos,i).sub(p).multiplyScalar(1-u*0.85).add(p); pos.setXYZ(i,c.x,c.y,c.z); }
+    geo.computeVertexNormals();
+    const m=new T.Mesh(geo,mat); m.castShadow=true; head.attach(m);
+  });
+}
+
+/* ── Build a posed figure ──────────────────────────────────────────── */
+function trimToHead(mesh){
+  const bones=mesh.skeleton.bones, geo=mesh.geometry;
+  const si=geo.attributes.skinIndex, sw=geo.attributes.skinWeight;
+  const keepB=new Set(['Head','neck_01']);
+  const keep=v=>{ let best=0,bi=0; for(let k=0;k<4;k++){ const w=sw.getComponent(v,k); if(w>best){best=w;bi=si.getComponent(v,k);} } return keepB.has(bones[bi].name); };
+  const idx=geo.index.array, out=[];
+  for(let t=0;t<idx.length;t+=3){ if(keep(idx[t])&&keep(idx[t+1])&&keep(idx[t+2])) out.push(idx[t],idx[t+1],idx[t+2]); }
+  const g2=geo.clone(); g2.setIndex(out); mesh.geometry=g2;
+}
+async function buildFigure(spec, L){
+  const names=['Base_'+spec.body, ...spec.parts, ...(spec.hair?[spec.hair]:[]), ...(spec.beard?['Hair_Beard']:[])];
+  const loaded=await Promise.all(names.map(n=>glb(n)));
+  const root=cloneScene(loaded[0].scene);
+  let skel=null; root.traverse(o=>{ if(o.isSkinnedMesh&&!skel) skel=o.skeleton; });
+  const boneBy={}; skel.bones.forEach(b=>boneBy[b.name]=b);
+  const sx=spec.body, skinTex='Skin_'+sx, regTex='Regular_'+sx;
+  const mats={
+    skin:tintedMat(skinTex, skinTex+'_N', spec.skin, 0.3, 0.62),
+    reg: tintedMat(regTex, regTex+'_N', spec.skin, 0.3, 0.62),
+    hair1:tintedMat('Hair_1','Hair_1_N', spec.hairCol, 0.1, 0.55),
+    hair2:tintedMat('Hair_2','Hair_2_N', spec.hairCol, 0.1, 0.55),
+    eye: tintedMat('Eye', null, spec.eyeCol, 0.35, 0.15),
+    ranger:gradedMat(spec.ranger, spec.metal?Object.assign({},L,{desat:0.8,tint:L.tint.map((v,i)=>v*[0.92,0.96,1.05][i])}):L, spec.metal),
+    peasant:gradedMat(spec.peasant, L, false),
+  };
+  const pick=n=>/Superhero/.test(n)?mats.skin:/Regular/.test(n)?mats.reg:/Eyes/.test(n)?mats.eye:/Hair_2/.test(n)?mats.hair2:/Hair_1/.test(n)?mats.hair1:/Ranger/.test(n)?mats.ranger:mats.peasant;
+  const assign=o=>{ o.castShadow=true; o.frustumCulled=false;
+    if(Array.isArray(o.material)) o.material=o.material.map(m=>pick(m.name)); else o.material=pick(o.material.name); };
+  root.traverse(o=>{ if(!o.isSkinnedMesh) return;
+    const mn=(Array.isArray(o.material)?o.material[0]:o.material).name;
+    if(/Superhero/.test(mn)) trimToHead(o);   // outfits cover the body; show the head only
+    if(/Hair/.test(mn) && !spec.brows) o.visible=false;
+    assign(o); });
+  // Every other piece shares the base skeleton, so one pose drives them all.
+  for(let i=1;i<loaded.length;i++){
+    const sc=cloneScene(loaded[i].scene), meshes=[];
+    sc.traverse(o=>{ if(o.isSkinnedMesh) meshes.push(o); });
+    meshes.forEach(o=>{
+      const bones=o.skeleton.bones.map(b=>boneBy[b.name]||b);
+      o.bind(new T.Skeleton(bones,o.skeleton.boneInverses), o.bindMatrix);
+      assign(o); root.add(o);
+    });
+    if(names[i]===spec.hair||names[i]==='Hair_Beard'){ const hm=(HAIR_TEX[names[i]]==='Hair_2')?mats.hair2:mats.hair1; meshes.forEach(o=>o.material=hm); }
+  }
+  // Relaxed stance. Bone axes differ per side and per export, so each bone is
+  // aimed at a direction in figure space (+Z is the front, +X the figure's left).
+  root.updateMatrixWorld(true);
+  const aim=(bone, child, dir)=>{
+    if(!bone||!child) return;
+    const a=new T.Vector3(), b=new T.Vector3(); bone.getWorldPosition(a); child.getWorldPosition(b);
+    const cur=b.sub(a).normalize(), want=new T.Vector3(...dir).normalize();
+    const dq=new T.Quaternion().setFromUnitVectors(cur,want);
+    const qw=new T.Quaternion(); bone.getWorldQuaternion(qw);
+    const qp=new T.Quaternion(); bone.parent.getWorldQuaternion(qp);
+    bone.quaternion.copy(qp.invert().multiply(dq.multiply(qw)));
+    bone.updateMatrixWorld(true);
+  };
+  const B=boneBy;
+  aim(B.upperarm_r,B.lowerarm_r,[-0.2,-1,0.02]);  aim(B.lowerarm_r,B.hand_r,[-0.1,-1,0.32]);
+  aim(B.upperarm_l,B.lowerarm_l,[0.2,-1,0.02]);   aim(B.lowerarm_l,B.hand_l,[0.1,-1,0.32]);
+  aim(B.hand_r,B.middle_01_r,[-0.12,-1,0.18]);    aim(B.hand_l,B.middle_01_l,[0.12,-1,0.18]);
+  const held={r:false,l:false};
+  spec.weapons.forEach(w=>{
+    const sd=w.hand, hb=B['hand_'+sd], mid=B['middle_01_'+sd]; if(!hb||!mid) return;
+    held[sd]=true;
+    const m=weaponMesh(w);
+    // Grip point: between the palm and the finger roots
+    const hp=new T.Vector3(), mp=new T.Vector3(); hb.getWorldPosition(hp); mid.getWorldPosition(mp);
+    const grip=hp.clone().lerp(mp,0.75);
+    const f=WEAPON_FRAME[w.kind]||WEAPON_FRAME.sword, sx=sd==='r'?1:-1;
+    const y=new T.Vector3(...f.y).normalize(), x0=new T.Vector3(f.x[0]*sx,f.x[1],f.x[2]);
+    const z=new T.Vector3().crossVectors(x0,y).normalize(), x=new T.Vector3().crossVectors(y,z).normalize();
+    const qd=new T.Quaternion().setFromRotationMatrix(new T.Matrix4().makeBasis(x,y,z));
+    if(f.off) grip.add(new T.Vector3(f.off[0]*sx,f.off[1],f.off[2]));
+    const qb=new T.Quaternion(); hb.getWorldQuaternion(qb);
+    const ws=new T.Vector3(); hb.getWorldScale(ws);
+    const holder=new T.Group(); holder.add(m);
+    holder.position.copy(hb.worldToLocal(grip)); holder.quaternion.copy(qb.invert().multiply(qd)); holder.scale.setScalar(1/ws.x);
+    hb.add(holder);
+  });
+  if(spec.horns && B.Head) addHorns(B.Head, spec.horns, spec.hornCol);
+  // Curl the fingers of a hand that holds something
+  ['r','l'].forEach(sd=>{ if(!held[sd]) return;
+    ['index','middle','ring','pinky'].forEach(fn=>{ [1,2,3].forEach(j=>{ const b=B[fn+'_0'+j+'_'+sd]; if(b) b.rotateZ(FIST.curl*(j===1?0.8:1)); }); });
+    [1,2].forEach(j=>{ const b=B['thumb_0'+j+'_'+sd]; if(b) b.rotateZ(FIST.thumb); });
+  });
+  root.updateMatrixWorld(true);
+  return {root, bones:boneBy, rest:{spine:boneBy.spine_03?.quaternion.clone(), head:boneBy.Head?.quaternion.clone()}};
+}
+
+/* ── Stage: one shared renderer, moved into whichever doll is showing ── */
+const S={renderer:null, scene:null, cam:null, fig:null, lights:null, host:null, sig:'', building:null, yaw:0.4, t0:0, raf:0, visible:true, ro:null, io:null};
+function ensureStage(){
+  if(S.renderer) return;
+  const r=new T.WebGLRenderer({antialias:true, alpha:false, powerPreference:'low-power'});
+  r.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
+  r.outputColorSpace=T.SRGBColorSpace; r.toneMapping=T.ACESFilmicToneMapping; r.toneMappingExposure=1.3;
+  r.shadowMap.enabled=true; r.shadowMap.type=T.PCFSoftShadowMap;
+  r.domElement.className='doll3d-canvas';
+  S.renderer=r; S.scene=new T.Scene(); S.cam=new T.PerspectiveCamera(28,1,0.05,40);
+  // Drag to turn, double-click to face front again.
+  let drag=null;
+  const el=r.domElement;
+  el.addEventListener('pointerdown',e=>{ drag={x:e.clientX,yaw:S.yaw}; el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointermove',e=>{ if(!drag) return; S.yaw=drag.yaw+(e.clientX-drag.x)*0.012; _kick(); });
+  el.addEventListener('pointerup',()=>{ drag=null; });
+  el.addEventListener('pointercancel',()=>{ drag=null; });
+  el.addEventListener('dblclick',()=>{ S.yaw=0.4; _kick(); });
+  S.ro=new ResizeObserver(()=>{ _resize(); _kick(); });
+  S.io=new IntersectionObserver(es=>{ S.visible=es.some(e=>e.isIntersecting); if(S.visible) _kick(); });
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) _kick(); });
+}
+function _resize(){
+  if(!S.host||!S.renderer) return;
+  const w=Math.max(40,S.host.clientWidth), h=Math.max(60,S.host.clientHeight);
+  S.renderer.setSize(w,h,false); S.renderer.domElement.style.width=w+'px'; S.renderer.domElement.style.height=h+'px';
+  S.cam.aspect=w/h; _frame();
+}
+function _frame(){
+  if(!S.fig) return;
+  const hh=S.fig.height, vfov=S.cam.fov*Math.PI/180;
+  const fitH=(hh*1.12/2)/Math.tan(vfov/2);
+  const fitW=(0.62*hh*0.5)/(Math.tan(vfov/2)*S.cam.aspect);
+  const d=Math.max(fitH,fitW);
+  S.cam.position.set(0,hh*0.54,d); S.cam.lookAt(0,hh*0.5,0); S.cam.updateProjectionMatrix();
+}
+function setLights(L){
+  if(S.lights) S.scene.remove(S.lights);
+  const g=new T.Group();
+  g.add(new T.HemisphereLight(0x2a2440,0x050408,0.55));
+  const key=new T.PointLight(L.key,10,8,1.5); key.position.set(-1.2,1.75,1.5); key.castShadow=true; key.shadow.mapSize.set(512,512); g.add(key);
+  const rim=new T.DirectionalLight(L.rim,5.5); rim.position.set(1.8,2.6,-2.6); g.add(rim);
+  const rim2=new T.DirectionalLight(0x6a5cff,1.2); rim2.position.set(-2.2,1.6,-2.0); g.add(rim2);
+  const fill=new T.DirectionalLight(0xb0b4d0,0.9); fill.position.set(1.2,1.6,3); g.add(fill);
+  // Ground: a soft pool of light under the feet
+  const cv=document.createElement('canvas'); cv.width=cv.height=128; const x=cv.getContext('2d');
+  const gr=x.createRadialGradient(64,64,4,64,64,64); gr.addColorStop(0,'#'+L.bg.clone().lerp(L.rim,0.1).getHexString()); gr.addColorStop(1,'rgba(0,0,0,0)');
+  x.fillStyle=gr; x.fillRect(0,0,128,128);
+  const gt=new T.CanvasTexture(cv); gt.colorSpace=T.SRGBColorSpace;
+  const ground=new T.Mesh(new T.CircleGeometry(1.1,40), new T.MeshStandardMaterial({map:gt,transparent:true,roughness:1}));
+  ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; g.add(ground);
+  S.scene.background=L.bg.clone(); S.scene.fog=new T.Fog(L.bg,4,9);
+  S.lights=g; S.scene.add(g);
+}
+// Animate for a while after anything changes, then hold a still frame (saves battery).
+function _kick(){ S.until=performance.now()+12000; if(!S.raf && S.renderer) S.raf=requestAnimationFrame(_tick); }
+function _tick(t){
+  S.raf=0;
+  if(!S.host||!S.host.isConnected||document.hidden||!S.visible) return;   // parked until shown again
+  if(S.fig){
+    const s=(t-S.t0)/1000;
+    S.fig.root.rotation.y=S.yaw;
+    const b=S.fig.bones, br=Math.sin(s*1.6);
+    if(b.spine_03&&S.fig.rest.spine){ b.spine_03.quaternion.copy(S.fig.rest.spine); b.spine_03.rotateX(br*0.012); }
+    if(b.Head&&S.fig.rest.head){ b.Head.quaternion.copy(S.fig.rest.head); b.Head.rotateY(Math.sin(s*0.37)*0.06); b.Head.rotateX(Math.sin(s*0.23)*0.025); }
+  }
+  S.renderer.render(S.scene,S.cam);
+  if(t<S.until) S.raf=requestAnimationFrame(_tick);
+}
+
+/* ── Public API for the classic scripts ────────────────────────────── */
+async function mount(host, char){
+  host.classList.add('doll3d-loading');
+  try{ await lib(); }catch(e){ host.classList.remove('doll3d-loading'); host.classList.add('doll3d-failed'); throw e; }
+  ensureStage();
+  if(S.host!==host){
+    if(S.host){ S.ro.unobserve(S.host); S.io.unobserve(S.host); }
+    S.host=host; host.appendChild(S.renderer.domElement); S.ro.observe(host); S.io.observe(host);
+  }
+  _resize();
+  const spec=dollSpec(char);
+  const sig=JSON.stringify(spec);
+  if(sig===S.sig && S.fig){ host.classList.remove('doll3d-loading'); _kick(); return; }
+  S.sig=sig;
+  const my=S.building={};
+  const L=await lookFor(spec);
+  const fig=await buildFigure(spec,L);
+  if(S.building!==my) return;              // a newer build started meanwhile
+  if(S.fig) S.scene.remove(S.fig.root);
+  const bb=new T.Box3().setFromObject(fig.root); const c=bb.getCenter(new T.Vector3());
+  fig.root.position.set(-c.x,-bb.min.y,-c.z); fig.height=bb.max.y-bb.min.y;
+  S.fig=fig; S.scene.add(fig.root); setLights(L); _frame();
+  if(!S.t0) S.t0=performance.now();
+  if(S.host===host) host.classList.remove('doll3d-loading');
+  _kick();
+}
+window.Doll3D={ mount, spec:dollSpec, HAIR_STYLES, HAIR_LABEL, ready:true, _stage:S };
+window.dispatchEvent(new Event('doll3d-ready'));
+</script>
 
 </body>
 </html>
