@@ -887,15 +887,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .paperdoll-body.doll3d-host:not(.doll3d-loading):not(.doll3d-failed) .doll3d-msg { display: none; }
 .paperdoll-body.doll3d-host.doll3d-loading canvas.doll3d-canvas { opacity: 0.35; }
 .doll3d-hint { position: absolute; top: 6px; right: 8px; font-size: 9px; color: rgba(255,255,255,0.35); z-index: 2; pointer-events: none; }
-.dm-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 10px; }
-.dm-row label { width: 78px; font-family: 'Cinzel', serif; font-size: 9px; letter-spacing: 1.2px; color: var(--gold); text-transform: uppercase; }
-.dm-chip { background: none; border: 1px solid var(--border2); border-radius: 14px; color: var(--muted); font-size: 11px; padding: 4px 10px; cursor: pointer; }
-.dm-chip.on { border-color: var(--gold); color: var(--gold); background: var(--gold-dim); }
-.paperdoll-body img.paperdoll-portrait {
-  max-width: 100%; max-height: 310px; object-fit: contain;
-  border-radius: 10px; position: relative; z-index: 1;
-  filter: drop-shadow(0 6px 16px rgba(0,0,0,0.55));
-}
 .sheet-avatar-lg img.avatar-portrait, .pm-av img.avatar-portrait {
   width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;
 }
@@ -905,23 +896,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   margin-top: 8px; transition: var(--trans);
 }
 .portrait-paste-zone.armed { border-color: var(--gold); color: var(--gold); }
-.paperdoll-body .doll-glow {
-  position: absolute; inset: 0;
-  border-radius: 12px;
-  pointer-events: none;
-  animation: dollPulse 3s ease-in-out infinite;
-}
-@keyframes dollPulse {
-  0%,100% { opacity: 0.18; }
-  50%      { opacity: 0.38; }
-}
 .paperdoll-section { position: relative; overflow: hidden; }
-.paperdoll-section .class-bg-rune {
-  position: absolute; bottom: -10px; right: -10px;
-  font-size: 90px; opacity: 0.04; pointer-events: none;
-  user-select: none; line-height: 1;
-  filter: blur(2px);
-}
 
 /* Equipment slot — base */
 .equip-slot {
@@ -1535,8 +1510,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
               <div class="paperdoll-section-label" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
                 <span>EQUIPMENT SLOTS</span>
                 <span style="display:flex;gap:6px">
-                  <button id="dollModeBtn" onclick="toggleDollMode()" title="Switch between the 3D model and the portrait picture" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">⇄ 2D</button>
-                  <button id="dollModelBtn" onclick="openDollModelModal()" title="Build, hair and outfit dye for the 3D model" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">✎ Model</button>
+                  <button id="dollModeBtn" onclick="toggleDollMode()" title="Switch between the 3D model and a flat silhouette" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">⇄ 2D</button>
                   <button onclick="openMiniStudio()" title="Frame this character's round token for the campaign map" style="background:none;border:1px solid var(--gold);border-radius:6px;color:var(--gold);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">🎯 Map Token</button>
                   <button onclick="openPortraitModal()" title="Set a character portrait" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">🖼 Portrait</button>
                   <button onclick="resetCharEquipment()" title="Unequip everything" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;letter-spacing:0.5px;padding:3px 8px;cursor:pointer">↺ Reset</button>
@@ -16181,161 +16155,17 @@ function charQuickHP(sign){
 function selectCharScreen(id){ charScreenId=id; renderCharacterScreen(); }
 
 /* ── Paperdoll ── */
-/* ── Class silhouette SVGs — one per class ── */
-function getClassDollSVG(className, color) {
-  var c = color || '#aaa';
-  var dim = 'opacity:0.13';
-  // Shared base body parts
-  var head   = '<ellipse cx="48" cy="22" rx="14" ry="15" fill="'+c+'" style="'+dim+'"/>';
-  var neck   = '<rect x="43" y="37" width="10" height="9" rx="3" fill="'+c+'" style="'+dim+'"/>';
-  var torso  = '<path d="M28 46 Q24 52 23 66 L22 128 Q22 134 28 136 L68 136 Q74 134 74 128 L73 66 Q72 52 68 46 Z" fill="'+c+'" style="'+dim+'"/>';
-  var legL   = '<path d="M30 136 L28 208 Q28 214 34 215 L42 215 Q46 214 47 208 L48 136 Z" fill="'+c+'" style="'+dim+'"/>';
-  var legR   = '<path d="M66 136 L68 208 Q68 214 62 215 L54 215 Q50 214 49 208 L48 136 Z" fill="'+c+'" style="'+dim+'"/>';
-  var armL   = '<path d="M28 48 Q18 54 16 66 L14 112 Q14 118 20 119 L28 119 Q33 118 34 112 L35 80 Z" fill="'+c+'" style="'+dim+'"/>';
-  var armR   = '<path d="M68 48 Q78 54 80 66 L82 112 Q82 118 76 119 L68 119 Q63 118 62 112 L61 80 Z" fill="'+c+'" style="'+dim+'"/>';
-  var body   = head+neck+torso+legL+legR+armL+armR;
-
-  // Class-specific weapon / prop overlays (higher opacity, class colour)
-  var props = '';
-  var cl = (className||'').toLowerCase();
-
-  if(cl === 'barbarian'){
-    // Greataxe raised over right shoulder
-    props = '<line x1="72" y1="20" x2="72" y2="130" stroke="'+c+'" stroke-width="4" stroke-linecap="round" opacity="0.55"/>'
-          + '<path d="M56 20 Q72 10 88 20 Q80 36 72 28 Z" fill="'+c+'" opacity="0.55"/>'
-          + '<path d="M72 18 Q58 8 60 24 Q66 30 72 28 Z" fill="'+c+'" opacity="0.35"/>'
-          // rage marks on chest
-          + '<line x1="38" y1="72" x2="44" y2="84" stroke="'+c+'" stroke-width="1.5" opacity="0.3"/>'
-          + '<line x1="42" y1="70" x2="48" y2="82" stroke="'+c+'" stroke-width="1.5" opacity="0.3"/>';
-  } else if(cl === 'bard'){
-    // Lute
-    props = '<ellipse cx="62" cy="140" rx="12" ry="16" fill="'+c+'" opacity="0.4"/>'
-          + '<line x1="62" y1="124" x2="62" y2="82" stroke="'+c+'" stroke-width="2.5" stroke-linecap="round" opacity="0.45"/>'
-          + '<line x1="58" y1="90" x2="66" y2="90" stroke="'+c+'" stroke-width="1.5" opacity="0.35"/>'
-          + '<line x1="57" y1="96" x2="67" y2="96" stroke="'+c+'" stroke-width="1.5" opacity="0.35"/>'
-          + '<line x1="58" y1="102" x2="66" y2="102" stroke="'+c+'" stroke-width="1.5" opacity="0.35"/>'
-          // musical notes
-          + '<text x="14" y="60" font-size="12" fill="'+c+'" opacity="0.3" font-family="serif">♪</text>'
-          + '<text x="76" y="75" font-size="9" fill="'+c+'" opacity="0.25" font-family="serif">♫</text>';
-  } else if(cl === 'cleric'){
-    // Holy symbol on chest + mace
-    props = '<circle cx="48" cy="82" r="10" fill="none" stroke="'+c+'" stroke-width="2" opacity="0.45"/>'
-          + '<line x1="48" y1="72" x2="48" y2="92" stroke="'+c+'" stroke-width="2" opacity="0.45"/>'
-          + '<line x1="38" y1="82" x2="58" y2="82" stroke="'+c+'" stroke-width="2" opacity="0.45"/>'
-          // Mace in right hand
-          + '<line x1="76" y1="60" x2="76" y2="130" stroke="'+c+'" stroke-width="3.5" stroke-linecap="round" opacity="0.4"/>'
-          + '<ellipse cx="76" cy="55" rx="7" ry="9" fill="'+c+'" opacity="0.45"/>'
-          // Divine rays from above
-          + '<line x1="48" y1="0" x2="48" y2="14" stroke="'+c+'" stroke-width="1.5" opacity="0.25"/>'
-          + '<line x1="36" y1="2" x2="40" y2="14" stroke="'+c+'" stroke-width="1" opacity="0.2"/>'
-          + '<line x1="60" y1="2" x2="56" y2="14" stroke="'+c+'" stroke-width="1" opacity="0.2"/>';
-  } else if(cl === 'druid'){
-    // Staff with leaf motif
-    props = '<line x1="18" y1="10" x2="20" y2="210" stroke="'+c+'" stroke-width="3" stroke-linecap="round" opacity="0.45"/>'
-          + '<path d="M10 10 Q18 0 26 8 Q20 18 14 14 Z" fill="'+c+'" opacity="0.5"/>'
-          + '<path d="M26 8 Q18 4 14 14 Q20 18 26 8 Z" fill="'+c+'" opacity="0.3"/>'
-          // Floating leaves
-          + '<ellipse cx="70" cy="50" rx="8" ry="4" fill="'+c+'" opacity="0.25" transform="rotate(-30 70 50)"/>'
-          + '<ellipse cx="76" cy="70" rx="6" ry="3" fill="'+c+'" opacity="0.2" transform="rotate(20 76 70)"/>'
-          + '<ellipse cx="68" cy="90" rx="7" ry="3.5" fill="'+c+'" opacity="0.2" transform="rotate(-15 68 90)"/>'
-          // Nature circle
-          + '<circle cx="48" cy="80" r="18" fill="none" stroke="'+c+'" stroke-width="1" stroke-dasharray="3 3" opacity="0.2"/>';
-  } else if(cl === 'fighter'){
-    // Sword + shield
-    props = '<rect x="6" y="50" width="18" height="26" rx="3" fill="'+c+'" opacity="0.45"/>'
-          + '<path d="M6 50 Q15 44 24 50" fill="'+c+'" opacity="0.45"/>'
-          + '<path d="M15 50 L15 76" stroke="'+c+'" stroke-width="1.5" opacity="0.3"/>'
-          + '<path d="M6 63 L24 63" stroke="'+c+'" stroke-width="1.5" opacity="0.3"/>'
-          // Longsword
-          + '<line x1="78" y1="15" x2="78" y2="125" stroke="'+c+'" stroke-width="3.5" stroke-linecap="round" opacity="0.5"/>'
-          + '<line x1="70" y1="52" x2="86" y2="52" stroke="'+c+'" stroke-width="3" stroke-linecap="round" opacity="0.45"/>'
-          + '<rect x="75" y="120" width="6" height="10" rx="2" fill="'+c+'" opacity="0.4"/>';
-  } else if(cl === 'monk'){
-    // Fighting stance — extended arm + kick
-    props = '<line x1="14" y1="70" x2="30" y2="58" stroke="'+c+'" stroke-width="3" stroke-linecap="round" opacity="0.45"/>'
-          // Ki energy circles
-          + '<circle cx="48" cy="80" r="22" fill="none" stroke="'+c+'" stroke-width="1" opacity="0.2"/>'
-          + '<circle cx="48" cy="80" r="14" fill="none" stroke="'+c+'" stroke-width="0.5" opacity="0.15"/>'
-          // Yin-yang hint
-          + '<path d="M40 80 Q40 68 48 68 Q56 68 56 74 Q56 80 48 80 Q44 80 44 76 Q44 72 48 72" fill="none" stroke="'+c+'" stroke-width="1" opacity="0.25"/>'
-          // Raised leg
-          + '<path d="M30 136 L18 175 Q16 180 22 182 L28 181 Q32 180 34 175 L42 140 Z" fill="'+c+'" style="'+dim+'" opacity="0.4"/>';
-  } else if(cl === 'paladin'){
-    // Sword raised + holy radiance
-    props = '<line x1="72" y1="10" x2="72" y2="130" stroke="'+c+'" stroke-width="4" stroke-linecap="round" opacity="0.52"/>'
-          + '<line x1="62" y1="42" x2="82" y2="42" stroke="'+c+'" stroke-width="3.5" stroke-linecap="round" opacity="0.5"/>'
-          + '<rect x="69" y="125" width="6" height="9" rx="2" fill="'+c+'" opacity="0.45"/>'
-          // Radiance burst
-          + '<circle cx="48" cy="72" r="24" fill="none" stroke="'+c+'" stroke-width="1" opacity="0.2"/>'
-          + '<line x1="48" y1="44" x2="48" y2="38" stroke="'+c+'" stroke-width="1.5" opacity="0.2"/>'
-          + '<line x1="26" y1="52" x2="22" y2="48" stroke="'+c+'" stroke-width="1.5" opacity="0.2"/>'
-          + '<line x1="70" y1="52" x2="74" y2="48" stroke="'+c+'" stroke-width="1.5" opacity="0.2"/>'
-          // Cross on shield/chest
-          + '<line x1="48" y1="62" x2="48" y2="90" stroke="'+c+'" stroke-width="2" opacity="0.3"/>'
-          + '<line x1="36" y1="74" x2="60" y2="74" stroke="'+c+'" stroke-width="2" opacity="0.3"/>';
-  } else if(cl === 'ranger'){
-    // Longbow drawn
-    props = '<path d="M14 20 Q8 80 14 140" fill="none" stroke="'+c+'" stroke-width="3.5" stroke-linecap="round" opacity="0.5"/>'
-          + '<line x1="14" y1="20" x2="14" y2="140" stroke="'+c+'" stroke-width="1" opacity="0.3"/>'
-          + '<line x1="14" y1="80" x2="68" y2="80" stroke="'+c+'" stroke-width="1.5" opacity="0.4"/>'
-          // Arrow nocked
-          + '<line x1="14" y1="78" x2="75" y2="72" stroke="'+c+'" stroke-width="1.5" stroke-linecap="round" opacity="0.45"/>'
-          + '<path d="M75 72 L80 68 L76 76 Z" fill="'+c+'" opacity="0.5"/>'
-          // Leaf marks
-          + '<ellipse cx="78" cy="95" rx="6" ry="3" fill="'+c+'" opacity="0.18" transform="rotate(20 78 95)"/>'
-          + '<ellipse cx="74" cy="108" rx="5" ry="2.5" fill="'+c+'" opacity="0.15" transform="rotate(-10 74 108)"/>';
-  } else if(cl === 'rogue'){
-    // Dagger + cloak suggestion
-    props = '<line x1="74" y1="40" x2="66" y2="110" stroke="'+c+'" stroke-width="2.5" stroke-linecap="round" opacity="0.5"/>'
-          + '<path d="M74 40 L80 32 L76 44 Z" fill="'+c+'" opacity="0.55"/>'
-          // Shadow cloak trailing
-          + '<path d="M22 46 Q10 90 8 160 Q12 165 18 162 Q20 140 28 136" fill="'+c+'" opacity="0.15"/>'
-          // Second dagger
-          + '<line x1="16" y1="55" x2="22" y2="108" stroke="'+c+'" stroke-width="2" stroke-linecap="round" opacity="0.35"/>'
-          + '<path d="M16 55 L12 47 L18 57 Z" fill="'+c+'" opacity="0.4"/>';
-  } else if(cl === 'sorcerer'){
-    // Arcane orb + magic trails
-    props = '<circle cx="20" cy="90" r="12" fill="'+c+'" opacity="0.35"/>'
-          + '<circle cx="20" cy="90" r="8" fill="none" stroke="'+c+'" stroke-width="1.5" opacity="0.5"/>'
-          // Arcane swirl lines
-          + '<path d="M26 86 Q42 70 44 54" fill="none" stroke="'+c+'" stroke-width="1.5" opacity="0.3" stroke-dasharray="3 2"/>'
-          + '<path d="M16 96 Q8 120 14 140" fill="none" stroke="'+c+'" stroke-width="1" opacity="0.2" stroke-dasharray="2 2"/>'
-          // Stars
-          + '<circle cx="70" cy="38" r="2" fill="'+c+'" opacity="0.45"/>'
-          + '<circle cx="78" cy="58" r="1.5" fill="'+c+'" opacity="0.35"/>'
-          + '<circle cx="12" cy="48" r="1.5" fill="'+c+'" opacity="0.3"/>'
-          + '<circle cx="80" cy="100" r="2" fill="'+c+'" opacity="0.3"/>'
-          // Spell lines from hands
-          + '<path d="M22 96 Q14 108 10 130" fill="none" stroke="'+c+'" stroke-width="2" opacity="0.25"/>';
-  } else if(cl === 'warlock'){
-    // Dark pact symbol + eldritch hand
-    props = '<circle cx="48" cy="76" r="18" fill="none" stroke="'+c+'" stroke-width="1.5" opacity="0.3"/>'
-          + '<polygon points="48,58 52,70 64,70 55,78 58,90 48,82 38,90 41,78 32,70 44,70" fill="none" stroke="'+c+'" stroke-width="1.2" opacity="0.35"/>'
-          // Eldritch blast from hand
-          + '<path d="M80 90 Q94 80 96 64" fill="none" stroke="'+c+'" stroke-width="2" opacity="0.4" stroke-dasharray="4 2"/>'
-          + '<circle cx="82" cy="92" r="5" fill="'+c+'" opacity="0.4"/>'
-          // Dark tendrils
-          + '<path d="M22 100 Q10 115 8 138" fill="none" stroke="'+c+'" stroke-width="1.5" opacity="0.2" stroke-dasharray="2 3"/>'
-          + '<path d="M18 112 Q6 124 6 148" fill="none" stroke="'+c+'" stroke-width="1" opacity="0.15" stroke-dasharray="2 3"/>';
-  } else if(cl === 'wizard'){
-    // Staff + spellbook + stars
-    props = '<line x1="16" y1="8" x2="18" y2="210" stroke="'+c+'" stroke-width="2.5" stroke-linecap="round" opacity="0.45"/>'
-          + '<circle cx="16" cy="8" r="8" fill="none" stroke="'+c+'" stroke-width="1.5" opacity="0.5"/>'
-          + '<circle cx="16" cy="8" r="4" fill="'+c+'" opacity="0.45"/>'
-          // Arcane runes floating
-          + '<text x="62" y="52" font-size="10" fill="'+c+'" opacity="0.28" font-family="serif">✦</text>'
-          + '<text x="70" y="78" font-size="8"  fill="'+c+'" opacity="0.22" font-family="serif">⌬</text>'
-          + '<text x="64" y="100" font-size="9" fill="'+c+'" opacity="0.2"  font-family="serif">◈</text>'
-          // Star field
-          + '<circle cx="78" cy="36" r="1.5" fill="'+c+'" opacity="0.4"/>'
-          + '<circle cx="84" cy="58" r="1" fill="'+c+'" opacity="0.3"/>'
-          + '<circle cx="74" cy="110" r="1.5" fill="'+c+'" opacity="0.3"/>'
-          + '<circle cx="10" cy="140" r="1" fill="'+c+'" opacity="0.25"/>';
-  }
-
+/* ── Flat mannequin silhouette (2D view) ── */
+function getDollSVG() {
+  var c = '#aaa', dim = 'opacity:0.13';
   return '<svg viewBox="0 0 96 230" fill="none" xmlns="http://www.w3.org/2000/svg" overflow="visible">'
-    + props
-    + body
+    + '<ellipse cx="48" cy="22" rx="14" ry="15" fill="'+c+'" style="'+dim+'"/>'
+    + '<rect x="43" y="37" width="10" height="9" rx="3" fill="'+c+'" style="'+dim+'"/>'
+    + '<path d="M28 46 Q24 52 23 66 L22 128 Q22 134 28 136 L68 136 Q74 134 74 128 L73 66 Q72 52 68 46 Z" fill="'+c+'" style="'+dim+'"/>'
+    + '<path d="M30 136 L28 208 Q28 214 34 215 L42 215 Q46 214 47 208 L48 136 Z" fill="'+c+'" style="'+dim+'"/>'
+    + '<path d="M66 136 L68 208 Q68 214 62 215 L54 215 Q50 214 49 208 L48 136 Z" fill="'+c+'" style="'+dim+'"/>'
+    + '<path d="M28 48 Q18 54 16 66 L14 112 Q14 118 20 119 L28 119 Q33 118 34 112 L35 80 Z" fill="'+c+'" style="'+dim+'"/>'
+    + '<path d="M68 48 Q78 54 80 66 L82 112 Q82 118 76 119 L68 119 Q63 118 62 112 L61 80 Z" fill="'+c+'" style="'+dim+'"/>'
     + '</svg>';
 }
 
@@ -16343,32 +16173,12 @@ function renderPaperdoll(char, cls){
   const gridEl = document.getElementById('paperdollGrid');
   if(!gridEl) return;
   const slots = getEquippedItems(char);
-  const cc = cls.color || '#aaa';
-
-  // Add class bg rune to section
-  const section = document.querySelector('.paperdoll-section');
-  if(section){
-    // Remove old rune if any
-    var old = section.querySelector('.class-bg-rune');
-    if(old) old.remove();
-    var rune = document.createElement('div');
-    rune.className = 'class-bg-rune';
-    rune.textContent = cls.icon;
-    section.appendChild(rune);
-    // Class-colour tint on section border-bottom
-    section.style.borderBottom = '1px solid '+cc+'44';
-  }
 
   const use3d = _dollMode()==='3d';
   _syncDollButtons(use3d);
   let html = use3d
     ? '<div class="paperdoll-body doll3d-host doll3d-loading" id="doll3dHost" style="grid-column:2;grid-row:1/6" title="Drag to turn · double-click to face front"><div class="doll3d-msg">SUMMONING…</div><div class="doll3d-hint">⟲ drag</div></div>'
-    : '<div class="paperdoll-body" style="grid-column:2;grid-row:1/6">'
-    + '<div class="doll-glow" style="background:radial-gradient(ellipse at center, '+cc+'28 0%, transparent 70%)"></div>'
-    + (char.portrait
-        ? '<img class="paperdoll-portrait" src="'+char.portrait+'" alt="'+esc(char.name||'Character')+' portrait">'
-        : getClassDollSVG(cls.name, cc))
-    + '</div>';
+    : '<div class="paperdoll-body" style="grid-column:2;grid-row:1/6">' + getDollSVG() + '</div>';
 
   const offhandLocked = isOffhandBlocked(char);
   EQUIP_SLOTS.forEach(function(slot){
@@ -16412,10 +16222,9 @@ function _dollMode(){
 }
 function _syncDollButtons(use3d){
   const b=document.getElementById('dollModeBtn'); if(b) b.textContent = use3d ? '⇄ 2D' : '⇄ 3D';
-  const m=document.getElementById('dollModelBtn'); if(m) m.style.display = use3d ? '' : 'none';
 }
 function toggleDollMode(){
-  try{ localStorage.setItem('toh_doll_mode', _dollMode()==='3d' ? 'portrait' : '3d'); }catch(e){}
+  try{ localStorage.setItem('toh_doll_mode', _dollMode()==='3d' ? 'flat' : '3d'); }catch(e){}
   const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
   if(char) renderPaperdoll(char, CLASSES[char.classIdx]);
 }
@@ -16426,71 +16235,11 @@ function _mountDoll3D(char){
     window.Doll3D.mount(host, char).catch(function(e){
       console.warn('3D paperdoll unavailable', e);
       host.classList.remove('doll3d-loading'); host.classList.add('doll3d-failed');
-      const m=host.querySelector('.doll3d-msg'); if(m) m.textContent='3D VIEW UNAVAILABLE — TAP 🖼 PORTRAIT';
+      const m=host.querySelector('.doll3d-msg'); if(m) m.textContent='3D VIEW UNAVAILABLE — TAP ⇄ 2D';
     });
   };
   if(window.Doll3D) go(); else window.addEventListener('doll3d-ready', go, {once:true});
 }
-function openDollModelModal(){
-  const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
-  if(!char){ toast('No character selected','var(--red)'); return; }
-  const spec=window.Doll3D ? window.Doll3D.spec(char) : {body:'Female',hair:null,beard:false};
-  const M=char.model||{};
-  const cur={body:spec.body, hair:(M.hair!==undefined?M.hair:spec.hair)||'', beard:spec.beard, dye:String(({a:1,b:2})[M.dye]||M.dye||''), outfit:M.outfit||'', light:M.light||''};
-  const chip=function(group,val,label,on){
-    return '<button class="dm-chip'+(on?' on':'')+'" onclick="dollModelSet(\''+group+'\',\''+val+'\')">'+label+'</button>';
-  };
-  const styles=(window.Doll3D?window.Doll3D.HAIR_STYLES:[]);
-  const labels=(window.Doll3D?window.Doll3D.HAIR_LABEL:{});
-  const inner='<div class="slot-picker-header">'
-    +'<div class="slot-picker-title">✎ 3D MODEL</div>'
-    +'<button onclick="closeDollModelModal()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px">✕</button>'
-    +'</div><div style="padding:14px 18px 18px">'
-    +'<div class="dm-row"><label>Gender</label>'+GENDERS.map(function(g){return chip('gender',g,g||'Unspecified',(char.gender||'')===g);}).join('')+'</div>'
-    +'<div class="dm-row"><label>Build</label>'+chip('body','','By gender',!M.body)+chip('body','Female','Slender',M.body==='Female')+chip('body','Male','Broad',M.body==='Male')+'</div>'
-    +'<div class="dm-row"><label>Hair</label>'+styles.map(function(h){return chip('hair',h,labels[h]||h,cur.hair===h);}).join('')+chip('hair','none','None',!cur.hair)+'</div>'
-    +'<div class="dm-row"><label>Beard</label>'+chip('beard','1','Yes',cur.beard)+chip('beard','0','No',!cur.beard)+'</div>'
-    +'<div class="dm-row"><label>Outfit</label>'+chip('outfit','','By gear',!cur.outfit)+['Knight','Noble','Wizard','Ranger','Peasant'].map(function(f){return chip('outfit',f,f,cur.outfit===f);}).join('')+'</div>'
-    +'<div class="dm-row"><label>Colours</label>'+chip('dye','','By class',!cur.dye)+chip('dye','1','I',cur.dye==='1')+chip('dye','2','II',cur.dye==='2')+chip('dye','3','III',cur.dye==='3')+'</div>'
-    +'<div class="dm-row"><label>Class props</label>'+chip('props','1','Show',M.props!==false)+chip('props','0','Hide',M.props===false)+'</div>'
-    +'<div class="dm-row"><label>Stance</label>'+chip('stance','','Class',M.stance!=='neutral')+chip('stance','neutral','Neutral',M.stance==='neutral')+'</div>'
-    +'<div class="dm-row"><label>Aura</label>'+chip('aura','1','Show',M.aura!==false)+chip('aura','0','Off',M.aura===false)+'</div>'
-    +'<div class="dm-row"><label>Lighting</label>'+chip('light','','Portrait mood',!cur.light)+chip('light','class','Class colours',cur.light==='class')+'</div>'
-    +'<div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:10px">Skin, hair and eye colours follow race and the hair/eye details from creation, same as the portrait. Height uses the Height from creation when it can be read (e.g. 4\'2" or 127 cm), otherwise the race\'s usual height and build. '
-    +'With Outfit on “By gear”, body armour picks the look (plate → Knight, leather → Ranger, robes → Wizard, fine clothes → Noble, none → your class’s clothes). Gauntlets, boots, helms, hoods, crowns, gorgets, cloaks and weapons show when equipped.</div>'
-    +'<button class="btn btn-outline" style="margin-top:12px;width:100%" onclick="dollModelSet(\'reset\',\'\')">↺ Back to defaults</button>'
-    +'</div>';
-  closeDollModelModal();
-  const overlay=document.createElement('div');
-  overlay.className='slot-picker-overlay'; overlay.id='dollModelOverlay';
-  overlay.onclick=function(e){if(e.target===overlay)closeDollModelModal();};
-  overlay.innerHTML='<div class="slot-picker-sheet">'+inner+'</div>';
-  document.body.appendChild(overlay);
-}
-function closeDollModelModal(){ const el=document.getElementById('dollModelOverlay'); if(el) el.remove(); }
-function dollModelSet(group,val){
-  const char=getVisibleChars().find(function(c){return String(c.id)===String(charScreenId||'');});
-  if(!char) return;
-  if(group==='gender'){ char.gender=val; }
-  else if(group==='reset') delete char.model;
-  else {
-    const m=Object.assign({}, char.model||{});
-    if(group==='body'){ if(val) m.body=val; else delete m.body; }
-    if(group==='hair') m.hair=(val==='none'?null:val);
-    if(group==='beard') m.beard=(val==='1');
-    if(group==='dye'){ if(val) m.dye=val; else delete m.dye; }
-    if(group==='outfit'){ if(val) m.outfit=val; else delete m.outfit; }
-    if(group==='props'){ if(val==='0') m.props=false; else delete m.props; }
-    if(group==='stance'){ if(val) m.stance=val; else delete m.stance; }
-    if(group==='aura'){ if(val==='0') m.aura=false; else delete m.aura; }
-    if(group==='light'){ if(val) m.light=val; else delete m.light; }
-    char.model=m;
-  }
-  saveChar(char);
-  renderPaperdoll(char, CLASSES[char.classIdx]);
-  openDollModelModal();
-}
-
 /* ── Inventory bag ── */
 let _invFilterType = 'all';
 let _invFilterRarity = 'all';
@@ -19733,9 +19482,9 @@ bootApp();
 <script type="module">
 /* ══════════════════════════════════════════════════════════════════
    3D PAPERDOLL — Quaternius Universal Base Characters + Modular Outfits
-   (CC0, models/). Equipped armour picks the outfit parts, weapons are
-   built in code and put in the hands, and the lighting takes its mood
-   from the portrait (75%) and the class (25%).
+   (CC0, models/). A generic, faceless mannequin with the race's build and
+   tone; equipped armour picks the outfit parts, and weapons are built in
+   code and put in the hands.
    three.js is only fetched the first time a 3D doll is shown.
    ══════════════════════════════════════════════════════════════════ */
 const DOLL_DIR = 'models/';
@@ -19762,28 +19511,10 @@ function tex(name, color){
   return _tex[k]=t;
 }
 
-/* ── Look tables ───────────────────────────────────────────────────── */
-// key = warm near light, rim = cold edge light, bg = backdrop & fog, tint = cloth grade
-const GRADES={
-  Barbarian:{key:0xff7a3a,rim:0xff9d6a,bg:0x0d0605,tint:[0.72,0.58,0.52]},
-  Bard:     {key:0xffc27a,rim:0xc98bff,bg:0x0a0610,tint:[0.68,0.6,0.7]},
-  Cleric:   {key:0xffe0a0,rim:0xfff0c8,bg:0x0c0a06,tint:[0.72,0.68,0.6]},
-  Druid:    {key:0xffc070,rim:0x86e08e,bg:0x050a06,tint:[0.6,0.66,0.55]},
-  Fighter:  {key:0xffb070,rim:0x9fc4ff,bg:0x07060d,tint:[0.62,0.6,0.66]},
-  Monk:     {key:0xffcf8a,rim:0x6fe0d8,bg:0x050a0a,tint:[0.66,0.64,0.6]},
-  Paladin:  {key:0xffe6b0,rim:0xffd66b,bg:0x0b0906,tint:[0.7,0.66,0.6]},
-  Ranger:   {key:0xffb070,rim:0x8fd0a0,bg:0x050908,tint:[0.6,0.64,0.58]},
-  Rogue:    {key:0xff6a5a,rim:0x7f8cff,bg:0x040308,tint:[0.5,0.48,0.54]},
-  Sorcerer: {key:0xffa46a,rim:0xff5ad0,bg:0x0c050c,tint:[0.68,0.58,0.66]},
-  Warlock:  {key:0xa06bff,rim:0x7dffb0,bg:0x070510,tint:[0.56,0.52,0.62]},
-  Wizard:   {key:0xffc58a,rim:0x5aa8ff,bg:0x05070e,tint:[0.6,0.62,0.7]},
-};
-// Average linear luminance of each tintable texture, so a tint lands on the
-// requested colour rather than a darker version of it.
-const TEX_LUM={Skin_Female:0.235,Skin_Male:0.23,Regular_Female:0.216,Regular_Male:0.199,Hair_1:0.287,Hair_2:0.275,Eye:0.203};
-const HAIR_STYLES=['Hair_Long','Hair_Buns','Hair_SimpleParted','Hair_Buzzed','Hair_BuzzedFemale'];
-const HAIR_LABEL={Hair_Long:'Long',Hair_Buns:'Buns',Hair_SimpleParted:'Parted',Hair_Buzzed:'Buzzed',Hair_BuzzedFemale:'Cropped'};
-const HAIR_TEX={Hair_Long:'Hair_2',Hair_Buns:'Hair_2',Hair_SimpleParted:'Hair_1',Hair_Buzzed:'Hair_1',Hair_BuzzedFemale:'Hair_1',Hair_Beard:'Hair_1'};
+/* ── Look ────────────────────────────────────────────────────────────── */
+// One neutral studio look for everyone: key = warm near light, rim = cool
+// edge light, bg = backdrop & fog, tint = cloth grade.
+const LOOK={key:0xfff1dc, rim:0xb8c8e8, bg:0x0a0910, tint:[0.82,0.81,0.8], desat:0.3};
 const RARITY_GLOW={uncommon:'#1eff00',rare:'#2f8cff','very-rare':'#b35cff',legendary:'#ff8a1a',artifact:'#ffd98a'};
 
 /* ── Character → model spec ────────────────────────────────────────── */
@@ -19800,18 +19531,6 @@ function _armourKind(it){
   if(/clothes|vestment|tunic|coat|garb|attire/.test(n)) return 'cloth';
   return it.type==='armor'?'light':'cloth';
 }
-// Everyday clothes per class, and which of each family's three colourways a
-// class wears. Families: Knight, Noble, Wizard, Ranger, Peasant.
-const CLASS_CLOTHES={Wizard:'Wizard',Sorcerer:'Wizard',Warlock:'Wizard',Cleric:'Noble',Bard:'Noble',Artificer:'Noble',
-  Paladin:'Knight',Fighter:'Knight',Ranger:'Ranger',Rogue:'Ranger',Druid:'Peasant',Monk:'Peasant',Barbarian:'Peasant'};
-const CLASS_DYE={
-  Wizard: {Wizard:1,Sorcerer:3,Warlock:2,Cleric:3,Bard:2},
-  Noble:  {Bard:1,Cleric:2,Artificer:2,Paladin:1,Druid:3,Ranger:3,Sorcerer:1,Warlock:2,Wizard:2},
-  Knight: {Paladin:1,Cleric:2,Fighter:3,Barbarian:3,Warlock:3,Artificer:2,Ranger:3,Rogue:3},
-  Ranger: {Ranger:1,Druid:1,Rogue:2,Warlock:2,Monk:3,Barbarian:3,Bard:3,Fighter:3},
-  Peasant:{Barbarian:1,Druid:2,Monk:3,Bard:3,Cleric:3},
-};
-const OUTFIT_FAMILIES=['Knight','Noble','Wizard','Ranger','Peasant'];
 function _weaponKind(it){
   if(!it) return null;
   const n=(it.name||'').toLowerCase();
@@ -19828,132 +19547,62 @@ function _weaponKind(it){
   return it.type==='weapon'?'sword':null;
 }
 function dollSpec(char){
-  const cls=(typeof CLASSES!=='undefined'&&CLASSES[char.classIdx])||{name:'Fighter'};
   const F=(typeof _raceFeatures==='function')?_raceFeatures(char.race):{skin:'human'};
-  // Same seeded picks, in the same order, as generateCharPortrait so the model
-  // and the portrait agree on skin, hair and eye colour.
-  const rng=_makeRng(_hashStr(String(char.name||'hero')+'|'+String(char.id||'')+'|'+String(char.portraitSeed||0)));
-  const skin=_pick(rng,_SKIN[F.skin]||_SKIN.human);
-  const hairCol=_parseColorWord(char.hair,_HAIR_WORDS, F.hairDef||_pick(rng,['#1e1c24','#5b3a24','#7a3b1e','#d9b45b','#b8b8c2','#3d2718']));
-  const eyeCol=_parseColorWord(char.eyes,_EYE_WORDS, _pick(rng,['#4a7ab5','#3f8e5a','#6b4226','#8a6b32','#9aa0ae']));
-  const M=char.model||{};
+  // A generic mannequin: the race's typical tone, no face or hair.
+  const tones=_SKIN[F.skin]||_SKIN.human, skin=tones[(tones.length-1)>>1];
   const h=_hashStr(String(char.id||char.name||'x'))>>>0;   // non-negative, so every % pick lands in range
-  // Gender picks the body; Build in ✎ Model overrides it; otherwise the ID decides.
+  // Gender picks the build; otherwise the ID decides.
   const gd=String(char.gender||'').toLowerCase();
-  const body=M.body||(/^(f|woman|girl|female)/.test(gd)?'Female':/^(m|man|boy|male)/.test(gd)?'Male':(h%2?'Male':'Female'));
-  const noHair=!!F.noHair;
-  let hair=M.hair!==undefined?M.hair:(noHair?null:(F.baldBias&&h%3===0)?null:
-    (body==='Female'?['Hair_Long','Hair_Buns','Hair_SimpleParted','Hair_Long'][(h>>>3)%4]:['Hair_SimpleParted','Hair_Buzzed','Hair_Long','Hair_SimpleParted'][(h>>>3)%4]));
-  if(hair && HAIR_STYLES.indexOf(hair)<0) hair=null;
-  const dwarf=/dwarf|duergar/i.test(char.race||'');
-  const beard=M.beard!==undefined?!!M.beard:(body==='Male'&&!noHair&&(dwarf||(h>>>5)%5<2));
+  const body=/^(f|woman|girl|female)/.test(gd)?'Female':/^(m|man|boy|male)/.test(gd)?'Male':(h%2?'Male':'Female');
 
   const eq=(typeof getEquippedItems==='function')?getEquippedItems(char):{};
   const nm=it=>((it&&it.name)||'').toLowerCase();
   const allNames=Object.keys(eq).map(k=>nm(eq[k])).join(' | ');
   const chest=_armourKind(eq.chest);
   const metal=chest==='heavy'||chest==='medium';
-  const fam=OUTFIT_FAMILIES.indexOf(M.outfit)>=0?M.outfit:
-    metal?'Knight': (chest==='light'||chest==='hide')?'Ranger': chest==='robe'?'Wizard': chest==='fine'?'Noble': (CLASS_CLOTHES[cls.name]||'Peasant');
+  // Body armour picks the outfit; with none, plain peasant clothes.
+  const fam=metal?'Knight': (chest==='light'||chest==='hide')?'Ranger': chest==='robe'?'Wizard': chest==='fine'?'Noble': 'Peasant';
   const pre=body+'_', parts=[];
-  parts.push(pre+(fam==='Knight'?(metal||M.outfit==='Knight'?'Knight_Body_Armor':'Knight_Body_Cloth'):fam+'_Body'));
+  parts.push(pre+(fam==='Knight'?'Knight_Body_Armor':fam+'_Body'));
   parts.push(pre+fam+'_Legs');
   const gl=nm(eq.gloves);
   parts.push(pre+(/gauntlet|vambrace/.test(gl)||chest==='heavy'?'Knight':eq.gloves&&fam!=='Knight'&&fam!=='Noble'?'Ranger':fam)+'_Arms');
   const bt=nm(eq.boots);
   parts.push(pre+(/greave|sabaton|plated|iron/.test(bt)||chest==='heavy'?'Knight':eq.boots&&(fam==='Peasant'||fam==='Wizard')?'Ranger':fam)+'_Feet');
-  if(chest==='heavy') parts.push(pre+'Knight_Acc_Pauldrons_'+(/Barbarian|Warlock|Rogue/.test(cls.name)?'Spike':'Round'));
-  else if(chest==='medium') parts.push(pre+(cls.name==='Paladin'?'Noble_Acc_Pauldron_Lion':'Noble_Acc_Pauldrons'));
+  if(chest==='heavy') parts.push(pre+'Knight_Acc_Pauldrons_Round');
+  else if(chest==='medium') parts.push(pre+'Noble_Acc_Pauldrons');
   else if(chest==='hide') parts.push(pre+'Ranger_Acc_Pauldrons');
   if(/gorget/.test(allNames)) parts.push(pre+'Noble_Acc_Gorget');
-  if(/cloak|cape|mantle|scarf|shawl/.test(allNames)) parts.push(pre+'Knight_Acc_Scarf');
+  if(/scarf|shawl/.test(allNames)) parts.push(pre+'Knight_Acc_Scarf');
   const hn=nm(eq.head);
   let head=null;
   if(/hood|cowl/.test(hn)) head='Ranger_Head_Hood';
-  else if(/horn/.test(hn)||(/helm|armet|bascinet/.test(hn)&&cls.name==='Barbarian')) head='Knight_Head_Horns';
+  else if(/horn/.test(hn)) head='Knight_Head_Horns';
   else if(/helm|armet|bascinet|visor|coif/.test(hn)) head='Knight_Head_Armet';
   else if(/crown|circlet|tiara|diadem/.test(hn)) head='Noble_Head_Crown';
   if(head) parts.push(pre+head);
   const hooded=!!head&&head!=='Noble_Head_Crown';
   const RB=_raceBuild(char.race);
   const height=Math.min(2.6,Math.max(0.7,_parseHeight(char.height)||RB.h*(body==='Female'?0.95:1)));
-  // Colourway for every family in use: the player's pick, else the class's.
-  const legacy={a:1,b:2};
-  const forced=+(legacy[M.dye]||M.dye)||0;
+  // One colourway for every outfit family, so gear reads the same on everyone.
   const dyes={};
-  parts.forEach(p=>{ const f=p.split('_')[1]; if(dyes[f]) return;
-    const d=forced||(CLASS_DYE[f]&&CLASS_DYE[f][cls.name])||1+((h>>>7)%3);
-    dyes[f]=f+(d>1?'_'+d:''); });
+  parts.forEach(p=>{ const f=p.split('_')[1]; dyes[f]=f; });
   const weapons=[];
   const mk=_weaponKind(eq.mainhand), ok=_weaponKind(eq.offhand);
   const glow=it=>it?(RARITY_GLOW[it.rarity]||(/\+\d/.test(it.name||'')?'#8fb4ff':null)):null;
   if(mk) weapons.push({hand:'r',kind:mk,glow:glow(eq.mainhand)});
   if(ok) weapons.push({hand:'l',kind:ok,glow:glow(eq.offhand)});
-  const horns=M.horns===false?null:(F.horns||null);
-  const hornCol=F.skin==='dragon'?skin:'#2b2226';
-  return {cls:cls.name, body, skin, hairCol, eyeCol, brows:!noHair, hair:hooded?null:hair, beard, parts, dyes, ears:hooded?null:(F.ears||null), tusks:!!F.tusks&&!hooded, tail:_raceTail(char.race), height, build:{w:RB.w,legs:RB.legs,head:RB.head},
-    props:M.props!==false, stance:M.stance==='neutral'?null:cls.name, aura:M.aura===false?null:cls.name, armoured:metal, cape:/cloak|cape|mantle/.test(allNames), headFree:!head, clothCol:cls.color||'#554a3a', horns:hooded&&horns!=='ridge'?null:horns, hornCol,
-    weapons, portrait:M.light==='class'?null:(char.portrait||null)};
+  const horns=F.horns||null;
+  return {body, skin, parts, dyes, ears:hooded?null:(F.ears||null), tail:_raceTail(char.race), height, build:{w:RB.w,legs:RB.legs,head:RB.head},
+    cape:/cloak|cape|mantle/.test(allNames), horns:hooded&&horns!=='ridge'?null:horns, hornCol:F.skin==='dragon'?skin:'#2b2226', weapons};
 }
 
-/* ── Portrait mood → colour scheme ─────────────────────────────────── */
-const _palCache={};
-async function portraitPalette(url){
-  const key=url.length>200?url.length+':'+url.slice(-120):url;
-  if(key in _palCache) return _palCache[key];
-  let out=null;
-  try{
-    const img=new Image(); img.crossOrigin='anonymous'; img.src=url; await img.decode();
-    const N=48, cv=document.createElement('canvas'); cv.width=cv.height=N;
-    const x=cv.getContext('2d'); const iw=img.naturalWidth, ih=img.naturalHeight;
-    x.drawImage(img, iw*0.1, ih*0.08, iw*0.8, ih*0.84, 0,0,N,N); // skip any frame
-    const d=x.getImageData(0,0,N,N).data, px=[];
-    for(let i=0;i<d.length;i+=4){ if(d[i+3]<128) continue; const c=new T.Color().setRGB(d[i]/255,d[i+1]/255,d[i+2]/255,T.SRGBColorSpace); const hsl={}; c.getHSL(hsl); px.push({c,h:hsl.h,s:hsl.s,l:hsl.l}); }
-    if(px.length<50) throw 0;
-    const avg=a=>{ const o=new T.Color(0,0,0); a.forEach(p=>o.add(p.c)); return a.length?o.multiplyScalar(1/a.length):o; };
-    const byL=[...px].sort((a,b)=>a.l-b.l); const dark=avg(byL.slice(0,Math.max(1,byL.length/5|0)));
-    const bins=Array.from({length:12},()=>({w:0,a:[]}));
-    px.forEach(p=>{ const w=p.s*p.s*(1-Math.abs(p.l-0.5)*2); if(w<0.05) return; const b=bins[Math.floor(p.h*12)%12]; b.w+=w; b.a.push(p); });
-    const top=[...bins].sort((a,b)=>b.w-a.w);
-    // Rim takes the most vivid hue that isn't a warm skin/torch tone; an
-    // all-warm portrait leaves the rim to the class.
-    const coolTop=top.find(b=>b.a.length && b.w>top[0].w*0.15 && [0,1,11].indexOf(bins.indexOf(b))<0);
-    const warmBin=bins.filter((b,i)=>(i<=1||i===11)&&b.a.length).sort((a,b)=>b.w-a.w)[0];
-    const mid=avg(px.filter(p=>p.l>0.2&&p.l<0.75));
-    const norm=(c,s,l)=>{ const h={}; c.getHSL(h); return new T.Color().setHSL(h.h, Math.max(h.s,s), l); };
-    const m={}; mid.getHSL(m); const tc=new T.Color().setHSL(m.h, Math.min(m.s,0.16), 0.62);
-    out={ bg:norm(dark,0.3,0.006), rim:coolTop?norm(avg(coolTop.a),0.55,0.62):null,
-      key:warmBin?norm(avg(warmBin.a),0.5,0.66):null, tint:[tc.r,tc.g,tc.b] };
-  }catch(e){ out=null; }
-  return _palCache[key]=out;
-}
-async function lookFor(spec){
-  const G=GRADES[spec.cls]||GRADES.Fighter;
-  const L={bg:new T.Color(G.bg), key:new T.Color(G.key), rim:new T.Color(G.rim), tint:G.tint.map(v=>0.5+v*0.5), desat:0.38};
-  const pal=spec.portrait?await portraitPalette(spec.portrait):null;
-  if(pal){
-    L.bg=pal.bg.clone().lerp(new T.Color(G.bg),0.25);
-    if(pal.key) L.key=pal.key.clone().lerp(new T.Color(G.key),0.25);
-    if(pal.rim) L.rim=pal.rim.clone().lerp(new T.Color(G.rim),0.25);
-    L.tint=pal.tint.map((v,i)=>0.5+(v*0.75+G.tint[i]*0.25)*0.5);
-  }
-  // Keep the key light a torch, not a stage gel
-  L.key.lerp(new T.Color(0xfff1dc),0.35);
-  return L;
+function lookFor(){
+  return {bg:new T.Color(LOOK.bg), key:new T.Color(LOOK.key), rim:new T.Color(LOOK.rim), tint:LOOK.tint, desat:LOOK.desat};
 }
 
 /* ── Materials ─────────────────────────────────────────────────────── */
-// Tinted: keep the texture's shading and detail, recolour it (skin, hair, eyes).
-function tintedMat(texName, normName, color, keep, rough){
-  const m=new T.MeshStandardMaterial({map:tex(texName,true), normalMap:normName?tex(normName):null, roughness:rough, metalness:0});
-  const u={uCol:{value:new T.Color(color)}, uGain:{value:1/(TEX_LUM[texName]||0.22)}, uKeep:{value:keep}};
-  m.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,u);
-    sh.fragmentShader='uniform vec3 uCol; uniform float uGain; uniform float uKeep;\n'+sh.fragmentShader.replace('#include <map_fragment>',
-      '#include <map_fragment>\n float _l=dot(diffuseColor.rgb,vec3(0.2126,0.7152,0.0722));\n diffuseColor.rgb = mix(vec3(_l), diffuseColor.rgb, uKeep) * uGain * uCol * 0.55;'); };
-  m.customProgramCacheKey=()=>'toh-tinted';
-  return m;
-}
-// Graded: outfit textures, desaturated and pulled toward the scene's mood.
+// Graded: outfit textures, slightly desaturated so gear reads evenly.
 function gradedMat(base, L, metal){
   const m=new T.MeshStandardMaterial({map:tex(base,true), normalMap:tex(base.replace(/_\d$/,'')+'_N'),
     roughnessMap:tex(base.replace(/_\d$/,'')+'_ORM'), metalnessMap:tex(base.replace(/_\d$/,'')+'_ORM'),
@@ -20013,10 +19662,11 @@ const WEAPON_FRAME={
 const FIST={curl:1.1, thumb:0.5};
 
 // Horns from the race table (the same flags the portrait generator uses),
-// built in figure space and then attached to the head bone.
+// built in figure space, rooted on the mannequin head and attached to its bone.
 function addHorns(head, kind, col){
   const mat=new T.MeshStandardMaterial({color:new T.Color(col||'#2b2226'), roughness:0.45, metalness:0.1});
   const hp=new T.Vector3(); head.getWorldPosition(hp);
+  const k=head.getWorldScale(new T.Vector3()).y;
   const P=(x,y,z)=>new T.Vector3(x,y,z);
   [1,-1].forEach(sx=>{
     let pts, r0=0.022;
@@ -20024,7 +19674,9 @@ function addHorns(head, kind, col){
     else if(kind==='curl'){ pts=[P(0.065,0.2,0.05),P(0.11,0.26,-0.02),P(0.15,0.19,-0.07),P(0.13,0.13,-0.01)]; r0=0.028; }
     else if(kind==='ridge'){ pts=[P(0.035,0.17,0.03),P(0.05,0.2,-0.06),P(0.06,0.18,-0.15)]; r0=0.02; }
     else { pts=[P(0.05,0.2,0.075),P(0.075,0.27,0.04),P(0.095,0.3,-0.05),P(0.095,0.25,-0.13)]; r0=0.026; }
-    const curve=new T.CatmullRomCurve3(pts.map(v=>new T.Vector3(v.x*sx,v.y,v.z).add(hp)));
+    const at=pts.map(v=>new T.Vector3(v.x*sx,v.y,v.z).multiplyScalar(k).add(hp));
+    const shift=_onHead(at[0],hp,k).lerp(hp,0.08).sub(at[0]);   // sink the root just into the head
+    const curve=new T.CatmullRomCurve3(at.map(v=>v.add(shift)));
     const geo=new T.TubeGeometry(curve,16,r0,8,false);
     // taper toward the tip
     const pos=geo.attributes.position, c=new T.Vector3();
@@ -20078,290 +19730,19 @@ function _parseHeight(s){
   return null;
 }
 
-/* ── Class props (built in code, attached to bones) ──────────────────── */
-const PROP_MATS={};
-function propMat(key){
-  if(PROP_MATS[key]) return PROP_MATS[key];
-  const P={
-    leather:{color:0x3b2616, roughness:0.8}, darkleather:{color:0x1d1510, roughness:0.75},
-    wood:{color:0x5a3a22, roughness:0.7}, paper:{color:0xd8cdb0, roughness:0.9},
-    gold:{color:0xc9a227, metalness:1, roughness:0.35}, steel:{color:0xb8bcc6, metalness:1, roughness:0.35},
-    iron:{color:0x4a4c52, metalness:1, roughness:0.5}, bone:{color:0xd8cfb8, roughness:0.6},
-    fur:{color:0x5a4a3a, roughness:1}, antler:{color:0x8a6e4e, roughness:0.7},
-    fletch:{color:0xe8e2d0, roughness:0.9}, bead:{color:0x6a3a22, roughness:0.4},
-    violet:{color:0x3a2250, roughness:0.6}, glass:{color:0x2a3040, metalness:0.2, roughness:0.1},
-  };
-  return PROP_MATS[key]=new T.MeshStandardMaterial(P[key]||{color:0x888888});
-}
-function glowMat(col,i){ return new T.MeshStandardMaterial({color:col, emissive:col, emissiveIntensity:i||1.4, roughness:0.2}); }
-function _mesh(geo,mat,pos,rot,scale){ const m=new T.Mesh(geo,mat); if(pos) m.position.set(...pos); if(rot) m.rotation.set(...rot); if(scale) m.scale.set(...scale); m.castShadow=true; return m; }
-
-function addClassProps(spec, B, clothCol){
-  const wp=n=>{ const v=new T.Vector3(); if(B[n]) B[n].getWorldPosition(v); return v; };
-  const head=wp('Head'), chest=wp('spine_03'), neck=wp('neck_01'), pelvis=wp('pelvis');
-  const clav=wp('clavicle_l').add(wp('clavicle_r')).multiplyScalar(0.5);
-  // Attach a group placed in figure space to a bone, keeping where it is.
-  const put=(bone,g)=>{ if(B[bone]){ B[bone].updateWorldMatrix(true,false); B[bone].attach(g); } };
-  const group=(pos,rot)=>{ const g=new T.Group(); g.position.copy(pos); if(rot) g.rotation.set(...rot); return g; };
-  const c=spec.cls, headFree=spec.headFree;
-
-  // Cape for any cloak/cape/mantle item
-  if(spec.cape){
-    const g=group(clav.clone().add(new T.Vector3(0,0.02,-0.06)));
-    const mat=new T.MeshStandardMaterial({color:new T.Color(clothCol), roughness:0.85, side:T.DoubleSide});
-    const geo=new T.CylinderGeometry(0.2,0.34,1.12,18,1,true,Math.PI*0.62,Math.PI*0.76);
-    g.add(_mesh(geo,mat,[0,-0.56,0.02]));
-    put('spine_03',g);
-  }
-  if(!spec.props) return;
-
-  if(c==='Wizard' && headFree){ // pointed hat
-    const g=group(head.clone().add(new T.Vector3(0,0.19,-0.005)),[-0.18,0,0.06]);
-    const cloth=new T.MeshStandardMaterial({color:new T.Color(clothCol).multiplyScalar(0.7), roughness:0.9});
-    g.add(_mesh(new T.CylinderGeometry(0.25,0.25,0.012,28),cloth,[0,0,0]));
-    const cone=_mesh(new T.ConeGeometry(0.125,0.42,20,4),cloth,[0,0.2,-0.02],[-0.22,0,0]); g.add(cone);
-    g.add(_mesh(new T.TorusGeometry(0.122,0.012,6,24),propMat('gold'),[0,0.025,0],[Math.PI/2,0,0]));
-    put('Head',g);
-  }
-  if(c==='Wizard'||c==='Warlock'){ // book at the left hip
-    const g=group(pelvis.clone().add(new T.Vector3(0.2,-0.02,0.07)),[0,0.6,0.12]);
-    g.add(_mesh(new T.BoxGeometry(0.05,0.2,0.15),propMat(c==='Warlock'?'violet':'leather')));
-    g.add(_mesh(new T.BoxGeometry(0.04,0.18,0.14),propMat('paper'),[0.005,0,0.006]));
-    if(c==='Warlock'){
-      g.add(_mesh(new T.TorusGeometry(0.075,0.008,6,16),propMat('iron'),[0,0,0],[0,Math.PI/2,0]));
-      g.add(_mesh(new T.SphereGeometry(0.02,10,8),glowMat(0x7dffb0,2),[0.028,0.03,0]));
-    } else g.add(_mesh(new T.BoxGeometry(0.052,0.05,0.05),propMat('gold'),[0,0.04,0]));
-    put('pelvis',g);
-  }
-  if(c==='Cleric'||c==='Paladin'){ // holy symbol on a chain
-    const g=group(chest.clone().add(new T.Vector3(0,0.05,spec.armoured?0.2:0.16)));
-    g.add(_mesh(new T.CylinderGeometry(0.045,0.045,0.01,6),propMat('gold'),[0,0,0],[Math.PI/2,0,0]));
-    g.add(_mesh(new T.OctahedronGeometry(0.022),glowMat(0xfff0c8,0.8),[0,0,0.012]));
-    const chain=_mesh(new T.TorusGeometry(0.13,0.004,4,28),propMat('gold'),[0,0.12,-0.1],[1.25,0,0]); g.add(chain);
-    put('spine_03',g);
-  }
-  if(c==='Sorcerer'){ // crystal pendant
-    const g=group(chest.clone().add(new T.Vector3(0,0.06,spec.armoured?0.2:0.16)));
-    g.add(_mesh(new T.OctahedronGeometry(0.035),glowMat(0xff5ad0,1.8),[0,0,0],[0,0,0],[0.7,1.2,0.7]));
-    g.add(_mesh(new T.TorusGeometry(0.13,0.004,4,28),propMat('steel'),[0,0.12,-0.1],[1.25,0,0]));
-    put('spine_03',g);
-  }
-  if(c==='Monk'){ // prayer beads
-    const g=group(neck.clone().add(new T.Vector3(0,-0.07,0.02)),[1.2,0,0]);
-    for(let i=0;i<22;i++){ const a=i/22*Math.PI*2; g.add(_mesh(new T.SphereGeometry(0.017,8,6),propMat('bead'),[Math.cos(a)*0.14,Math.sin(a)*0.15,0])); }
-    put('spine_03',g);
-  }
-  if(c==='Barbarian'){ // fur pelts over the shoulders and across the upper back
-    ['l','r'].forEach(sd=>{
-      const g=group(wp('upperarm_'+sd).add(new T.Vector3(0,0.05,-0.01)));
-      g.add(_mesh(new T.SphereGeometry(0.11,12,8),propMat('fur'),[0,0,0],[0,0,0],[1.15,0.55,1.05]));
-      put('clavicle_'+sd,g);
-    });
-    const b=group(chest.clone().add(new T.Vector3(0,0.1,-0.12)));
-    b.add(_mesh(new T.SphereGeometry(0.16,14,10),propMat('fur'),[0,0,0],[0,0,0],[1.35,0.7,0.45]));
-    put('spine_03',b);
-  }
-  if(c==='Druid' && headFree && !spec.horns){ // antler circlet
-    const g=group(head.clone().add(new T.Vector3(0,0.17,0.02)));
-    g.add(_mesh(new T.TorusGeometry(0.11,0.01,6,24),propMat('antler'),[0,0,0],[Math.PI/2,0,0]));
-    [1,-1].forEach(sx=>{
-      const main=new T.CatmullRomCurve3([[0.07,0,0.02],[0.11,0.1,0],[0.17,0.2,-0.03]].map(p=>new T.Vector3(p[0]*sx,p[1],p[2])));
-      g.add(_mesh(new T.TubeGeometry(main,10,0.011,6,false),propMat('antler')));
-      [[0.1,0.08,0,0.06,0.16,0.04],[0.14,0.15,-0.02,0.13,0.25,0.02]].forEach(t=>{
-        const tine=new T.CatmullRomCurve3([new T.Vector3(t[0]*sx,t[1],t[2]),new T.Vector3(t[3]*sx,t[4],t[5])]);
-        g.add(_mesh(new T.TubeGeometry(tine,4,0.008,5,false),propMat('antler')));
-      });
-    });
-    put('Head',g);
-  }
-  if(c==='Ranger'){ // quiver on the back
-    const g=group(chest.clone().add(new T.Vector3(0.02,-0.02,-0.17)),[0.1,0,-0.45]);
-    g.add(_mesh(new T.CylinderGeometry(0.055,0.045,0.5,12),propMat('leather')));
-    for(let i=0;i<7;i++){ const a=i/7*Math.PI*2, x=Math.cos(a)*0.028, z=Math.sin(a)*0.028;
-      g.add(_mesh(new T.CylinderGeometry(0.004,0.004,0.16,4),propMat('wood'),[x,0.31,z]));
-      g.add(_mesh(new T.BoxGeometry(0.018,0.05,0.002),propMat('fletch'),[x,0.37,z],[0,a,0])); }
-    put('spine_03',g);
-  }
-  if(c==='Bard'){ // lute on the back
-    const g=group(chest.clone().add(new T.Vector3(-0.02,-0.08,-0.2)),[0,Math.PI,0.55]);
-    g.add(_mesh(new T.SphereGeometry(0.16,16,12),propMat('wood'),[0,-0.08,0],[0,0,0],[1,1.25,0.35]));
-    g.add(_mesh(new T.CylinderGeometry(0.035,0.035,0.004,14),propMat('darkleather'),[0,-0.02,0.056],[Math.PI/2,0,0]));
-    g.add(_mesh(new T.BoxGeometry(0.045,0.36,0.025),propMat('darkleather'),[0,0.28,0.01]));
-    g.add(_mesh(new T.BoxGeometry(0.06,0.09,0.03),propMat('wood'),[0,0.49,-0.01],[-0.5,0,0]));
-    put('spine_03',g);
-  }
-  if(c==='Rogue'){ // sheathed daggers at both hips
-    [1,-1].forEach(sx=>{
-      const g=group(pelvis.clone().add(new T.Vector3(0.17*sx,-0.06,0.05)),[0.35,0,0.25*sx]);
-      g.add(_mesh(new T.BoxGeometry(0.035,0.2,0.018),propMat('darkleather'),[0,-0.06,0]));
-      g.add(_mesh(new T.BoxGeometry(0.07,0.012,0.02),propMat('steel'),[0,0.045,0]));
-      g.add(_mesh(new T.CylinderGeometry(0.01,0.01,0.08,6),propMat('darkleather'),[0,0.09,0]));
-      put('pelvis',g);
-    });
-  }
-  if(c==='Fighter'){ // scabbard on the left hip
-    const g=group(pelvis.clone().add(new T.Vector3(0.18,-0.02,-0.02)),[-0.55,0,0.12]);
-    g.add(_mesh(new T.BoxGeometry(0.05,0.75,0.022),propMat('darkleather'),[0,-0.3,0]));
-    g.add(_mesh(new T.BoxGeometry(0.14,0.018,0.03),propMat('steel'),[0,0.08,0]));
-    g.add(_mesh(new T.CylinderGeometry(0.013,0.013,0.13,8),propMat('leather'),[0,0.155,0]));
-    g.add(_mesh(new T.SphereGeometry(0.02,8,6),propMat('steel'),[0,0.23,0]));
-    put('pelvis',g);
-  }
-  if(c==='Artificer' && headFree){ // goggles pushed up on the forehead
-    const g=group(head.clone().add(new T.Vector3(0,0.14,0.085)),[-0.35,0,0]);
-    [1,-1].forEach(sx=>{ g.add(_mesh(new T.CylinderGeometry(0.032,0.032,0.03,14),propMat('iron'),[0.042*sx,0,0],[Math.PI/2,0,0]));
-      g.add(_mesh(new T.CylinderGeometry(0.026,0.026,0.004,14),propMat('glass'),[0.042*sx,0,0.016],[Math.PI/2,0,0])); });
-    g.add(_mesh(new T.TorusGeometry(0.105,0.01,4,24),propMat('darkleather'),[0,0,-0.085],[Math.PI/2+0.1,0,0]));
-    put('Head',g);
-  }
+/* ── Cape (any cloak/cape/mantle item), hung from the upper back ─────── */
+function _mesh(geo,mat,pos){ const m=new T.Mesh(geo,mat); if(pos) m.position.set(...pos); m.castShadow=true; return m; }
+function addCape(B){
+  if(!B.spine_03||!B.clavicle_l||!B.clavicle_r) return;
+  const a=new T.Vector3(), b=new T.Vector3(); B.clavicle_l.getWorldPosition(a); B.clavicle_r.getWorldPosition(b);
+  const g=new T.Group(); g.position.copy(a.add(b).multiplyScalar(0.5).add(new T.Vector3(0,0.02,-0.06)));
+  const mat=new T.MeshStandardMaterial({color:0x3e3830, roughness:0.85, side:T.DoubleSide});
+  g.add(_mesh(new T.CylinderGeometry(0.2,0.34,1.12,18,1,true,Math.PI*0.62,Math.PI*0.76),mat,[0,-0.56,0.02]));
+  B.spine_03.updateWorldMatrix(true,false); B.spine_03.attach(g);
 }
 
-/* ── Class stances ─────────────────────────────────────────────────────
-   Directions are in figure space (+X the figure's left, +Z the front) and
-   written for the LEFT side; the right side mirrors X. Arm poses only apply
-   to a hand that isn't holding anything.
-   spine: lean of the lower back · neck: head carriage
-   thigh/calf: leg per side (l/r) · arm: {up, fore, hand} per side */
-const STANCES={
-  Barbarian:{spine:[0,1,0.22], neck:[0,1,0.1],
-    thigh:{l:[0.32,-1,0.06], r:[0.32,-1,0.06]}, calf:{l:[0.1,-1,-0.03], r:[0.1,-1,-0.03]},
-    arm:{l:{up:[0.42,-1,0.08], fore:[0.1,-1,0.25]}, r:{up:[0.42,-1,0.08], fore:[0.1,-1,0.25]}}},
-  Fighter:{spine:[0,1,0.06],
-    thigh:{l:[0.16,-1,0.2], r:[0.14,-1,-0.14]}, calf:{l:[0.05,-1,0.02], r:[0.05,-1,-0.04]}},
-  Paladin:{thigh:{l:[0.12,-1,0.02], r:[0.12,-1,0.02]}, calf:{l:[0.04,-1,0], r:[0.04,-1,0]}},
-  Rogue:{spine:[0,1,0.42], neck:[0,1,0.12],
-    thigh:{l:[0.2,-0.75,0.62], r:[0.2,-0.85,0.42]}, calf:{l:[0.04,-1,-0.42], r:[0.04,-1,-0.5]},
-    arm:{l:{up:[0.28,-0.9,0.35], fore:[0.05,-0.55,0.85]}, r:{up:[0.28,-0.9,0.35], fore:[0.05,-0.55,0.85]}}},
-  Monk:{spine:[0,1,0.12],
-    thigh:{l:[0.24,-1,0.34], r:[0.22,-1,-0.3]}, calf:{l:[0.06,-1,0.04], r:[0.06,-1,-0.1]},
-    arm:{l:{up:[0.25,-0.7,0.55], fore:[-0.35,0.65,0.7], hand:[-0.2,0.9,0.3]},
-         r:{up:[0.3,-0.75,-0.3], fore:[-0.15,0.1,1]}}},
-  Ranger:{thigh:{l:[0.1,-1,0.3], r:[0.1,-1,-0.04]}, calf:{l:[0.03,-1,0.02], r:[0.04,-1,-0.02]}},
-  Bard:{spine:[-0.08,1,0.02], neck:[0.12,1,0.05],
-    thigh:{l:[0.12,-1,0.2], r:[0.06,-1,0]}, calf:{l:[0.12,-1,-0.3], r:[0.03,-1,0]},
-    arm:{l:{up:[0.55,-0.85,-0.15], fore:[-0.65,-0.35,0.2], hand:[-0.5,-0.8,0.1]}}},
-  Druid:{neck:[0.07,1,0.06], thigh:{l:[0.1,-1,0.05], r:[0.1,-1,0.05]},
-    arm:{l:{up:[0.38,-1,0.12], fore:[0.35,-0.75,0.5]}, r:{up:[0.38,-1,0.12], fore:[0.35,-0.75,0.5]}}},
-  Wizard:{thigh:{l:[0.1,-1,0.1], r:[0.1,-1,-0.04]},
-    arm:{l:{up:[0.35,-0.75,0.45], fore:[0.05,0.15,1], hand:[0,0.35,1]}}},
-  Sorcerer:{thigh:{l:[0.14,-1,0.06], r:[0.14,-1,0.06]},
-    arm:{l:{up:[0.45,-0.9,0.12], fore:[0.4,-0.45,0.65]}, r:{up:[0.45,-0.9,0.12], fore:[0.4,-0.45,0.65]}}},
-  Warlock:{neck:[0,1,0.12], thigh:{l:[0.1,-1,0.08], r:[0.1,-1,0]},
-    arm:{l:{up:[0.3,-0.9,0.32], fore:[0.1,-0.15,1], hand:[0.05,0.1,1]}}},
-  Cleric:{thigh:{l:[0.1,-1,0.04], r:[0.1,-1,0.04]},
-    arm:{l:{up:[0.3,-0.6,0.55], fore:[0,0.6,0.8], hand:[0,1,0.25]}}},
-};
-const _mx=(v,sd)=>sd==='r'?[-v[0],v[1],v[2]]:v;
-
-/* ── Class auras (particles, animated in the render loop) ─────────────── */
-const AURAS={
-  Warlock:  {kind:'swirl',    col:0x7dffb0, n:54, size:0.153, light:0x7dffb0},
-  Cleric:   {kind:'halo',     col:0xffe6a0, n:26, size:0.108, light:0xffe6a0},
-  Paladin:  {kind:'rise',     col:0xffd66b, n:56, size:0.126, light:0xffd66b},
-  Druid:    {kind:'leaves',   col:0x6fbf4a, n:26, size:0.18},
-  Sorcerer: {kind:'hands',    col:0xff5ad0, n:60, size:0.108, light:0xff5ad0},
-  Wizard:   {kind:'runes',    col:0x5aa8ff, n:22, size:0.108},
-  Barbarian:{kind:'embers',   col:0xff6a2a, n:52, size:0.108},
-  Bard:     {kind:'notes',    col:0xffd98a, n:12, size:0.288},
-  Ranger:   {kind:'fireflies',col:0xd8ff7a, n:18, size:0.126},
-  Monk:     {kind:'rise',     col:0x6fe0d8, n:36, size:0.108},
-  Rogue:    {kind:'smoke',    col:0x4a3b6e, n:30, size:0.576},
-};
-const _auraTex={};
-function _canvasTex(key, draw){
-  if(_auraTex[key]) return _auraTex[key];
-  const c=document.createElement('canvas'); c.width=c.height=64; draw(c.getContext('2d'));
-  const t=new T.CanvasTexture(c); t.colorSpace=T.SRGBColorSpace; return _auraTex[key]=t;
-}
-const _dot=()=>_canvasTex('dot',x=>{ const g=x.createRadialGradient(32,32,0,32,32,32); g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(0.35,'rgba(255,255,255,0.6)'); g.addColorStop(1,'rgba(255,255,255,0)'); x.fillStyle=g; x.fillRect(0,0,64,64); });
-const _leaf=()=>_canvasTex('leaf',x=>{ x.fillStyle='#fff'; x.beginPath(); x.moveTo(32,6); x.quadraticCurveTo(58,30,32,58); x.quadraticCurveTo(6,30,32,6); x.fill(); x.strokeStyle='rgba(0,0,0,0.35)'; x.lineWidth=2; x.beginPath(); x.moveTo(32,10); x.lineTo(32,56); x.stroke(); });
-const _note=()=>_canvasTex('note',x=>{ // drawn, not a font glyph, so it shows everywhere
-  x.fillStyle='#fff'; x.strokeStyle='#fff'; x.lineWidth=5;
-  x.beginPath(); x.ellipse(22,48,11,8,-0.4,0,Math.PI*2); x.fill();
-  x.beginPath(); x.moveTo(31,46); x.lineTo(31,10); x.stroke();
-  x.beginPath(); x.moveTo(31,10); x.quadraticCurveTo(44,16,48,30); x.quadraticCurveTo(42,22,31,20); x.fill(); });
-function _runeCircle(){
-  if(_auraTex.circle) return _auraTex.circle;
-  const c=document.createElement('canvas'); c.width=c.height=512; const x=c.getContext('2d');
-  x.translate(256,256); x.strokeStyle='#fff'; x.fillStyle='#fff';
-  [236,200,120].forEach((r,i)=>{ x.lineWidth=i===1?3:5; x.beginPath(); x.arc(0,0,r,0,Math.PI*2); x.stroke(); });
-  const G='ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ';
-  x.font='bold 30px serif'; x.textAlign='center'; x.textBaseline='middle';
-  for(let i=0;i<24;i++){ x.save(); x.rotate(i/24*Math.PI*2); x.fillText(G[i],0,-218); x.restore(); }
-  for(let i=0;i<6;i++){ const a=i/6*Math.PI*2, b=a+Math.PI*2/3; x.lineWidth=2; x.beginPath(); x.moveTo(Math.cos(a)*200,Math.sin(a)*200); x.lineTo(Math.cos(b)*200,Math.sin(b)*200); x.stroke(); }
-  const t=new T.CanvasTexture(c); t.colorSpace=T.SRGBColorSpace; return _auraTex.circle=t;
-}
-// Particles live in the figure's own (unscaled) space: feet at y≈floor, head at top.
-function buildAura(kind, root, B, floor, top){
-  const A=AURAS[kind]; if(!A) return null;
-  const g=new T.Group(); root.add(g);
-  const add=A.kind==='smoke'||A.kind==='leaves'?T.NormalBlending:T.AdditiveBlending;
-  const tex=A.kind==='leaves'?_leaf():A.kind==='notes'?_note():_dot();
-  const n=A.n, pos=new Float32Array(n*3), col=new Float32Array(n*3);
-  const geo=new T.BufferGeometry(); geo.setAttribute('position',new T.BufferAttribute(pos,3)); geo.setAttribute('color',new T.BufferAttribute(col,3));
-  const mat=new T.PointsMaterial({size:A.size, map:tex, vertexColors:true, transparent:true, depthWrite:false, blending:add,
-    opacity:A.kind==='smoke'?0.55:1, alphaTest:A.kind==='leaves'?0.3:0});
-  const pts=new T.Points(geo,mat); pts.frustumCulled=false; g.add(pts);
-  const base=new T.Color(A.col), H=top-floor, P=[];
-  const rnd=(a,b)=>a+Math.random()*(b-a);
-  const hands=()=>['hand_l','hand_r'].map(n=>{ const v=new T.Vector3(); B[n].getWorldPosition(v); return root.worldToLocal(v); });
-  const spawn=(p,first)=>{
-    p.age=0; p.life=rnd(1.6,3.6); p.ph=Math.random()*6.28;
-    switch(A.kind){
-      case 'swirl': p.r=rnd(0.32,0.55); p.a=Math.random()*6.28; p.y=floor+rnd(0.1,H*0.9); p.vy=rnd(0.05,0.18); p.life=rnd(2.5,5); break;
-      case 'rise': case 'halo': case 'runes': case 'embers':
-        { const a=Math.random()*6.28, r=rnd(0.1,A.kind==='embers'?0.4:0.45); p.x=Math.cos(a)*r; p.z=Math.sin(a)*r; p.y=floor+rnd(0,H*(first?1:0.25)); p.vy=rnd(0.12,A.kind==='embers'?0.5:0.3); } break;
-      case 'leaves': p.x=rnd(-0.6,0.6); p.z=rnd(-0.5,0.5); p.y=first?rnd(floor,top+0.3):top+rnd(0.1,0.4); p.vy=-rnd(0.08,0.18); p.life=99; break;
-      case 'hands': { const hs=hands(), h=hs[Math.random()<0.5?0:1]; p.x=h.x; p.y=h.y; p.z=h.z; p.vx=rnd(-0.25,0.25); p.vy=rnd(-0.1,0.35); p.vz=rnd(-0.25,0.25); p.life=rnd(0.3,0.8); } break;
-      case 'notes': p.x=rnd(-0.45,0.45); p.z=rnd(-0.2,0.3); p.y=floor+H*rnd(0.4,0.8); p.vy=rnd(0.08,0.16); p.life=rnd(2.5,4); break;
-      case 'fireflies': p.cx=rnd(-0.7,0.7); p.cz=rnd(-0.5,0.5); p.cy=floor+rnd(0.2,H*0.9); p.life=rnd(2,5); break;
-      case 'smoke': { const a=Math.random()*6.28, r=rnd(0.15,0.5); p.x=Math.cos(a)*r; p.z=Math.sin(a)*r; p.y=floor+rnd(0,0.15); p.vy=rnd(0.03,0.08); p.life=rnd(2,4); } break;
-    }
-    if(first) p.age=Math.random()*Math.min(p.life,4);
-  };
-  for(let i=0;i<n;i++){ const p={}; spawn(p,true); P.push(p); }
-  let halo=null, ring=null, light=null;
-  if(A.kind==='halo' && B.Head){
-    const hp=new T.Vector3(); B.Head.getWorldPosition(hp); root.worldToLocal(hp);
-    halo=new T.Mesh(new T.RingGeometry(0.15,0.19,48), new T.MeshBasicMaterial({color:base, transparent:true, opacity:0.55, blending:T.AdditiveBlending, depthWrite:false, side:T.DoubleSide}));
-    halo.position.set(hp.x, hp.y+0.14, hp.z-0.13); g.add(halo);
-  }
-  if(A.kind==='runes'){
-    ring=new T.Mesh(new T.CircleGeometry(0.75,48), new T.MeshBasicMaterial({map:_runeCircle(), color:base, transparent:true, opacity:0.6, blending:T.AdditiveBlending, depthWrite:false}));
-    ring.rotation.x=-Math.PI/2; ring.position.y=floor+0.012; g.add(ring);
-  }
-  if(A.light){ light=new T.PointLight(A.light,0.9,2.2,1.5); light.position.set(0,floor+H*0.55,0.35); g.add(light); }
-  const update=(dt,t)=>{
-    for(let i=0;i<n;i++){
-      const p=P[i]; p.age+=dt; if(p.age>p.life) spawn(p,false);
-      const u=p.age/p.life, fade=A.kind==='leaves'?1:Math.sin(Math.PI*Math.min(1,u));
-      let x=p.x, y=p.y, z=p.z;
-      switch(A.kind){
-        case 'swirl': p.a+=dt*0.9; p.y+=p.vy*dt; x=Math.cos(p.a)*p.r; z=Math.sin(p.a)*p.r; y=p.y+Math.sin(t*2+p.ph)*0.03; break;
-        case 'rise': case 'halo': case 'runes': p.y+=p.vy*dt; x=p.x+Math.sin(t*1.3+p.ph)*0.03; y=p.y; z=p.z; break;
-        case 'embers': p.y+=p.vy*dt; x=p.x+Math.sin(t*3+p.ph)*0.05; y=p.y; z=p.z+Math.cos(t*2.3+p.ph)*0.04; break;
-        case 'leaves': p.y+=p.vy*dt; if(p.y<floor) { spawn(p,false); } x=p.x+Math.sin(t*0.9+p.ph)*0.18; y=p.y; z=p.z+Math.cos(t*0.7+p.ph)*0.1; break;
-        case 'hands': p.x+=p.vx*dt; p.y+=p.vy*dt; p.z+=p.vz*dt; x=p.x; y=p.y; z=p.z; break;
-        case 'notes': p.y+=p.vy*dt; x=p.x+Math.sin(t*1.5+p.ph)*0.08; y=p.y; z=p.z; break;
-        case 'fireflies': x=p.cx+Math.sin(t*0.7+p.ph)*0.12; y=p.cy+Math.sin(t*1.1+p.ph*2)*0.08; z=p.cz+Math.cos(t*0.6+p.ph)*0.12; break;
-        case 'smoke': p.y+=p.vy*dt; x=p.x*(1+u*0.4); y=p.y; z=p.z*(1+u*0.4); break;
-      }
-      pos[i*3]=x; pos[i*3+1]=y; pos[i*3+2]=z;
-      const k=A.kind==='fireflies'?Math.max(0,Math.sin(t*2.2+p.ph*3))*fade:A.kind==='smoke'?1:fade;
-      const c=A.kind==='leaves'?base.clone().offsetHSL((p.ph-3)*0.02,0,(p.ph-3)*0.03):base;
-      col[i*3]=c.r*k; col[i*3+1]=c.g*k; col[i*3+2]=c.b*k;
-    }
-    geo.attributes.position.needsUpdate=true; geo.attributes.color.needsUpdate=true;
-    if(halo) halo.material.opacity=0.4+0.18*Math.sin(t*1.7);
-    if(ring){ ring.rotation.z=t*0.25; ring.material.opacity=0.45+0.15*Math.sin(t*1.3); }
-    if(light) light.intensity=0.75+0.25*Math.sin(t*2.1);
-  };
-  update(0,0);
-  return {group:g, update};
-}
-
-/* ── Race features: ear shapes, tusks, tails ──────────────────────────
-   Ear and tusk flags come from the portrait generator's race table; tails
+/* ── Race features: ear shapes, horns, tails ──────────────────────────
+   Ear and horn flags come from the portrait generator's race table; tails
    from RACE_TAILS. Everything is placed in figure space from bone positions
    and then attached to the bone it should follow. */
 const RACE_TAILS=[
@@ -20401,32 +19782,14 @@ const EAR_SHAPES={
   fin:   {at:[0.075,0.1,-0.02],  dir:[0.85,0.35,-0.55],len:0.1,  rad:0.05,  flat:0.16, flatAxis:[0,1,0]},
   cat:   {at:[0.05,0.2,-0.015], dir:[0.3,1,-0.05],    len:0.07, rad:0.034, flat:0.35},
 };
-function addRaceFeatures(spec, B, root){
+function addRaceFeatures(spec, B, skinMat){
   const head=B.Head, pelvis=B.pelvis;
   const hp=new T.Vector3(); if(head) head.getWorldPosition(hp);
-  const skinMat=new T.MeshStandardMaterial({color:new T.Color(spec.skin).multiplyScalar(0.62), roughness:0.6});
   if(head && spec.ears && EAR_SHAPES[spec.ears]){
-    const E=EAR_SHAPES[spec.ears];
-    const mat=spec.ears==='cat'?new T.MeshStandardMaterial({color:new T.Color(spec.skin).multiplyScalar(0.62), roughness:0.9}):skinMat;
+    const E=EAR_SHAPES[spec.ears], k=head.getWorldScale(new T.Vector3()).y;
     [1,-1].forEach(sx=>{
-      const base=hp.clone().add(new T.Vector3(E.at[0]*sx,E.at[1],E.at[2]));
-      const m=_blade(base,[E.dir[0]*sx,E.dir[1],E.dir[2]],E.len,E.rad,E.flat,mat,E.flatAxis);
-      head.attach(m);
-      if(spec.ears==='cat'){ // pink inner ear
-        const inner=_blade(base.clone().add(new T.Vector3(0,0.004,0.006)),[E.dir[0]*sx,E.dir[1],E.dir[2]],E.len*0.7,E.rad*0.6,E.flat*0.6,
-          new T.MeshStandardMaterial({color:0x8a4a52, roughness:0.8}),E.flatAxis);
-        head.attach(inner);
-      }
-    });
-  }
-  if(head && spec.tusks){
-    const ivory=new T.MeshStandardMaterial({color:0xe8dfc8, roughness:0.45});
-    [1,-1].forEach(sx=>{
-      const base=hp.clone().add(new T.Vector3(0.024*sx,0.035,0.088));
-      const m=new T.Mesh(new T.ConeGeometry(0.0085,0.034,8), ivory); m.castShadow=true;
-      const d=new T.Vector3(0.25*sx,1,0.3).normalize();
-      m.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),d); m.position.copy(base).add(d.multiplyScalar(0.017));
-      head.attach(m);
+      const base=_onHead(hp.clone().add(new T.Vector3(E.at[0]*sx,E.at[1],E.at[2]).multiplyScalar(k)),hp,k).lerp(hp,0.05);
+      head.attach(_blade(base,[E.dir[0]*sx,E.dir[1],E.dir[2]],E.len,E.rad,E.flat,skinMat,E.flatAxis));
     });
   }
   let tail=null;
@@ -20434,7 +19797,7 @@ function addRaceFeatures(spec, B, root){
     const pp=new T.Vector3(); pelvis.getWorldPosition(pp);
     const g=new T.Group(); g.position.copy(pp.clone().add(new T.Vector3(0,0.03,-0.11)));   // base of the spine
     const P=pts=>new T.CatmullRomCurve3(pts.map(p=>new T.Vector3(...p)));
-    const tailMat=spec.tail==='reptile'?new T.MeshStandardMaterial({color:new T.Color(spec.skin).multiplyScalar(0.62), roughness:0.45}):skinMat;
+    const tailMat=skinMat;
     if(spec.tail==='spade'){
       const c=P([[0,0,0],[0.02,-0.22,-0.14],[0.1,-0.5,-0.14],[0.2,-0.66,-0.02],[0.26,-0.64,0.1]]);
       g.add(_mesh(_taperTube(c,0.016,0.009,24,6),tailMat));
@@ -20449,7 +19812,7 @@ function addRaceFeatures(spec, B, root){
     } else if(spec.tail==='tuft'){
       const c=P([[0,0,0],[0.01,-0.25,-0.1],[0.04,-0.55,-0.14],[0.07,-0.72,-0.1]]);
       g.add(_mesh(_taperTube(c,0.014,0.01,18,6),tailMat));
-      const t=new T.Mesh(new T.SphereGeometry(0.035,10,8),new T.MeshStandardMaterial({color:new T.Color(spec.hairCol), roughness:1}));
+      const t=new T.Mesh(new T.SphereGeometry(0.035,10,8),new T.MeshStandardMaterial({color:new T.Color(spec.skin).multiplyScalar(0.45), roughness:1}));
       t.scale.set(0.8,1.4,0.8); t.position.copy(c.getPointAt(1)).add(new T.Vector3(0,-0.03,0)); g.add(t);
     }
     pelvis.attach(g);
@@ -20459,40 +19822,43 @@ function addRaceFeatures(spec, B, root){
 }
 
 /* ── Build a posed figure ──────────────────────────────────────────── */
-function trimToHead(mesh){
-  const bones=mesh.skeleton.bones, geo=mesh.geometry;
-  const si=geo.attributes.skinIndex, sw=geo.attributes.skinWeight;
-  const keepB=new Set(['Head','neck_01']);
-  const keep=v=>{ let best=0,bi=0; for(let k=0;k<4;k++){ const w=sw.getComponent(v,k); if(w>best){best=w;bi=si.getComponent(v,k);} } return keepB.has(bones[bi].name); };
-  const idx=geo.index.array, out=[];
-  for(let t=0;t<idx.length;t+=3){ if(keep(idx[t])&&keep(idx[t+1])&&keep(idx[t+2])) out.push(idx[t],idx[t+1],idx[t+2]); }
-  const g2=geo.clone(); g2.setIndex(out); mesh.geometry=g2;
+// The mannequin head: an egg over the head bone, sized to the models' skull
+// (figure space, before the race's head scale).
+const HEAD_EGG={c:[0,0.098,0.012], r:[0.076,0.12,0.1]};
+// Move a figure-space point `p` onto the egg's surface along its radius.
+function _onHead(p, hp, k){
+  const c=new T.Vector3(...HEAD_EGG.c).multiplyScalar(k).add(hp), r=new T.Vector3(...HEAD_EGG.r).multiplyScalar(k);
+  const d=p.clone().sub(c).divide(r), n=d.length()||1;
+  return d.multiplyScalar(1/n).multiply(r).add(c);
 }
 async function buildFigure(spec, L){
-  const names=['Base_'+spec.body, ...spec.parts, ...(spec.hair?[spec.hair]:[]), ...(spec.beard?['Hair_Beard']:[])];
+  const names=['Base_'+spec.body, ...spec.parts];
   const loaded=await Promise.all(names.map(n=>glb(n)));
   const root=cloneScene(loaded[0].scene);
   let skel=null; root.traverse(o=>{ if(o.isSkinnedMesh&&!skel) skel=o.skeleton; });
   const boneBy={}; skel.bones.forEach(b=>boneBy[b.name]=b);
-  const sx=spec.body, skinTex='Skin_'+sx, regTex='Regular_'+sx;
-  const mats={
-    skin:tintedMat(skinTex, skinTex+'_N', spec.skin, 0.3, 0.62),
-    reg: tintedMat(regTex, regTex+'_N', spec.skin, 0.3, 0.62),
-    hair1:tintedMat('Hair_1','Hair_1_N', spec.hairCol, 0.1, 0.55),
-    hair2:tintedMat('Hair_2','Hair_2_N', spec.hairCol, 0.1, 0.55),
-    eye: tintedMat('Eye', null, spec.eyeCol, 0.35, 0.15),
-  };
+  // Mannequin skin: one smooth matte tone, no texture detail.
+  const skinMat=new T.MeshStandardMaterial({color:new T.Color(spec.skin).multiplyScalar(0.62), roughness:0.6});
   const cloth={};
   const clothMat=f=>cloth[f]||(cloth[f]=gradedMat(spec.dyes[f]||f, L, f==='Knight'));
   const pick=n=>{ const f=/MI_(Knight|Noble|Wizard|Ranger|Peasant)/.exec(n);
-    return /Superhero/.test(n)?mats.skin:/Regular/.test(n)?mats.reg:/Eyes/.test(n)?mats.eye:/Hair_2/.test(n)?mats.hair2:/Hair_1/.test(n)?mats.hair1:clothMat(f?f[1]:'Peasant'); };
+    return /Regular|Superhero/.test(n)?skinMat:clothMat(f?f[1]:'Peasant'); };
   const assign=o=>{ o.castShadow=true; o.frustumCulled=false;
     if(Array.isArray(o.material)) o.material=o.material.map(m=>pick(m.name)); else o.material=pick(o.material.name); };
-  root.traverse(o=>{ if(!o.isSkinnedMesh) return;
-    const mn=(Array.isArray(o.material)?o.material[0]:o.material).name;
-    if(/Superhero/.test(mn)) trimToHead(o);   // outfits cover the body; show the head only
-    if(/Hair/.test(mn) && !spec.brows) o.visible=false;
-    assign(o); });
+  root.updateMatrixWorld(true);
+  // Outfits cover the body; the base body's head, eyes and brows give way to
+  // a faceless mannequin head and neck.
+  root.traverse(o=>{ if(o.isSkinnedMesh) o.visible=false; });
+  if(boneBy.Head && boneBy.neck_01){
+    const hp=new T.Vector3(), np=new T.Vector3(); boneBy.Head.getWorldPosition(hp); boneBy.neck_01.getWorldPosition(np);
+    const egg=new T.Mesh(new T.SphereGeometry(1,32,24), skinMat); egg.castShadow=true;
+    egg.scale.set(...HEAD_EGG.r); egg.position.set(...HEAD_EGG.c).add(hp);
+    boneBy.Head.attach(egg);
+    const a=np.clone().add(new T.Vector3(0,-0.04,-0.01)), b=hp.clone().add(new T.Vector3(0,0.05,-0.01));
+    const neck=new T.Mesh(new T.CylinderGeometry(0.042,0.05,a.distanceTo(b),20), skinMat); neck.castShadow=true;
+    neck.position.copy(a).lerp(b,0.5); neck.quaternion.setFromUnitVectors(new T.Vector3(0,1,0), b.clone().sub(a).normalize());
+    boneBy.neck_01.attach(neck);
+  }
   // Every other piece shares the base skeleton, so one pose drives them all.
   for(let i=1;i<loaded.length;i++){
     const sc=cloneScene(loaded[i].scene), meshes=[];
@@ -20502,17 +19868,15 @@ async function buildFigure(spec, L){
       o.bind(new T.Skeleton(bones,o.skeleton.boneInverses), o.bindMatrix);
       assign(o); root.add(o);
     });
-    if(names[i]===spec.hair||names[i]==='Hair_Beard'){ const hm=(HAIR_TEX[names[i]]==='Hair_2')?mats.hair2:mats.hair1; meshes.forEach(o=>o.material=hm); }
   }
   // Race proportions on the skeleton: leg length and head size.
   ['thigh_l','thigh_r'].forEach(n=>boneBy[n]?.scale.setScalar(spec.build.legs));
   boneBy.Head?.scale.setScalar(spec.build.head);
-  // Height is measured standing, before any stance bends the figure.
   root.updateMatrixWorld(true);
   const hp0=new T.Vector3(); boneBy.Head.getWorldPosition(hp0);
   const top0=hp0.y+0.21*spec.build.head;
-  // Stance. Bone axes differ per side and per export, so each bone is
-  // aimed at a direction in figure space (+Z is the front, +X the figure's left).
+  // Neutral standing pose. Bone axes differ per side and per export, so each
+  // bone is aimed at a direction in figure space (+Z is the front, +X the figure's left).
   const aim=(bone, child, dir)=>{
     if(!bone||!child) return;
     const a=new T.Vector3(), b=new T.Vector3(); bone.getWorldPosition(a); child.getWorldPosition(b);
@@ -20523,19 +19887,11 @@ async function buildFigure(spec, L){
     bone.quaternion.copy(qp.invert().multiply(dq.multiply(qw)));
     bone.updateMatrixWorld(true);
   };
-  const B=boneBy, ST=(spec.stance&&STANCES[spec.stance])||{};
-  const busy={r:spec.weapons.some(w=>w.hand==='r'), l:spec.weapons.some(w=>w.hand==='l')};
-  if(ST.spine) aim(B.spine_01,B.spine_02,ST.spine);
-  if(ST.neck) aim(B.neck_01,B.Head,ST.neck);
+  const B=boneBy, mx=(v,sd)=>sd==='r'?[-v[0],v[1],v[2]]:v;
   ['l','r'].forEach(sd=>{
-    const th=ST.thigh&&ST.thigh[sd], ca=ST.calf&&ST.calf[sd];
-    if(th) aim(B['thigh_'+sd],B['calf_'+sd],_mx(th,sd));
-    if(ca) aim(B['calf_'+sd],B['foot_'+sd],_mx(ca,sd));
-    if(th||ca) aim(B['foot_'+sd],B['ball_'+sd],_mx([0.12,-0.25,1],sd));   // keep the foot flat
-    const A=(!busy[sd]&&ST.arm&&ST.arm[sd])||{};   // a hand holding something keeps its grip pose
-    aim(B['upperarm_'+sd],B['lowerarm_'+sd],_mx(A.up||[0.2,-1,0.02],sd));
-    aim(B['lowerarm_'+sd],B['hand_'+sd],_mx(A.fore||[0.1,-1,0.32],sd));
-    aim(B['hand_'+sd],B['middle_01_'+sd],_mx(A.hand||[0.12,-1,0.18],sd));
+    aim(B['upperarm_'+sd],B['lowerarm_'+sd],mx([0.2,-1,0.02],sd));
+    aim(B['lowerarm_'+sd],B['hand_'+sd],mx([0.1,-1,0.32],sd));
+    aim(B['hand_'+sd],B['middle_01_'+sd],mx([0.12,-1,0.18],sd));
   });
   const held={r:false,l:false};
   spec.weapons.forEach(w=>{
@@ -20557,27 +19913,20 @@ async function buildFigure(spec, L){
     hb.add(holder);
   });
   if(spec.horns && B.Head) addHorns(B.Head, spec.horns, spec.hornCol);
-  const tail=addRaceFeatures(spec, B, root);
+  const tail=addRaceFeatures(spec, B, skinMat);
   // Curl the fingers of a hand that holds something
   ['r','l'].forEach(sd=>{ if(!held[sd]) return;
     ['index','middle','ring','pinky'].forEach(fn=>{ [1,2,3].forEach(j=>{ const b=B[fn+'_0'+j+'_'+sd]; if(b) b.rotateZ(FIST.curl*(j===1?0.8:1)); }); });
     [1,2].forEach(j=>{ const b=B['thumb_0'+j+'_'+sd]; if(b) b.rotateZ(FIST.thumb); });
   });
   root.updateMatrixWorld(true);
-  addClassProps(spec, B, spec.clothCol);
-  root.updateMatrixWorld(true);
-  let aura=null;
-  if(spec.aura){
-    const wy=n=>{ const v=new T.Vector3(); B[n].getWorldPosition(v); return v.y; };
-    const floor=Math.min(...['ball_l','ball_r','foot_l','foot_r'].filter(n=>B[n]).map(wy))-0.04;
-    aura=buildAura(spec.aura, root, B, floor, wy('Head')+0.2);
-  }
+  if(spec.cape) addCape(B);
   // Overall height and breadth: scale the whole figure so the top of the head
-  // (standing) lands at the character's height.
+  // lands at the character's height.
   const k=spec.height/top0, w=spec.build.w;
   root.scale.set(k*w, k, k*w);
   root.updateMatrixWorld(true);
-  return {root, bones:boneBy, aura, tail, rest:{spine:boneBy.spine_03?.quaternion.clone(), head:boneBy.Head?.quaternion.clone()}};
+  return {root, bones:boneBy, tail, rest:{spine:boneBy.spine_03?.quaternion.clone(), head:boneBy.Head?.quaternion.clone()}};
 }
 
 /* ── Stage: one shared renderer, moved into whichever doll is showing ── */
@@ -20598,7 +19947,7 @@ function ensureStage(){
   el.addEventListener('pointerup',()=>{ drag=null; });
   el.addEventListener('pointercancel',()=>{ drag=null; });
   el.addEventListener('dblclick',()=>{ S.yaw=0.4; _kick(); });
-  el.addEventListener('pointerenter',()=>_kick());   // wake the idle animation and aura
+  el.addEventListener('pointerenter',()=>_kick());   // wake the idle animation
   S.ro=new ResizeObserver(()=>{ _resize(); _kick(); });
   S.io=new IntersectionObserver(es=>{ S.visible=es.some(e=>e.isIntersecting); if(S.visible) _kick(); });
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) _kick(); });
@@ -20641,9 +19990,8 @@ function _tick(t){
   S.raf=0;
   if(!S.host||!S.host.isConnected||document.hidden||!S.visible) return;   // parked until shown again
   if(S.fig){
-    const s=(t-S.t0)/1000, dt=Math.min(0.05,Math.max(0,(t-(S.lastT||t))/1000)); S.lastT=t;
+    const s=(t-S.t0)/1000;
     S.fig.root.rotation.y=S.yaw;
-    if(S.fig.aura) S.fig.aura.update(dt,s);
     if(S.fig.tail){ const tg=S.fig.tail.g; tg.quaternion.copy(S.fig.tail.rest); tg.rotateY(Math.sin(s*1.1)*0.14); tg.rotateX(Math.sin(s*0.7)*0.04); }
     const b=S.fig.bones, br=Math.sin(s*1.6);
     if(b.spine_03&&S.fig.rest.spine){ b.spine_03.quaternion.copy(S.fig.rest.spine); b.spine_03.rotateX(br*0.012); }
@@ -20668,7 +20016,7 @@ async function mount(host, char){
   if(sig===S.sig && S.fig){ host.classList.remove('doll3d-loading'); _kick(); return; }
   S.sig=sig;
   const my=S.building={};
-  const L=await lookFor(spec);
+  const L=lookFor();
   const fig=await buildFigure(spec,L);
   if(S.building!==my) return;              // a newer build started meanwhile
   if(S.fig) S.scene.remove(S.fig.root);
@@ -20679,7 +20027,7 @@ async function mount(host, char){
   if(S.host===host) host.classList.remove('doll3d-loading');
   _kick();
 }
-window.Doll3D={ mount, spec:dollSpec, HAIR_STYLES, HAIR_LABEL, ready:true, _stage:S };
+window.Doll3D={ mount, spec:dollSpec, ready:true, _stage:S };
 window.dispatchEvent(new Event('doll3d-ready'));
 </script>
 
