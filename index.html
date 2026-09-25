@@ -1902,9 +1902,14 @@ document.addEventListener('visibilitychange', ()=>{
 /* ══ IN-MEMORY STORE — Supabase is source of truth ══ */
 const _db = { chars:[], campaigns:[], items:{}, wealth:{} };
 
-function syncIndicator(state){
+// The last sync failure, shown when "⚠ Sync error" is tapped (the details
+// otherwise only reach the console, which a phone can't show).
+let _lastSyncError = '';
+function syncIndicator(state, detail){
+  if(state==='error') _lastSyncError = String(detail||'unknown error');
   const el = document.getElementById('syncIndicator');
   if(!el) return;
+  el.title = state==='error' ? 'Sync error: '+_lastSyncError+' — tap to retry' : 'Tap to refresh';
   if(state==='live')    { el.textContent='🟢 Live'; el.style.color='var(--green)'; }
   else if(state==='saving'){ el.textContent='💾 Saving…'; el.style.color='var(--gold)'; }
   else if(state==='offline'){ el.textContent='🔴 Offline'; el.style.color='var(--red)'; }
@@ -2166,8 +2171,9 @@ async function pullAll(campId){
       supa.from('campaigns').select('*'),
     ]);
     if(cr.error || campr.error){
-      console.warn('pullAll error:', cr.error?.message || campr.error?.message);
-      syncIndicator('error');
+      const err = cr.error ? 'characters: '+cr.error.message : 'campaigns: '+campr.error.message;
+      console.warn('pullAll error:', err);
+      syncIndicator('error', err);
       return false;
     }
     _db.campaigns = _dedupeByDataId(
@@ -2190,7 +2196,7 @@ async function pullAll(campId){
     return true;
   } catch(e){
     console.warn('pullAll error:', e);
-    syncIndicator('error');
+    syncIndicator('error', e && e.message || e);
     return false;
   }
 }
@@ -2201,7 +2207,7 @@ async function manualRefresh(){
   syncIndicator('saving');
   _lastFocusRefresh = Date.now();
   const ok = await pullAll(getActiveCampId()).catch(()=>false);
-  if(!ok){ toast('Sync failed — check connection','var(--red)'); return; }
+  if(!ok){ toast('Sync failed — '+(_lastSyncError||'check connection'),'var(--red)', 9000); return; }
   // Re-load shared campaigns so joined camps are always present after a refresh
   await _loadSharedCamps().catch(()=>{});
   if(currentScreen==='roster') renderRoster();
@@ -3473,7 +3479,7 @@ const decodeChar=s=>{try{const b=s.replace(/[-_]/g,x=>({'-':'+','_':'/'})[x]);re
 const calcGP=w=>(w.gp||0)+(w.sp||0)/10+(w.ep||0)/2+(w.cp||0)/100;
 const fmtGP=v=>v%1===0?v:v.toFixed(2);
 
-function toast(msg,col){const t=document.getElementById('toast');t.textContent=msg;t.style.background=col||'var(--purple)';t.classList.add('show');clearTimeout(t._to);t._to=setTimeout(()=>t.classList.remove('show'),2300);}
+function toast(msg,col,ms){const t=document.getElementById('toast');t.textContent=msg;t.style.background=col||'var(--purple)';t.classList.add('show');clearTimeout(t._to);t._to=setTimeout(()=>t.classList.remove('show'),ms||2300);}
 
 /* ══ NAV ══ */
 let currentScreen='roster';
