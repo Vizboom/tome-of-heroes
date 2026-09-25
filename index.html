@@ -13656,13 +13656,18 @@ function _mapImgSrc(map){
   }
   return null;
 }
+// Downloads in flight, by map id. Kept here rather than on the map: a flag on
+// the map got saved with the campaign mid-download, and every later session
+// then took the image as "already loading" and never fetched it.
+const _mapImgLoading = new Set();
 async function _fetchMapImage(map){
-  if(map._loading) return; map._loading=true;
+  delete map._loading;   // drop any flag saved by older versions
+  if(_mapImgLoading.has(map.id)) return; _mapImgLoading.add(map.id);
   try{
     const { data } = await supa.from('settings').select('value').eq('key', map.imgKey).maybeSingle();
     if(data?.value){ _mapImgCache[map.id]=data.value; if(_currentCampTab==='map') renderMap(); }
   }catch(e){ console.warn('map image load:', e.message); }
-  map._loading=false;
+  _mapImgLoading.delete(map.id);
 }
 // DM-only maps go under camp_map_<campaign>_dm_…, which the Strahd pack's
 // database policy keeps readable by the owner alone. Returns true once stored.
