@@ -2063,20 +2063,23 @@ async function dbGetCampaigns(){
   if(error){ console.warn('getCampaigns error:', error.message); return _db.campaigns; }
   _db.campaigns = _dedupeByDataId(
     (data||[]).map(r=>{ const c = r.data||r; delete c._ownerGid; c._rowId = r.id; return c; }), 'campaign');
+  _db.campaigns.forEach(_setCampBase);
   return _db.campaigns;
 }
 
 // Collapse duplicate rows that share one logical id (caused by an old
-// realtime-echo bug that dropped row keys). Keeps the richest copy.
+// realtime-echo bug that dropped row keys, and by Force Sync writing a second
+// row). Keeps the most recently saved copy, else the richest.
 function _dedupeByDataId(list, label){
   const byId = new Map();
   for(const item of list){
     const key = String(item.id);
     const prev = byId.get(key);
     if(!prev){ byId.set(key, item); continue; }
-    const a = JSON.stringify(prev).length, b = JSON.stringify(item).length;
-    const keep = b > a ? item : prev;
-    const drop = b > a ? prev : item;
+    const ta = +prev._savedAt||0, tb = +item._savedAt||0;
+    const newer = (ta||tb) ? tb > ta : JSON.stringify(item).length > JSON.stringify(prev).length;
+    const keep = newer ? item : prev;
+    const drop = newer ? prev : item;
     byId.set(key, keep);
     console.warn('[dedupe] duplicate', label, 'rows for', key,
       '— showing row', keep._rowId, '| spare row:', drop._rowId,
@@ -2096,21 +2099,144 @@ function _isOwnEcho(id){
   if(Date.now()-t > 6000){ _ownWrites.delete(String(id)); return false; }
   return true;
 }
+/* ── Campaign saves merge instead of overwriting ─────────────────────────
+   Every member saves the whole campaign as one row, so a device whose copy
+   was behind (a missed update, or an older echo of its own save) used to put
+   the old version of everything back — maps, pins, image links. Each save now
+   carries a revision number (_rev) and only lands if the row is still at the
+   revision this device last saw. If someone saved in between, their copy is
+   fetched and merged with ours field by field (lists of things with ids —
+   maps, places, sessions — item by item), then the save is tried again.
+   _campBase holds, per campaign, the last server copy this device took in:
+   the common ancestor for that merge. */
+const _campBase = new Map();     // campaign id → JSON of the last server copy seen
+const _campSaves = new Map();    // campaign id → { camp, running, again }
+function _campClean(camp){ const c={ ...camp }; delete c._ownerGid; delete c._rowId; return c; }
+function _setCampBase(data){ if(data && data.id!=null) _campBase.set(String(data.id), JSON.stringify(_campClean(data))); }
+function _campBaseOf(id){ const s=_campBase.get(String(id)); return s ? JSON.parse(s) : null; }
+function _jeq(a,b){ return a===b || JSON.stringify(a)===JSON.stringify(b); }
+const _isPlainObj = v => !!v && typeof v==='object' && !Array.isArray(v);
+// Lists merged item by item: every entry an object with a unique id.
+function _isIdList(a){ if(!Array.isArray(a)) return false; const ids=new Set();
+  for(const x of a){ if(!_isPlainObj(x) || x.id==null || ids.has(String(x.id))) return false; ids.add(String(x.id)); } return true; }
+/* Three-way merge: `mine` and `theirs` both started from `base`. Whatever
+   only one side changed is kept; where both changed the same value, mine
+   (the save being made now) wins. Returns mine's own objects where it can,
+   so code still holding a map or place keeps editing the live one. */
+function _merge3(base, mine, theirs){
+  if(_jeq(mine, theirs) || _jeq(theirs, base)) return mine;
+  if(_jeq(mine, base)) return theirs;
+  if(_isPlainObj(mine) && _isPlainObj(theirs)){
+    const b=_isPlainObj(base)?base:{}, out={};
+    new Set([...Object.keys(mine), ...Object.keys(theirs)]).forEach(k=>{ const v=_merge3(b[k], mine[k], theirs[k]); if(v!==undefined) out[k]=v; });
+    return out;
+  }
+  if(Array.isArray(mine) && Array.isArray(theirs)){
+    const b=Array.isArray(base)?base:[];
+    if(_isIdList(mine) && _isIdList(theirs) && _isIdList(b)){
+      const key=x=>String(x.id), bm=new Map(b.map(x=>[key(x),x])), mm=new Map(mine.map(x=>[key(x),x])), tm=new Map(theirs.map(x=>[key(x),x]));
+      const out=[];
+      // Mine's order; an item one side deleted stays deleted unless the other side changed it.
+      mine.forEach(m=>{ const k=key(m), t=tm.get(k), bb=bm.get(k);
+        if(t) out.push(_merge3(bb, m, t));
+        else if(!(bb && _jeq(m, bb))) out.push(m); });
+      theirs.forEach(t=>{ const k=key(t), bb=bm.get(k);
+        if(mm.has(k) || (bb && _jeq(t, bb))) return;
+        out.push(t); });
+      return out;
+    }
+    if([mine, theirs, b].every(a=>a.every(x=>typeof x==='string'))){
+      const add=mine.filter(x=>!b.includes(x)), del=b.filter(x=>!mine.includes(x));
+      return [...theirs.filter(x=>!del.includes(x)), ...add.filter(x=>!theirs.includes(x))];
+    }
+  }
+  return mine;
+}
+// Fold another copy of a campaign into the one in memory, in place, and make
+// it the new common ancestor.
+function _mergeCampInto(camp, theirs){
+  const base=_campBaseOf(camp.id);
+  const merged = base ? _merge3(base, _campClean(camp), _campClean(theirs)) : _campClean(theirs);
+  Object.keys(camp).forEach(k=>{ if(k!=='_rowId' && k!=='_ownerGid' && !(k in merged)) delete camp[k]; });
+  Object.assign(camp, merged);
+  _setCampBase(theirs);
+}
+// The row's current data: an object, null when there is no row, undefined on error.
+async function _fetchCampData(rowId){
+  const { data, error } = await supa.from('campaigns').select('data').eq('id', rowId).maybeSingle();
+  if(error){ console.warn('saveCampaign fetch error:', error.message); return undefined; }
+  return data ? (data.data||{}) : null;
+}
+// Returns null once saved, else an error message.
+async function _writeCampaign(camp, gid){
+  const rowId = camp._rowId || String(camp.id);
+  camp._rowId = rowId;
+  for(let attempt=0; attempt<5; attempt++){
+    let base=_campBaseOf(camp.id);
+    if(!base){
+      // Never loaded from the server (a new campaign): look before writing.
+      const cur=await _fetchCampData(rowId);
+      if(cur===undefined) return 'could not read the campaign';
+      if(cur) _setCampBase(cur);
+      base=cur;
+    }
+    const rev=(base && +base._rev) || 0;
+    const clean=_campClean(camp); clean._rev=rev+1; clean._savedAt=Date.now();
+    const row = { id: rowId, group_id: gid, camp_id: String(camp.id),
+                  join_code: camp.joinCode || null,
+                  name: camp.name||'Untitled Campaign', data: clean };
+    let error, saved=false;
+    if(!base){
+      ({ error } = await supa.from('campaigns').upsert(row, {onConflict:'id'}));
+      saved=!error;
+    } else {
+      // Only if nobody has saved since this device's copy.
+      let q=supa.from('campaigns').update(row).eq('id', rowId);
+      q = base._rev ? q.eq('data->>_rev', String(base._rev)) : q.is('data->>_rev', null);
+      const r=await q.select('id'); error=r.error; saved=!error && !!(r.data&&r.data.length);
+    }
+    if(error){ console.warn('saveCampaign error:', error.message); return error.message; }
+    if(saved){ camp._rev=clean._rev; camp._savedAt=clean._savedAt; _setCampBase(clean); return null; }
+    const cur=await _fetchCampData(rowId);
+    if(cur===undefined) return 'could not read the campaign';
+    if(cur===null){ _campBase.delete(String(camp.id)); continue; }   // row gone: write it fresh
+    if((+cur._rev||0)===rev){
+      // Still at our revision, so the update was refused rather than beaten:
+      // save the way older versions did.
+      ({ error } = await supa.from('campaigns').upsert(row, {onConflict:'id'}));
+      if(error){ console.warn('saveCampaign error:', error.message); return error.message; }
+      camp._rev=clean._rev; camp._savedAt=clean._savedAt; _setCampBase(clean); return null;
+    }
+    // Someone saved in between: take in their changes and try again.
+    _mergeCampInto(camp, cur);
+    _campMergedFromServer(camp);
+  }
+  console.warn('saveCampaign: still conflicting after 5 tries', camp.id);
+  return 'other saves kept landing first — try again';
+}
+// Another device's changes were merged in during a save: redraw if showing.
+function _campMergedFromServer(camp){
+  if(document.getElementById('campList')) _refreshCampScreen();
+  if(document.getElementById('campDetailHeader') && editingCampId===camp.id) renderCampDetailHeader();
+}
 async function dbSaveCampaign(camp){
   if(!camp || !camp.id) { console.warn('dbSaveCampaign: invalid camp', camp); return; }
   _markOwnWrite(camp.id);
   const gid = getGroupId(); if(!gid || !_authUid) return;
-  // One canonical row per campaign; every member writes the same row.
-  const rowId = camp._rowId || String(camp.id);
-  camp._rowId = rowId;
-  const clean = { ...camp }; delete clean._ownerGid; delete clean._rowId;
-  const row = { id: rowId, group_id: gid, camp_id: String(camp.id),
-                join_code: camp.joinCode || null,
-                name: camp.name||'Untitled Campaign', data: clean };
-  const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
-  if(error) console.warn('saveCampaign error:', error.message);
   const i = _db.campaigns.findIndex(c=>c.id===camp.id);
   if(i>=0) _db.campaigns[i]=camp; else _db.campaigns.push(camp);
+  // One save per campaign at a time; changes made meanwhile go in the next.
+  const id=String(camp.id), q=_campSaves.get(id)||{};
+  _campSaves.set(id, q); q.camp=camp;
+  if(q.running){ q.again=true; return q.running; }
+  q.running=(async()=>{
+    let err=null;
+    try{ do{ q.again=false; _markOwnWrite(q.camp.id); err=await _writeCampaign(q.camp, gid); }while(q.again); }
+    catch(e){ err=e.message||String(e); console.warn('saveCampaign error:', err); }
+    finally{ q.running=null; }
+    return err;
+  })();
+  return q.running;
 }
 
 async function dbDeleteCampaign(campId){
@@ -2173,6 +2299,7 @@ async function pullAll(campId){
     _db.campaigns = _dedupeByDataId(
       (campr.data||[]).map(r=>{ const c=r.data||r; delete c._ownerGid; c._rowId=r.id; return c; })
         .filter(c=>c && c.id && c.name), 'campaign');
+    _db.campaigns.forEach(_setCampBase);
     _db.campaigns.forEach(c=>{ if(c.charIds) c.charIds=[...new Set(c.charIds.map(String))]; });
     _db.chars = _dedupeByDataId(
       (cr.data||[]).map(r=>{ const c=r.data||r; c._rowId=r.id; c._campaignId=r.campaign_id; return c; })
@@ -2257,10 +2384,20 @@ function subscribeRealtime(campId){
       if(payload.new?.data){
         const updated = payload.new.data;
         delete updated._ownerGid;
-        updated._rowId = payload.new.id;   // CRITICAL: keep the storage key,
-                                           // or the next save inserts a duplicate row
         const i = _db.campaigns.findIndex(c=>String(c.id)===String(updated.id) || c._rowId===payload.new.id);
-        if(i>=0) _db.campaigns[i]=updated; else _db.campaigns.push(updated);
+        const cur = i>=0 ? _db.campaigns[i] : null;
+        if(cur && cur._rowId===payload.new.id){
+          // A copy no newer than ours (usually our own save echoing back)
+          // must not replace newer changes made since.
+          const base=_campBaseOf(cur.id);
+          if(base && base._rev && updated._rev && +updated._rev<=+base._rev) return;
+          _mergeCampInto(cur, updated);   // keep our unsaved changes on top of theirs
+        } else {
+          updated._rowId = payload.new.id;   // CRITICAL: keep the storage key,
+                                             // or the next save inserts a duplicate row
+          if(i>=0) _db.campaigns[i]=updated; else _db.campaigns.push(updated);
+          _setCampBase(updated);
+        }
         // Our own save coming back to us: the screen already shows it.
         if(_isOwnEcho(updated.id)) return;
         if(document.getElementById('campList')) _refreshCampScreen();
@@ -9548,12 +9685,12 @@ async function forceSyncAll(){
     if(String(camp.id).startsWith('preset_')) continue;
     // Never write joined campaigns (owned by another group) — only write own campaigns
     if(camp._ownerGid) continue;
-    const rowId = gid + '_' + camp.id;
-    const row = { id: rowId, group_id: gid, name: camp.name||'Untitled', data: camp };
-    const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
-    if(error){
-      console.error('camp push error:', error.message, error.code, camp.name);
-      errorLines.push('camp "'+( camp.name||camp.id)+'": '+error.message+' ['+error.code+']');
+    // Through the normal save, into the campaign's own row: a second row per
+    // campaign made devices flip between copies.
+    const err = await dbSaveCampaign(camp);
+    if(err){
+      console.error('camp push error:', err, camp.name);
+      errorLines.push('camp "'+( camp.name||camp.id)+'": '+err);
     } else pushed++;
   }
 
@@ -13663,14 +13800,24 @@ const _mapImgLoading = new Set();
 // Maps whose image came back empty: access rules hide a row without an error,
 // so without this the map would say "loading map…" forever.
 const _mapImgMissing = new Set();
+// An empty answer can be momentary, so a map is only called missing after a
+// few tries a few seconds apart; one bad answer used to stick until a reload.
+const _mapImgTries = new Map();   // map id → { n: empty answers so far, at: earliest next try }
+const MAP_IMG_TRIES = 3;
 async function _fetchMapImage(map){
   delete map._loading;   // drop any flag saved by older versions
-  if(_mapImgLoading.has(map.id) || _mapImgMissing.has(map.id)) return; _mapImgLoading.add(map.id);
+  if(_mapImgLoading.has(map.id) || _mapImgMissing.has(map.id)) return;
+  const tr=_mapImgTries.get(map.id); if(tr && Date.now()<tr.at) return;
+  _mapImgLoading.add(map.id);
   try{
     const { data, error } = await supa.from('settings').select('value').eq('key', map.imgKey).maybeSingle();
     if(error) throw error;
-    if(data?.value) _mapImgCache[map.id]=data.value;
-    else { _mapImgMissing.add(map.id); console.warn('map image not found or not readable:', map.imgKey); }
+    if(data?.value){ _mapImgCache[map.id]=data.value; _mapImgTries.delete(map.id); }
+    else {
+      const n=((tr&&tr.n)||0)+1, wait=3000*n; _mapImgTries.set(map.id, { n, at:Date.now()+wait });
+      if(n>=MAP_IMG_TRIES){ _mapImgMissing.add(map.id); console.warn('map image not found or not readable:', map.imgKey); }
+      else setTimeout(()=>{ if(_currentCampTab==='map') renderMap(); }, wait+50);
+    }
     if(_currentCampTab==='map') renderMap();
   }catch(e){ console.warn('map image load:', e.message); }
   _mapImgLoading.delete(map.id);
@@ -13700,13 +13847,40 @@ async function _setMapDm(camp, m, on){
   m.imgKey=old;   // leave it where it was rather than lose it
   return false;
 }
-// Stores a map's image under _mapImgKey. Returns true once stored.
-async function _storeMapImage(camp, map, dataUrl){
-  const key=_mapImgKey(camp, map);
-  _mapImgCache[map.id]=dataUrl; _mapImgMissing.delete(map.id); map.imgKey=key; delete map.imgUrl;
+// Stores a map's image under _mapImgKey. Returns true once stored. If the
+// upload fails the map keeps whatever image it had: pointing it at a key that
+// was never written is what left maps saying "wasn't saved" after a reload.
+async function _storeMapImage(camp, map, dataUrl, quiet){
+  const key=_mapImgKey(camp, map), prev={ key:map.imgKey, url:map.imgUrl, cache:_mapImgCache[map.id] };
+  _mapImgCache[map.id]=dataUrl; _mapImgMissing.delete(map.id); _mapImgTries.delete(map.id); map.imgKey=key; delete map.imgUrl;
   try{ const { error }=await supa.from('settings').upsert({ key, value:dataUrl, owner_group:getGroupId(), ...(_authUid?{user_id:_authUid}:{}) }, { onConflict:'key' });
     if(error) throw error; return true; }
-  catch(e){ toast('Image kept on this device only — could not upload ('+(e.message||'error')+')','var(--red)'); return false; }
+  catch(e){
+    if(prev.key) map.imgKey=prev.key; else delete map.imgKey;
+    if(prev.url) map.imgUrl=prev.url;
+    if(prev.cache) _mapImgCache[map.id]=prev.cache; else delete _mapImgCache[map.id];
+    _storeMapImage.lastError=e.message||'error';
+    if(!quiet) toast('Map image not uploaded ('+_storeMapImage.lastError+') — try again','var(--red)');
+    return false;
+  }
+}
+// True when a map points at a stored image that isn't there (or can't be read).
+async function _mapImgAbsent(map){
+  if(!map.imgKey) return !map.imgUrl;
+  try{ const { data, error }=await supa.from('settings').select('key').eq('key', map.imgKey).maybeSingle(); return !error && !data; }
+  catch(e){ return false; }
+}
+// Missing-image notice: try the download again, or put the image back.
+function retryMapImage(id){ _mapImgMissing.delete(id); _mapImgTries.delete(id); renderMap(); }
+function reuploadMapImage(id, file){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp || !file) return;
+  const m=_mapById(camp, id); if(!m) return;
+  if(!canDesignMaps(camp)){ toast('Only the GM can change a map image','var(--red)'); return; }
+  _readMapFile(file, async (url,w,h)=>{
+    toast('Uploading map image…','var(--gold)');
+    if(await _storeMapImage(camp, m, url)){ m.w=w; m.h=h; saveCampaign(camp); toast('🗺 Map image restored','var(--gold)'); }
+    renderMap();
+  });
 }
 /* ── Curse of Strahd map pack ──────────────────────────────────────────
    The pack is under a personal licence, so it never ships with the app: its
@@ -13869,7 +14043,7 @@ async function bulkAddStrahdMaps(src, input){
   const byName=n=>maps.find(m=>norm(m.name)===norm(n));
   // Into an empty campaign, the overview (e.g. "Barovia") becomes the home map.
   const homeG=maps.length ? null : (order.find(g=>!g.parent && _placeTypeFor(g.name)==='region') || null);
-  let added=0, placesNew=0, dup=0, bad=0, dmAdded=0, tidied=0, moved=0, first=null, n=0;
+  let added=0, placesNew=0, dup=0, bad=0, failed=0, repaired=0, dmAdded=0, tidied=0, moved=0, first=null, n=0;
   const total=entries.length;
   const placeFor=name=>{
     let pl=camp.places.find(q=>norm(q.name)===norm(name));
@@ -13895,7 +14069,16 @@ async function bulkAddStrahdMaps(src, input){
   const addMap=async (x, name, props)=>{
     if(x.map) return tidyMap(x.map, name, props);
     say(`Adding ${++n} of ${total}: ${name}…`);
-    const ex=byName(name); if(ex){ dup++; return ex; }
+    const ex=byName(name);
+    if(ex){
+      // Already here — but if its image never made it to the server, this file puts it back.
+      if(!_mapImgCache[ex.id] && await _mapImgAbsent(ex)){
+        const img=await _readMapFileP(x.file);
+        if(img && await _storeMapImage(camp, ex, img.url, true)){ ex.w=img.w; ex.h=img.h; repaired++; }
+        else if(img) failed++; else bad++;
+      } else dup++;
+      return ex;
+    }
     const img=await _readMapFileP(x.file);
     if(!img){ bad++; return null; }
     const m={ id:(props.dm?'dm_':'')+genItemId(), name, reveal:'medium', pinPx:4, added:Date.now(), vis:props.vis, w:img.w, h:img.h };
@@ -13903,7 +14086,8 @@ async function bulkAddStrahdMaps(src, input){
     if(props.parent){ m.parentId=props.parent.id; if(_fogOn(props.parent)) m.fogEnabled=true; }
     if(props.home){ m.isHome=true; delete m.parentId; }
     if(props.placeName) m.placeId=placeFor(props.placeName).id;
-    maps.push(m); await _storeMapImage(camp, m, img.url);
+    maps.push(m);
+    if(!await _storeMapImage(camp, m, img.url, true)){ maps.splice(maps.indexOf(m),1); failed++; return null; }
     added++; if(props.dm) dmAdded++; if(!first && !props.dm) first=m;
     return m;
   };
@@ -13928,13 +14112,18 @@ async function bulkAddStrahdMaps(src, input){
   const anyDm=dmAdded || maps.some(x=>x.dmOnly);
   if(anyDm && !hasGM(camp)){ camp.gm=getGroupId(); madeGM=true; }
   done();
-  if(!added && !tidied){ say(''); toast(dup?'All '+dup+' maps are already in this campaign':'No images found','var(--muted)'); return; }
+  const failNote=failed?`${failed} not uploaded (${_storeMapImage.lastError||'error'}) — try those again`:'';
+  if(repaired) saveCampaign(camp);
+  if(!added && !tidied){ say(''); if(repaired) renderMap();
+    toast(repaired||failed ? [repaired?`🗺 Restored ${repaired} missing map image${repaired>1?'s':''}`:'', failNote].filter(Boolean).join(' · ')
+      : dup?'All '+dup+' maps are already in this campaign':'No images found', failed?'var(--red)':repaired?'var(--gold)':'var(--muted)'); return; }
   _curMapId=(first||maps.find(x=>x.isHome)||maps[maps.length-1]).id;
   saveCampaign(camp); renderMap();
   toast([ added?`🗺 Added ${added} map${added>1?'s':''}${dmAdded?` (${dmAdded} of them DM maps)`:''}`:'',
           tidied?`🧹 Tidied ${tidied} earlier map${tidied>1?'s':''}${moved?` (${moved} DM image${moved>1?'s':''} locked to you)`:''}`:'',
           placesNew?`${placesNew} place${placesNew!==1?'s':''} added`:'',
-          dup?`${dup} already here`:'', bad?`${bad} unreadable`:'',
+          repaired?`${repaired} missing image${repaired>1?'s':''} restored`:'',
+          dup?`${dup} already here`:'', bad?`${bad} unreadable`:'', failNote,
           madeGM?'you are now the GM, so DM maps stay hidden':'' ].filter(Boolean).join(' · '),'var(--gold)');
 }
 /* Downscale an uploaded image so it syncs comfortably (≈1600px, JPEG). */
@@ -14031,7 +14220,7 @@ function renderMap(){
     const edges=[]; pinned.forEach(p=>(p.links||[]).forEach(n=>{ const q=byName(n); if(q&&q!==p&&q.pins&&q.pins[map.id]&&!edges.some(e=>e[0]===q&&e[1]===p)) edges.push([p,q]); }));
     const svg = `<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="campMapSvg" data-vw="${VW}" data-vh="${VH}">
       ${src?`<image href="${src}" x="0" y="0" width="${VW}" height="${VH}" preserveAspectRatio="none"/>`
-           :`<rect width="${VW}" height="${VH}" fill="#1a1530"/><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="#8880b0" font-size="11" font-family="Cinzel,serif">${map.imgKey?(_mapImgMissing.has(map.id)?'map image unavailable — your account can’t open it, or it wasn’t saved':'loading map…'):'no image yet'}</text>`}
+           :`<rect width="${VW}" height="${VH}" fill="#1a1530"/><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="#8880b0" font-size="11" font-family="Cinzel,serif">${map.imgKey?(_mapImgMissing.has(map.id)?'map image missing — see below':'loading map…'):'no image yet'}</text>`}
       ${edges.map(([p,q])=>`<line class="map-edge" x1="${X(p)}" y1="${Y(p)}" x2="${X(q)}" y2="${Y(q)}"/>`).join('')}
       ${(()=>{ const PS=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4);
         const _locked=!!map.pinsLocked;
@@ -14093,6 +14282,14 @@ function renderMap(){
     // Peeking is the odd state, so it is the one that gets marked.
     const _peeking = gm && _fogOn(map) && !map.fogFull && _gmPeek;
     const _legend2 = _peeking ? 'you are seeing through the fog — the party sees it solid' : _legend;
+    if(!src && map.imgKey && _mapImgMissing.has(map.id)){
+      const _fix=canDesignMaps(camp);
+      html += `<div class="map-ctrls" style="margin:0 0 8px;align-items:center;border:1px solid var(--red);border-radius:10px;padding:8px 10px;font-size:12px">
+        <span style="flex:1;min-width:180px;color:var(--muted)">This map’s image couldn’t be loaded. If “Try again” doesn’t bring it back, it was never uploaded (older versions saved a map even when its upload failed)${_fix?' — choose the image file again to restore it; pins and fog stay.':' or your account can’t open it — ask your GM to re-upload it.'}</span>
+        <button class="pc-pill" onclick="retryMapImage('${jsq(map.id)}')">↻ Try again</button>
+        ${_fix?`<label class="pc-pill" style="color:var(--gold);border-color:var(--gold);cursor:pointer">⬆ Re-upload image<input type="file" accept="image/*" style="display:none" onchange="reuploadMapImage('${jsq(map.id)}', this.files[0]); this.value=''"></label>`:''}
+      </div>`;
+    }
     html += `<div class="map-wrap ${(_placingId||_placingParty||_placingTok)?'placing':''} ${_painting?'painting-fog':''} ${_peeking?'gm-preview':''} ${_mapWheelZoom?'zoom-active':''}" id="campMapWrap">${svg}<div class="map-legend">${_legend2}</div></div>`;
     html += _gmMapCtrlsHtml(camp, map);
     html += `<div class="map-ctrls">
@@ -14906,12 +15103,17 @@ async function saveMapForm(){
       if(!hasGM(camp) && getGroupId()){ camp.gm=getGroupId(); dmNote+=' · you are now the GM, so it stays hidden'; }
       if(m.imgUrl) dmNote+=' · a linked image is hidden in the app but not locked'; }
   }
-  if(pend){ m.w=pend.w; m.h=pend.h; toast('Uploading map image…','var(--gold)');
+  let upFail=false;
+  if(pend){ toast('Uploading map image…','var(--gold)');
     const oldK=m.imgKey;
-    if(await _storeMapImage(camp, m, pend.url) && oldK && oldK!==m.imgKey) supa.from('settings').delete().eq('key', oldK).then(()=>{}).catch(()=>{}); }
+    if(await _storeMapImage(camp, m, pend.url)){ m.w=pend.w; m.h=pend.h;
+      if(oldK && oldK!==m.imgKey) supa.from('settings').delete().eq('key', oldK).then(()=>{}).catch(()=>{}); }
+    else upFail=true; }
   window._showMapForm=false; window._editMapId=null; window._pendingMapImg=null; window._presetMapParent=null; window._mapSlot=null;
   _curMapId=m.id;
-  saveCampaign(camp); renderMap(); toast((dm?'🔒 DM-only map saved':'🗺 Map saved')+dmNote+placeNote,'var(--gold)');
+  saveCampaign(camp); renderMap();
+  // A failed upload already said so; the map is kept, and "Edit" takes the image again.
+  if(!upFail) toast((dm?'🔒 DM-only map saved':'🗺 Map saved')+dmNote+placeNote,'var(--gold)');
 }
 function _probeImg(url, m){ const img=new Image(); img.onload=()=>{ const camp=getCampaigns().find(c=>c.id===editingCampId); m.w=img.width; m.h=img.height; if(camp) saveCampaign(camp); if(_currentCampTab==='map') renderMap(); }; img.src=url; }
 function deleteMap(id){
