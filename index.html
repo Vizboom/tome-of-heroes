@@ -13700,13 +13700,40 @@ async function _setMapDm(camp, m, on){
   m.imgKey=old;   // leave it where it was rather than lose it
   return false;
 }
-// Stores a map's image under _mapImgKey. Returns true once stored.
-async function _storeMapImage(camp, map, dataUrl){
-  const key=_mapImgKey(camp, map);
+// Stores a map's image under _mapImgKey. Returns true once stored. If the
+// upload fails the map keeps whatever image it had: pointing it at a key that
+// was never written is what left maps saying "wasn't saved" after a reload.
+async function _storeMapImage(camp, map, dataUrl, quiet){
+  const key=_mapImgKey(camp, map), prev={ key:map.imgKey, url:map.imgUrl, cache:_mapImgCache[map.id] };
   _mapImgCache[map.id]=dataUrl; _mapImgMissing.delete(map.id); map.imgKey=key; delete map.imgUrl;
   try{ const { error }=await supa.from('settings').upsert({ key, value:dataUrl, owner_group:getGroupId(), ...(_authUid?{user_id:_authUid}:{}) }, { onConflict:'key' });
     if(error) throw error; return true; }
-  catch(e){ toast('Image kept on this device only — could not upload ('+(e.message||'error')+')','var(--red)'); return false; }
+  catch(e){
+    if(prev.key) map.imgKey=prev.key; else delete map.imgKey;
+    if(prev.url) map.imgUrl=prev.url;
+    if(prev.cache) _mapImgCache[map.id]=prev.cache; else delete _mapImgCache[map.id];
+    _storeMapImage.lastError=e.message||'error';
+    if(!quiet) toast('Map image not uploaded ('+_storeMapImage.lastError+') — try again','var(--red)');
+    return false;
+  }
+}
+// True when a map points at a stored image that isn't there (or can't be read).
+async function _mapImgAbsent(map){
+  if(!map.imgKey) return !map.imgUrl;
+  try{ const { data, error }=await supa.from('settings').select('key').eq('key', map.imgKey).maybeSingle(); return !error && !data; }
+  catch(e){ return false; }
+}
+// Missing-image notice: try the download again, or put the image back.
+function retryMapImage(id){ _mapImgMissing.delete(id); renderMap(); }
+function reuploadMapImage(id, file){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp || !file) return;
+  const m=_mapById(camp, id); if(!m) return;
+  if(!canDesignMaps(camp)){ toast('Only the GM can change a map image','var(--red)'); return; }
+  _readMapFile(file, async (url,w,h)=>{
+    toast('Uploading map image…','var(--gold)');
+    if(await _storeMapImage(camp, m, url)){ m.w=w; m.h=h; saveCampaign(camp); toast('🗺 Map image restored','var(--gold)'); }
+    renderMap();
+  });
 }
 /* ── Curse of Strahd map pack ──────────────────────────────────────────
    The pack is under a personal licence, so it never ships with the app: its
@@ -13869,7 +13896,7 @@ async function bulkAddStrahdMaps(src, input){
   const byName=n=>maps.find(m=>norm(m.name)===norm(n));
   // Into an empty campaign, the overview (e.g. "Barovia") becomes the home map.
   const homeG=maps.length ? null : (order.find(g=>!g.parent && _placeTypeFor(g.name)==='region') || null);
-  let added=0, placesNew=0, dup=0, bad=0, dmAdded=0, tidied=0, moved=0, first=null, n=0;
+  let added=0, placesNew=0, dup=0, bad=0, failed=0, repaired=0, dmAdded=0, tidied=0, moved=0, first=null, n=0;
   const total=entries.length;
   const placeFor=name=>{
     let pl=camp.places.find(q=>norm(q.name)===norm(name));
@@ -13895,7 +13922,16 @@ async function bulkAddStrahdMaps(src, input){
   const addMap=async (x, name, props)=>{
     if(x.map) return tidyMap(x.map, name, props);
     say(`Adding ${++n} of ${total}: ${name}…`);
-    const ex=byName(name); if(ex){ dup++; return ex; }
+    const ex=byName(name);
+    if(ex){
+      // Already here — but if its image never made it to the server, this file puts it back.
+      if(!_mapImgCache[ex.id] && await _mapImgAbsent(ex)){
+        const img=await _readMapFileP(x.file);
+        if(img && await _storeMapImage(camp, ex, img.url, true)){ ex.w=img.w; ex.h=img.h; repaired++; }
+        else if(img) failed++; else bad++;
+      } else dup++;
+      return ex;
+    }
     const img=await _readMapFileP(x.file);
     if(!img){ bad++; return null; }
     const m={ id:(props.dm?'dm_':'')+genItemId(), name, reveal:'medium', pinPx:4, added:Date.now(), vis:props.vis, w:img.w, h:img.h };
@@ -13903,7 +13939,8 @@ async function bulkAddStrahdMaps(src, input){
     if(props.parent){ m.parentId=props.parent.id; if(_fogOn(props.parent)) m.fogEnabled=true; }
     if(props.home){ m.isHome=true; delete m.parentId; }
     if(props.placeName) m.placeId=placeFor(props.placeName).id;
-    maps.push(m); await _storeMapImage(camp, m, img.url);
+    maps.push(m);
+    if(!await _storeMapImage(camp, m, img.url, true)){ maps.splice(maps.indexOf(m),1); failed++; return null; }
     added++; if(props.dm) dmAdded++; if(!first && !props.dm) first=m;
     return m;
   };
@@ -13928,13 +13965,18 @@ async function bulkAddStrahdMaps(src, input){
   const anyDm=dmAdded || maps.some(x=>x.dmOnly);
   if(anyDm && !hasGM(camp)){ camp.gm=getGroupId(); madeGM=true; }
   done();
-  if(!added && !tidied){ say(''); toast(dup?'All '+dup+' maps are already in this campaign':'No images found','var(--muted)'); return; }
+  const failNote=failed?`${failed} not uploaded (${_storeMapImage.lastError||'error'}) — try those again`:'';
+  if(repaired) saveCampaign(camp);
+  if(!added && !tidied){ say(''); if(repaired) renderMap();
+    toast(repaired||failed ? [repaired?`🗺 Restored ${repaired} missing map image${repaired>1?'s':''}`:'', failNote].filter(Boolean).join(' · ')
+      : dup?'All '+dup+' maps are already in this campaign':'No images found', failed?'var(--red)':repaired?'var(--gold)':'var(--muted)'); return; }
   _curMapId=(first||maps.find(x=>x.isHome)||maps[maps.length-1]).id;
   saveCampaign(camp); renderMap();
   toast([ added?`🗺 Added ${added} map${added>1?'s':''}${dmAdded?` (${dmAdded} of them DM maps)`:''}`:'',
           tidied?`🧹 Tidied ${tidied} earlier map${tidied>1?'s':''}${moved?` (${moved} DM image${moved>1?'s':''} locked to you)`:''}`:'',
           placesNew?`${placesNew} place${placesNew!==1?'s':''} added`:'',
-          dup?`${dup} already here`:'', bad?`${bad} unreadable`:'',
+          repaired?`${repaired} missing image${repaired>1?'s':''} restored`:'',
+          dup?`${dup} already here`:'', bad?`${bad} unreadable`:'', failNote,
           madeGM?'you are now the GM, so DM maps stay hidden':'' ].filter(Boolean).join(' · '),'var(--gold)');
 }
 /* Downscale an uploaded image so it syncs comfortably (≈1600px, JPEG). */
@@ -14031,7 +14073,7 @@ function renderMap(){
     const edges=[]; pinned.forEach(p=>(p.links||[]).forEach(n=>{ const q=byName(n); if(q&&q!==p&&q.pins&&q.pins[map.id]&&!edges.some(e=>e[0]===q&&e[1]===p)) edges.push([p,q]); }));
     const svg = `<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="campMapSvg" data-vw="${VW}" data-vh="${VH}">
       ${src?`<image href="${src}" x="0" y="0" width="${VW}" height="${VH}" preserveAspectRatio="none"/>`
-           :`<rect width="${VW}" height="${VH}" fill="#1a1530"/><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="#8880b0" font-size="11" font-family="Cinzel,serif">${map.imgKey?(_mapImgMissing.has(map.id)?'map image unavailable — your account can’t open it, or it wasn’t saved':'loading map…'):'no image yet'}</text>`}
+           :`<rect width="${VW}" height="${VH}" fill="#1a1530"/><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="#8880b0" font-size="11" font-family="Cinzel,serif">${map.imgKey?(_mapImgMissing.has(map.id)?'map image missing — see below':'loading map…'):'no image yet'}</text>`}
       ${edges.map(([p,q])=>`<line class="map-edge" x1="${X(p)}" y1="${Y(p)}" x2="${X(q)}" y2="${Y(q)}"/>`).join('')}
       ${(()=>{ const PS=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4);
         const _locked=!!map.pinsLocked;
@@ -14093,6 +14135,14 @@ function renderMap(){
     // Peeking is the odd state, so it is the one that gets marked.
     const _peeking = gm && _fogOn(map) && !map.fogFull && _gmPeek;
     const _legend2 = _peeking ? 'you are seeing through the fog — the party sees it solid' : _legend;
+    if(!src && map.imgKey && _mapImgMissing.has(map.id)){
+      const _fix=canDesignMaps(camp);
+      html += `<div class="map-ctrls" style="margin:0 0 8px;align-items:center;border:1px solid var(--red);border-radius:10px;padding:8px 10px;font-size:12px">
+        <span style="flex:1;min-width:180px;color:var(--muted)">This map’s image isn’t on the server — it was probably never uploaded (older versions saved the map even when the upload failed)${_fix?'. Choose the image file again to restore it; pins and fog stay.':', or your account can’t open it. Ask your GM to re-upload it.'}</span>
+        <button class="pc-pill" onclick="retryMapImage('${jsq(map.id)}')">↻ Try again</button>
+        ${_fix?`<label class="pc-pill" style="color:var(--gold);border-color:var(--gold);cursor:pointer">⬆ Re-upload image<input type="file" accept="image/*" style="display:none" onchange="reuploadMapImage('${jsq(map.id)}', this.files[0]); this.value=''"></label>`:''}
+      </div>`;
+    }
     html += `<div class="map-wrap ${(_placingId||_placingParty||_placingTok)?'placing':''} ${_painting?'painting-fog':''} ${_peeking?'gm-preview':''} ${_mapWheelZoom?'zoom-active':''}" id="campMapWrap">${svg}<div class="map-legend">${_legend2}</div></div>`;
     html += _gmMapCtrlsHtml(camp, map);
     html += `<div class="map-ctrls">
@@ -14906,12 +14956,17 @@ async function saveMapForm(){
       if(!hasGM(camp) && getGroupId()){ camp.gm=getGroupId(); dmNote+=' · you are now the GM, so it stays hidden'; }
       if(m.imgUrl) dmNote+=' · a linked image is hidden in the app but not locked'; }
   }
-  if(pend){ m.w=pend.w; m.h=pend.h; toast('Uploading map image…','var(--gold)');
+  let upFail=false;
+  if(pend){ toast('Uploading map image…','var(--gold)');
     const oldK=m.imgKey;
-    if(await _storeMapImage(camp, m, pend.url) && oldK && oldK!==m.imgKey) supa.from('settings').delete().eq('key', oldK).then(()=>{}).catch(()=>{}); }
+    if(await _storeMapImage(camp, m, pend.url)){ m.w=pend.w; m.h=pend.h;
+      if(oldK && oldK!==m.imgKey) supa.from('settings').delete().eq('key', oldK).then(()=>{}).catch(()=>{}); }
+    else upFail=true; }
   window._showMapForm=false; window._editMapId=null; window._pendingMapImg=null; window._presetMapParent=null; window._mapSlot=null;
   _curMapId=m.id;
-  saveCampaign(camp); renderMap(); toast((dm?'🔒 DM-only map saved':'🗺 Map saved')+dmNote+placeNote,'var(--gold)');
+  saveCampaign(camp); renderMap();
+  // A failed upload already said so; the map is kept, and "Edit" takes the image again.
+  if(!upFail) toast((dm?'🔒 DM-only map saved':'🗺 Map saved')+dmNote+placeNote,'var(--gold)');
 }
 function _probeImg(url, m){ const img=new Image(); img.onload=()=>{ const camp=getCampaigns().find(c=>c.id===editingCampId); m.w=img.width; m.h=img.height; if(camp) saveCampaign(camp); if(_currentCampTab==='map') renderMap(); }; img.src=url; }
 function deleteMap(id){
