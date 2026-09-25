@@ -3,7 +3,8 @@
 -- Uploaded map images live in public.settings under the key
 --   camp_map_<campaign id>_<map id>          (see _storeMapImage in index.html)
 -- For the Curse of Strahd campaign (camp_m49562377d1) these policies allow:
---   * read      — members of that campaign only (campaign_members)
+--   * read      — members of that campaign only (campaign_members);
+--                 DM maps (keys with _dm_ after the campaign) the owner only
 --   * add, change, delete — the pack's owner (VIZBOOM) only
 -- They are RESTRICTIVE, so Postgres ANDs them with the table's existing
 -- policies: nothing outside that campaign's map images changes.
@@ -21,6 +22,7 @@ do $$
 declare
   camp  constant text := 'camp_m49562377d1';
   pre   constant text := 'camp_map_' || camp || '_';
+  dm    constant text := pre || 'dm_';
   owner uuid;
 begin
   select cm.user_id into owner
@@ -34,10 +36,12 @@ begin
   execute format($p$
     create policy "strahd maps: members read" on public.settings
       as restrictive for select to public
-      using (not starts_with(key, %L) or exists (
-        select 1 from public.campaign_members cm
-        where cm.campaign_id = %L and cm.user_id = auth.uid()))
-  $p$, pre, camp);
+      using (not starts_with(key, %L)
+        or auth.uid() = %L::uuid
+        or (not starts_with(key, %L) and exists (
+          select 1 from public.campaign_members cm
+          where cm.campaign_id = %L and cm.user_id = auth.uid())))
+  $p$, pre, owner, dm, camp);
 
   execute format($p$
     create policy "strahd maps: owner inserts" on public.settings

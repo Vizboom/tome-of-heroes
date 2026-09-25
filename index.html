@@ -13535,6 +13535,17 @@ function _canOpenMap(camp, m){ return canDesignMaps(camp) || _effVis(camp,m)==='
    true but was never rendered, so honouring it now would black out every
    map already built — fog stays strictly opt-in per map instead. */
 function _fogOn(map){ return !!(map && map.fogEnabled); }
+/* Fog follows the map tree: turning it on or off for a map does the same for
+   every map nested under it, so fogging the top map fogs the whole area.
+   Returns how many nested maps changed. */
+function _cascadeFog(camp, map){
+  const on=_fogOn(map); let n=0;
+  _campMaps(camp).forEach(x=>{
+    if(x===map || !_mapChain(camp,x).includes(map) || _fogOn(x)===on) return;
+    x.fogEnabled=on; if(on) delete x.fogFull; n++;
+  });
+  return n;
+}
 /* Off by default, and reset every session: fog that conceals is the whole
    point, so seeing through it has to be something you deliberately turn on
    and can see is on — never the state you happen to find the map in. */
@@ -13662,8 +13673,8 @@ async function _storeMapImage(camp, map, dataUrl){
 /* ── Curse of Strahd map pack ──────────────────────────────────────────
    The pack is under a personal licence, so it never ships with the app: its
    owner uploads the images into their own Curse of Strahd campaign, where
-   they are stored like any uploaded map. The multi-upload only appears for
-   that owner in that one campaign; the database side is locked by
+   they are stored like any uploaded map. The Maps screen's "Upload maps"
+   button only appears for that owner in that one campaign; the database side is locked by
    supabase/strahd-map-pack-policy.sql (members read, owner writes). */
 const STRAHD_PACK = { camp:'camp_m49562377d1', owner:'VIZBOOM' };
 function _canUploadStrahdPack(camp){
@@ -13681,37 +13692,174 @@ function _readMapFileP(file){
     _readMapFile(file, (url,w,h)=>{ clearTimeout(t); res({url,w,h}); });
   });
 }
-async function bulkAddStrahdMaps(input){
+// JSZip is only fetched when a pack zip is imported.
+let _jszipP=null;
+function _jszip(){
+  if(window.JSZip) return Promise.resolve(window.JSZip);
+  return _jszipP||(_jszipP=new Promise((res,rej)=>{ const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s.onload=()=>res(window.JSZip); s.onerror=()=>{ _jszipP=null; rej(new Error('could not load the zip reader')); };
+    document.head.appendChild(s); }));
+}
+const _IMG_TYPE={jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',gif:'image/gif'};
+// [{file, dirs}] → images, unpacking zips (and zips inside them); a zip's
+// name counts as a folder. `dirs` is the folder path, used for nesting.
+async function _packImages(items){
+  const out=[];
+  const walk=async (blob, prefix)=>{
+    const zip=await (await _jszip()).loadAsync(blob);
+    for(const e of Object.values(zip.files)){
+      if(e.dir || /(^|\/)(__MACOSX|\.)/.test(e.name)) continue;
+      const full=prefix.concat(e.name.split('/')), fn=full[full.length-1], ext=(fn.split('.').pop()||'').toLowerCase();
+      if(ext==='zip') await walk(await e.async('blob'), full.slice(0,-1).concat(fn.replace(/\.zip$/i,'')));
+      else if(_IMG_TYPE[ext]) out.push({ file:new File([await e.async('blob')], fn, {type:_IMG_TYPE[ext]}), dirs:full.slice(0,-1) });
+    }
+  };
+  for(const {file, dirs} of items){
+    if(/\.zip$/i.test(file.name)||/zip/.test(file.type||'')) await walk(file, dirs.concat(file.name.replace(/\.zip$/i,'')));
+    else if(/^image\//.test(file.type||'') || _IMG_TYPE[(file.name.split('.').pop()||'').toLowerCase()]) out.push({ file, dirs });
+  }
+  return out;
+}
+// Dropped files and folders → [{file, dirs}], walking folders as they go.
+async function _dropItems(dt){
+  const entries=[...(dt.items||[])].map(i=>i.webkitGetAsEntry&&i.webkitGetAsEntry()).filter(Boolean);
+  if(!entries.length) return [...(dt.files||[])].map(file=>({file, dirs:[]}));
+  const out=[];
+  const walk=async (e, dirs)=>{
+    if(e.isFile){ out.push({ file:await new Promise((res,rej)=>e.file(res,rej)), dirs }); return; }
+    const rd=e.createReader(); let batch;
+    do{ batch=await new Promise((res,rej)=>rd.readEntries(res,rej)); for(const c of batch) await walk(c, dirs.concat(e.name)); }while(batch.length);
+  };
+  for(const e of entries) await walk(e, []);
+  return out;
+}
+async function dropStrahdMaps(ev){
+  ev.preventDefault();
+  let items=[];
+  try{ items=await _dropItems(ev.dataTransfer); }catch(e){ toast('Could not read the dropped files','var(--red)'); return; }
+  bulkAddStrahdMaps(items);
+}
+// "CurseofStrahd_AbbeyOfSaintMarkovia_1_DM" → {path:['AbbeyOfSaintMarkovia','1'], variant:'dm'}.
+// Files without the pack prefix are one-part names, as before.
+function _strahdParse(fn){
+  const base=String(fn||'').replace(/\.[a-z0-9]+$/i,'');
+  const t=base.split('_').filter(Boolean);
+  if(t.length<2 || !/^curse\s*of\s*strahd$/i.test(t[0])) return { path:[_mapNameFromFile(fn)], variant:'player' };
+  t.shift();
+  let variant='player';
+  if(t.length>1 && /^(dm|gm)$/i.test(t[t.length-1])){ variant='dm'; t.pop(); }
+  else if(t.length>1 && /^players?$/i.test(t[t.length-1])) t.pop();
+  return { path:t, variant };
+}
+// "AbbeyOfSaintMarkovia" → "Abbey of Saint Markovia"
+function _strahdWords(tok){
+  const w=String(tok).replace(/([a-z])([A-Z0-9])/g,'$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g,'$1 $2').replace(/([0-9])([A-Za-z])/g,'$1 $2').trim().split(/\s+/);
+  return w.map((x,i)=>i && /^(of|the|and|in|on|at|to|a|an|by|for)$/i.test(x) ? x.toLowerCase() : x).join(' ');
+}
+// A place type from a Barovian map name.
+function _placeTypeFor(n){
+  n=n.toLowerCase();
+  if(/crypt|tomb|catacomb|dungeon|cellar|cave|mine|lair|tunnel|vault|larder|fane/.test(n)) return 'dungeon';
+  if(/castle|keep|fortress|citadel|tower|spire|ravenloft|amber temple|argynvostholt/.test(n)) return 'landmark';
+  if(/\binn\b|tavern|church|temple|chapel|abbey|manor|mansion|house|hall|mill|shop|mercantile|winery|wizard of wines|estate|stable|cottage|\bcamp\b|encampment|burgomaster/.test(n)) return 'building';
+  if(/vallaki/.test(n)) return 'town';
+  if(/village|krezk|hamlet|berez/.test(n)) return 'village';
+  if(/forest|wood|lake|river|pass|moor|mountain|swamp|falls|road|crossroads|pool|tser|yester|lysaga|baratok|ghakis|zarovich|luna|ivlis|gates/.test(n)) return 'wilderness';
+  if(/^barovia$|land of barovia|valley|region|overview|world/.test(n)) return 'region';
+  return 'other';
+}
+// `src` is a FileList from the picker (with its input) or dropped [{file, dirs}].
+async function bulkAddStrahdMaps(src, input){
   const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
   if(!_canUploadStrahdPack(camp)){ toast('The map pack is only for its owner’s Curse of Strahd campaign','var(--red)'); return; }
-  const files=[...(input.files||[])].sort((a,b)=>a.name.localeCompare(b.name, undefined, {numeric:true}));
-  if(!files.length) return;
+  const picked=[...(src||[])].map(x=>x instanceof File ? {file:x, dirs:[]} : x); if(!picked.length) return;
+  if(bulkAddStrahdMaps._busy) return; bulkAddStrahdMaps._busy=true;
   const maps=_campMaps(camp), prog=document.getElementById('mpBulkProgress');
-  // The rest of the form decides where they nest and who can see them.
-  const parM=_mapById(camp, document.getElementById('mpParent')?.value||'');
-  const fog=document.getElementById('mpFog') ? document.getElementById('mpFog').value==='1' : false;
-  const visSel=document.getElementById('mpVis')?.value;
-  const vis=MAP_VIS.includes(visSel) ? visSel : (hasGM(camp) ? 'hidden' : 'revealed');
-  input.disabled=true;
-  let added=0, skipped=[], first=null;
-  for(let i=0;i<files.length;i++){
-    const f=files[i];
-    if(prog) prog.textContent=`Adding ${i+1} of ${files.length}: ${f.name}…`;
-    const img=await _readMapFileP(f);
-    if(!img){ skipped.push(f.name); continue; }
-    const m={ id:genItemId(), name:_mapNameFromFile(f.name), reveal:'medium', pinPx:4, added:Date.now(), vis, w:img.w, h:img.h };
-    if(fog) m.fogEnabled=true;
-    if(parM) m.parentId=parM.id;
-    if(!maps.length) m.isHome=true;
+  if(!camp.places) camp.places=[];
+  const say=t=>{ if(prog) prog.textContent=t; };
+  // Player maps start revealed and fog-free (fog a map and its nested maps
+  // later); DM maps start hidden.
+  const done=()=>{ bulkAddStrahdMaps._busy=false; if(input){ input.disabled=false; input.value=''; } };
+  if(input) input.disabled=true;
+  let imgs=[];
+  try{ say('Unpacking…'); imgs=await _packImages(picked); }
+  catch(e){ done(); say(''); toast('Could not read the zip: '+(e.message||e),'var(--red)'); return; }
+  // Name the pack's files by their structure:
+  //   CurseofStrahd_<Location>[_<Part>…]_<Player|DM>
+  // e.g. CurseofStrahd_AbbeyOfSaintMarkovia_1_DM → Abbey of Saint Markovia 1 (DM).
+  const nat=(a,b)=>String(a).localeCompare(String(b),undefined,{numeric:true});
+  const groups={};   // path key → {path, player, dm}
+  imgs.forEach(x=>{
+    const p=_strahdParse(x.file.name), key=p.path.join('/');
+    const g=groups[key]||(groups[key]={path:p.path, key, dirs:x.dirs});
+    if(!g[p.variant]) g[p.variant]=x;
+  });
+  const G=Object.values(groups).sort((a,b)=>a.path.length-b.path.length || nat(a.key,b.key));
+  const isNum=t=>/^\d+[a-z]?$/i.test(t);
+  // Where each group nests: its parent path's group; numbered parts with no
+  // parent map nest under their first-numbered sibling, which stands in for
+  // the location. Named parts with no parent map stay top level.
+  const parentOf=g=>{
+    if(g.path.length<2) return null;
+    const pk=g.path.slice(0,-1).join('/');
+    if(groups[pk]) return groups[pk];
+    if(!isNum(g.path[g.path.length-1])) return null;
+    const rep=G.find(s=>s.path.length===g.path.length && s.path.slice(0,-1).join('/')===pk && isNum(s.path[s.path.length-1]));
+    return rep===g ? (g.path.length>2 ? parentOf({path:g.path.slice(0,-1)}) : null) : rep;
+  };
+  const nameOf=path=>{ const last=path[path.length-1];
+    return path.length>1 && isNum(last) ? nameOf(path.slice(0,-1))+' '+last : _strahdWords(last); };
+  G.forEach(g=>{ g.name=nameOf(g.path); g.parent=parentOf(g);
+    // A place for each location and each named part; numbered parts share their location's.
+    const last=g.path[g.path.length-1], numbered=g.path.length>1 && isNum(last);
+    // A numbered part standing in for its location carries the location's place.
+    g.placeName = !numbered ? g.name : g.parent ? null : nameOf(g.path.slice(0,-1)); });
+  // Parents before children.
+  const order=[], seen=new Set(), visit=g=>{ if(seen.has(g)) return; if(g.parent) visit(g.parent); seen.add(g); order.push(g); };
+  G.forEach(visit);
+  // Exact names: "Castle Ravenloft 2" must not count as "Castle Ravenloft 1".
+  const norm=n=>String(n).toLowerCase().replace(/\s+/g,' ').trim();
+  const byName=n=>maps.find(m=>norm(m.name)===norm(n));
+  // Into an empty campaign, the overview (e.g. "Barovia") becomes the home map.
+  const homeG=maps.length ? null : (order.find(g=>!g.parent && _placeTypeFor(g.name)==='region') || null);
+  let added=0, placesNew=0, dup=0, bad=0, dmAdded=0, first=null, n=0;
+  const total=imgs.length;
+  const addMap=async (x, name, props)=>{
+    say(`Adding ${++n} of ${total}: ${name}…`);
+    const ex=byName(name); if(ex){ dup++; return ex; }
+    const img=await _readMapFileP(x.file);
+    if(!img){ bad++; return null; }
+    const m={ id:(props.dm?'dm_':'')+genItemId(), name, reveal:'medium', pinPx:4, added:Date.now(), vis:props.vis, w:img.w, h:img.h };
+    if(props.parent){ m.parentId=props.parent.id; if(_fogOn(props.parent)) m.fogEnabled=true; }
+    if(props.home){ m.isHome=true; delete m.parentId; }
+    if(props.placeName){
+      let pl=camp.places.find(q=>norm(q.name)===norm(props.placeName));
+      if(!pl){ pl={ id:genItemId(), name:props.placeName, type:_placeTypeFor(props.placeName), region:'Barovia', desc:'', status:'rumoured', links:[], seed:'strahd', session:0, added:Date.now() };
+        camp.places.push(pl); placesNew++; }
+      m.placeId=pl.id;
+    }
     maps.push(m); await _storeMapImage(camp, m, img.url);
-    added++; if(!first) first=m;
+    added++; if(props.dm) dmAdded++; if(!first && !props.dm) first=m;
+    return m;
+  };
+  for(const g of order){
+    const home=g===homeG, parent=g.parent && g.parent.main;
+    // The Player version is the map everyone sees; the DM version sits hidden
+    // beneath it. A DM-only map is hidden itself.
+    const mainX=g.player||g.dm, mainIsDm=!g.player;
+    g.main=await addMap(mainX, g.name+(mainIsDm?' (DM)':''), { vis:mainIsDm?'hidden':'revealed', dm:mainIsDm, parent, home, placeName: home||mainIsDm ? null : g.placeName });
+    if(g.player && g.dm && g.main) await addMap(g.dm, g.name+' (DM)', { vis:'hidden', dm:true, parent:g.main });
   }
-  input.disabled=false; input.value='';
-  if(!added){ if(prog) prog.textContent=''; toast('No images could be read','var(--red)'); return; }
-  window._showMapForm=false; window._editMapId=null; window._pendingMapImg=null; window._presetMapParent=null;
-  _curMapId=first.id;
+  // DM maps are only hidden once someone holds the GM screen: the uploader.
+  let madeGM=false;
+  if(dmAdded && !hasGM(camp)){ camp.gm=getGroupId(); madeGM=true; }
+  done();
+  if(!added){ say(''); toast(dup?'All '+dup+' maps are already in this campaign':'No images found','var(--muted)'); return; }
+  _curMapId=(first||maps[maps.length-1]).id;
   saveCampaign(camp); renderMap();
-  toast(`🗺 Added ${added} map${added>1?'s':''}`+(skipped.length?` · skipped ${skipped.length} that weren't images`:''),'var(--gold)');
+  toast(`🗺 Added ${added} map${added>1?'s':''}${dmAdded?` (${dmAdded} of them DM maps)`:''} and ${placesNew} place${placesNew!==1?'s':''}`
+    +(dup?` · ${dup} already here`:'')+(bad?` · ${bad} unreadable`:'')+(madeGM?' · you are now the GM, so DM maps stay hidden':''),'var(--gold)');
 }
 /* Downscale an uploaded image so it syncs comfortably (≈1600px, JPEG). */
 function _readMapFile(file, cb){
@@ -13757,6 +13905,16 @@ function renderMap(){
     }).join('')
       + `<button class="map-chip add" onclick="toggleAddMap()" title="Add a top-level map — use “＋ sub-map” below to nest one inside this map">+ Map</button>`
       + `</div>`;
+  }
+  // Curse of Strahd map pack: one upload for the whole pack (owner + campaign only).
+  if(_canUploadStrahdPack(camp)){
+    html += `<div id="mpBulkDrop" class="map-ctrls" style="margin:-2px 0 10px;align-items:center;border:1px dashed var(--border2);border-radius:10px;padding:8px 10px"
+        ondragover="event.preventDefault();this.style.borderColor='var(--gold)'" ondragleave="this.style.borderColor=''" ondrop="this.style.borderColor='';dropStrahdMaps(event)"
+        title="Each image becomes a map named after its file, with a matching place in the travel log (rumoured until you pin it). Images in a folder named after another map nest under it. Maps already here are skipped.">
+      <label class="pc-pill" style="color:var(--gold);border-color:var(--gold);cursor:pointer">📦 Upload maps
+        <input type="file" id="mpBulk" accept="image/*,.zip,application/zip" multiple style="display:none" onchange="bulkAddStrahdMaps(this.files, this)"></label>
+      <span id="mpBulkProgress" style="font-size:11px;color:var(--muted)">…or drop the map files, their folder, or the pack's .zip here</span>
+    </div>`;
   }
 
   // ── Canvas ──
@@ -13945,12 +14103,6 @@ function renderMap(){
     <div class="field"><label>Nested under</label><select id="mpParent"><option value="">— top level —</option>${_parOpts.map(n=>`<option value="${n.map.id}" ${_parId===n.map.id?'selected':''}>${'　'.repeat(Math.min(n.depth,4))}${n.depth?'↳ ':''}${esc(n.map.name)}</option>`).join('')}</select>
       <div style="font-size:10px;color:var(--muted2);margin-top:4px">Sub-maps stack as deep as you need — Home ▸ Map of Barovia Village ▸ Graveyard. The pin for “detailed map of” gets a ▸ badge on the parent map that jumps straight here.</div>
     </div>
-    ${(!em && _canUploadStrahdPack(camp)) ? `<div class="field" style="border:1px dashed var(--border2);border-radius:10px;padding:10px 12px">
-      <label>📚 Curse of Strahd map pack — add several at once</label>
-      <input type="file" id="mpBulk" accept="image/*" multiple style="font-size:12px;color:var(--muted)" onchange="bulkAddStrahdMaps(this)">
-      <div style="font-size:10px;color:var(--muted2);margin-top:4px">Each image becomes its own map, named after its file, using the nesting, fog and visibility chosen in this form. They're stored with this campaign only, not in the app itself; only its members can open them, and only you can add or change them.</div>
-      <div id="mpBulkProgress" style="font-size:11px;color:var(--gold);margin-top:6px"></div>
-    </div>` : ''}
     <div class="field"><label>Image</label>
       <input type="file" id="mpFile" accept="image/*" style="font-size:12px;color:var(--muted)">
       <div style="font-size:10px;color:var(--muted2);margin:4px 0">…or paste an image URL</div>
@@ -13958,7 +14110,7 @@ function renderMap(){
       <div style="font-size:10px;color:var(--muted2);margin-top:4px">Use your own scan or a map you have the rights to. Uploads are shrunk to ~1600px and shared with campaign members.</div>
     </div>
     <div class="form-row two">
-      ${gm?`<div class="field"><label>Fog of war</label><select id="mpFog"><option value="1" ${_fogOn(em)?'selected':''}>on — you reveal it as they explore</option><option value="0" ${_fogOn(em)?'':'selected'}>off — the whole map is visible</option></select></div>`:''}
+      ${gm?`<div class="field"><label>Fog of war</label><select id="mpFog"><option value="1" ${_fogOn(em||_parMap)?'selected':''}>on — you reveal it as they explore</option><option value="0" ${_fogOn(em||_parMap)?'':'selected'}>off — the whole map is visible</option></select></div>`:''}
     ${gm?`<div class="field"><label>Party can see</label><select id="mpVis">${MAP_VIS.map(k=>`<option value="${k}" ${(em?_mapVis(camp,em):(hasGM(camp)?'hidden':'revealed'))===k?'selected':''}>${VIS_META[k].icon} ${VIS_META[k].label} — ${esc(VIS_META[k].tip)}</option>`).join('')}</select></div>`:''}
       <div class="field"><label>Home map</label><select id="mpHome"><option value="0">no</option><option value="1" ${em?.isHome||(!em&&!maps.length)?'selected':''}>yes — shown first</option></select></div>
     </div>
@@ -14636,8 +14788,10 @@ async function saveMapForm(){
   m.name=name;
   m.placeId=document.getElementById('mpPlace')?.value||null; if(!m.placeId) delete m.placeId;
   if(canDesignMaps(camp)){
+    const _fogWas=_fogOn(m);
     m.fogEnabled=document.getElementById('mpFog')?.value==='1';
     if(!m.fogEnabled) delete m.fogFull;
+    if(m.fogEnabled!==_fogWas) _cascadeFog(camp, m);
     const _vsel=document.getElementById('mpVis')?.value;
     if(MAP_VIS.includes(_vsel)) m.vis=_vsel;
   }
@@ -14811,8 +14965,9 @@ function toggleFog(id){
   const g=_gmMap(id); if(!g) return;
   g.m.fogEnabled = !_fogOn(g.m);
   if(!g.m.fogEnabled) _paintMode=null; else delete g.m.fogFull;
+  const n=_cascadeFog(g.camp, g.m), also=n?' and '+n+' map'+(n>1?'s':'')+' inside it':'';
   saveCampaign(g.camp); renderMap();
-  toast(g.m.fogEnabled?'🌫 Fog drawn over '+g.m.name:'☀ Fog lifted from '+g.m.name,'var(--gold)');
+  toast(g.m.fogEnabled?'🌫 Fog drawn over '+g.m.name+also:'☀ Fog lifted from '+g.m.name+also,'var(--gold)');
 }
 function revealAllFog(id){
   const g=_gmMap(id); if(!g) return;
