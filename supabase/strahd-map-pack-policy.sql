@@ -17,6 +17,20 @@
 --   drop policy if exists "strahd maps: owner inserts" on public.settings;
 --   drop policy if exists "strahd maps: owner updates" on public.settings;
 --   drop policy if exists "strahd maps: owner deletes" on public.settings;
+--   drop function if exists public.toh_is_campaign_member(text);
+
+-- Membership is checked through a SECURITY DEFINER function, so it doesn't
+-- depend on campaign_members' own row-level security.
+create or replace function public.toh_is_campaign_member(p_camp text)
+  returns boolean
+  language sql stable security definer
+  set search_path = public
+as $fn$
+  select exists (
+    select 1 from public.campaign_members
+    where campaign_id = p_camp and user_id = auth.uid()
+  )
+$fn$;
 
 do $$
 declare
@@ -38,9 +52,7 @@ begin
       as restrictive for select to public
       using (not starts_with(key, %L)
         or auth.uid() = %L::uuid
-        or (not starts_with(key, %L) and exists (
-          select 1 from public.campaign_members cm
-          where cm.campaign_id = %L and cm.user_id = auth.uid())))
+        or (not starts_with(key, %L) and public.toh_is_campaign_member(%L)))
   $p$, pre, owner, dm, camp);
 
   execute format($p$
