@@ -19531,20 +19531,72 @@ function _armourKind(it){
   if(/clothes|vestment|tunic|coat|garb|attire/.test(n)) return 'cloth';
   return it.type==='armor'?'light':'cloth';
 }
+// Item name, plus the base weapon a magic item's description opens with
+// ("Longsword, paladin only…"), which decides when the name alone doesn't say.
+const _weaponBase=it=>String(it.desc||'').toLowerCase().split(/[.,;(]/)[0];
+const _weaponText=it=>(it.name||'').toLowerCase()+' | '+_weaponBase(it);
 function _weaponKind(it){
   if(!it) return null;
-  const n=(it.name||'').toLowerCase();
-  if(/shield/.test(n)) return 'shield';
+  if(it.type==='staff') return 'staff';
+  if(it.type==='wand'||it.type==='rod') return 'wand';
+  const k=_weaponKindOf((it.name||'').toLowerCase());
+  if(k==='none') return null;
+  if(k && !(it.type==='weapon'&&k==='wand')) return k;   // "Holy Avenger" is a longsword, not a holy symbol
+  const b=_weaponKindOf(_weaponBase(it));
+  return b==='none'?null:b||k||(it.type==='weapon'?'sword':null);
+}
+function _weaponKindOf(n){
+  if(/\bshield\b/.test(n)) return 'shield';
+  if(/\bsling\b|\bnet\b|\barrows?\b|\bbolts?\b|ammunition/.test(n)) return 'none';   // nothing to hold
   if(/crossbow/.test(n)) return 'crossbow';
   if(/\bbow\b|longbow|shortbow/.test(n)) return 'bow';
   if(/staff|quarterstaff/.test(n)) return 'staff';
   if(/spear|pike|halberd|glaive|trident|lance|javelin|polearm/.test(n)) return 'spear';
   if(/great ?axe|battleaxe|battle axe|handaxe|hand axe|\baxe/.test(n)) return 'axe';
-  if(/maul|warhammer|war hammer|light hammer|\bhammer|mace|morningstar|flail|club|greatclub/.test(n)) return 'mace';
+  if(/maul|warhammer|war hammer|light hammer|\bhammer|war pick|\bpick\b|mace|morningstar|flail|club|greatclub/.test(n)) return 'mace';
   if(/dagger|knife|sickle|dart/.test(n)) return 'dagger';
   if(/wand|rod|orb|focus|crystal|totem|symbol|amulet|holy/.test(n)) return 'wand';
   if(/sword|scimitar|rapier|blade|katana|sabre|saber|cutlass|whip/.test(n)) return 'sword';
-  return it.type==='weapon'?'sword':null;
+  return null;
+}
+// Which model in models/weapons/ (Quaternius Medieval Weapons and RPG Asset
+// Pack) shows an item, if any; wands, crossbows and maces stay built in code.
+// `k` scales it.
+function _weaponModel(it, kind){
+  const n=_weaponText(it), grand=/legendary|artifact/.test(it.rarity||'');
+  switch(kind){
+    case 'sword':
+      if(/great ?sword|claymore|zweih|two.?handed|flamberge/.test(n)) return {m:/flame|blood|infernal/.test(n)?'Claymore':'Sword_Big'};
+      if(grand||/gold|holy|sun/.test(n)) return {m:'Sword_Golden'};
+      if(/scimitar|sabre|saber|cutlass|falchion|katana/.test(n)) return {m:'Sword_2'};
+      if(/short ?sword|rapier/.test(n)) return {m:'Sword',k:0.85};
+      if(/whip/.test(n)) return null;
+      return {m:'Sword'};
+    case 'dagger': return {m:/sickle|kukri|curved/.test(n)?'Dagger_2':'Dagger'};
+    case 'axe':
+      if(/great ?axe/.test(n)) return {m:'Axe_Double'};
+      if(/hand ?axe|throwing/.test(n)) return {m:'Axe_Small'};
+      return {m:'Axe'};
+    case 'mace':
+      if(/maul|great ?hammer/.test(n)) return {m:'Hammer_Double'};
+      if(/hammer|pick/.test(n)) return {m:'Hammer_Small'};
+      return null;
+    case 'spear': return {m:/scythe/.test(n)?'Scythe':'Spear'};
+    case 'staff':
+      if(/frost|ice|cold|winter|snow/.test(n)) return {m:'IceStaff'};
+      if(/quarterstaff|wood|druid|oak|thorn|vine|nature/.test(n)) return {m:'WoodenStaff'};
+      return {m:'Staff'};
+    case 'bow':
+      if(grand) return {m:'Bow_Golden'};
+      if(/evil|infernal|shadow|blood|dark/.test(n)) return {m:'Bow_Evil'};
+      return /long/.test(n)?{m:'Bow_Wooden',k:1.25}:{m:'Bow_Wooden2'};
+    case 'shield':
+      if(grand) return {m:'Shield_Celtic_Golden',k:0.7};
+      { const nm=(it.name||'').toLowerCase();   // a "+N" in the description is just its AC
+        if(/round|buckler|targe|wooden/.test(nm)) return {m:/\+\d|painted/.test(nm)?'Shield_Round_2':'Shield_Round'};
+        return {m:/\+\d|tower|kite/.test(nm)?'Shield_Heater_2':'Shield_Heater'}; }
+  }
+  return null;
 }
 function dollSpec(char){
   const F=(typeof _raceFeatures==='function')?_raceFeatures(char.race):{skin:'human'};
@@ -19590,8 +19642,8 @@ function dollSpec(char){
   const weapons=[];
   const mk=_weaponKind(eq.mainhand), ok=_weaponKind(eq.offhand);
   const glow=it=>it?(RARITY_GLOW[it.rarity]||(/\+\d/.test(it.name||'')?'#8fb4ff':null)):null;
-  if(mk) weapons.push({hand:'r',kind:mk,glow:glow(eq.mainhand)});
-  if(ok) weapons.push({hand:'l',kind:ok,glow:glow(eq.offhand)});
+  if(mk) weapons.push({hand:'r',kind:mk,glow:glow(eq.mainhand),model:_weaponModel(eq.mainhand,mk)});
+  if(ok) weapons.push({hand:'l',kind:ok,glow:glow(eq.offhand),model:_weaponModel(eq.offhand,ok)});
   const horns=F.horns||null;
   return {body, skin, parts, dyes, ears:hooded?null:(F.ears||null), tail:_raceTail(char.race), height, build:{w:RB.w,legs:RB.legs,head:RB.head},
     cape:/cloak|cape|mantle/.test(allNames), horns:hooded&&horns!=='ridge'?null:horns, hornCol:F.skin==='dragon'?skin:'#2b2226', weapons};
@@ -19616,8 +19668,17 @@ function gradedMat(base, L, metal){
 }
 
 /* ── Weapons (built in code, parented to the hand bones) ───────────── */
-function weaponMesh(w){
+function weaponMesh(w, model){
   const g=new T.Group();
+  if(model){   // a Quaternius weapon: already in metres, grip at the origin, along +Y
+    const o=model.scene.clone(true);
+    o.traverse(m=>{ if(!m.isMesh) return; m.castShadow=true;
+      const glowing=mt=>{ if(!w.glow||mt.metalness<0.5) return mt;
+        const c=mt.clone(); c.emissive=new T.Color(w.glow); c.emissiveIntensity=0.18; return c; };
+      m.material=Array.isArray(m.material)?m.material.map(glowing):glowing(m.material); });
+    o.scale.setScalar(w.model.k||1); g.add(o);
+    return g;
+  }
   const steel=new T.MeshStandardMaterial({color:0xb8bcc6, metalness:1, roughness:0.32});
   const dark=new T.MeshStandardMaterial({color:0x2a2018, metalness:0.1, roughness:0.8});
   const wood=new T.MeshStandardMaterial({color:0x5a3a22, metalness:0, roughness:0.75});
@@ -19657,7 +19718,7 @@ const WEAPON_FRAME={
   wand:{y:[0,0.2,1], x:[1,0,0]},
   staff:{y:[0,1,0.06], x:[1,0,0]},  spear:{y:[0,1,0.06], x:[1,0,0]},
   bow:{y:[0,1,0.3], x:[0,0,1], off:[-0.04,0,0.03]},      crossbow:{y:[0,1,0], x:[1,0,0]},
-  shield:{y:[0,1,0], x:[-1,0,0], off:[-0.07,0.1,0.02]},
+  shield:{y:[0,1,0], x:[-0.6,0,0.8], off:[-0.02,0.1,0.08]},
 };
 const FIST={curl:1.1, thumb:0.5};
 
@@ -19894,10 +19955,11 @@ async function buildFigure(spec, L){
     aim(B['hand_'+sd],B['middle_01_'+sd],mx([0.12,-1,0.18],sd));
   });
   const held={r:false,l:false};
-  spec.weapons.forEach(w=>{
+  const models=await Promise.all(spec.weapons.map(w=>w.model?glb('weapons/'+w.model.m).catch(()=>null):null));
+  spec.weapons.forEach((w,wi)=>{
     const sd=w.hand, hb=B['hand_'+sd], mid=B['middle_01_'+sd]; if(!hb||!mid) return;
     held[sd]=true;
-    const m=weaponMesh(w);
+    const m=weaponMesh(w, models[wi]);
     // Grip point: between the palm and the finger roots
     const hp=new T.Vector3(), mp=new T.Vector3(); hb.getWorldPosition(hp); mid.getWorldPosition(mp);
     const grip=hp.clone().lerp(mp,0.75);
