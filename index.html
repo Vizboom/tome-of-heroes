@@ -2063,20 +2063,23 @@ async function dbGetCampaigns(){
   if(error){ console.warn('getCampaigns error:', error.message); return _db.campaigns; }
   _db.campaigns = _dedupeByDataId(
     (data||[]).map(r=>{ const c = r.data||r; delete c._ownerGid; c._rowId = r.id; return c; }), 'campaign');
+  _db.campaigns.forEach(_setCampBase);
   return _db.campaigns;
 }
 
 // Collapse duplicate rows that share one logical id (caused by an old
-// realtime-echo bug that dropped row keys). Keeps the richest copy.
+// realtime-echo bug that dropped row keys, and by Force Sync writing a second
+// row). Keeps the most recently saved copy, else the richest.
 function _dedupeByDataId(list, label){
   const byId = new Map();
   for(const item of list){
     const key = String(item.id);
     const prev = byId.get(key);
     if(!prev){ byId.set(key, item); continue; }
-    const a = JSON.stringify(prev).length, b = JSON.stringify(item).length;
-    const keep = b > a ? item : prev;
-    const drop = b > a ? prev : item;
+    const ta = +prev._savedAt||0, tb = +item._savedAt||0;
+    const newer = (ta||tb) ? tb > ta : JSON.stringify(item).length > JSON.stringify(prev).length;
+    const keep = newer ? item : prev;
+    const drop = newer ? prev : item;
     byId.set(key, keep);
     console.warn('[dedupe] duplicate', label, 'rows for', key,
       '— showing row', keep._rowId, '| spare row:', drop._rowId,
@@ -2096,21 +2099,144 @@ function _isOwnEcho(id){
   if(Date.now()-t > 6000){ _ownWrites.delete(String(id)); return false; }
   return true;
 }
+/* ── Campaign saves merge instead of overwriting ─────────────────────────
+   Every member saves the whole campaign as one row, so a device whose copy
+   was behind (a missed update, or an older echo of its own save) used to put
+   the old version of everything back — maps, pins, image links. Each save now
+   carries a revision number (_rev) and only lands if the row is still at the
+   revision this device last saw. If someone saved in between, their copy is
+   fetched and merged with ours field by field (lists of things with ids —
+   maps, places, sessions — item by item), then the save is tried again.
+   _campBase holds, per campaign, the last server copy this device took in:
+   the common ancestor for that merge. */
+const _campBase = new Map();     // campaign id → JSON of the last server copy seen
+const _campSaves = new Map();    // campaign id → { camp, running, again }
+function _campClean(camp){ const c={ ...camp }; delete c._ownerGid; delete c._rowId; return c; }
+function _setCampBase(data){ if(data && data.id!=null) _campBase.set(String(data.id), JSON.stringify(_campClean(data))); }
+function _campBaseOf(id){ const s=_campBase.get(String(id)); return s ? JSON.parse(s) : null; }
+function _jeq(a,b){ return a===b || JSON.stringify(a)===JSON.stringify(b); }
+const _isPlainObj = v => !!v && typeof v==='object' && !Array.isArray(v);
+// Lists merged item by item: every entry an object with a unique id.
+function _isIdList(a){ if(!Array.isArray(a)) return false; const ids=new Set();
+  for(const x of a){ if(!_isPlainObj(x) || x.id==null || ids.has(String(x.id))) return false; ids.add(String(x.id)); } return true; }
+/* Three-way merge: `mine` and `theirs` both started from `base`. Whatever
+   only one side changed is kept; where both changed the same value, mine
+   (the save being made now) wins. Returns mine's own objects where it can,
+   so code still holding a map or place keeps editing the live one. */
+function _merge3(base, mine, theirs){
+  if(_jeq(mine, theirs) || _jeq(theirs, base)) return mine;
+  if(_jeq(mine, base)) return theirs;
+  if(_isPlainObj(mine) && _isPlainObj(theirs)){
+    const b=_isPlainObj(base)?base:{}, out={};
+    new Set([...Object.keys(mine), ...Object.keys(theirs)]).forEach(k=>{ const v=_merge3(b[k], mine[k], theirs[k]); if(v!==undefined) out[k]=v; });
+    return out;
+  }
+  if(Array.isArray(mine) && Array.isArray(theirs)){
+    const b=Array.isArray(base)?base:[];
+    if(_isIdList(mine) && _isIdList(theirs) && _isIdList(b)){
+      const key=x=>String(x.id), bm=new Map(b.map(x=>[key(x),x])), mm=new Map(mine.map(x=>[key(x),x])), tm=new Map(theirs.map(x=>[key(x),x]));
+      const out=[];
+      // Mine's order; an item one side deleted stays deleted unless the other side changed it.
+      mine.forEach(m=>{ const k=key(m), t=tm.get(k), bb=bm.get(k);
+        if(t) out.push(_merge3(bb, m, t));
+        else if(!(bb && _jeq(m, bb))) out.push(m); });
+      theirs.forEach(t=>{ const k=key(t), bb=bm.get(k);
+        if(mm.has(k) || (bb && _jeq(t, bb))) return;
+        out.push(t); });
+      return out;
+    }
+    if([mine, theirs, b].every(a=>a.every(x=>typeof x==='string'))){
+      const add=mine.filter(x=>!b.includes(x)), del=b.filter(x=>!mine.includes(x));
+      return [...theirs.filter(x=>!del.includes(x)), ...add.filter(x=>!theirs.includes(x))];
+    }
+  }
+  return mine;
+}
+// Fold another copy of a campaign into the one in memory, in place, and make
+// it the new common ancestor.
+function _mergeCampInto(camp, theirs){
+  const base=_campBaseOf(camp.id);
+  const merged = base ? _merge3(base, _campClean(camp), _campClean(theirs)) : _campClean(theirs);
+  Object.keys(camp).forEach(k=>{ if(k!=='_rowId' && k!=='_ownerGid' && !(k in merged)) delete camp[k]; });
+  Object.assign(camp, merged);
+  _setCampBase(theirs);
+}
+// The row's current data: an object, null when there is no row, undefined on error.
+async function _fetchCampData(rowId){
+  const { data, error } = await supa.from('campaigns').select('data').eq('id', rowId).maybeSingle();
+  if(error){ console.warn('saveCampaign fetch error:', error.message); return undefined; }
+  return data ? (data.data||{}) : null;
+}
+// Returns null once saved, else an error message.
+async function _writeCampaign(camp, gid){
+  const rowId = camp._rowId || String(camp.id);
+  camp._rowId = rowId;
+  for(let attempt=0; attempt<5; attempt++){
+    let base=_campBaseOf(camp.id);
+    if(!base){
+      // Never loaded from the server (a new campaign): look before writing.
+      const cur=await _fetchCampData(rowId);
+      if(cur===undefined) return 'could not read the campaign';
+      if(cur) _setCampBase(cur);
+      base=cur;
+    }
+    const rev=(base && +base._rev) || 0;
+    const clean=_campClean(camp); clean._rev=rev+1; clean._savedAt=Date.now();
+    const row = { id: rowId, group_id: gid, camp_id: String(camp.id),
+                  join_code: camp.joinCode || null,
+                  name: camp.name||'Untitled Campaign', data: clean };
+    let error, saved=false;
+    if(!base){
+      ({ error } = await supa.from('campaigns').upsert(row, {onConflict:'id'}));
+      saved=!error;
+    } else {
+      // Only if nobody has saved since this device's copy.
+      let q=supa.from('campaigns').update(row).eq('id', rowId);
+      q = base._rev ? q.eq('data->>_rev', String(base._rev)) : q.is('data->>_rev', null);
+      const r=await q.select('id'); error=r.error; saved=!error && !!(r.data&&r.data.length);
+    }
+    if(error){ console.warn('saveCampaign error:', error.message); return error.message; }
+    if(saved){ camp._rev=clean._rev; camp._savedAt=clean._savedAt; _setCampBase(clean); return null; }
+    const cur=await _fetchCampData(rowId);
+    if(cur===undefined) return 'could not read the campaign';
+    if(cur===null){ _campBase.delete(String(camp.id)); continue; }   // row gone: write it fresh
+    if((+cur._rev||0)===rev){
+      // Still at our revision, so the update was refused rather than beaten:
+      // save the way older versions did.
+      ({ error } = await supa.from('campaigns').upsert(row, {onConflict:'id'}));
+      if(error){ console.warn('saveCampaign error:', error.message); return error.message; }
+      camp._rev=clean._rev; camp._savedAt=clean._savedAt; _setCampBase(clean); return null;
+    }
+    // Someone saved in between: take in their changes and try again.
+    _mergeCampInto(camp, cur);
+    _campMergedFromServer(camp);
+  }
+  console.warn('saveCampaign: still conflicting after 5 tries', camp.id);
+  return 'other saves kept landing first — try again';
+}
+// Another device's changes were merged in during a save: redraw if showing.
+function _campMergedFromServer(camp){
+  if(document.getElementById('campList')) _refreshCampScreen();
+  if(document.getElementById('campDetailHeader') && editingCampId===camp.id) renderCampDetailHeader();
+}
 async function dbSaveCampaign(camp){
   if(!camp || !camp.id) { console.warn('dbSaveCampaign: invalid camp', camp); return; }
   _markOwnWrite(camp.id);
   const gid = getGroupId(); if(!gid || !_authUid) return;
-  // One canonical row per campaign; every member writes the same row.
-  const rowId = camp._rowId || String(camp.id);
-  camp._rowId = rowId;
-  const clean = { ...camp }; delete clean._ownerGid; delete clean._rowId;
-  const row = { id: rowId, group_id: gid, camp_id: String(camp.id),
-                join_code: camp.joinCode || null,
-                name: camp.name||'Untitled Campaign', data: clean };
-  const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
-  if(error) console.warn('saveCampaign error:', error.message);
   const i = _db.campaigns.findIndex(c=>c.id===camp.id);
   if(i>=0) _db.campaigns[i]=camp; else _db.campaigns.push(camp);
+  // One save per campaign at a time; changes made meanwhile go in the next.
+  const id=String(camp.id), q=_campSaves.get(id)||{};
+  _campSaves.set(id, q); q.camp=camp;
+  if(q.running){ q.again=true; return q.running; }
+  q.running=(async()=>{
+    let err=null;
+    try{ do{ q.again=false; _markOwnWrite(q.camp.id); err=await _writeCampaign(q.camp, gid); }while(q.again); }
+    catch(e){ err=e.message||String(e); console.warn('saveCampaign error:', err); }
+    finally{ q.running=null; }
+    return err;
+  })();
+  return q.running;
 }
 
 async function dbDeleteCampaign(campId){
@@ -2173,6 +2299,7 @@ async function pullAll(campId){
     _db.campaigns = _dedupeByDataId(
       (campr.data||[]).map(r=>{ const c=r.data||r; delete c._ownerGid; c._rowId=r.id; return c; })
         .filter(c=>c && c.id && c.name), 'campaign');
+    _db.campaigns.forEach(_setCampBase);
     _db.campaigns.forEach(c=>{ if(c.charIds) c.charIds=[...new Set(c.charIds.map(String))]; });
     _db.chars = _dedupeByDataId(
       (cr.data||[]).map(r=>{ const c=r.data||r; c._rowId=r.id; c._campaignId=r.campaign_id; return c; })
@@ -2257,10 +2384,20 @@ function subscribeRealtime(campId){
       if(payload.new?.data){
         const updated = payload.new.data;
         delete updated._ownerGid;
-        updated._rowId = payload.new.id;   // CRITICAL: keep the storage key,
-                                           // or the next save inserts a duplicate row
         const i = _db.campaigns.findIndex(c=>String(c.id)===String(updated.id) || c._rowId===payload.new.id);
-        if(i>=0) _db.campaigns[i]=updated; else _db.campaigns.push(updated);
+        const cur = i>=0 ? _db.campaigns[i] : null;
+        if(cur && cur._rowId===payload.new.id){
+          // A copy no newer than ours (usually our own save echoing back)
+          // must not replace newer changes made since.
+          const base=_campBaseOf(cur.id);
+          if(base && base._rev && updated._rev && +updated._rev<=+base._rev) return;
+          _mergeCampInto(cur, updated);   // keep our unsaved changes on top of theirs
+        } else {
+          updated._rowId = payload.new.id;   // CRITICAL: keep the storage key,
+                                             // or the next save inserts a duplicate row
+          if(i>=0) _db.campaigns[i]=updated; else _db.campaigns.push(updated);
+          _setCampBase(updated);
+        }
         // Our own save coming back to us: the screen already shows it.
         if(_isOwnEcho(updated.id)) return;
         if(document.getElementById('campList')) _refreshCampScreen();
@@ -9548,12 +9685,12 @@ async function forceSyncAll(){
     if(String(camp.id).startsWith('preset_')) continue;
     // Never write joined campaigns (owned by another group) — only write own campaigns
     if(camp._ownerGid) continue;
-    const rowId = gid + '_' + camp.id;
-    const row = { id: rowId, group_id: gid, name: camp.name||'Untitled', data: camp };
-    const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
-    if(error){
-      console.error('camp push error:', error.message, error.code, camp.name);
-      errorLines.push('camp "'+( camp.name||camp.id)+'": '+error.message+' ['+error.code+']');
+    // Through the normal save, into the campaign's own row: a second row per
+    // campaign made devices flip between copies.
+    const err = await dbSaveCampaign(camp);
+    if(err){
+      console.error('camp push error:', err, camp.name);
+      errorLines.push('camp "'+( camp.name||camp.id)+'": '+err);
     } else pushed++;
   }
 
