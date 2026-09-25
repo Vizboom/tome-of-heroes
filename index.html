@@ -14880,6 +14880,18 @@ async function saveMapForm(){
   const dm=_isDmName(name);
   if(document.getElementById('mpHome')?.value==='1' && !dm){ maps.forEach(x=>x.isHome=false); m.isHome=true; delete m.placeId; delete m.parentId; }
   else if(m.isHome){ m.isHome=false; }
+  // Every map but the home overview and DM maps gets a matching place in the
+  // travel log (an existing one of that name, or a new one), so it can be
+  // pinned on its parent map from the log like any other place.
+  let placeNote='';
+  if(!m.placeId && !m.isHome && !dm){
+    if(!camp.places) camp.places=[];
+    const norm=n=>String(n).toLowerCase().replace(/\s+/g,' ').trim();
+    let pl=camp.places.find(q=>norm(q.name)===norm(name));
+    if(!pl){ pl={ id:genItemId(), name, type:_placeTypeFor(name), region:'', desc:'', status:'rumoured', links:[], session:(camp.sessions||[]).length, added:Date.now() };
+      camp.places.push(pl); placeNote=' · “'+name+'” added to the travel log — pin it from there'; }
+    m.placeId=pl.id;
+  }
   const url=(document.getElementById('mpUrl')?.value||'').trim();
   const pend=window._pendingMapImg;
   const wasDm=!!window._editMapId && _isDmMap(m);
@@ -14899,7 +14911,7 @@ async function saveMapForm(){
     if(await _storeMapImage(camp, m, pend.url) && oldK && oldK!==m.imgKey) supa.from('settings').delete().eq('key', oldK).then(()=>{}).catch(()=>{}); }
   window._showMapForm=false; window._editMapId=null; window._pendingMapImg=null; window._presetMapParent=null; window._mapSlot=null;
   _curMapId=m.id;
-  saveCampaign(camp); renderMap(); toast((dm?'🔒 DM-only map saved':'🗺 Map saved')+dmNote,'var(--gold)');
+  saveCampaign(camp); renderMap(); toast((dm?'🔒 DM-only map saved':'🗺 Map saved')+dmNote+placeNote,'var(--gold)');
 }
 function _probeImg(url, m){ const img=new Image(); img.onload=()=>{ const camp=getCampaigns().find(c=>c.id===editingCampId); m.w=img.width; m.h=img.height; if(camp) saveCampaign(camp); if(_currentCampTab==='map') renderMap(); }; img.src=url; }
 function deleteMap(id){
