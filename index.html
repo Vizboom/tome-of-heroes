@@ -13656,7 +13656,7 @@ async function _fetchMapImage(map){
 async function _storeMapImage(camp, map, dataUrl){
   const key='camp_map_'+camp.id+'_'+map.id;
   _mapImgCache[map.id]=dataUrl; map.imgKey=key; delete map.imgUrl;
-  try{ await supa.from('settings').upsert({ key, value:dataUrl, owner_group:getGroupId() }, { onConflict:'key' }); }
+  try{ await supa.from('settings').upsert({ key, value:dataUrl, owner_group:getGroupId(), ...(_authUid?{user_id:_authUid}:{}) }, { onConflict:'key' }); }
   catch(e){ toast('Image kept on this device only — could not upload ('+(e.message||'error')+')','var(--red)'); }
 }
 /* ── Curse of Strahd map pack ──────────────────────────────────────────
