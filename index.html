@@ -13663,14 +13663,24 @@ const _mapImgLoading = new Set();
 // Maps whose image came back empty: access rules hide a row without an error,
 // so without this the map would say "loading map…" forever.
 const _mapImgMissing = new Set();
+// An empty answer can be momentary, so a map is only called missing after a
+// few tries a few seconds apart; one bad answer used to stick until a reload.
+const _mapImgTries = new Map();   // map id → { n: empty answers so far, at: earliest next try }
+const MAP_IMG_TRIES = 3;
 async function _fetchMapImage(map){
   delete map._loading;   // drop any flag saved by older versions
-  if(_mapImgLoading.has(map.id) || _mapImgMissing.has(map.id)) return; _mapImgLoading.add(map.id);
+  if(_mapImgLoading.has(map.id) || _mapImgMissing.has(map.id)) return;
+  const tr=_mapImgTries.get(map.id); if(tr && Date.now()<tr.at) return;
+  _mapImgLoading.add(map.id);
   try{
     const { data, error } = await supa.from('settings').select('value').eq('key', map.imgKey).maybeSingle();
     if(error) throw error;
-    if(data?.value) _mapImgCache[map.id]=data.value;
-    else { _mapImgMissing.add(map.id); console.warn('map image not found or not readable:', map.imgKey); }
+    if(data?.value){ _mapImgCache[map.id]=data.value; _mapImgTries.delete(map.id); }
+    else {
+      const n=((tr&&tr.n)||0)+1, wait=3000*n; _mapImgTries.set(map.id, { n, at:Date.now()+wait });
+      if(n>=MAP_IMG_TRIES){ _mapImgMissing.add(map.id); console.warn('map image not found or not readable:', map.imgKey); }
+      else setTimeout(()=>{ if(_currentCampTab==='map') renderMap(); }, wait+50);
+    }
     if(_currentCampTab==='map') renderMap();
   }catch(e){ console.warn('map image load:', e.message); }
   _mapImgLoading.delete(map.id);
@@ -13705,7 +13715,7 @@ async function _setMapDm(camp, m, on){
 // was never written is what left maps saying "wasn't saved" after a reload.
 async function _storeMapImage(camp, map, dataUrl, quiet){
   const key=_mapImgKey(camp, map), prev={ key:map.imgKey, url:map.imgUrl, cache:_mapImgCache[map.id] };
-  _mapImgCache[map.id]=dataUrl; _mapImgMissing.delete(map.id); map.imgKey=key; delete map.imgUrl;
+  _mapImgCache[map.id]=dataUrl; _mapImgMissing.delete(map.id); _mapImgTries.delete(map.id); map.imgKey=key; delete map.imgUrl;
   try{ const { error }=await supa.from('settings').upsert({ key, value:dataUrl, owner_group:getGroupId(), ...(_authUid?{user_id:_authUid}:{}) }, { onConflict:'key' });
     if(error) throw error; return true; }
   catch(e){
@@ -13724,7 +13734,7 @@ async function _mapImgAbsent(map){
   catch(e){ return false; }
 }
 // Missing-image notice: try the download again, or put the image back.
-function retryMapImage(id){ _mapImgMissing.delete(id); renderMap(); }
+function retryMapImage(id){ _mapImgMissing.delete(id); _mapImgTries.delete(id); renderMap(); }
 function reuploadMapImage(id, file){
   const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp || !file) return;
   const m=_mapById(camp, id); if(!m) return;
@@ -14138,7 +14148,7 @@ function renderMap(){
     if(!src && map.imgKey && _mapImgMissing.has(map.id)){
       const _fix=canDesignMaps(camp);
       html += `<div class="map-ctrls" style="margin:0 0 8px;align-items:center;border:1px solid var(--red);border-radius:10px;padding:8px 10px;font-size:12px">
-        <span style="flex:1;min-width:180px;color:var(--muted)">This map’s image isn’t on the server — it was probably never uploaded (older versions saved the map even when the upload failed)${_fix?'. Choose the image file again to restore it; pins and fog stay.':', or your account can’t open it. Ask your GM to re-upload it.'}</span>
+        <span style="flex:1;min-width:180px;color:var(--muted)">This map’s image couldn’t be loaded. If “Try again” doesn’t bring it back, it was never uploaded (older versions saved a map even when its upload failed)${_fix?' — choose the image file again to restore it; pins and fog stay.':' or your account can’t open it — ask your GM to re-upload it.'}</span>
         <button class="pc-pill" onclick="retryMapImage('${jsq(map.id)}')">↻ Try again</button>
         ${_fix?`<label class="pc-pill" style="color:var(--gold);border-color:var(--gold);cursor:pointer">⬆ Re-upload image<input type="file" accept="image/*" style="display:none" onchange="reuploadMapImage('${jsq(map.id)}', this.files[0]); this.value=''"></label>`:''}
       </div>`;
