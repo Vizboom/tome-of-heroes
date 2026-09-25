@@ -14138,11 +14138,11 @@ function renderMap(){
   }
 
   // ── Add / edit map form ──
-  // On a sub-map you came to nest another map, not to log a place, so the map
-  // form holds the slot the Add Place card holds on a top-level map. The place
-  // form is one pill away.
+  // Every map leads with the Add Place card, nested maps included (most maps
+  // are nested once a map pack is in). On a sub-map the "sub-map" pill swaps
+  // it for the form that nests another map inside this one.
   const _onSub = !!(map && _parentMap(camp, map));
-  const _slot = _onSub ? (window._mapSlot==='place' ? 'place' : 'map') : 'place';
+  const _slot = _onSub ? (window._mapSlot==='map' ? 'map' : 'place') : 'place';
   const _mapFormOpen = !!window._showMapForm || (_onSub && _slot==='map');
   const em = window._editMapId ? maps.find(m=>m.id===window._editMapId) : null;
   // Which map this one hangs under: the saved parent when editing, the map you
@@ -14891,7 +14891,7 @@ async function saveMapForm(){
   if(pend){ m.w=pend.w; m.h=pend.h; toast('Uploading map image…','var(--gold)');
     const oldK=m.imgKey;
     if(await _storeMapImage(camp, m, pend.url) && oldK && oldK!==m.imgKey) supa.from('settings').delete().eq('key', oldK).then(()=>{}).catch(()=>{}); }
-  window._showMapForm=false; window._editMapId=null; window._pendingMapImg=null; window._presetMapParent=null;
+  window._showMapForm=false; window._editMapId=null; window._pendingMapImg=null; window._presetMapParent=null; window._mapSlot=null;
   _curMapId=m.id;
   saveCampaign(camp); renderMap(); toast((dm?'🔒 DM-only map saved':'🗺 Map saved')+dmNote,'var(--gold)');
 }
