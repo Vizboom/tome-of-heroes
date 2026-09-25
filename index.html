@@ -13664,11 +13664,15 @@ async function _fetchMapImage(map){
   }catch(e){ console.warn('map image load:', e.message); }
   map._loading=false;
 }
+// DM-only maps go under camp_map_<campaign>_dm_…, which the Strahd pack's
+// database policy keeps readable by the owner alone. Returns true once stored.
 async function _storeMapImage(camp, map, dataUrl){
-  const key='camp_map_'+camp.id+'_'+map.id;
+  const dm=map.dmOnly && !String(map.id).startsWith('dm_');
+  const key='camp_map_'+camp.id+'_'+(dm?'dm_':'')+map.id;
   _mapImgCache[map.id]=dataUrl; map.imgKey=key; delete map.imgUrl;
-  try{ await supa.from('settings').upsert({ key, value:dataUrl, owner_group:getGroupId(), ...(_authUid?{user_id:_authUid}:{}) }, { onConflict:'key' }); }
-  catch(e){ toast('Image kept on this device only — could not upload ('+(e.message||'error')+')','var(--red)'); }
+  try{ const { error }=await supa.from('settings').upsert({ key, value:dataUrl, owner_group:getGroupId(), ...(_authUid?{user_id:_authUid}:{}) }, { onConflict:'key' });
+    if(error) throw error; return true; }
+  catch(e){ toast('Image kept on this device only — could not upload ('+(e.message||'error')+')','var(--red)'); return false; }
 }
 /* ── Curse of Strahd map pack ──────────────────────────────────────────
    The pack is under a personal licence, so it never ships with the app: its
@@ -13677,6 +13681,9 @@ async function _storeMapImage(camp, map, dataUrl){
    button only appears for that owner in that one campaign; the database side is locked by
    supabase/strahd-map-pack-policy.sql (members read, owner writes). */
 const STRAHD_PACK = { camp:'camp_m49562377d1', owner:'VIZBOOM' };
+// Maps from the first version of the pack upload, named straight from their
+// files ("CurseofStrahd VistaniCamp Player"), waiting to be tidied.
+function _strahdLegacyMaps(camp){ return _campMaps(camp).filter(m=>/^curse\s*of\s*strahd\s+\S/i.test(m.name||'')); }
 function _canUploadStrahdPack(camp){
   return !!camp && String(camp.id)===STRAHD_PACK.camp && String(getGroupId()||'').toUpperCase()===STRAHD_PACK.owner;
 }
@@ -13773,7 +13780,10 @@ function _placeTypeFor(n){
 async function bulkAddStrahdMaps(src, input){
   const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
   if(!_canUploadStrahdPack(camp)){ toast('The map pack is only for its owner’s Curse of Strahd campaign','var(--red)'); return; }
-  const picked=[...(src||[])].map(x=>x instanceof File ? {file:x, dirs:[]} : x); if(!picked.length) return;
+  const picked=[...(src||[])].map(x=>x instanceof File ? {file:x, dirs:[]} : x);
+  // Maps from the first upload are tidied in place alongside (or instead of) new files.
+  const legacy=_strahdLegacyMaps(camp);
+  if(!picked.length && !legacy.length) return;
   if(bulkAddStrahdMaps._busy) return; bulkAddStrahdMaps._busy=true;
   const maps=_campMaps(camp), prog=document.getElementById('mpBulkProgress');
   if(!camp.places) camp.places=[];
@@ -13783,15 +13793,17 @@ async function bulkAddStrahdMaps(src, input){
   const done=()=>{ bulkAddStrahdMaps._busy=false; if(input){ input.disabled=false; input.value=''; } };
   if(input) input.disabled=true;
   let imgs=[];
-  try{ say('Unpacking…'); imgs=await _packImages(picked); }
+  try{ if(picked.length){ say('Unpacking…'); imgs=await _packImages(picked); } }
   catch(e){ done(); say(''); toast('Could not read the zip: '+(e.message||e),'var(--red)'); return; }
+  // Earlier-upload maps come first, so they win over a re-uploaded copy of the same file.
+  const entries=legacy.map(m=>({ map:m, fn:m.name.trim().replace(/\s+/g,'_') })).concat(imgs.map(x=>({ ...x, fn:x.file.name })));
   // Name the pack's files by their structure:
   //   CurseofStrahd_<Location>[_<Part>…]_<Player|DM>
   // e.g. CurseofStrahd_AbbeyOfSaintMarkovia_1_DM → Abbey of Saint Markovia 1 (DM).
   const nat=(a,b)=>String(a).localeCompare(String(b),undefined,{numeric:true});
   const groups={};   // path key → {path, player, dm}
-  imgs.forEach(x=>{
-    const p=_strahdParse(x.file.name), key=p.path.join('/');
+  entries.forEach(x=>{
+    const p=_strahdParse(x.fn), key=p.path.join('/');
     const g=groups[key]||(groups[key]={path:p.path, key, dirs:x.dirs});
     if(!g[p.variant]) g[p.variant]=x;
   });
@@ -13823,22 +13835,48 @@ async function bulkAddStrahdMaps(src, input){
   const byName=n=>maps.find(m=>norm(m.name)===norm(n));
   // Into an empty campaign, the overview (e.g. "Barovia") becomes the home map.
   const homeG=maps.length ? null : (order.find(g=>!g.parent && _placeTypeFor(g.name)==='region') || null);
-  let added=0, placesNew=0, dup=0, bad=0, dmAdded=0, first=null, n=0;
-  const total=imgs.length;
+  let added=0, placesNew=0, dup=0, bad=0, dmAdded=0, tidied=0, moved=0, first=null, n=0;
+  const total=entries.length;
+  const placeFor=name=>{
+    let pl=camp.places.find(q=>norm(q.name)===norm(name));
+    if(!pl){ pl={ id:genItemId(), name, type:_placeTypeFor(name), region:'Barovia', desc:'', status:'rumoured', links:[], seed:'strahd', session:0, added:Date.now() };
+      camp.places.push(pl); placesNew++; }
+    return pl;
+  };
+  // An earlier-upload map is fixed where it is: name, nesting, place and
+  // visibility, keeping its fog and pins. A DM map's image moves to a DM key.
+  const tidyMap=async (m, name, props)=>{
+    say(`Tidying ${++n} of ${total}: ${name}…`);
+    m.name=name; m.vis=props.vis;
+    if(props.parent && props.parent!==m){ m.parentId=props.parent.id; if(_fogOn(props.parent)) m.fogEnabled=true; } else delete m.parentId;
+    if(props.home){ maps.forEach(x=>{ if(x!==m) x.isHome=false; }); m.isHome=true; delete m.parentId; } else if(m.isHome) m.isHome=false;
+    if(props.placeName) m.placeId=placeFor(props.placeName).id; else delete m.placeId;
+    if(props.dm){
+      m.dmOnly=true;
+      const oldKey=m.imgKey;
+      if(oldKey && !/_dm_/.test(oldKey)){
+        let data=_mapImgCache[m.id];
+        if(!data){ try{ const { data:row }=await supa.from('settings').select('value').eq('key', oldKey).maybeSingle(); data=row?.value; }catch(e){} }
+        if(data && await _storeMapImage(camp, m, data)){
+          try{ await supa.from('settings').delete().eq('key', oldKey); }catch(e){}
+          moved++;
+        } else m.imgKey=oldKey;   // leave it where it was rather than lose it
+      }
+    }
+    tidied++;
+    return m;
+  };
   const addMap=async (x, name, props)=>{
+    if(x.map) return tidyMap(x.map, name, props);
     say(`Adding ${++n} of ${total}: ${name}…`);
     const ex=byName(name); if(ex){ dup++; return ex; }
     const img=await _readMapFileP(x.file);
     if(!img){ bad++; return null; }
     const m={ id:(props.dm?'dm_':'')+genItemId(), name, reveal:'medium', pinPx:4, added:Date.now(), vis:props.vis, w:img.w, h:img.h };
+    if(props.dm) m.dmOnly=true;
     if(props.parent){ m.parentId=props.parent.id; if(_fogOn(props.parent)) m.fogEnabled=true; }
     if(props.home){ m.isHome=true; delete m.parentId; }
-    if(props.placeName){
-      let pl=camp.places.find(q=>norm(q.name)===norm(props.placeName));
-      if(!pl){ pl={ id:genItemId(), name:props.placeName, type:_placeTypeFor(props.placeName), region:'Barovia', desc:'', status:'rumoured', links:[], seed:'strahd', session:0, added:Date.now() };
-        camp.places.push(pl); placesNew++; }
-      m.placeId=pl.id;
-    }
+    if(props.placeName) m.placeId=placeFor(props.placeName).id;
     maps.push(m); await _storeMapImage(camp, m, img.url);
     added++; if(props.dm) dmAdded++; if(!first && !props.dm) first=m;
     return m;
@@ -13851,15 +13889,27 @@ async function bulkAddStrahdMaps(src, input){
     g.main=await addMap(mainX, g.name+(mainIsDm?' (DM)':''), { vis:mainIsDm?'hidden':'revealed', dm:mainIsDm, parent, home, placeName: home||mainIsDm ? null : g.placeName });
     if(g.player && g.dm && g.main) await addMap(g.dm, g.name+' (DM)', { vis:'hidden', dm:true, parent:g.main });
   }
+  // The home map is never a DM map: fall back to the overview, else the first
+  // top-level Player map. (The first upload could make a DM map home.)
+  const home=maps.find(x=>x.isHome);
+  if(tidied && (!home || home.dmOnly)){
+    const ok=g=>g.main && !g.main.dmOnly && !g.parent;
+    const cand=order.find(g=>ok(g) && _placeTypeFor(g.name)==='region') || order.find(ok);
+    if(cand){ maps.forEach(x=>x.isHome=false); cand.main.isHome=true; delete cand.main.parentId; delete cand.main.placeId; }
+  }
   // DM maps are only hidden once someone holds the GM screen: the uploader.
   let madeGM=false;
-  if(dmAdded && !hasGM(camp)){ camp.gm=getGroupId(); madeGM=true; }
+  const anyDm=dmAdded || maps.some(x=>x.dmOnly);
+  if(anyDm && !hasGM(camp)){ camp.gm=getGroupId(); madeGM=true; }
   done();
-  if(!added){ say(''); toast(dup?'All '+dup+' maps are already in this campaign':'No images found','var(--muted)'); return; }
-  _curMapId=(first||maps[maps.length-1]).id;
+  if(!added && !tidied){ say(''); toast(dup?'All '+dup+' maps are already in this campaign':'No images found','var(--muted)'); return; }
+  _curMapId=(first||maps.find(x=>x.isHome)||maps[maps.length-1]).id;
   saveCampaign(camp); renderMap();
-  toast(`🗺 Added ${added} map${added>1?'s':''}${dmAdded?` (${dmAdded} of them DM maps)`:''} and ${placesNew} place${placesNew!==1?'s':''}`
-    +(dup?` · ${dup} already here`:'')+(bad?` · ${bad} unreadable`:'')+(madeGM?' · you are now the GM, so DM maps stay hidden':''),'var(--gold)');
+  toast([ added?`🗺 Added ${added} map${added>1?'s':''}${dmAdded?` (${dmAdded} of them DM maps)`:''}`:'',
+          tidied?`🧹 Tidied ${tidied} earlier map${tidied>1?'s':''}${moved?` (${moved} DM image${moved>1?'s':''} locked to you)`:''}`:'',
+          placesNew?`${placesNew} place${placesNew!==1?'s':''} added`:'',
+          dup?`${dup} already here`:'', bad?`${bad} unreadable`:'',
+          madeGM?'you are now the GM, so DM maps stay hidden':'' ].filter(Boolean).join(' · '),'var(--gold)');
 }
 /* Downscale an uploaded image so it syncs comfortably (≈1600px, JPEG). */
 function _readMapFile(file, cb){
@@ -13913,6 +13963,7 @@ function renderMap(){
         title="Each image becomes a map named after its file, with a matching place in the travel log (rumoured until you pin it). Images in a folder named after another map nest under it. Maps already here are skipped.">
       <label class="pc-pill" style="color:var(--gold);border-color:var(--gold);cursor:pointer">📦 Upload maps
         <input type="file" id="mpBulk" accept="image/*,.zip,application/zip" multiple style="display:none" onchange="bulkAddStrahdMaps(this.files, this)"></label>
+      ${_strahdLegacyMaps(camp).length ? `<button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="bulkAddStrahdMaps([],null)" title="Rename, nest and place the maps from the first upload, hide the DM ones and lock their images to you. Keeps your fog and pins.">🧹 Tidy earlier upload (${_strahdLegacyMaps(camp).length})</button>` : ''}
       <span id="mpBulkProgress" style="font-size:11px;color:var(--muted)">…or drop the map files, their folder, or the pack's .zip here</span>
     </div>`;
   }
