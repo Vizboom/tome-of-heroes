@@ -19521,15 +19521,41 @@ const RARITY_GLOW={uncommon:'#1eff00',rare:'#2f8cff','very-rare':'#b35cff',legen
 function _armourKind(it){
   if(!it) return null;
   const n=((it.name||'')+' '+(it.subtype||'')).toLowerCase();
+  // Magic armour often names its base only in the description ("Plate armor. …").
+  return _armourKindOf(n)||_armourKindOf(String(it.desc||'').toLowerCase().split(/[.;(]/)[0])||(it.type==='armor'?'medium':'cloth');
+}
+function _armourKindOf(n){
   if(/robe/.test(n)) return 'robe';
   if(/half.?plate|breastplate|scale|chain shirt|cuirass/.test(n)) return 'medium';
   if(/plate|splint|chain ?mail|ring mail|banded/.test(n)) return 'heavy';
   if(/mithral|adamantine|\bmail\b/.test(n)) return 'medium';
   if(/\bhide\b|fur|pelt/.test(n)) return 'hide';
-  if(/leather|studded|padded|brigandine/.test(n)) return 'light';
+  if(/padded|quilted|gambeson/.test(n)) return 'padded';
+  if(/leather|studded|brigandine/.test(n)) return 'light';
   if(/fine clothes|noble|royal|courtier|finery|doublet/.test(n)) return 'fine';
   if(/clothes|vestment|tunic|coat|garb|attire/.test(n)) return 'cloth';
-  return it.type==='armor'?'light':'cloth';
+  return null;
+}
+// Outfit parts by slot. Everyone starts in plain peasant clothes, and each
+// equipped item swaps only its own part(s).
+const CHEST_PARTS={
+  heavy:['Knight_Body_Armor','Knight_Legs','Knight_Acc_Pauldrons_Round'],   // a full suit covers the legs too
+  medium:['Knight_Body_Armor','Noble_Acc_Pauldrons'],
+  padded:['Knight_Body_Cloth'],
+  light:['Ranger_Body'],
+  hide:['Ranger_Body','Ranger_Acc_Pauldrons'],
+  robe:['Wizard_Body','Wizard_Legs'],
+  fine:['Noble_Body','Noble_Legs'],
+};
+function _glovesPart(n){
+  if(/gauntlet|vambrace|plate|iron|steel/.test(n)) return 'Knight_Arms';
+  if(/silk|lace|velvet|noble|fine/.test(n)) return 'Noble_Arms';
+  return 'Ranger_Arms';
+}
+function _bootsPart(n){
+  if(/greave|sabaton|plate|plated|iron|steel/.test(n)) return 'Knight_Feet';
+  if(/slipper|sandal|\bshoes?\b/.test(n)) return 'Wizard_Feet';
+  return 'Ranger_Feet';
 }
 // Item name, plus the base weapon a magic item's description opens with
 // ("Longsword, paladin only…"), which decides when the name alone doesn't say.
@@ -19610,25 +19636,17 @@ function dollSpec(char){
   const eq=(typeof getEquippedItems==='function')?getEquippedItems(char):{};
   const nm=it=>((it&&it.name)||'').toLowerCase();
   const allNames=Object.keys(eq).map(k=>nm(eq[k])).join(' | ');
-  const chest=_armourKind(eq.chest);
-  const metal=chest==='heavy'||chest==='medium';
-  // Body armour picks the outfit; with none, plain peasant clothes.
-  const fam=metal?'Knight': (chest==='light'||chest==='hide')?'Ranger': chest==='robe'?'Wizard': chest==='fine'?'Noble': 'Peasant';
-  const pre=body+'_', parts=[];
-  parts.push(pre+(fam==='Knight'?'Knight_Body_Armor':fam+'_Body'));
-  parts.push(pre+fam+'_Legs');
-  const gl=nm(eq.gloves);
-  parts.push(pre+(/gauntlet|vambrace/.test(gl)||chest==='heavy'?'Knight':eq.gloves&&fam!=='Knight'&&fam!=='Noble'?'Ranger':fam)+'_Arms');
-  const bt=nm(eq.boots);
-  parts.push(pre+(/greave|sabaton|plated|iron/.test(bt)||chest==='heavy'?'Knight':eq.boots&&(fam==='Peasant'||fam==='Wizard')?'Ranger':fam)+'_Feet');
-  if(chest==='heavy') parts.push(pre+'Knight_Acc_Pauldrons_Round');
-  else if(chest==='medium') parts.push(pre+'Noble_Acc_Pauldrons');
-  else if(chest==='hide') parts.push(pre+'Ranger_Acc_Pauldrons');
+  // Base outfit, then each slot swaps its own part.
+  const P={Body:'Peasant_Body', Legs:'Peasant_Legs', Arms:'Peasant_Arms', Feet:'Peasant_Feet'}, acc=[];
+  (CHEST_PARTS[_armourKind(eq.chest)]||[]).forEach(p=>{ const k=/_(Body|Legs)/.exec(p); if(k) P[k[1]]=p; else acc.push(p); });
+  if(eq.gloves) P.Arms=_glovesPart(nm(eq.gloves));
+  if(eq.boots) P.Feet=_bootsPart(nm(eq.boots));
+  const pre=body+'_', parts=[P.Body,P.Legs,P.Arms,P.Feet,...acc].map(p=>pre+p);
   if(/gorget/.test(allNames)) parts.push(pre+'Noble_Acc_Gorget');
   if(/scarf|shawl/.test(allNames)) parts.push(pre+'Knight_Acc_Scarf');
   const hn=nm(eq.head);
   let head=null;
-  if(/hood|cowl/.test(hn)) head='Ranger_Head_Hood';
+  if(/\bhood\b|cowl/.test(hn)) head='Ranger_Head_Hood';
   else if(/horn/.test(hn)) head='Knight_Head_Horns';
   else if(/helm|armet|bascinet|visor|coif/.test(hn)) head='Knight_Head_Armet';
   else if(/crown|circlet|tiara|diadem/.test(hn)) head='Noble_Head_Crown';
