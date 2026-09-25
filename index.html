@@ -13660,11 +13660,15 @@ async function _storeMapImage(camp, map, dataUrl){
   catch(e){ toast('Image kept on this device only — could not upload ('+(e.message||'error')+')','var(--red)'); }
 }
 /* ── Curse of Strahd map pack ──────────────────────────────────────────
-   The pack is under a personal licence, so it never ships with the app: the
-   GM uploads the images into their own Curse of Strahd campaign, where they
-   are stored like any uploaded map (per campaign, shared with its members).
-   The multi-upload only appears in a campaign whose name mentions Strahd. */
-function _isStrahdCamp(camp){ return !!camp && /strahd/i.test(camp.name||''); }
+   The pack is under a personal licence, so it never ships with the app: its
+   owner uploads the images into their own Curse of Strahd campaign, where
+   they are stored like any uploaded map. The multi-upload only appears for
+   that owner in that one campaign; the database side is locked by
+   supabase/strahd-map-pack-policy.sql (members read, owner writes). */
+const STRAHD_PACK = { camp:'camp_m49562377d1', owner:'VIZBOOM' };
+function _canUploadStrahdPack(camp){
+  return !!camp && String(camp.id)===STRAHD_PACK.camp && String(getGroupId()||'').toUpperCase()===STRAHD_PACK.owner;
+}
 // "03_Village-of_Barovia.jpg" → "Village of Barovia"
 function _mapNameFromFile(fn){
   const n=String(fn||'').replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' ').replace(/^\s*\d+\s*[.)]?\s+/,'').replace(/\s+/g,' ').trim();
@@ -13679,7 +13683,7 @@ function _readMapFileP(file){
 }
 async function bulkAddStrahdMaps(input){
   const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
-  if(!_isStrahdCamp(camp) || !canDesignMaps(camp)){ toast('The map pack upload is for the Curse of Strahd campaign’s GM','var(--red)'); return; }
+  if(!_canUploadStrahdPack(camp)){ toast('The map pack is only for its owner’s Curse of Strahd campaign','var(--red)'); return; }
   const files=[...(input.files||[])].sort((a,b)=>a.name.localeCompare(b.name, undefined, {numeric:true}));
   if(!files.length) return;
   const maps=_campMaps(camp), prog=document.getElementById('mpBulkProgress');
@@ -13941,10 +13945,10 @@ function renderMap(){
     <div class="field"><label>Nested under</label><select id="mpParent"><option value="">— top level —</option>${_parOpts.map(n=>`<option value="${n.map.id}" ${_parId===n.map.id?'selected':''}>${'　'.repeat(Math.min(n.depth,4))}${n.depth?'↳ ':''}${esc(n.map.name)}</option>`).join('')}</select>
       <div style="font-size:10px;color:var(--muted2);margin-top:4px">Sub-maps stack as deep as you need — Home ▸ Map of Barovia Village ▸ Graveyard. The pin for “detailed map of” gets a ▸ badge on the parent map that jumps straight here.</div>
     </div>
-    ${(!em && _isStrahdCamp(camp) && gm) ? `<div class="field" style="border:1px dashed var(--border2);border-radius:10px;padding:10px 12px">
+    ${(!em && _canUploadStrahdPack(camp)) ? `<div class="field" style="border:1px dashed var(--border2);border-radius:10px;padding:10px 12px">
       <label>📚 Curse of Strahd map pack — add several at once</label>
       <input type="file" id="mpBulk" accept="image/*" multiple style="font-size:12px;color:var(--muted)" onchange="bulkAddStrahdMaps(this)">
-      <div style="font-size:10px;color:var(--muted2);margin-top:4px">Each image becomes its own map, named after its file, using the nesting, fog and visibility chosen in this form. They're stored with this campaign's data, not in the app itself, so licensed maps aren't published with it.</div>
+      <div style="font-size:10px;color:var(--muted2);margin-top:4px">Each image becomes its own map, named after its file, using the nesting, fog and visibility chosen in this form. They're stored with this campaign only, not in the app itself; only its members can open them, and only you can add or change them.</div>
       <div id="mpBulkProgress" style="font-size:11px;color:var(--gold);margin-top:6px"></div>
     </div>` : ''}
     <div class="field"><label>Image</label>
