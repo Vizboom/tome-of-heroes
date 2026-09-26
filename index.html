@@ -2011,6 +2011,18 @@ function _normalizeOwnCharTags(c){
   return changed;
 }
 
+// Last version of each character loaded from, or written to, Supabase. saveChars
+// uses it to write only the characters that actually changed, rather than
+// upserting every visible character on each edit (slow, and it could overwrite
+// another player's newer edit with the stale copy held here).
+const _charSynced = new Map();
+function _charSig(c){
+  try{ return JSON.stringify(c, (k,v)=> (k==='_rowId'||k==='_campaignId'||k==='_sharedCampId') ? undefined : v); }
+  catch(e){ return null; }
+}
+function _markCharSynced(c, sig){ if(c && c.id!=null) _charSynced.set(String(c.id), sig===undefined ? _charSig(c) : sig); }
+function _charChanged(c){ const was = _charSynced.get(String(c.id)); return was==null || was!==_charSig(c); }
+
 async function dbGetChars(){
   if(!_authUid) return _db.chars;
   // RLS scopes this to characters in campaigns the user is a member of.
@@ -2023,6 +2035,7 @@ async function dbGetChars(){
     return c;
   }), 'character');
   _db.chars.forEach(c=>_normalizeOwnCharTags(c));
+  _db.chars.forEach(c=>_markCharSynced(c));   // before repairs, so repaired ones still save
   _db.chars.forEach(c=>_repairCharEquip(c));
   return _db.chars;
 }
@@ -2043,8 +2056,10 @@ async function dbSaveChar(char){
   const cleanChar = { ...char }; delete cleanChar._rowId; delete cleanChar._campaignId;
   const row = { id: rowId, group_id: gid, campaign_id: campaignId,
                 share_code: char.shareCode || null, data: cleanChar };
+  const sig = _charSig(char);
   const { error } = await supa.from('characters').upsert(row, {onConflict:'id'});
   if(error) console.warn('saveChar error:', error.message);
+  else _markCharSynced(char, sig);
   const i = _db.chars.findIndex(c=>String(c.id)===String(char.id));
   if(i>=0) _db.chars[i]=char; else _db.chars.push(char);
 }
@@ -2305,6 +2320,7 @@ async function pullAll(campId){
       (cr.data||[]).map(r=>{ const c=r.data||r; c._rowId=r.id; c._campaignId=r.campaign_id; return c; })
         .filter(c=>c && c.id), 'character');
     _db.chars.forEach(c=>_normalizeOwnCharTags(c));
+    _db.chars.forEach(c=>_markCharSynced(c));
     // Auto-repair any character whose equipped gear was left in a bad state by
     // an older version, then persist just the ones that changed.
     _db.chars.forEach(c=>{ if(_repairCharEquip(c)){ try{ dbSaveChar(c); }catch(e){} } });
@@ -2372,6 +2388,7 @@ function subscribeRealtime(campId){
         updated._campaignId = payload.new.campaign_id;
         const i = _db.chars.findIndex(c=>String(c.id)===String(updated.id) || c._rowId===payload.new.id);
         if(i>=0) _db.chars[i]=updated; else _db.chars.push(updated);
+        _markCharSynced(updated);
       }
       if(document.getElementById('rosterList')?.closest('.screen.active')) renderRoster();
       if(document.getElementById('ptab-overview')?.classList.contains('active')) renderPartyOverview();
@@ -2434,6 +2451,7 @@ function subscribeRealtime(campId){
             updated._sharedCampId = campId;
             const i = _db.chars.findIndex(c=>String(c.id)===String(updated.id));
             if(i>=0) _db.chars[i]=updated; else _db.chars.push(updated);
+            _markCharSynced(updated);
           }
           if(document.getElementById('rosterList')?.closest('.screen.active')) renderRoster();
           if(document.getElementById('ptab-overview')?.classList.contains('active')) renderPartyOverview();
@@ -2477,15 +2495,15 @@ function enrichCharSpells(char){
 
 const CLASSES=[
   {name:'Barbarian',icon:'🪓',hit:12,primary:['STR','CON'],theme:'barbarian',color:'#c0392b',saves:['STR','CON'],spellcaster:false,
-   resources:[{key:'rage',name:'Rages',icon:'🔥',maxFn:'(l)=>l<3?2:l<6?3:l<12?4:l<17?5:l<20?6:999',reset:'long'},{key:'second_wind',name:'2nd Wind',icon:'💨',maxFn:'(l)=>1',reset:'short'}],
+   resources:[{key:'rage',name:'Rages',icon:'🔥',maxFn:'(l)=>l<3?2:l<6?3:l<12?4:l<17?5:l<20?6:999',reset:'long'}],
    subclasses:['Path of the Berserker (PHB)','Path of the Totem Warrior (PHB)','Path of the Ancestral Guardian (XGE)','Path of the Battlerager (SCAG)','Path of the Beast (TCE)','Path of the Storm Herald (XGE)','Path of the Zealot (XGE)','Path of Wild Magic (TCE)','Path of the Giant (BGotG)'],
-   features:[{n:'Rage',d:'Bonus damage on STR attacks, resistance to physical damage. Uses = CON mod. Lasts 1 minute.'},{n:'Unarmored Defense',d:'When not wearing armour, AC = 10 + DEX mod + CON mod.'},{n:'Reckless Attack',d:'When attacking, can choose to attack recklessly. Gain advantage on STR attacks this turn, but attacks against you also have advantage.'},{n:'Primal Path',d:'Choose a subclass at level 3.'}]},
+   features:[{n:'Rage',d:'Bonus action: advantage on STR checks and saves, bonus damage on STR melee attacks, resistance to bludgeoning, piercing and slashing. Lasts 1 minute; uses per long rest grow with level.'},{n:'Unarmored Defense',d:'When not wearing armour, AC = 10 + DEX mod + CON mod.'},{n:'Reckless Attack',d:'When attacking, can choose to attack recklessly. Gain advantage on STR attacks this turn, but attacks against you also have advantage.'},{n:'Primal Path',d:'Choose a subclass at level 3.'}]},
   {name:'Bard',icon:'🎭',hit:8,primary:['CHA','DEX'],theme:'bard',color:'#8e44ad',saves:['DEX','CHA'],spellcaster:true,
-   resources:[{key:'bardic_insp',name:'Bardic Insp.',icon:'🎶',maxFn:'(l,c)=>Math.max(1,Math.floor((c.abilities&&c.abilities.CHA?c.abilities.CHA:10)-10)/2)',reset:'long'}],
+   resources:[{key:'bardic_insp',name:'Bardic Insp.',icon:'🎶',maxFn:'(l,c)=>Math.max(1,Math.floor(((c.abilities&&c.abilities.CHA?c.abilities.CHA:10)-10)/2))',reset:'long'}],
    subclasses:['College of Lore (PHB)','College of Valor (PHB)','College of Creation (TCE)','College of Eloquence (TCE)','College of Glamour (XGE)','College of Swords (XGE)','College of Whispers (XGE)','College of Spirits (VRGR)'],
    features:[{n:'Bardic Inspiration',d:'Grant a d6 inspiration die to a creature within 60 ft as a bonus action. Uses = CHA mod per long rest.'},{n:'Jack of All Trades',d:'Add half proficiency bonus (rounded down) to any ability check you are not already proficient in.'},{n:'Song of Rest',d:'During a short rest, allies who hear your performance regain extra hit points.'},{n:'Bard College',d:'Choose a subclass at level 3.'}]},
   {name:'Cleric',icon:'✝',hit:8,primary:['WIS','CON'],theme:'cleric',color:'#d4ac0d',saves:['WIS','CHA'],spellcaster:true,
-   resources:[{key:'channel_div',name:'Channel Div.',icon:'✝',maxFn:'(l)=>l<6?1:l<18?2:3',reset:'short'}],
+   resources:[{key:'channel_div',name:'Channel Div.',icon:'✝',maxFn:'(l)=>l<2?0:l<6?1:l<18?2:3',reset:'short'}],
    subclasses:['Arcana Domain (SCAG)','Death Domain (DMG)','Forge Domain (XGE)','Grave Domain (XGE)','Knowledge Domain (PHB)','Life Domain (PHB)','Light Domain (PHB)','Nature Domain (PHB)','Order Domain (TCE/GGtR)','Peace Domain (TCE)','Tempest Domain (PHB)','Trickery Domain (PHB)','Twilight Domain (TCE)','War Domain (PHB)'],
    features:[{n:'Divine Domain',d:'Choose a domain at level 1 — grants domain spells and features.'},{n:'Channel Divinity',d:'Use divine energy to fuel magical effects. Recharges on short or long rest.'},{n:'Spellcasting',d:'WIS-based. Prepare WIS mod + cleric level spells from the full cleric list.'}]},
   {name:'Druid',icon:'🌿',hit:8,primary:['WIS','CON'],theme:'druid',color:'#27ae60',saves:['INT','WIS'],spellcaster:true,
@@ -2501,7 +2519,7 @@ const CLASSES=[
    subclasses:['Way of the Astral Self (TCE)','Way of the Drunken Master (XGE)','Way of the Four Elements (PHB)','Way of the Kensei (XGE)','Way of the Long Death (SCAG)','Way of the Mercy (TCE)','Way of the Open Hand (PHB)','Way of Shadow (PHB)','Way of the Sun Soul (XGE/SCAG)','Way of the Cobalt Soul (EGtW)'],
    features:[{n:'Unarmored Defense',d:'AC = 10 + DEX mod + WIS mod when not wearing armour.'},{n:'Martial Arts',d:'Use DEX for unarmed strikes. Unarmed strike damage scales with Martial Arts die.'},{n:'Ki',d:'Spend ki points to fuel special features. Ki points = monk level. Recharges on short rest.'},{n:'Monastic Tradition',d:'Choose a subclass at level 3.'}]},
   {name:'Paladin',icon:'🛡',hit:10,primary:['STR','CHA'],theme:'paladin',color:'#f1c40f',saves:['WIS','CHA'],spellcaster:true,
-   resources:[{key:'divine_sense',name:'Divine Sense',icon:'👁',maxFn:'(l,c)=>1+Math.max(0,Math.floor((c.abilities&&c.abilities.CHA?c.abilities.CHA:10)-10)/2)',reset:'long'},{key:'lay_on_hands',name:'Lay on Hands',icon:'🙌',maxFn:'(l)=>l*5',reset:'long',isPool:true,unit:'HP'}],
+   resources:[{key:'divine_sense',name:'Divine Sense',icon:'👁',maxFn:'(l,c)=>1+Math.max(0,Math.floor(((c.abilities&&c.abilities.CHA?c.abilities.CHA:10)-10)/2))',reset:'long'},{key:'lay_on_hands',name:'Lay on Hands',icon:'🙌',maxFn:'(l)=>l*5',reset:'long',isPool:true,unit:'HP'}],
    subclasses:['Oath of the Ancients (PHB)','Oath of Conquest (XGE)','Oath of the Crown (SCAG)','Oath of Devotion (PHB)','Oath of Glory (TCE/MOoT)','Oath of the Open Sea (EGtW)','Oath of Redemption (XGE)','Oath of Vengeance (PHB)','Oath of the Watchers (TCE)','Oathbreaker (DMG)'],
    features:[{n:'Divine Sense',d:'Detect celestials, fiends, and undead within 60 ft. Uses = 1 + CHA mod per long rest.'},{n:'Lay on Hands',d:'Pool of HP equal to 5 × paladin level. Use to heal or cure disease/poison.'},{n:'Divine Smite',d:'Expend a spell slot after a melee hit to deal extra radiant damage.'},{n:'Sacred Oath',d:'Choose a subclass at level 3.'}]},
   {name:'Ranger',icon:'🏹',hit:10,primary:['DEX','WIS'],theme:'ranger',color:'#2ecc71',saves:['STR','DEX'],spellcaster:true,
@@ -2576,9 +2594,10 @@ function getCharLootWeapons(char){
       const magicMatch = i.name.match(/[+\-](\d)/);
       const magicBonus = magicMatch ? parseInt(magicMatch[0]) : 0;
       // Finesse/ranged → use dex, else str
-      const isFinesse = /rapier|shortsword|dagger|hand crossbow|whip/i.test(i.name);
-      const isRanged  = /bow|crossbow|dart|sling|javelin|thrown/i.test(i.name);
-      const abilityMod = (isFinesse || isRanged) ? Math.max(strMod, dexMod) : strMod;
+      const isFinesse = /rapier|shortsword|scimitar|dagger|whip|dart/i.test(i.name);
+      const isRanged  = /bow|sling|blowgun|dart|javelin|thrown/i.test(i.name);
+      const isShot    = /bow|sling|blowgun/i.test(i.name); // crossbows included: "bow"
+      const abilityMod = isShot ? dexMod : isFinesse ? Math.max(strMod, dexMod) : strMod;
       const totalBonus = abilityMod + pb + magicBonus;
       const bonusStr = (totalBonus >= 0 ? '+' : '') + totalBonus;
       // Guess damage from common weapons
@@ -2589,6 +2608,10 @@ function getCharLootWeapons(char){
         'warhammer':'1d8','flail':'1d8','whip':'1d4',
         'shortbow':'1d6','longbow':'1d8','hand crossbow':'1d6',
         'light crossbow':'1d8','heavy crossbow':'1d10',
+        'scimitar':'1d6','trident':'1d6','javelin':'1d6','morningstar':'1d8',
+        'war pick':'1d8','glaive':'1d10','halberd':'1d10','pike':'1d10','lance':'1d12',
+        'greatclub':'1d8','light hammer':'1d4','club':'1d4','sickle':'1d4',
+        'dart':'1d4','sling':'1d4','blowgun':'1',
       };
       let baseDmg = '1d6';
       for(const [key, die] of Object.entries(dmgTable)){
@@ -2609,8 +2632,22 @@ function getCharLootWeapons(char){
 }
 
 // Get AC bonus from assigned armor/shield loot items
+// AC with no armor or magic items: the manually set char.ac (or 10+DEX), raised
+// to Unarmored Defense when the character has it — Barbarian 10+DEX+CON, Monk
+// 10+DEX+WIS (Monk only without a shield). Computed live so an ability
+// increase at level-up shows up without editing AC by hand.
+function getBaseAC(char, opts){
+  const ab = (char && char.abilities) || {};
+  const m = k => Math.floor(((ab[k]||10)-10)/2);
+  let base = char.ac || (10 + m('DEX'));
+  const names = _gwCharClasses(char).map(r=>(CLASSES[r.classIdx]||{}).name);
+  if(names.includes('Barbarian')) base = Math.max(base, 10 + m('DEX') + m('CON'));
+  if(names.includes('Monk') && !(opts && opts.shield)) base = Math.max(base, 10 + m('DEX') + m('WIS'));
+  return base;
+}
+
 // Returns the character's effective AC, accounting for equipped armor/shield from the Character screen.
-// Falls back to char.ac (manually set) or 10+DEX if nothing is equipped.
+// Falls back to getBaseAC (manual AC or Unarmored Defense) if no armor is equipped.
 function getCharAC(char){
   const dex = parseInt(getMod(char.abilities&&char.abilities.DEX?char.abilities.DEX:10))||0;
   const slots = Object.values(getEquippedItems(char)).filter(it => it && !it._2hBlocked);
@@ -2625,14 +2662,16 @@ function getCharAC(char){
       var magic = magicM ? parseInt(magicM[1]) : 0;
       var n = item.name.toLowerCase();
       if(/shield/i.test(item.name)){ shieldBonus = 2 + magic; return; }
+      // Medium armor that contains "plate" is matched first so Breastplate and
+      // Half Plate aren't read as full Plate (AC 18).
+      if(n.indexOf('half plate')>=0||n.indexOf('half-plate')>=0){ armorAC=15+Math.min(dex,2)+magic; hasArmor=true; }
+      else if(n.indexOf('breastplate')>=0||n.indexOf('breast plate')>=0){ armorAC=14+Math.min(dex,2)+magic; hasArmor=true; }
       // Heavy armor — no DEX
-      if(n.indexOf('plate mail')>=0||(n.indexOf('plate')>=0&&n.indexOf('half')<0)){ armorAC=18+magic; hasArmor=true; }
+      else if(n.indexOf('plate')>=0){ armorAC=18+magic; hasArmor=true; }
       else if(n.indexOf('splint')>=0){ armorAC=17+magic; hasArmor=true; }
       else if(n.indexOf('ring mail')>=0){ armorAC=14+magic; hasArmor=true; }
       else if(n.indexOf('chain mail')>=0||n.indexOf('chainmail')>=0){ armorAC=16+magic; hasArmor=true; }
       // Medium armor — DEX max 2
-      else if(n.indexOf('half plate')>=0||n.indexOf('half-plate')>=0){ armorAC=15+Math.min(dex,2)+magic; hasArmor=true; }
-      else if(n.indexOf('breastplate')>=0){ armorAC=14+Math.min(dex,2)+magic; hasArmor=true; }
       else if(n.indexOf('scale mail')>=0){ armorAC=14+Math.min(dex,2)+magic; hasArmor=true; }
       else if(n.indexOf('hide')>=0){ armorAC=12+Math.min(dex,2)+magic; hasArmor=true; }
       else if(n.indexOf('chain shirt')>=0){ armorAC=13+Math.min(dex,2)+magic; hasArmor=true; }
@@ -2666,7 +2705,7 @@ function getCharAC(char){
     if(nm.indexOf('spellguard shield')>=0)                     { bonusAC += 2; return; } // handled as armor elsewhere but safety net
   });
 
-  var baseAC = char.ac || (10 + dex);
+  var baseAC = getBaseAC(char, {shield: shieldBonus>0});
   var finalBase = hasArmor ? armorAC : baseAC;
   return finalBase + shieldBonus + bonusAC;
 }
@@ -3232,8 +3271,8 @@ function saveChars(chars){
   // Update in-memory cache immediately
   _db.chars = chars;
 
-  // Persist saves for remaining chars
-  chars.forEach(char => dbSaveChar(char));
+  // Persist only the characters that changed since they were loaded or saved
+  chars.forEach(char => { if(_charChanged(char)) dbSaveChar(char); });
 
   // Delete removed chars from Supabase
   removed.forEach(c => dbDeleteChar(c.id));
@@ -4108,7 +4147,7 @@ function renderCombatTab(char,cls,elId,editable){
   const hpC=pct>60?'var(--green)':pct>25?'var(--gold)':'var(--red)';
   const lootAcBonus = 0; // legacy — AC now handled by getCharAC
   const displayAC = getCharAC(char);
-  const baseAC = char.ac || (10+dex);
+  const baseAC = getBaseAC(char);
   const hasAcBoost = displayAC !== baseAC;
   let html=`
     <div class="combat-stats" style="--cc:${cls.color};--cc-dim:${cls.color}22">
@@ -5771,8 +5810,8 @@ const FEATS_5E = FEATS_DB.map(f=>f.name);
 
 // ASI levels per class — when the class gets +2 points to distribute
 const ASI_LEVELS = {
-  Fighter:[4,6,8,10,12,14,16,19],
-  Rogue:[4,8,10,12,16,18],
+  Fighter:[4,6,8,12,14,16,19],
+  Rogue:[4,8,10,12,16,19],
   default:[4,8,12,16,19]
 };
 
@@ -5893,6 +5932,180 @@ function computePendingChoices(char, cls){
 
   result.choices.sort((a,b)=>a.level-b.level);
   return result;
+}
+
+// ── Legacy choice repair ────────────────────────────────────────────────────
+// Totem Warrior barbarians used to be asked for their animal twice: once by the
+// subclass ("Totem Spirit", "Aspect of the Beast", "Totemic Attunement" in
+// subclassChoices) and again by a second class table ("Totem Animal (Spirit
+// Seeker)" at 3, "Aspect of the Beast Totem" at 6, "Spirit Walker Totem" at 10,
+// saved in featureChoiceLog plus an equipment line). The two could disagree —
+// e.g. Bear in one and Tiger in the other — and the second table's option text
+// was wrong, so an old pick there isn't trusted on its own.
+//   • repairCharChoices() silently removes old picks that are redundant: the
+//     same animal as the subclass choice, or a tier the barbarian hasn't reached.
+//   • Anything else (the subclass choice is empty or different) is left for the
+//     player: the Sheet check offers "keep" / "use" buttons (resolveLegacyTotem).
+const _LEGACY_TOTEM = {
+  'Totem Animal (Spirit Seeker)': {to:'Totem Spirit', minLevel:3},
+  'Aspect of the Beast Totem':    {to:'Aspect of the Beast', minLevel:6},
+  'Spirit Walker Totem':          {to:'Totemic Attunement', minLevel:14}, // its options were the 14th-level ones
+};
+const _cap = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : s;
+function _barbLevel(char){
+  const r = _gwCharClasses(char).find(x=>(CLASSES[x.classIdx]||{}).name==='Barbarian');
+  return r ? r.level : 0;
+}
+// Old totem picks still on the sheet: [{label, to, minLevel, animal, current}]
+function legacyTotemPicks(char){
+  const out = [], seen = new Set();
+  const add = (label, pick)=>{
+    const map = _LEGACY_TOTEM[label]; if(!map) return;
+    const animal = String(pick||'').split(/\s*[—(]/)[0].trim().toLowerCase();
+    if(!animal || seen.has(label+'|'+animal)) return;
+    seen.add(label+'|'+animal);
+    out.push({label, to:map.to, minLevel:map.minLevel, animal, current:(char.subclassChoices||{})[map.to]||''});
+  };
+  (char.featureChoiceLog||[]).forEach(e=>{ if(_LEGACY_TOTEM[e.choice]) (e.picks||[]).forEach(p=>add(e.choice, p)); });
+  (char.equipment||[]).forEach(x=>{ const t=String(x), i=t.indexOf(': '); if(i>0 && _LEGACY_TOTEM[t.slice(0,i)]) add(t.slice(0,i), t.slice(i+2)); });
+  return out;
+}
+// Remove every trace of one old prompt (log entry, equipment line, level log).
+function _dropLegacyTotem(char, label){
+  char.featureChoiceLog = (char.featureChoiceLog||[]).filter(e=>e.choice!==label);
+  char.equipment = (char.equipment||[]).filter(x=>!String(x).startsWith(label+': '));
+  (char.levelLog||[]).forEach(en=>{ if(Array.isArray(en.choices)) en.choices = en.choices.filter(c=>c.choice!==label); });
+}
+function repairCharChoices(char){
+  const changes = [];
+  const bl = _barbLevel(char);
+  const byLabel = {};
+  legacyTotemPicks(char).forEach(p=>(byLabel[p.label]=byLabel[p.label]||[]).push(p));
+  Object.entries(byLabel).forEach(([label, picks])=>{
+    const tooEarly = bl < picks[0].minLevel;
+    const redundant = picks.every(p=>p.current && p.current===p.animal);
+    if(tooEarly || redundant){
+      _dropLegacyTotem(char, label);
+      changes.push(tooEarly ? `removed an early "${label}" pick (${picks[0].to} comes at level ${picks[0].minLevel})`
+                            : `removed a duplicate "${label}" entry (same as ${picks[0].to}: ${_cap(picks[0].current)})`);
+    }
+  });
+  return changes;
+}
+// Player's decision on one old pick: 'keep' the subclass choice as it is, or
+// 'use' the old pick's animal for it. Either way the old entry is removed.
+function resolveLegacyTotem(charId, label, how){
+  const char = _gwResolveChar(charId); if(!char) return;
+  const p = legacyTotemPicks(char).find(x=>x.label===label); if(!p) return;
+  if(how==='use'){ char.subclassChoices = char.subclassChoices||{}; char.subclassChoices[p.to] = p.animal; }
+  _dropLegacyTotem(char, label);
+  saveChar(char);
+  toast(how==='use' ? `${p.to}: ${_cap(p.animal)}` : (p.current ? `${p.to}: kept ${_cap(p.current)}` : `Removed the old ${label} pick — choose ${p.to} under Subclass Choices`),'var(--gold)');
+  _gwRefreshAfterLevel(char);
+}
+// Run the silent repair for a character and persist it if anything changed.
+function repairAndSaveChar(char){
+  if(!char) return false;
+  const ch = repairCharChoices(char);
+  if(!ch.length) return false;
+  saveChar(char);
+  return true;
+}
+
+// ── Sheet check ─────────────────────────────────────────────────────────────
+// Rules checks on a character's derived numbers and recorded choices. Each item:
+// {level:'warn'|'fix', msg, fix?: {label, id}} — 'fix' items have a one-tap fix
+// (see applySheetFix). Used on the Progress tab and in the Level Up review.
+const _INVOCATIONS_KNOWN = [[18,8],[15,7],[12,6],[9,5],[7,4],[5,3],[2,2]];
+const _METAMAGIC_KNOWN   = [[17,4],[10,3],[3,2]];
+const _MANEUVERS_KNOWN   = [[15,9],[10,7],[7,5],[3,3]];
+const _atLevel = (tbl, lv) => { const r = tbl.find(([l])=>lv>=l); return r ? r[1] : 0; };
+function _expectedSpeed(char){
+  const rl = raceLookup(char.race);
+  const rn = String(char.race||'').toLowerCase();
+  const byName = rl ? null : RACE_DB.slice().sort((a,b)=>b.n.length-a.n.length).find(r=>rn.startsWith(r.n.toLowerCase()));
+  if(!rl && !byName) return null;
+  let sp = rl ? (rl.sub.speed || rl.race.speed || 30) : (byName.speed || 30);
+  _gwCharClasses(char).forEach(r=>{
+    const n = (CLASSES[r.classIdx]||{}).name;
+    if(n==='Barbarian' && r.level>=5) sp += 10;
+    if(n==='Monk' && r.level>=2) sp += r.level>=18?30:r.level>=14?25:r.level>=10?20:r.level>=6?15:10;
+  });
+  return sp;
+}
+function auditChar(char){
+  const out = [];
+  const classes = _gwCharClasses(char);
+  const lvOf = name => { const r = classes.find(x=>(CLASSES[x.classIdx]||{}).name===name); return r ? r.level : 0; };
+  // Class levels add up to the character level
+  if(classes.length>1){
+    const sum = classes.reduce((a,r)=>a+(r.level||0),0);
+    if(sum!==char.level) out.push({level:'fix', msg:`Class levels add up to ${sum}, but the character is level ${char.level}.`, fix:{label:`Set level to ${sum}`, id:'level'}});
+  }
+  // Totem picks left by the old second prompt that disagree with (or fill in
+  // for) the subclass choice — the player decides which one stands.
+  const legacy = legacyTotemPicks(char).filter(p=>_barbLevel(char)>=p.minLevel && p.current!==p.animal);
+  const legacySlots = new Set(legacy.map(p=>p.to));
+  legacy.forEach(p=>{
+    const id = jsq(String(char.id)), lb = jsq(p.label);
+    out.push({level:'fix', msg: p.current
+      ? `${p.to} is ${_cap(p.current)}, but an old duplicate prompt ("${p.label}") recorded ${_cap(p.animal)}. Which is right?`
+      : `${p.to} isn't chosen, but an old duplicate prompt ("${p.label}") recorded ${_cap(p.animal)}.`,
+      buttons:[
+        {label: p.current ? `Keep ${_cap(p.current)}` : 'Choose again', on:`resolveLegacyTotem('${id}','${lb}','keep')`},
+        {label:`Use ${_cap(p.animal)}`, on:`resolveLegacyTotem('${id}','${lb}','use')`}]});
+  });
+  // Subclass choices still unmade at the current level
+  classes.forEach(r=>{
+    if(!r.sub) return;
+    const sf = getSubFeatures(r.sub);
+    Object.keys(sf).map(Number).filter(l=>l<=r.level).forEach(l=>(sf[l]||[]).forEach(ft=>{
+      if(ft && ft.choice && !(char.subclassChoices||{})[ft.n] && !legacySlots.has(ft.n)) out.push({level:'warn', msg:`${ft.n} (${cleanSub(r.sub)} level ${l}) hasn't been chosen — pick it under Subclass Choices.`});
+    }));
+  });
+  // Choice counts against the class tables
+  const wl = lvOf('Warlock'), inv = (char.invocations||[]).length, invMax = _atLevel(_INVOCATIONS_KNOWN, wl);
+  if(wl && inv>invMax) out.push({level:'warn', msg:`${inv} Eldritch Invocations recorded; a level ${wl} Warlock knows ${invMax}.`});
+  if(wl && inv<invMax) out.push({level:'warn', msg:`${inv} of ${invMax} Eldritch Invocations recorded for a level ${wl} Warlock.`});
+  const so = lvOf('Sorcerer'), mm = (char.metamagic||[]).length, mmMax = _atLevel(_METAMAGIC_KNOWN, so);
+  if(so && mm>mmMax) out.push({level:'warn', msg:`${mm} Metamagic options recorded; a level ${so} Sorcerer knows ${mmMax}.`});
+  if(so && mm<mmMax) out.push({level:'warn', msg:`${mm} of ${mmMax} Metamagic options recorded for a level ${so} Sorcerer.`});
+  if(classes.some(r=>/battle master/i.test(r.sub||''))){
+    const fl = lvOf('Fighter'), want = _atLevel(_MANEUVERS_KNOWN, fl);
+    const have = (char.featureChoiceLog||[]).filter(e=>/battle master maneuver/i.test(e.choice)).reduce((a,e)=>a+(e.picks||[]).length,0);
+    if(have<want) out.push({level:'warn', msg:`${have} of ${want} Battle Master maneuvers recorded for a level ${fl} Fighter — note the rest on the sheet.`});
+  }
+  // Speed from Fast Movement / Unarmored Movement
+  const sp = _expectedSpeed(char);
+  if(sp!=null && (char.speed||30) < sp) out.push({level:'fix', msg:`Speed is ${char.speed||30} ft; race and class give ${sp} ft (Fast Movement / Unarmored Movement).`, fix:{label:`Set speed to ${sp} ft`, id:'speed'}});
+  // XP below the level's threshold
+  if((char.xp||0) < xpForLevel(char.level||1)) out.push({level:'fix', msg:`XP ${char.xp||0} is below the ${xpForLevel(char.level)} needed for level ${char.level}.`, fix:{label:`Set XP to ${xpForLevel(char.level)}`, id:'xp'}});
+  // Saving throws (single class: both class saves)
+  if(classes.length===1 && Array.isArray(char.savingThrowProfs)){
+    const miss = ((CLASSES[char.classIdx]||{}).saves||[]).filter(a=>!char.savingThrowProfs.includes(a));
+    if(miss.length) out.push({level:'fix', msg:`Missing class saving throw proficiency: ${miss.join(', ')}.`, fix:{label:'Add', id:'saves'}});
+  }
+  return out;
+}
+function applySheetFix(charId, fixId){
+  const char = _gwResolveChar(charId); if(!char) return;
+  if(fixId==='speed'){ const sp=_expectedSpeed(char); if(sp) char.speed = sp; }
+  else if(fixId==='xp') char.xp = xpForLevel(char.level||1);
+  else if(fixId==='level') char.level = _gwCharClasses(char).reduce((a,r)=>a+(r.level||0),0);
+  else if(fixId==='saves'){ char.savingThrowProfs = [...new Set([...(char.savingThrowProfs||[]), ...((CLASSES[char.classIdx]||{}).saves||[])])]; }
+  saveChar(char);
+  toast('✓ Sheet updated','var(--green)');
+  _gwRefreshAfterLevel(char);
+}
+function sheetCheckHTML(char){
+  const items = auditChar(char);
+  const head = `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">SHEET CHECK</div>`;
+  if(!items.length) return head + `<div style="font-size:12px;color:var(--green);margin-bottom:16px">✓ Class levels, choices, speed, XP and saves all line up.</div>`;
+  return head + `<div style="background:var(--surface2);border:1px solid var(--gold);border-radius:10px;padding:10px 12px;margin-bottom:16px">` +
+    items.map(i=>`<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12px;padding:4px 0">
+      <span style="flex:1;color:var(--text)">⚠ ${esc(i.msg)}</span>
+      ${(i.buttons||(i.fix?[{label:i.fix.label, on:`applySheetFix('${jsq(String(char.id))}','${i.fix.id}')`}]:[])).map(b=>`<button class="btn btn-outline" style="width:auto;margin:0;padding:4px 10px;font-size:11px;white-space:nowrap" onclick="${b.on}">${esc(b.label)}</button>`).join('')}
+    </div>`).join('') + `</div>`;
 }
 
 // Build the Backfill panel HTML (empty string when nothing is pending).
@@ -6127,6 +6340,7 @@ function renderProgressTab(char, cls){
   const el = document.getElementById('stab-progress');
   if(!el) return;
   try {
+  repairAndSaveChar(char);
   const isDM = true;
   const pb = getPB(char.level);
   const asiLevels = getASILevels(cls.name);
@@ -6137,6 +6351,7 @@ function renderProgressTab(char, cls){
 
   // ── BACKFILL: retroactive subclass & earlier feature choices ──
   html += renderBackfillPanel(char, cls);
+  html += sheetCheckHTML(char);
 
   // ── DM CONTROLS (DM only) ──
   if(isDM){
@@ -6416,19 +6631,19 @@ const LEVEL_FEATURES = {
   Cleric: {
     1:  { features:['Spellcasting','Divine Domain'], spells:3, cantrips:3, domainSpells:true },
     2:  { features:['Channel Divinity (1/rest)','Divine Domain Feature'], spells:2 },
-    3:  { features:['Channel Divinity (2/rest)'], spells:2 },
+    3:  { features:[], spells:2 },
     4:  { asi:true, features:['ASI or Feat'], spells:2, cantrips:1 },
     5:  { features:['Destroy Undead (CR 1/2)'], spells:2 },
-    6:  { features:['Channel Divinity (3/rest)','Divine Domain Feature'], spells:2 },
+    6:  { features:['Channel Divinity (2/rest)','Divine Domain Feature'], spells:2 },
     7:  { features:[], spells:2 },
-    8:  { asi:true, features:['ASI or Feat','Divine Strike or Potent Spellcasting'], spells:2 },
-    9:  { features:['Destroy Undead (CR 1)'], spells:2 },
+    8:  { asi:true, features:['ASI or Feat','Destroy Undead (CR 1)','Divine Domain Feature'], spells:2 },
+    9:  { features:[], spells:2 },
     10: { features:['Divine Intervention'], spells:2, cantrips:1 },
     11: { features:['Destroy Undead (CR 2)'], spells:2 },
     12: { asi:true, features:['ASI or Feat'], spells:2 },
-    13: { features:['Destroy Undead (CR 3)'], spells:2 },
-    14: { features:['Divine Domain Feature'], spells:2 },
-    15: { features:['Destroy Undead (CR 4)'], spells:2 },
+    13: { features:[], spells:2 },
+    14: { features:['Destroy Undead (CR 3)'], spells:2 },
+    15: { features:[], spells:2 },
     16: { asi:true, features:['ASI or Feat'], spells:2 },
     17: { features:['Destroy Undead (CR 4)','Divine Domain Feature'], spells:2 },
     18: { features:['Channel Divinity (3/rest)'], spells:2 },
@@ -6492,9 +6707,9 @@ const LEVEL_FEATURES = {
     10: { features:['Purity of Body','Unarmored Movement +20ft'] },
     11: { features:['Monastic Tradition Feature','Martial Arts (1d8)'] },
     12: { asi:true, features:['ASI or Feat'] },
-    13: { features:['Tongue of the Sun and Moon','Unarmored Movement +20ft'] },
-    14: { features:['Diamond Soul'] },
-    15: { features:['Timeless Body','Martial Arts (1d8)','Unarmored Movement +25ft'] },
+    13: { features:['Tongue of the Sun and Moon'] },
+    14: { features:['Diamond Soul','Unarmored Movement +25ft'] },
+    15: { features:['Timeless Body'] },
     16: { asi:true, features:['ASI or Feat'] },
     17: { features:['Monastic Tradition Feature','Martial Arts (1d10)'] },
     18: { features:['Empty Body','Unarmored Movement +30ft'] },
@@ -6506,7 +6721,7 @@ const LEVEL_FEATURES = {
     2:  { features:['Fighting Style','Spellcasting','Divine Smite'], spells:2, fightingStyle:true },
     3:  { features:['Divine Health','Sacred Oath (subclass)'], subclass:true, spells:2 },
     4:  { asi:true, features:['ASI or Feat'], spells:1 },
-    5:  { features:['Extra Attack','Destroy Undead'], spells:1 },
+    5:  { features:['Extra Attack'], spells:1 },
     6:  { features:['Aura of Protection'], spells:1 },
     7:  { features:['Sacred Oath Feature'], spells:1 },
     8:  { asi:true, features:['ASI or Feat'], spells:1 },
@@ -6592,23 +6807,23 @@ const LEVEL_FEATURES = {
   Warlock: {
     1:  { features:['Otherworldly Patron (subclass)','Pact Magic'], subclass:true, spells:2, cantrips:2 },
     2:  { features:['Eldritch Invocations (2)'], spells:1, invocations:2 },
-    3:  { features:['Pact Boon'], spells:1, invocations:1 },
-    4:  { asi:true, features:['ASI or Feat'], spells:1, cantrips:1, invocations:1 },
+    3:  { features:['Pact Boon'], spells:1 },
+    4:  { asi:true, features:['ASI or Feat'], spells:1, cantrips:1 },
     5:  { features:[], spells:1, invocations:1 },
-    6:  { features:['Otherworldly Patron Feature'], spells:1, invocations:1 },
+    6:  { features:['Otherworldly Patron Feature'], spells:1 },
     7:  { features:[], spells:1, invocations:1 },
-    8:  { asi:true, features:['ASI or Feat'], spells:1, invocations:1 },
+    8:  { asi:true, features:['ASI or Feat'], spells:1 },
     9:  { features:[], spells:1, invocations:1 },
-    10: { features:['Otherworldly Patron Feature'], spells:1, cantrips:1, invocations:1 },
+    10: { features:['Otherworldly Patron Feature'], spells:1, cantrips:1 },
     11: { features:['Mystic Arcanum (6th level)'], spells:1 },
     12: { asi:true, features:['ASI or Feat'], invocations:1 },
     13: { features:['Mystic Arcanum (7th level)'], spells:1 },
     14: { features:['Otherworldly Patron Feature'] },
     15: { features:['Mystic Arcanum (8th level)'], spells:1, invocations:1 },
     16: { asi:true, features:['ASI or Feat'] },
-    17: { features:['Mystic Arcanum (9th level)'], spells:1, invocations:1 },
+    17: { features:['Mystic Arcanum (9th level)'], spells:1 },
     18: { features:[], invocations:1 },
-    19: { asi:true, features:['ASI or Feat'], spells:1, invocations:1 },
+    19: { asi:true, features:['ASI or Feat'], spells:1 },
     20: { features:['Eldritch Master'] },
   },
   Wizard: {
@@ -6663,20 +6878,26 @@ const SUBCLASS_FEATURES = {
   'Path of the Totem Warrior': {
     3:  [{n:'Spirit Seeker',d:'You can cast Beast Sense and Speak with Animals as rituals.'},
       {n:'Totem Spirit', choice:true, options:[
-        {value:'bear',label:'Bear',desc:'Resistance to all non-psychic damage while raging'},
-        {value:'eagle',label:'Eagle',desc:'Dash as bonus action while raging, provoke no opportunity attacks'},
-        {value:'wolf',label:'Wolf',desc:'Allies have advantage on melee attacks vs enemies within 5 ft of you while raging'}
+        {value:'bear',label:'Bear',desc:'While raging, resistance to all damage except psychic'},
+        {value:'eagle',label:'Eagle',desc:'While raging without heavy armor, others have disadvantage on opportunity attacks against you, and you can Dash as a bonus action'},
+        {value:'wolf',label:'Wolf',desc:'While raging, friends have advantage on melee attacks against hostile creatures within 5 ft of you'},
+        {value:'elk',label:'Elk (SCAG)',desc:'While raging without heavy armor, your walking speed increases by 15 ft'},
+        {value:'tiger',label:'Tiger (SCAG)',desc:'While raging, add 10 ft to your long jump and 3 ft to your high jump'}
       ]}],
     6:  [{n:'Aspect of the Beast', choice:true, options:[
-        {value:'bear',label:'Bear',desc:'Carry weight doubled, advantage on STR checks'},
-        {value:'eagle',label:'Eagle',desc:'See up to 1 mile clearly, dim light counts as bright'},
-        {value:'wolf',label:'Wolf',desc:'Track at fast pace, stealth at normal pace'}
+        {value:'bear',label:'Bear',desc:'Carrying capacity doubled; advantage on STR checks to push, pull, lift or break'},
+        {value:'eagle',label:'Eagle',desc:'See up to 1 mile clearly; dim light doesn\'t impose disadvantage on Perception'},
+        {value:'wolf',label:'Wolf',desc:'Track while travelling at a fast pace; move stealthily at a normal pace'},
+        {value:'elk',label:'Elk (SCAG)',desc:'Your travel pace is doubled, as is that of up to 10 companions within 60 ft'},
+        {value:'tiger',label:'Tiger (SCAG)',desc:'Gain proficiency in two of: Athletics, Acrobatics, Stealth, Survival'}
       ]}],
     10: [{n:'Spirit Walker',d:'You can cast Commune with Nature as a ritual.'}],
     14: [{n:'Totemic Attunement', choice:true, options:[
-        {value:'bear',label:'Bear',desc:'Enemies have disadvantage on attacks vs your allies if you\'re within 5 ft'},
-        {value:'eagle',label:'Eagle',desc:'Fly speed equal to walk speed while raging'},
-        {value:'wolf',label:'Wolf',desc:'Knock Large or smaller creatures prone with melee weapon attacks while raging'}
+        {value:'bear',label:'Bear',desc:'While raging, hostile creatures within 5 ft of you have disadvantage on attacks against anyone but you'},
+        {value:'eagle',label:'Eagle',desc:'While raging, you have a flying speed equal to your walking speed (you fall if you end your turn in the air)'},
+        {value:'wolf',label:'Wolf',desc:'While raging, bonus action to knock a Large or smaller creature prone when you hit it with a melee weapon attack'},
+        {value:'elk',label:'Elk (SCAG)',desc:'While raging, bonus action to move through a Large or smaller creature\'s space; STR save or it is knocked prone and takes 1d12 + STR bludgeoning'},
+        {value:'tiger',label:'Tiger (SCAG)',desc:'While raging, after moving 20 ft straight at a Large or smaller target, bonus action for an extra melee weapon attack against it'}
       ]}],
   },
   'Path of the Ancestral Guardian': {
@@ -7461,10 +7682,11 @@ const SUBCLASS_FEATURES = {
 
 // Spells known/prepared to pick at level-up + class spell lists by spell level
 const SPELLS_KNOWN_GAIN = {
-  Bard:     {1:4,2:1,3:1,4:1,5:1,6:1,7:1,8:1,9:1,10:2,11:1,12:1,13:1,14:1,15:1,16:1,17:1,18:1,19:1,20:1},
-  Ranger:   {1:2,2:1,3:1,4:1,5:1,6:1,7:1,8:1,9:1,10:1,11:1,12:1,13:1,14:1,15:1,16:1,17:1,18:1,19:1,20:1},
-  Sorcerer: {1:4,2:1,3:1,4:1,5:1,6:1,7:1,8:1,9:1,10:2,11:1,12:0,13:1,14:1,15:1,16:0,17:1,18:1,19:0,20:1},
-  Warlock:  {1:2,2:1,3:1,4:1,5:1,6:1,7:1,8:1,9:1,10:1,11:1,12:0,13:1,14:1,15:1,16:0,17:1,18:1,19:0,20:1},
+  // New spells known at each class level (PHB tables; Bard 10/14/18 include Magical Secrets)
+  Bard:     {1:4,2:1,3:1,4:1,5:1,6:1,7:1,8:1,9:1,10:2,11:1,12:0,13:1,14:2,15:1,16:0,17:1,18:2,19:0,20:0},
+  Ranger:   {1:0,2:2,3:1,4:0,5:1,6:0,7:1,8:0,9:1,10:0,11:1,12:0,13:1,14:0,15:1,16:0,17:1,18:0,19:1,20:0},
+  Sorcerer: {1:2,2:1,3:1,4:1,5:1,6:1,7:1,8:1,9:1,10:1,11:1,12:0,13:1,14:0,15:1,16:0,17:1,18:0,19:0,20:0},
+  Warlock:  {1:2,2:1,3:1,4:1,5:1,6:1,7:1,8:1,9:1,10:0,11:1,12:0,13:1,14:0,15:1,16:0,17:1,18:0,19:1,20:0},
   // Wizards add 2 to spellbook per level; clerics/druids/paladins prepare from full list
   Wizard:   {1:6,2:2,3:2,4:2,5:2,6:2,7:2,8:2,9:2,10:2,11:2,12:2,13:2,14:2,15:2,16:2,17:2,18:2,19:2,20:2},
   Cleric:   'prepare', // prepares WIS+level spells from full list each long rest
@@ -7580,30 +7802,16 @@ const SKILL_LIST = ['Acrobatics','Animal Handling','Arcana','Athletics','Decepti
 // Each entry: { type, label, icon, count, options[] or optionsFn(char) }
 // types: 'pick' (choose N from list), 'expertise' (pick N from proficient skills)
 const CLASS_LEVEL_CHOICES = {
-  Barbarian: {
-    3: [{type:'pick', label:'Totem Animal (Spirit Seeker)', icon:'🐾', count:1,
-         condition: c => (c.subclass||'').includes('Totem'),
-         options:['Bear — Resistance to all damage except psychic while raging','Eagle — Dash as bonus action, no opportunity attacks while raging','Wolf — Allies have advantage on melee attacks vs creatures within 5 ft of you while raging','Elk — Your speed increases by 15 ft while raging','Tiger — Gain proficiency in two skills from the following list: Athletics, Acrobatics, Stealth, Survival']
-        }],
-    6: [{type:'pick', label:'Aspect of the Beast Totem', icon:'🦁', count:1,
-         condition: c => (c.subclass||'').includes('Totem'),
-         options:['Bear — Carry weight doubled, advantage on STR checks','Eagle — See clearly up to 1 mile, dim light counts as bright light','Wolf — Track at fast pace, stealth at normal pace while in favored terrain','Elk — +15 ft speed when not raging','Tiger — +10 ft speed']
-        }],
-    10: [{type:'pick', label:'Spirit Walker Totem', icon:'👻', count:1,
-          condition: c => (c.subclass||'').includes('Totem'),
-          options:['Bear — Warding — enemies have disadvantage on attacks vs allies within 5 ft','Eagle — Soar — fly speed equal to walking speed while raging','Wolf — Hunter — enemies hit by you are knocked prone if they are Large or smaller','Elk — Stampede — knock creatures prone when you move through their space','Tiger — Stalker — hide as bonus action while raging']
-         }],
-  },
+  // Barbarian totem animals are subclass choices (SUBCLASS_FEATURES ▸ Path of
+  // the Totem Warrior). Old picks made under the removed "Totem Animal (Spirit
+  // Seeker)" / "Aspect of the Beast Totem" / "Spirit Walker Totem" prompts are
+  // folded into those choices by repairCharChoices().
   Bard: {
     3: [{type:'expertise', label:'Expertise (choose 2 skills or 1 skill + Thieves\' Tools)', icon:'⭐', count:2,
-         options: c => [...(c.proficiencies||[]), 'Thieves\'s Tools']
+         options: c => [...(c.proficiencies||[]), 'Thieves\' Tools']
         }],
     10: [{type:'expertise', label:'Expertise (choose 2 more skills)', icon:'⭐', count:2,
           options: c => (c.proficiencies||[]).filter(p => !(c.expertiseSkills||[]).includes(p))
-         }],
-    14: [{type:'pick', label:'Magical Secrets (any 2 spells from any class)', icon:'📖', count:1,
-          note:'Use the spell picker after confirming to add your Magical Secrets spells',
-          options:['Use the spell browser to choose any 2 spells from any class spell list']
          }],
   },
   Cleric: {
@@ -7614,16 +7822,18 @@ const CLASS_LEVEL_CHOICES = {
   },
   Druid: {
     2: [{type:'pick', label:'Wild Shape Beast (note a known beast)', icon:'🐺', count:1,
-         note:'Write in a beast you have observed. You can transform into beasts with CR ¼ or lower (no flying/swimming at L2).',
-         options:['Wolf (CR ¼)','Brown Bear (CR ½)','Giant Spider (CR 1)','Ape (CR ½)','Black Bear (CR ½)','Crocodile (CR ½)','Giant Toad (CR 1)','Dire Wolf (CR 1)','Custom — note a beast you\'ve seen in your campaign']
+         note:'Note a beast you have seen. Max CR ¼, no flying or swimming speed (Circle of the Moon: max CR 1).',
+         options: c => /moon/i.test(c.subclass||'')
+           ? ['Wolf (CR ¼)','Panther (CR ¼)','Boar (CR ¼)','Black Bear (CR ½)','Ape (CR ½)','Brown Bear (CR 1)','Dire Wolf (CR 1)','Giant Spider (CR 1)','Custom — note a beast you\'ve seen in your campaign']
+           : ['Wolf (CR ¼)','Panther (CR ¼)','Boar (CR ¼)','Giant Badger (CR ¼)','Giant Wolf Spider (CR ¼)','Elk (CR ¼)','Mastiff (CR ⅛)','Custom — note a beast you\'ve seen in your campaign']
         }],
     4: [{type:'pick', label:'Wild Shape Upgrade', icon:'🦅', count:1,
-         note:'Can now use Wild Shape with a swimming speed. Max CR ½.',
+         note:'Can now use Wild Shape with a swimming speed. Max CR ½ (Circle of the Moon: CR 1).',
          options:['Crocodile (CR ½, swim 30 ft)','Giant Crab (CR ⅛, swim 20 ft)','Reef Shark (CR ½, swim 40 ft)','Custom swimming beast']
         }],
     8: [{type:'pick', label:'Wild Shape Upgrade (flying)', icon:'🦁', count:1,
-         note:'Can now Wild Shape into beasts with a flying speed. Max CR 1.',
-         options:['Giant Eagle (CR 1, fly 80 ft)','Giant Vulture (CR 1, fly 60 ft)','Peryton (CR 2)','Custom flying beast']
+         note:'Can now Wild Shape into beasts with a flying speed. Max CR 1 (Circle of the Moon: CR 2).',
+         options:['Giant Eagle (CR 1, fly 80 ft)','Giant Vulture (CR 1, fly 60 ft)','Giant Owl (CR ¼, fly 60 ft)','Custom flying beast']
         }],
   },
   Fighter: {
@@ -7635,11 +7845,11 @@ const CLASS_LEVEL_CHOICES = {
          condition: c => (c.subclass||'').includes('Battle Master'),
          options:['Commander\'s Strike — Forgo one attack; ally makes an attack as a reaction','Disarming Attack — On hit, target drops one item (STR save)','Distracting Strike — On hit, next attack vs target has advantage until your next turn','Evasive Footwork — Add superiority die to AC when you move','Feinting Attack — Bonus action feint gives advantage + extra damage on next attack','Goading Attack — On hit, target has disadvantage on attacks vs others (WIS save)','Lunging Attack — Add 5 ft reach for one attack + extra damage','Maneuvering Attack — On hit, ally can move half speed without OA','Menacing Attack — On hit, target is frightened (WIS save)','Parry — Reaction: reduce melee damage by superiority die + DEX mod','Precision Attack — Add superiority die to one attack roll','Pushing Attack — On hit, push target 15 ft (STR save)','Rally — Bonus action: grant temp HP to an ally','Riposte — Reaction: counter-attack when a creature misses you','Sweeping Attack — Deal damage to adjacent creature when you hit','Trip Attack — On hit, knock target prone (STR save)']
         }],
-    7: [{type:'pick', label:'Additional Battle Master Maneuver', icon:'🎲', count:1,
+    7: [{type:'pick', label:'Additional Battle Master Maneuver', icon:'🎲', count:2, note:'Battle Masters learn two more maneuvers at 7th, 10th and 15th level.',
          condition: c => (c.subclass||'').includes('Battle Master'),
          options:['Commander\'s Strike','Disarming Attack','Distracting Strike','Evasive Footwork','Feinting Attack','Goading Attack','Lunging Attack','Maneuvering Attack','Menacing Attack','Parry','Precision Attack','Pushing Attack','Rally','Riposte','Sweeping Attack','Trip Attack']
         }],
-    10: [{type:'pick', label:'Additional Battle Master Maneuver', icon:'🎲', count:1,
+    10: [{type:'pick', label:'Additional Battle Master Maneuver', icon:'🎲', count:2, note:'Battle Masters learn two more maneuvers at 7th, 10th and 15th level.',
           condition: c => (c.subclass||'').includes('Battle Master'),
           options:['Commander\'s Strike','Disarming Attack','Distracting Strike','Evasive Footwork','Feinting Attack','Goading Attack','Lunging Attack','Maneuvering Attack','Menacing Attack','Parry','Precision Attack','Pushing Attack','Rally','Riposte','Sweeping Attack','Trip Attack']
          },
@@ -7647,7 +7857,7 @@ const CLASS_LEVEL_CHOICES = {
           condition: c => (c.subclass||'').includes('Champion'),
           options: FIGHTING_STYLES
          }],
-    15: [{type:'pick', label:'Additional Battle Master Maneuver', icon:'🎲', count:1,
+    15: [{type:'pick', label:'Additional Battle Master Maneuver', icon:'🎲', count:2, note:'Battle Masters learn two more maneuvers at 7th, 10th and 15th level.',
           condition: c => (c.subclass||'').includes('Battle Master'),
           options:['Commander\'s Strike','Disarming Attack','Distracting Strike','Evasive Footwork','Feinting Attack','Goading Attack','Lunging Attack','Maneuvering Attack','Menacing Attack','Parry','Precision Attack','Pushing Attack','Rally','Riposte','Sweeping Attack','Trip Attack']
          }],
@@ -7690,7 +7900,7 @@ const CLASS_LEVEL_CHOICES = {
   },
   Rogue: {
     1: [{type:'expertise', label:'Expertise (choose 2 skills or 1 skill + Thieves\' Tools)', icon:'⭐', count:2,
-         options: c => [...(c.proficiencies||[]), 'Thieves\'s Tools']
+         options: c => [...(c.proficiencies||[]), 'Thieves\' Tools']
         }],
     3: [{type:'pick', label:'Roguish Archetype — Arcane Trickster spells', icon:'🎩', count:1,
          condition: c => (c.subclass||'').includes('Arcane Trickster'),
@@ -7718,9 +7928,6 @@ const CLASS_LEVEL_CHOICES = {
         }],
     3: [{type:'pick', label:'Pact Boon', icon:'📜', count:1,
          options:['Pact of the Blade — Summon a magical weapon as a bonus action. Counts as your spellcasting focus. You are proficient with it.','Pact of the Chain — Learn Find Familiar. Your familiar can be an imp, pseudodragon, quasit, or sprite. It can attack using its reaction on your turn.','Pact of the Tome — Your patron gives you a Book of Shadows with 3 cantrips from any class. They count as warlock cantrips for you.']
-        },
-        {type:'pick', label:'Additional Eldritch Invocation', icon:'👁', count:1,
-         options: ELDRITCH_INVOCATIONS
         }],
     5: [{type:'pick', label:'Additional Eldritch Invocation', icon:'👁', count:1,
          options: ELDRITCH_INVOCATIONS
@@ -7749,14 +7956,8 @@ const CLASS_LEVEL_CHOICES = {
          }],
     17: [{type:'pick', label:'Mystic Arcanum (9th level spell)', icon:'⚡', count:1,
           options:['Astral Projection','Foresight','Gate','Imprisonment','Power Word Kill','True Polymorph']
-         },
-         {type:'pick', label:'Additional Eldritch Invocation', icon:'👁', count:1,
-          options: ELDRITCH_INVOCATIONS
          }],
     18: [{type:'pick', label:'Additional Eldritch Invocation', icon:'👁', count:1,
-          options: ELDRITCH_INVOCATIONS
-         }],
-    19: [{type:'pick', label:'Additional Eldritch Invocation', icon:'👁', count:1,
           options: ELDRITCH_INVOCATIONS
          }],
   },
@@ -8164,8 +8365,10 @@ function undoLastLevel(charId){
   } else if(entry && entry.sub && char.subclass===entry.sub){
     char.subclass = '';
   }
-  // 5. HP, level, XP
-  char.maxHP = Math.max(1, (char.maxHP||1) - hpLoss);
+  // 5. HP (incl. CON/Tough knock-on), speed, level, XP
+  const adj = (entry && entry.adj) || {};
+  if(adj.speed) char.speed = Math.max(0, (char.speed||30) - adj.speed);
+  char.maxHP = Math.max(1, (char.maxHP||1) - hpLoss - (adj.hp||0));
   char.currentHP = Math.min(char.currentHP||1, char.maxHP);
   char.level = lvl-1;
   if((char.xp||0) >= xpForLevel(lvl)) char.xp = xpForLevel(char.level);
@@ -8312,13 +8515,9 @@ function updateAbility(charId, ab, val){
   const chars = getChars();
   const ci = chars.findIndex(c=>c.id===charId);
   if(ci<0) return;
+  const before = chars[ci].abilities[ab];
   chars[ci].abilities[ab] = Math.max(1, Math.min(30, val||10));
-  // Recalculate max HP on CON change
-  if(ab==='CON'){
-    const cls = CLASSES[chars[ci].classIdx];
-    chars[ci].maxHP = getMaxHP(cls, chars[ci].level, chars[ci].abilities.CON);
-    chars[ci].currentHP = Math.min(chars[ci].currentHP, chars[ci].maxHP);
-  }
+  if(ab==='CON') _applyConHpDelta(chars[ci], before);
   saveChars(chars);
   renderSheetHero(chars[ci], CLASSES[chars[ci].classIdx], 'sheetHero');
 }
@@ -10053,7 +10252,7 @@ function renderDiceCharPanel(){
 
       ${(()=>{
         const ac = getCharAC(char);
-        const baseAC = char.ac||(10+abMods.DEX);
+        const baseAC = getBaseAC(char);
         const acBoosted = ac !== baseAC;
         const initMod = abMods.DEX;
         const initSign = initMod>=0?'+':'';
@@ -10400,7 +10599,6 @@ function filterFeatCards(listId, searchId){
     const match = c.dataset.feat.toLowerCase().includes(q) || c.textContent.toLowerCase().includes(q);
     c.style.display = match ? '' : 'none';
   });
-  if(scroller) scroller.scrollTop = savedScroll;
 }
 
 function toggleDicePrepSection(bodyId, arrowId){
@@ -10571,7 +10769,7 @@ function switchDiceChar(charId){
 function selectDie(d){diceState.die=d;renderDiceScreen();}
 function setMode(m){diceState.mode=m;document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('adv-on','dis-on','neu-on'));if(m==='advantage')document.getElementById('mAdv').classList.add('adv-on');else if(m==='disadvantage')document.getElementById('mDis').classList.add('dis-on');else document.getElementById('mNeu').classList.add('neu-on');updateRollBtn();}
 function getEffMode(){let adv=false,dis=false;for(const id of diceState.activeConds){const c=CONDITIONS.find(x=>x.id===id);if(c?.force==='advantage')adv=true;if(c?.force==='disadvantage')dis=true;}if(adv&&dis)return diceState.mode;if(adv)return'advantage';if(dis)return'disadvantage';return diceState.mode;}
-function updateRollBtn(){const em=getEffMode();const btn=document.getElementById('rollBtn');if(!btn)return;btn.className='roll-btn '+(em==='advantage'?'roll-a':em==='disadvantage'?'roll-d':'roll-n');btn.textContent=em==='advantage'?'Roll Advantage ↑':em==='disadvantage'?'Roll Disadvantage ↓':'Roll ⬡';const mod=parseInt(document.getElementById('dMod')?.value)||0;const mT=em!=='normal'?(' ('+em.slice(0,3)+')'):'';if(document.getElementById('rollDesc'))document.getElementById('rollDesc').textContent=`rolling 1d${diceState.die}${mT}${mod?(' '+mod>0?'+':''+mod):''}`;}
+function updateRollBtn(){const em=getEffMode();const btn=document.getElementById('rollBtn');if(!btn)return;btn.className='roll-btn '+(em==='advantage'?'roll-a':em==='disadvantage'?'roll-d':'roll-n');btn.textContent=em==='advantage'?'Roll Advantage ↑':em==='disadvantage'?'Roll Disadvantage ↓':'Roll ⬡';const mod=parseInt(document.getElementById('dMod')?.value)||0;const mT=em!=='normal'?(' ('+em.slice(0,3)+')'):'';if(document.getElementById('rollDesc'))document.getElementById('rollDesc').textContent=`rolling 1d${diceState.die}${mT}${mod?(' '+(mod>0?'+':'')+mod):''}`;}
 function toggleCond(id){if(diceState.activeConds.has(id))diceState.activeConds.delete(id);else diceState.activeConds.add(id);renderCondGrid();renderActiveConds();renderCondEffects();updateRollBtn();}
 function renderCondGrid(){const el=document.getElementById('condGrid');if(!el)return;el.innerHTML=CONDITIONS.map(c=>`<div class="cond-chip ${diceState.activeConds.has(c.id)?'con-active':''}" style="--chip-c:${c.c}" onclick="toggleCond('${c.id}')"><span class="ci" style="font-size:18px">${c.i}</span><span class="cn">${c.n}</span></div>`).join('');}
 function renderActiveConds(){const el=document.getElementById('activeConds');if(!el)return;if(!diceState.activeConds.size){el.innerHTML='';return;}el.innerHTML=[...diceState.activeConds].map(id=>{const c=CONDITIONS.find(x=>x.id===id);if(!c)return'';return`<span class="cond-tag" style="--chip-c:${c.c}">${c.i} ${c.n}<span class="cond-rm" onclick="toggleCond('${c.id}')">✕</span></span>`;}).join('');}
@@ -15902,9 +16100,9 @@ function getEquipSlotATK(char){
   const dex = parseInt(getMod(char.abilities&&char.abilities.DEX?char.abilities.DEX:10))||0;
   const magicM = weapon.name.match(/[+\-](\d)/);
   const magic = magicM ? parseInt(magicM[0]) : 0;
-  const isFinesse = /rapier|shortsword|dagger|whip/i.test(weapon.name);
-  const isRanged  = /bow|crossbow|dart|sling/i.test(weapon.name);
-  const mod = (isFinesse||isRanged) ? Math.max(str,dex) : str;
+  const isFinesse = /rapier|shortsword|scimitar|dagger|whip|dart/i.test(weapon.name);
+  const isShot    = /bow|sling|blowgun/i.test(weapon.name); // crossbows included: "bow"
+  const mod = isShot ? dex : isFinesse ? Math.max(str,dex) : str;
   const total = mod+pb+magic;
   return (total>=0?'+':'')+total;
 }
@@ -15916,7 +16114,7 @@ function getItemEffect(item){
   const magic = magicM ? parseInt(magicM[1]) : 0;
   if(item.type==='armor'){
     if(/shield/i.test(item.name)) return '+' + (2+magic) + ' AC (shield)';
-    var armorNames=['plate','splint','half plate','chain mail','chainmail','scale mail','breastplate','hide','chain shirt','studded leather','leather','padded'];
+    var armorNames=['half plate','breastplate','plate','splint','ring mail','chain mail','chainmail','scale mail','hide','chain shirt','studded leather','leather','padded'];
     for(var ai=0;ai<armorNames.length;ai++){ if(n.indexOf(armorNames[ai])>=0) return (magic?'+'+magic+' ':'')+armorNames[ai].charAt(0).toUpperCase()+armorNames[ai].slice(1)+' armor'; }
     return magic ? '+'+magic+' AC bonus' : 'Armor';
   }
@@ -16054,6 +16252,7 @@ function renderCharStatsTab(char, cls){
 function renderCharProgressTab(char, cls){
   const el = document.getElementById('cstab-progress');
   if(!el) return;
+  repairAndSaveChar(char);
   const cc = cls.color;
   const level = char.level;
   const multiclasses = char.multiclasses||[];
@@ -16137,6 +16336,7 @@ function renderCharProgressTab(char, cls){
     </div>`;
   }
 
+  h += sheetCheckHTML(char);
   h += _lvTimelineHTML(char);
   h += _lvXpHTML(char);
   h += _lvSubclassChoicesHTML(char);
@@ -16444,8 +16644,21 @@ function _csSaveChar(id, updater){
   updater(chars[i]);
   saveChars(chars);
 }
+// A CON modifier change moves max HP by (change × level). Adjusting by the
+// difference keeps rolled HP, multiclass hit dice and Tough/Dwarven Toughness
+// (the old code re-derived HP from one class' average and lost all of those).
+function _applyConHpDelta(c, beforeCon){
+  const m = v => Math.floor(((v||10)-10)/2);
+  const dm = m(c.abilities.CON) - m(beforeCon);
+  if(!dm) return 0;
+  const d = dm * (c.level||1);
+  c.maxHP = Math.max(1, (c.maxHP||0) + d);
+  c.currentHP = Math.max(0, Math.min((c.currentHP||0) + Math.max(0,d), c.maxHP));
+  toast(`Max HP ${d>0?'+':''}${d} (Constitution modifier ${dm>0?'+':''}${dm} × level ${c.level||1})`,'var(--gold)');
+  return d;
+}
 function csUpdateAbility(id, ab, val){
-  _csSaveChar(id, c=>{ if(!c.abilities) c.abilities={}; c.abilities[ab]=Math.max(1,Math.min(30,val)); });
+  _csSaveChar(id, c=>{ if(!c.abilities) c.abilities={}; const before=c.abilities[ab]; c.abilities[ab]=Math.max(1,Math.min(30,val)); if(ab==='CON') _applyConHpDelta(c, before); });
   const chars = getVisibleChars();
   const char = chars.find(c=>String(c.id)===String(id));
   if(char){ renderCharStatsTab(char, CLASSES[char.classIdx]); renderCharProfsTab(char, CLASSES[char.classIdx]); }
@@ -16896,7 +17109,7 @@ function renderCharStats(char, cls){
   const str = parseInt(getMod(char.abilities&&char.abilities.STR?char.abilities.STR:10))||0;
   const pb = getPB(char.level);
   const displayAC = getEquipSlotAC(char);
-  const baseAC = char.ac||(10+dex);
+  const baseAC = getBaseAC(char);
   const acBoosted = displayAC !== baseAC;
   const atkBonus = getEquipSlotATK(char) || ((str+pb>=0?'+':'')+(str+pb));
   const initMod = getMod(char.abilities&&char.abilities.DEX?char.abilities.DEX:10);
@@ -19496,6 +19709,7 @@ function gwOpenLevelUp(charId){
   const char = _gwResolveChar(charId);
   if(!char){ toast('Character not found','var(--red)'); return; }
   if((char.level||1)>=20){ toast(char.name+' is already level 20','var(--gold)'); return; }
+  repairAndSaveChar(char);
   const classes = _gwCharClasses(char);
   const top = classes.slice().sort((a,b)=>b.level-a.level)[0];
   const s = {char, target: top.classIdx, sub:'', choices:{}, asiSlot:{mode:'asi', d:{}, feat:''}, spells:{},
@@ -19569,7 +19783,8 @@ const GW_LEVEL_STEPS = [
          <button class="gw-hpbtn ${s.hp.mode==='avg'?'sel':''}" onclick="GW.s.hp.mode='avg';gwRefresh()"><em>Average</em><b>+${Math.max(1,avg+con)+hill}</b><span>${avg} ${con>=0?'+':'−'} ${Math.abs(con)}${hill?' + 1':''}</span></button>
          <button class="gw-hpbtn ${s.hp.mode==='roll'?'sel':''}" onclick="gwLvRollHp()"><em>Roll d${hit}</em><b>${s.hp.roll!=null?'+'+(Math.max(1,s.hp.roll+con)+hill):'🎲'}</b><span>${s.hp.roll!=null?`rolled ${s.hp.roll} · tap to re-roll`:'tap to roll'}</span></button>
        </div>
-       <div class="gw-note" style="margin-top:16px">Max HP: <b>${s.char.maxHP||0}</b> → <b style="color:var(--green)">${(s.char.maxHP||0)+gain}</b></div>`;
+       ${(()=>{ const x=_gwLvExtras(s); return x.hp ? `<div class="gw-mini" style="margin-top:10px">${x.notes.filter(n=>/HP/.test(n)).map(esc).join('<br>')}</div>` : ''; })()}
+       <div class="gw-note" style="margin-top:16px">Max HP: <b>${s.char.maxHP||0}</b> → <b style="color:var(--green)">${(s.char.maxHP||0)+gain+_gwLvExtras(s).hp}</b></div>`;
    },
    valid:(s)=>s.hp.mode==='roll' && s.hp.roll==null ? 'Roll your hit die, or take the average' : ''},
 
@@ -19584,14 +19799,44 @@ const GW_LEVEL_STEPS = [
      if(ld.asi) h += sec('asi','Improvement', `<div class="gw-mini">${esc(_gwAsiSlotText(s.asiSlot,true))}</div>`);
      const nsp = Object.values(s.spells).reduce((a,v)=>a+v.size,0);
      if(_gwLvSpellPlan(s)) h += sec('spells','Spells', `<div class="gw-mini">${nsp} new spell${nsp!==1?'s':''}${nsp?': '+esc(Object.values(s.spells).flatMap(v=>[...v]).join(', ')):''}</div>`);
-     h += sec('hp','Hit points', `<div class="gw-mini">+${_gwLvHpGain(s)} → ${(s.char.maxHP||0)+_gwLvHpGain(s)} max HP</div>`);
+     const xs = _gwLvExtras(s), hpAll = _gwLvHpGain(s)+xs.hp;
+     h += sec('hp','Hit points', `<div class="gw-mini">+${hpAll} → ${(s.char.maxHP||0)+hpAll} max HP</div>`);
+     if(xs.speed) h += sec('hp','Speed', `<div class="gw-mini">+${xs.speed} ft → ${(s.char.speed||30)+xs.speed} ft</div>`);
+     const warn = auditChar(s.char);
+     if(warn.length) h += sec('','Sheet check (before this level)', `<div class="gw-mini">${warn.map(i=>'⚠ '+esc(i.msg)).join('<br>')}<br><i>Fix these on the Progress tab.</i></div>`);
      return h + `</div>`;
    }},
 ];
+const _hasTough = char => (char.feats||[]).some(f=>/^tough$/i.test(String(f).trim()));
 function _gwLvHpGain(s){
   const t = _gwLvTarget(s), con = parseInt(_gwMod((s.char.abilities||{}).CON))||0, hill = s.char.race==='Dwarf (Hill)'?1:0;
   const die = s.hp.mode==='roll' && s.hp.roll!=null ? s.hp.roll : Math.floor(t.cls.hit/2)+1;
-  return Math.max(1, die+con)+hill;
+  return Math.max(1, die+con)+hill+(_hasTough(s.char)?2:0);
+}
+// Knock-on changes from this level beyond the hit die: a CON increase raises
+// max HP by 1 per level for each point of modifier gained; Tough taken now adds
+// 2 per level; Fast Movement (Barbarian 5) and Unarmored Movement (Monk 2, 6,
+// 10, 14, 18) add speed. Recorded on the level log so Undo can reverse them.
+function _gwLvExtras(s){
+  const t = _gwLvTarget(s), ld = _gwLvLd(s), newLevel = (s.char.level||1)+1;
+  const out = {hp:0, speed:0, notes:[]};
+  if(ld.asi && s.asiSlot){
+    const slot = s.asiSlot;
+    if(slot.mode==='asi' && slot.d && slot.d.CON){
+      const before = (s.char.abilities||{}).CON||10, after = Math.min(20, before+slot.d.CON);
+      const dm = Math.floor((after-10)/2) - Math.floor((before-10)/2);
+      if(dm){ out.hp += dm*newLevel; out.notes.push(`+${dm*newLevel} HP from the Constitution increase (${dm>0?'+':''}${dm} × ${newLevel} levels)`); }
+    } else if(slot.mode==='feat' && /^tough$/i.test(String(slot.feat||'').trim()) && !_hasTough(s.char)){
+      out.hp += 2*newLevel; out.notes.push(`+${2*newLevel} HP from Tough (2 × ${newLevel} levels)`);
+    }
+  }
+  const n = t.cls.name;
+  if(n==='Barbarian' && t.to===5){ out.speed += 10; out.notes.push('+10 ft speed from Fast Movement (not in heavy armor)'); }
+  if(n==='Monk'){
+    const mv = {2:10, 6:5, 10:5, 14:5, 18:5}[t.to];
+    if(mv){ out.speed += mv; out.notes.push(`+${mv} ft speed from Unarmored Movement (no armor or shield)`); }
+  }
+  return out;
 }
 function gwLvPickSub(i){ const t=_gwLvTarget(GW.s); GW.s.sub = t.cls.subclasses[i]||''; GW.s.choices={}; gwRefresh(); }
 function gwLvRollHp(){ const t=_gwLvTarget(GW.s); GW.s.hp.mode='roll'; GW.s.hp.roll = 1+Math.floor(Math.random()*t.cls.hit); gwRefresh(); }
@@ -19638,7 +19883,7 @@ function gwFinishLevelUp(s){
   // Snapshot everything derived from the current state BEFORE mutating the
   // character (s.char may be the same object).
   const t = _gwLvTarget(s), cls = t.cls, ld = _gwLvLd(s);
-  const chs = _gwLvChoices(s), plan = _gwLvSpellPlan(s), gain = _gwLvHpGain(s);
+  const chs = _gwLvChoices(s), plan = _gwLvSpellPlan(s), gain = _gwLvHpGain(s), extra = _gwLvExtras(s);
   const newLevel = (char.level||1)+1;
   // Class levels
   if(t.isNew){
@@ -19663,7 +19908,8 @@ function gwFinishLevelUp(s){
     char.subclassChoices = char.subclassChoices||{};
     Object.values(getSubFeatures(s.sub)).flat().filter(ft=>ft&&ft.choice).forEach(ft=>{ if(!(ft.n in char.subclassChoices)) char.subclassChoices[ft.n]=''; });
   }
-  const entry = {level:newLevel, classIdx:t.classIdx, classLevel:t.to, newClass:t.isNew, sub:s.sub||'', hp:gain, choices:[], spells:[]};
+  const entry = {level:newLevel, classIdx:t.classIdx, classLevel:t.to, newClass:t.isNew, sub:s.sub||'', hp:gain, choices:[], spells:[],
+    adj:{hp:extra.hp, speed:extra.speed}};
   // Feature choices (this level, plus any earlier ones filled in)
   chs.forEach(({key,ch})=>{
     const uniq = [...new Set((s.choices[key]||[]).filter(Boolean))];
@@ -19696,15 +19942,18 @@ function gwFinishLevelUp(s){
   }
   char.levelLog = (char.levelLog||[]).filter(e=>e.level!==newLevel);
   char.levelLog.push(entry);
-  // Hit points & XP floor
-  char.maxHP = (char.maxHP||0)+gain;
-  char.currentHP = Math.min((char.currentHP||0)+gain, char.maxHP);
+  // Hit points, speed & XP floor
+  char.maxHP = (char.maxHP||0)+gain+extra.hp;
+  char.currentHP = Math.min((char.currentHP||0)+gain+extra.hp, char.maxHP);
+  if(extra.speed) char.speed = (char.speed||30)+extra.speed;
   if((char.xp||0) < xpForLevel(newLevel)) char.xp = xpForLevel(newLevel);
 
   saveChar(char);
   GW.done = true;
   gwClose(true);
-  toast(`⬆ ${char.name} is now level ${newLevel}! +${gain} HP`,'var(--gold)');
+  toast(`⬆ ${char.name} is now level ${newLevel}! +${gain+extra.hp} HP${extra.speed?`, +${extra.speed} ft speed`:''}`,'var(--gold)');
+  const issues = auditChar(char);
+  if(issues.length) setTimeout(()=>toast(`Sheet check: ${issues.length} item${issues.length>1?'s':''} to review on the Progress tab`,'var(--gold)'), 2500);
   _gwRefreshAfterLevel(char);
 }
 function _gwRefreshAfterLevel(char){
