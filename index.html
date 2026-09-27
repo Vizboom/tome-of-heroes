@@ -1487,6 +1487,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
   <div class="scroll-region screen" id="scr-party" data-panel-label="PARTY">
     <div id="installBanner"></div>
     <div id="campSwitchBanner"></div>
+    <div id="partyNameBar"></div>
     <div class="divider"><span>Your Party</span></div>
     <div id="rosterList"></div>
     <div class="divider" style="margin-top:20px"><span>Party History</span></div>
@@ -3847,7 +3848,20 @@ function goBack(){const m=SCREEN_META[currentScreen];if(m?.back)nav(m.back);}
 
 /* ══ ROSTER ══ */
 let _rosterPulling = false;
+// Party name + rename button at the top of the Party screen
+function renderPartyNameBar(){
+  const el = document.getElementById('partyNameBar'); if(!el) return;
+  const camp = getActiveCamp();
+  if(!camp){ el.innerHTML = ''; return; }
+  const name = camp.partyName || '';
+  el.innerHTML = `<div style="display:flex;align-items:center;gap:10px;margin:4px 0 10px">
+    ${name ? `<div style="font-family:'Cinzel',serif;font-size:17px;color:var(--gold);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</div>`
+           : `<div style="font-family:'Cinzel',serif;font-size:13px;color:var(--muted);font-style:italic;flex:1">Unnamed party</div>`}
+    <button onclick="editPartyName()" style="background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:11px;padding:5px 10px;cursor:pointer;flex-shrink:0">✏ ${name?'Rename':'Name the party'}</button>
+  </div>`;
+}
 function renderRoster(){
+  try{ renderPartyNameBar(); }catch(e){}
   // Pull if we have no chars yet — but only once at a time
   if(!_db.chars.length && getGroupId() && !_rosterPulling){
     _rosterPulling = true;
@@ -4845,7 +4859,7 @@ function renderPartyOverview(){
   el.innerHTML=`
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
     ${partyName
-      ? `<div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold);flex:1">${partyName}</div>`
+      ? `<div style="font-family:'Cinzel',serif;font-size:16px;color:var(--gold);flex:1">${esc(partyName)}</div>`
       : `<div style="font-family:'Cinzel',serif;font-size:13px;color:var(--muted);font-style:italic;flex:1">Unnamed Party</div>`}
     ${'<button onclick="editPartyName()" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:10px;padding:3px 8px;cursor:pointer">✏ Name</button>'}
   </div>
@@ -10163,6 +10177,10 @@ function editPartyName(){
   }
   saveCampaigns(camps);
   renderPartyOverview();
+  renderPartyNameBar();
+  try{ renderPartyHistory(); }catch(e){}
+  try{ if(document.getElementById('campMapSvg')) renderMap(); }catch(e){}   // the party marker shows the name
+  if(name.trim() && name.trim()!==oldName) toast('✦ Party renamed to '+name.trim(),'var(--gold)');
 }
 
 // ── Party history ──
@@ -10238,7 +10256,7 @@ function renderPartyHistory(){
       groups[label].push(e);
     });
 
-    html += `<div style="font-size:11px;color:var(--muted);margin-bottom:8px">${history.length} event${history.length!==1?'s':''} in the chronicle of <strong style="color:var(--gold)">${partyName}</strong></div>`;
+    html += `<div style="font-size:11px;color:var(--muted);margin-bottom:8px">${history.length} event${history.length!==1?'s':''} in the chronicle of <strong style="color:var(--gold)">${esc(partyName)}</strong></div>`;
 
     Object.entries(groups).forEach(([dateLabel, events]) => {
       html += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin:12px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)33">${dateLabel}</div>`;
