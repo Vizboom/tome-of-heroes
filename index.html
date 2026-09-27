@@ -3514,6 +3514,50 @@ function getSaveProfs(char){
   return CLASSES[char?.classIdx]?.saves||[];
 }
 const getPB=l=>Math.ceil(l/4)+1;
+
+/* ── Skill checks & initiative — one calculation used by every panel ──── */
+function _abMod(char, ab){ const v=((char&&char.abilities)||{})[ab]||10; return Math.floor((v-10)/2); }
+function _sgn(n){ return (n>=0?'+':'')+n; }
+function _classLevel(char, name){ const r=_gwCharClasses(char).find(x=>(CLASSES[x.classIdx]||{}).name===name); return r?r.level:0; }
+function _subOf(char, name){ const r=_gwCharClasses(char).find(x=>(CLASSES[x.classIdx]||{}).name===name); return r?(r.sub||''):''; }
+function _hasFeat(char, n){ return (char.feats||[]).some(f=>String(f).trim().toLowerCase().startsWith(n.toLowerCase())); }
+const SKILL_ABILITY = Object.fromEntries(ALL_SKILLS.map(s=>[s.n, s.a]));
+// Bonus on an ability check you aren't proficient in: Jack of All Trades
+// (Bard 2+, half proficiency rounded down) or Remarkable Athlete (Champion 7+,
+// STR/DEX/CON checks, half proficiency rounded up). They don't stack.
+function _nonProfBonus(char, ab){
+  const pb = getPB(char.level||1); let b = 0, why = '';
+  if(_classLevel(char,'Bard')>=2){ b = Math.floor(pb/2); why = 'Jack of All Trades'; }
+  if(_classLevel(char,'Fighter')>=7 && /champion/i.test(_subOf(char,'Fighter')) && ['STR','DEX','CON'].includes(ab) && Math.ceil(pb/2)>b){ b = Math.ceil(pb/2); why = 'Remarkable Athlete'; }
+  return {b, why};
+}
+// {mod, level:'expert'|'prof'|'half'|'none'} — expertise doubles proficiency.
+function skillCheck(char, skill){
+  const ab = SKILL_ABILITY[skill] || 'DEX', pb = getPB(char.level||1), mod = _abMod(char, ab), low = String(skill).toLowerCase();
+  const prof = (char.proficiencies||[]).some(p=>String(p).toLowerCase()===low);
+  if(prof && (char.expertiseSkills||[]).some(p=>String(p).toLowerCase()===low)) return {mod:mod+2*pb, level:'expert'};
+  if(prof) return {mod:mod+pb, level:'prof'};
+  const h = _nonProfBonus(char, ab);
+  return {mod:mod+h.b, level:h.b?'half':'none'};
+}
+function passiveScore(char, skill){ return 10 + skillCheck(char, skill).mod + ((skill==='Perception'||skill==='Investigation') && _hasFeat(char,'Observant') ? 5 : 0); }
+// Initiative is a DEX check (so Jack of All Trades / Remarkable Athlete apply),
+// plus Alert, subclass features, Harengon, and a manual bonus for items etc.
+function initiativeInfo(char){
+  const pb = getPB(char.level||1), parts = [['DEX', _abMod(char,'DEX')]];
+  const h = _nonProfBonus(char, 'DEX'); if(h.b) parts.push([h.why, h.b]);
+  if(_hasFeat(char,'Alert')) parts.push(['Alert', 5]);
+  if(_classLevel(char,'Ranger')>=3 && /gloom stalker/i.test(_subOf(char,'Ranger'))) parts.push(['Dread Ambusher', _abMod(char,'WIS')]);
+  if(_classLevel(char,'Rogue')>=3 && /swashbuckler/i.test(_subOf(char,'Rogue'))) parts.push(['Rakish Audacity', _abMod(char,'CHA')]);
+  if(_classLevel(char,'Wizard')>=2 && /war magic/i.test(_subOf(char,'Wizard'))) parts.push(['Tactical Wit', _abMod(char,'INT')]);
+  if(/harengon/i.test(char.race||'')) parts.push(['Hare-Trigger', pb]);
+  if(+char.initMisc) parts.push(['Other', +char.initMisc]);
+  const adv = [];
+  if(_classLevel(char,'Barbarian')>=7) adv.push('Feral Instinct');
+  return {total: parts.reduce((a,p)=>a+p[1],0), parts, adv};
+}
+function initiativeText(char){ return _sgn(initiativeInfo(char).total); }
+function initiativeTitle(char){ const i=initiativeInfo(char); return i.parts.map(([k,v])=>k+' '+_sgn(v)).join(', ')+(i.adv.length?' · advantage ('+i.adv.join(', ')+')':''); }
 // Spell slots are based on the primary spellcasting class' own level (safest for multiclass —
 // avoids over-counting slots from total character level). Falls back to total level for single-class.
 function getPrimaryCastingLevel(char){
@@ -4175,7 +4219,7 @@ function renderCombatTab(char,cls,elId,editable){
   let html=`
     <div class="combat-stats" style="--cc:${cls.color};--cc-dim:${cls.color}22">
       <div class="cs-box"><div class="cs-val">${displayAC}</div><div class="cs-label">AC${hasAcBoost?(' <span style=\'font-size:9px;color:var(--gold)\'>✦</span>'):''}</div></div>
-      <div class="cs-box"><div class="cs-val">${getMod(char.abilities.DEX)}</div><div class="cs-label">Initiative</div></div>
+      <div class="cs-box" title="${esc(initiativeTitle(char))}"><div class="cs-val">${initiativeText(char)}</div><div class="cs-label">Initiative</div></div>
       <div class="cs-box"><div class="cs-val">+${pb}</div><div class="cs-label">Prof Bonus</div></div>
       <div class="cs-box"><div class="cs-val">${char.speed||30}</div><div class="cs-label">Speed</div></div>
     </div>
@@ -4316,22 +4360,19 @@ function renderSkillsTab(char,cls,elId){
   const pb=getPB(char.level);
   let html=`<div class="divider"><span>Skills</span></div><div class="skill-full-grid">`;
   ALL_SKILLS.forEach(sk=>{
-    const isPro=char.proficiencies.includes(sk.n);
-    const base=parseInt(getMod(char.abilities[sk.a]))||0;
-    const bonus=isPro?base+pb:base;
-    html+=`<div class="skill-full-row ${isPro?'prof':''}" style="--cc:${cls.color};--cc-dim:${cls.color}22">
+    const chk=skillCheck(char, sk.n), isPro=chk.level==='prof'||chk.level==='expert';
+    const bonus=chk.mod;
+    html+=`<div class="skill-full-row ${isPro?'prof':''}" style="--cc:${cls.color};--cc-dim:${cls.color}22" title="${chk.level==='expert'?'Expertise':chk.level==='half'?'Half proficiency':isPro?'Proficient':''}">
       <div class="skill-full-dot"></div>
-      <span class="skill-full-name">${sk.n}</span>
+      <span class="skill-full-name">${sk.n}${chk.level==='expert'?' ★':''}</span>
       <span class="skill-ab">${sk.a}</span>
       <span class="skill-full-bonus">${bonus>=0?'+':''}${bonus}</span>
     </div>`;
   });
   html+=`</div><div class="divider"><span>Passive Senses</span></div>`;
-  const wis=parseInt(getMod(char.abilities.WIS))||0;
-  const hasPPerc=char.proficiencies.includes('Perception');
   html+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px">
-    <div class="ab-display" style="--cc:${cls.color}"><div class="ab-display-label">PASSIVE PERCEPTION</div><div class="ab-display-score">${10+wis+(hasPPerc?pb:0)}</div></div>
-    <div class="ab-display"><div class="ab-display-label">PASSIVE INSIGHT</div><div class="ab-display-score">${10+wis+(char.proficiencies.includes('Insight')?pb:0)}</div></div>
+    <div class="ab-display" style="--cc:${cls.color}"><div class="ab-display-label">PASSIVE PERCEPTION</div><div class="ab-display-score">${passiveScore(char,'Perception')}</div></div>
+    <div class="ab-display"><div class="ab-display-label">PASSIVE INSIGHT</div><div class="ab-display-score">${passiveScore(char,'Insight')}</div></div>
   </div>`;
   html+=`<div class="divider"><span>Proficiencies & Languages</span></div>`;
   const toolProfs=char.toolProficiencies||[];
@@ -4339,7 +4380,7 @@ function renderSkillsTab(char,cls,elId){
   const langProfs=char.languageProficiencies||[];
   html+=`<div class="prof-block">
     <h4>Skill Proficiencies</h4>
-    <div class="prof-tags">${char.proficiencies.map(p=>`<span class="prof-tag">${p}</span>`).join('')||'<span style="color:var(--muted);font-size:12px;font-style:italic">None set</span>'}</div>
+    <div class="prof-tags">${(char.proficiencies||[]).map(p=>`<span class="prof-tag">${esc(p)}${(char.expertiseSkills||[]).some(x=>String(x).toLowerCase()===String(p).toLowerCase())?' ★':''}</span>`).join('')||'<span style="color:var(--muted);font-size:12px;font-style:italic">None set</span>'}</div>
   </div>`;
   if(toolProfs.length||weapProfs.length||langProfs.length){
     if(toolProfs.length)html+=`<div class="prof-block"><h4>Tool Proficiencies</h4><div class="prof-tags">${toolProfs.map(p=>`<span class="prof-tag">${p}</span>`).join('')}</div></div>`;
@@ -4834,7 +4875,7 @@ function renderPartyOverview(){
       </div>
       <div class="pm-stats">
         <div class="pm-stat"><strong>AC</strong><span>${10+dex}</span></div>
-        <div class="pm-stat"><strong>INIT</strong><span>${getMod(c.abilities?.DEX||10)}</span></div>
+        <div class="pm-stat" title="${esc(initiativeTitle(c))}"><strong>INIT</strong><span>${initiativeText(c)}</span></div>
         <div class="pm-stat"><strong>PROF</strong><span>+${pb}</span></div>
         <div class="pm-stat"><strong>STR</strong><span>${getMod(c.abilities?.STR||10)}</span></div>
         <div class="pm-stat"><strong>DEX</strong><span>${getMod(c.abilities?.DEX||10)}</span></div>
@@ -4875,7 +4916,7 @@ function adjHP(id,sign){
 
 /* ══ INITIATIVE ══ */
 function buildCombatants(){if(!combatants.length)combatants=getFullParty().map(c=>({id:c.id,name:c.name,icon:classIcon(c.classIdx),color:classColor(c.classIdx),initiative:0,type:'player',hp:c.currentHP,maxHP:c.maxHP}));}
-function rollAllInit(){buildCombatants();const party=getFullParty();combatants=combatants.map(c=>{const pc=party.find(p=>p.id===c.id);const dex=pc?parseInt(getMod(pc.abilities?.DEX||10))||0:0;return{...c,initiative:Math.ceil(Math.random()*20)+dex};});combatants.sort((a,b)=>b.initiative-a.initiative);currentTurn=0;renderInitiative();toast('Initiative rolled!');}
+function rollAllInit(){buildCombatants();const party=getFullParty();combatants=combatants.map(c=>{const pc=party.find(p=>p.id===c.id);const inf=pc?initiativeInfo(pc):{total:0,adv:[]};const d20=inf.adv.length?Math.max(Math.ceil(Math.random()*20),Math.ceil(Math.random()*20)):Math.ceil(Math.random()*20);return{...c,initiative:d20+inf.total};});combatants.sort((a,b)=>b.initiative-a.initiative);currentTurn=0;renderInitiative();toast('Initiative rolled!');}
 function addEnemy(){buildCombatants();const name=document.getElementById('enemyNameIn').value.trim();const init=parseInt(document.getElementById('enemyInitIn').value)||Math.ceil(Math.random()*20);if(!name){toast('Enter enemy name','var(--red)');return;}combatants.push({id:'e'+Date.now(),name,icon:'👹',color:'#c0392b',initiative:init,type:'enemy',hp:20,maxHP:20});combatants.sort((a,b)=>b.initiative-a.initiative);document.getElementById('enemyNameIn').value='';document.getElementById('enemyInitIn').value='';renderInitiative();}
 function renderInitiative(){
   if(!document.getElementById('ptab-initiative')) return; // Initiative tracker removed
@@ -6086,6 +6127,10 @@ function auditChar(char){
       if(ft && ft.choice && !(char.subclassChoices||{})[ft.n] && !legacySlots.has(ft.n)) out.push({level:'warn', msg:`${ft.n} (${cleanSub(r.sub)} level ${l}) hasn't been chosen — pick it under Subclass Choices.`});
     }));
   });
+  // Expertise picks (double proficiency) against the class tables
+  { const want = (_classLevel(char,'Rogue')>=6?4:_classLevel(char,'Rogue')>=1?2:0) + (_classLevel(char,'Bard')>=10?4:_classLevel(char,'Bard')>=3?2:0);
+    const have = (char.expertiseSkills||[]).length;
+    if(want && have < want) out.push({level:'warn', msg:`${have} of ${want} expertise picks recorded — mark them with ★ on Sheet ▸ Stats & Skills (a skill with expertise adds double proficiency).`}); }
   // Choice counts against the class tables
   const wl = lvOf('Warlock'), inv = (char.invocations||[]).length, invMax = _atLevel(_INVOCATIONS_KNOWN, wl);
   if(wl && inv>invMax) out.push({level:'warn', msg:`${inv} Eldritch Invocations recorded; a level ${wl} Warlock knows ${invMax}.`});
@@ -7266,7 +7311,7 @@ const SUBCLASS_FEATURES = {
     15: [{n:'Superior Hunter\'s Defense',d:'Choose one: Evasion (half damage on DEX save, no damage on success), Stand Against the Tide (reaction: force creature to repeat attack vs another creature nearby), Uncanny Dodge (use reaction to halve attack damage).'}],
   },
   'Gloom Stalker': {
-    3:  [{n:'Dread Ambusher',d:'Add prof bonus to initiative. On first turn of combat, one extra attack dealing +1d8 damage.'},{n:'Umbral Sight',d:'Darkvision 60 ft (or +60 ft). Invisible to darkvision while in darkness.'},{n:'Gloom Stalker Spells',d:'Always prepared: Disguise Self (L3), Rope Trick (L5), Fear (L9), Greater Invisibility (L13), Seeming (L17).'}],
+    3:  [{n:'Dread Ambusher',d:'Add your WIS modifier to initiative. On first turn of combat, one extra attack dealing +1d8 damage.'},{n:'Umbral Sight',d:'Darkvision 60 ft (or +60 ft). Invisible to darkvision while in darkness.'},{n:'Gloom Stalker Spells',d:'Always prepared: Disguise Self (L3), Rope Trick (L5), Fear (L9), Greater Invisibility (L13), Seeming (L17).'}],
     7:  [{n:'Iron Mind',d:'Proficiency in WIS saves (or CHA/INT if already proficient in WIS).'}],
     11: [{n:'Stalker\'s Flurry',d:'Once per turn, if you miss an attack, you can make an additional attack immediately.'}],
     15: [{n:'Shadowy Dodge',d:'Reaction: impose disadvantage on an attacker\'s attack roll.'}],
@@ -9064,8 +9109,8 @@ function parseDMVFields(f){
   // Proficient skills
   const SKILL_AB={acrobatics:'DEX','animal-handling':'WIS',arcana:'INT',athletics:'STR',deception:'CHA',history:'INT',insight:'WIS',intimidation:'CHA',investigation:'INT',medicine:'WIS',nature:'INT',perception:'WIS',performance:'CHA',persuasion:'CHA',religion:'INT','sleight-of-hand':'DEX',stealth:'DEX',survival:'WIS'};
   const SKILL_DISPLAY={acrobatics:'Acrobatics','animal-handling':'Animal Handling',arcana:'Arcana',athletics:'Athletics',deception:'Deception',history:'History',insight:'Insight',intimidation:'Intimidation',investigation:'Investigation',medicine:'Medicine',nature:'Nature',perception:'Perception',performance:'Performance',persuasion:'Persuasion',religion:'Religion','sleight-of-hand':'Sleight of Hand',stealth:'Stealth',survival:'Survival'};
-  const proficiencies=[];
-  for(const[sk,ab]of Object.entries(SKILL_AB)){const mod=parseInt((get(sk)||'').replace('+',''));if(isNaN(mod))continue;const base=Math.floor((abilities[ab]-10)/2);if(mod>=base+pb)proficiencies.push(SKILL_DISPLAY[sk]);}
+  const proficiencies=[], expertiseSkills=[];
+  for(const[sk,ab]of Object.entries(SKILL_AB)){const mod=parseInt((get(sk)||'').replace('+',''));if(isNaN(mod))continue;const base=Math.floor((abilities[ab]-10)/2);if(mod>=base+pb)proficiencies.push(SKILL_DISPLAY[sk]);if(mod>=base+2*pb)expertiseSkills.push(SKILL_DISPLAY[sk]);}
   // Attacks
   const attacks=[];
   for(let i=1;i<=6;i++){const name=get(`weapon-name-${i}`);const bonus=get(`weapon-attack-bonus-${i}`);const damage=get(`weapon-damage-${i}`);if(name)attacks.push({name,bonus,damage,type:'melee'});}
@@ -9075,7 +9120,7 @@ function parseDMVFields(f){
   // Spells
   const spells=[];const seenSp=new Set();
   for(let lvl=0;lvl<=9;lvl++){for(let slot=1;slot<=20;slot++){const spName=get(`spells-${lvl}-${slot}-1`,`spells-${lvl}-${slot}`);if(spName&&!seenSp.has(spName)){spells.push({id:'s'+spells.length,name:spName,level:lvl,prepared:true,desc:''});seenSp.add(spName);}}}
-  return{id:Date.now(),name:get('character-name','character_name')||'Imported Character',race:get('race')||'Human',background:get('background')||'Custom',alignment:get('alignment')||'',level,classIdx,subclass,xp:parseInt(get('xp'))||0,ac:parseInt(get('ac'))||null,speed:parseInt(get('speed'))||30,maxHP:parseInt(get('hp-max'))||0,currentHP:parseInt(get('hp-current','hp-max'))||0,abilities,proficiencies,attacks,equipment,spells,statuses:[],shareCode:genCode(),created:Date.now(),effects:{},customEffects:[],age:get('age'),height:get('height'),weight:get('weight'),eyes:get('eyes'),hair:get('hair'),skin:get('skin'),traits:get('personality-traits').replace(/[\r\n]+/g,' ').trim(),ideals:'',bonds:'',flaws:get('flaws'),backstory:get('backstory'),allies:get('faction-name')};
+  return{id:Date.now(),name:get('character-name','character_name')||'Imported Character',race:get('race')||'Human',background:get('background')||'Custom',alignment:get('alignment')||'',level,classIdx,subclass,xp:parseInt(get('xp'))||0,ac:parseInt(get('ac'))||null,speed:parseInt(get('speed'))||30,maxHP:parseInt(get('hp-max'))||0,currentHP:parseInt(get('hp-current','hp-max'))||0,abilities,proficiencies,expertiseSkills,attacks,equipment,spells,statuses:[],shareCode:genCode(),created:Date.now(),effects:{},customEffects:[],age:get('age'),height:get('height'),weight:get('weight'),eyes:get('eyes'),hair:get('hair'),skin:get('skin'),traits:get('personality-traits').replace(/[\r\n]+/g,' ').trim(),ideals:'',bonds:'',flaws:get('flaws'),backstory:get('backstory'),allies:get('faction-name')};
 }
 
 async function extractPdfFields(file){
@@ -9229,11 +9274,13 @@ function parseDMVPdfCharSheet(text){
   // Proficient Skills
   const SKILL_AB = {Acrobatics:'DEX','Animal Handling':'WIS',Arcana:'INT',Athletics:'STR',Deception:'CHA',History:'INT',Insight:'WIS',Intimidation:'CHA',Investigation:'INT',Medicine:'WIS',Nature:'INT',Perception:'WIS',Performance:'CHA',Persuasion:'CHA',Religion:'INT','Sleight of Hand':'DEX',Stealth:'DEX',Survival:'WIS'};
   const skillEntries = [...p1.matchAll(/\n([+-]?\d+)\s+([\w ]+?)\s*\((?:Dex|Str|Con|Int|Wis|Cha)\)/g)];
-  const proficiencies = [];
+  const proficiencies = [], expertiseSkills = [];
   skillEntries.forEach(m=>{
     const sk = m[2].trim(), mod = parseInt(m[1]);
     const abKey = SKILL_AB[sk];
-    if(abKey){ const base=Math.floor((abilities[abKey]-10)/2); if(mod>=base+pb) proficiencies.push(sk); }
+    if(abKey){ const base=Math.floor((abilities[abKey]-10)/2);
+      if(mod>=base+pb) proficiencies.push(sk);
+      if(mod>=base+2*pb) expertiseSkills.push(sk); }   // a doubled bonus is expertise
   });
 
   // Attacks
@@ -9300,7 +9347,7 @@ function parseDMVPdfCharSheet(text){
     id: Date.now(),
     name, race, background, alignment, level, classIdx, subclass, xp,
     ac, speed, maxHP, currentHP,
-    abilities, proficiencies, attacks, equipment, spells,
+    abilities, proficiencies, expertiseSkills, attacks, equipment, spells,
     statuses:[], shareCode:genCode(), created:Date.now(),
     effects:{}, customEffects:[],
     age, height, weight, eyes, hair, skin,
@@ -10307,7 +10354,7 @@ function renderDiceCharPanel(){
         const ac = getCharAC(char);
         const baseAC = getBaseAC(char);
         const acBoosted = ac !== baseAC;
-        const initMod = abMods.DEX;
+        const initMod = initiativeInfo(char).total;
         const initSign = initMod>=0?'+':'';
         const pct = Math.max(0,Math.round((char.currentHP/char.maxHP)*100));
         const hpC = pct>60?'var(--green)':pct>25?'var(--gold)':'var(--red)';
@@ -10371,12 +10418,12 @@ function renderDiceCharPanel(){
       <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">SKILLS</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:10px">
         ${skillList.map(sk=>{
-          const isProf = profs.some(p=>p.toLowerCase()===sk.n.toLowerCase());
-          const mod = abMods[sk.a] + (isProf?pb:0);
+          const chk = skillCheck(char, sk.n), isProf = chk.level==='prof'||chk.level==='expert';
+          const mod = chk.mod;
           const sign = mod>=0?'+':'';
           return `<div onclick="quickRoll('${sk.n}',${mod})" style="display:flex;align-items:center;gap:5px;padding:4px 6px;border-radius:6px;cursor:pointer;background:var(--surface);border:1px solid ${isProf?cc+'44':'var(--border)'}">
             <span style="width:6px;height:6px;border-radius:50%;background:${isProf?cc:'var(--border)'};flex-shrink:0"></span>
-            <span style="font-size:11px;flex:1;color:var(--text)">${sk.n}</span>
+            <span style="font-size:11px;flex:1;color:var(--text)">${sk.n}${chk.level==='expert'?' ★':''}</span>
             <span style="font-family:'Cinzel',serif;font-size:11px;color:${cc};font-weight:bold">${sign}${mod}</span>
           </div>`;
         }).join('')}
@@ -10812,9 +10859,16 @@ function doRollLabelled(label, mod){
 }
 
 function switchDiceChar(charId){
-  // Store selected char for dice screen
+  // Store selected char for dice screen. getActiveDiceChar() prefers the
+  // active campaign's saved character, so that has to change too — otherwise
+  // the selector snaps back to the old character inside a campaign.
   _userSettings['dice_char'] = String(charId);
   setUserSetting('dice_char', charId).catch(()=>{});
+  const campId = getActiveCampId();
+  if(campId){
+    _userSettings['active_char_'+campId] = String(charId);
+    setUserSetting('active_char_'+campId, charId).catch(()=>{});
+  }
   renderDiceCharPanel();
 }
 
@@ -16366,6 +16420,13 @@ function renderCharStatsTab(char, cls){
     <input type="number" min="0" max="200" step="5" value="${char.speed||30}" onchange="csUpdateField('${char.id}','speed',+this.value)"
       style="width:60px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'Cinzel',serif;font-size:20px;font-weight:700;text-align:center;padding:4px">
   </div>`;
+  h += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px" title="${esc(initiativeTitle(char))}">
+    <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);margin-bottom:4px">INITIATIVE <span style="color:${cc}">${initiativeText(char)}</span></div>
+    <div style="display:flex;align-items:center;gap:6px"><span style="font-size:10px;color:var(--muted)">other bonus</span>
+    <input type="number" min="-10" max="20" value="${+char.initMisc||0}" onchange="csUpdateField('${char.id}','initMisc',+this.value)" title="Magic items or anything else the app doesn't track"
+      style="width:52px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'Cinzel',serif;font-size:16px;font-weight:700;text-align:center;padding:3px"></div>
+    <div style="font-size:9px;color:var(--muted);margin-top:4px;line-height:1.35">${esc(initiativeTitle(char))}</div>
+  </div>`;
   h += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px">
     <div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);margin-bottom:4px">PROF BONUS</div>
     <div style="font-family:'Cinzel',serif;font-size:20px;font-weight:700;color:${cc};text-align:center;margin-top:8px">+${pb}</div>
@@ -16695,20 +16756,21 @@ function renderCharProfsTab(char, cls){
   let h = `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:8px">SKILL PROFICIENCIES</div>`;
   h += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:18px">`;
   ALL_SKILLS.forEach(sk=>{
-    const isProf = profs.some(p=>p.toLowerCase()===sk.n.toLowerCase());
-    const mod = ABILITY_MODS[sk.a] + (isProf?pb:0);
+    const chk = skillCheck(char, sk.n), isProf = chk.level==='prof'||chk.level==='expert', isExp = chk.level==='expert';
+    const mod = chk.mod;
     const sign = mod>=0?'+':'';
     h += `<label style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:var(--surface2);border:1px solid ${isProf?cc:'var(--border)'};border-radius:8px;cursor:pointer">
       <input type="checkbox" ${isProf?'checked':''} onchange="csToggleSkillProf('${char.id}','${sk.n}',this.checked)" style="accent-color:${cc};width:14px;height:14px;flex-shrink:0">
       <span style="font-size:11px;flex:1;color:var(--text)">${sk.n}</span>
-      <span style="font-family:'Cinzel',serif;font-size:11px;color:${isProf?cc:'var(--muted)'};">${sign}${mod}</span>
+      ${isProf?`<button type="button" onclick="event.preventDefault();event.stopPropagation();csToggleExpertise('${char.id}','${sk.n}')" title="${isExp?'Expertise — tap to remove':'Tap to mark expertise (double proficiency)'}" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:12px;color:${isExp?'var(--gold)':'var(--border2, #555)'}">★</button>`:''}
+      <span style="font-family:'Cinzel',serif;font-size:11px;color:${isProf?cc:'var(--muted)'};" title="${chk.level==='half'?'Half proficiency (Jack of All Trades / Remarkable Athlete)':''}">${sign}${mod}</span>
     </label>`;
   });
   h += `</div>`;
   const _hasProf = n => profs.some(p=>p.toLowerCase()===n.toLowerCase());
   h += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:-8px 0 18px">
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;display:flex;align-items:center"><span style="font-size:11px;flex:1;color:var(--muted)">Passive Perception</span><b style="font-family:'Cinzel',serif">${10+ABILITY_MODS.WIS+(_hasProf('Perception')?pb:0)}</b></div>
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;display:flex;align-items:center"><span style="font-size:11px;flex:1;color:var(--muted)">Passive Insight</span><b style="font-family:'Cinzel',serif">${10+ABILITY_MODS.WIS+(_hasProf('Insight')?pb:0)}</b></div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;display:flex;align-items:center"><span style="font-size:11px;flex:1;color:var(--muted)">Passive Perception</span><b style="font-family:'Cinzel',serif">${passiveScore(char,'Perception')}</b></div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;display:flex;align-items:center"><span style="font-size:11px;flex:1;color:var(--muted)">Passive Insight</span><b style="font-family:'Cinzel',serif">${passiveScore(char,'Insight')}</b></div>
   </div>`;
 
   // Feats
@@ -16828,10 +16890,21 @@ function csToggleSkillProf(id, skill, on){
   _csSaveChar(id, c=>{
     if(!c.proficiencies) c.proficiencies=[];
     if(on && !c.proficiencies.some(p=>p.toLowerCase()===skill.toLowerCase())) c.proficiencies.push(skill);
-    else if(!on) c.proficiencies = c.proficiencies.filter(p=>p.toLowerCase()!==skill.toLowerCase());
+    else if(!on){ c.proficiencies = c.proficiencies.filter(p=>p.toLowerCase()!==skill.toLowerCase());
+      c.expertiseSkills = (c.expertiseSkills||[]).filter(p=>String(p).toLowerCase()!==skill.toLowerCase()); }
   });
   const chars = getVisibleChars();
   const char = chars.find(c=>String(c.id)===String(id));
+  if(char) renderCharProfsTab(char, CLASSES[char.classIdx]);
+}
+// Expertise (double proficiency) on a proficient skill.
+function csToggleExpertise(id, skill){
+  _csSaveChar(id, c=>{
+    const low = skill.toLowerCase(); c.expertiseSkills = c.expertiseSkills||[];
+    if(c.expertiseSkills.some(p=>String(p).toLowerCase()===low)) c.expertiseSkills = c.expertiseSkills.filter(p=>String(p).toLowerCase()!==low);
+    else c.expertiseSkills.push(skill);
+  });
+  const char = getVisibleChars().find(c=>String(c.id)===String(id));
   if(char) renderCharProfsTab(char, CLASSES[char.classIdx]);
 }
 function csAddFeat(id){
@@ -17253,7 +17326,7 @@ function renderCharStats(char, cls){
   const baseAC = getBaseAC(char);
   const acBoosted = displayAC !== baseAC;
   const atkBonus = getEquipSlotATK(char) || ((str+pb>=0?'+':'')+(str+pb));
-  const initMod = getMod(char.abilities&&char.abilities.DEX?char.abilities.DEX:10);
+  const initMod = initiativeText(char);
   const mainHandItem = slots['mainhand'];
   const equipped = EQUIP_SLOTS.filter(function(s){return slots[s.id] && !slots[s.id]._2hBlocked;});
 
