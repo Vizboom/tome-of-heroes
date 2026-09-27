@@ -6,6 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
 <meta charset="UTF-8">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta name="theme-color" content="#0d0a1a">
 <meta name="mobile-web-app-capable" content="yes">
@@ -15737,7 +15738,7 @@ function popOutMap(){
   const cfg=JSON.stringify({vw:VW, vh:VH, mapId:map.id}).replace(/</g,'\\u003c');
   w.document.open();
   w.document.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-    +'<title>'+title+'</title><style>'+cssText
+    +'<meta name="referrer" content="no-referrer"><title>'+title+'</title><style>'+cssText
     +'html,body{margin:0;height:100%;background:#0d0a1a;overflow:hidden;font-family:system-ui,sans-serif}'
     +'#vp{position:fixed;inset:0;touch-action:none;cursor:grab}#vp:active{cursor:grabbing}'
     +'#vp svg{position:absolute;inset:0;width:100%;height:100%;display:block}'
@@ -20372,50 +20373,224 @@ function toggleTokMenu(){ _tokMenu = !_tokMenu; renderMap(); }
 // 'n:c-<npcId>' the campaign's own NPCs, 'c:c-<id>' custom creatures.
 // Pictures: camp.tokenArt[key] (uploaded or linked); campaign NPCs use their portrait.
 //
-// The Curse of Strahd lists below are a starting set written from knowledge of
-// the published adventure (the wiki it should mirror was not reachable when
-// they were written); each entry links to a search of the Ravenloft wiki.
+// The Curse of Strahd lists below mirror the Ravenloft wiki's Curse of Strahd
+// page (Index ▸ Characters / Creatures; "referenced only" names left out),
+// with each page's lead image and a link to it. Pictures are loaded from the
+// wiki's image host, which only serves them without a referrer — hence the
+// page-wide <meta name="referrer" content="no-referrer">.
 const COS_NPCS = [
-  ['strahd','Strahd von Zarovich','🧛','hostile'],['rahadin','Rahadin','🗡','hostile'],['ireena','Ireena Kolyana','🌹','friendly'],
-  ['ismark','Ismark Kolyanovich','🛡','friendly'],['kolyan','Kolyan Indirovich','⚰','friendly'],['madam-eva','Madam Eva','🔮','neutral'],
-  ['ezmerelda','Ezmerelda d\'Avenir','🏹','friendly'],['van-richten','Rudolph van Richten (Rictavio)','🎪','friendly'],
-  ['doru','Doru','🦇','hostile'],['donavich','Donavich','✝','friendly'],['mad-mary','Mad Mary','😢','neutral'],['gertruda','Gertruda','👧','neutral'],
-  ['bildrath','Bildrath Cantemir','🛒','neutral'],['parriwimple','Parriwimple','🧱','neutral'],
-  ['morgantha','Morgantha','🧙','hostile'],['bella','Bella Sunbane','🧙','hostile'],['offalia','Offalia Wormwiggle','🧙','hostile'],
-  ['lucian','Father Lucian Petrovich','✝','friendly'],['vargas','Baron Vargas Vallakovich','👑','neutral'],['lydia','Lady Lydia Petrovna','👒','neutral'],
-  ['victor','Victor Vallakovich','📜','neutral'],['izek','Izek Strazni','🔥','hostile'],['fiona','Lady Fiona Wachter','🥀','hostile'],
-  ['nikolai','Nikolai Wachter','🗡','neutral'],['karl','Karl Wachter','🗡','neutral'],['stella','Stella Wachter','🐱','neutral'],
-  ['urwin','Urwin Martikov','🍷','friendly'],['danika','Danika Dorakova','🍷','friendly'],['brom','Brom Martikov','👦','friendly'],['bray','Bray Martikov','👦','friendly'],
-  ['davian','Davian Martikov','🍇','friendly'],['adrian','Adrian Martikov','🍇','friendly'],['elvir','Elvir Martikov','🍇','friendly'],
-  ['blinsky','Gadof Blinsky','🧸','neutral'],['milivoj','Milivoj','⛏','neutral'],['szoldar','Szoldar Szoldarovich','🏹','neutral'],['yevgeni','Yevgeni Krushkin','🏹','neutral'],
-  ['kasimir','Kasimir Velikov','🧝','friendly'],['patrina','Patrina Velikovna','🧝','hostile'],
-  ['dmitri','Dmitri Krezkov','🏰','neutral'],['anna','Anna Krezkova','🏰','neutral'],['ilya','Ilya Krezkov','👦','neutral'],
-  ['abbot','The Abbot','😇','neutral'],['vasilka','Vasilka','👰','neutral'],['clovin','Clovin Belview','🐾','neutral'],
-  ['luvash','Luvash','🎻','neutral'],['arrigal','Arrigal','🗡','hostile'],['arabelle','Arabelle','👧','neutral'],['stanimir','Stanimir','🎻','neutral'],
-  ['baba-lysaga','Baba Lysaga','🧙','hostile'],['vladimir','Vladimir Horngaard','⚔','hostile'],['godfrey','Sir Godfrey Gwilym','⚔','hostile'],
-  ['argynvost','Argynvost','🐉','friendly'],['mordenkainen','Mordenkainen','🧙','neutral'],['pidlwick','Pidlwick II','🤡','hostile'],
-  ['escher','Escher','🧛','hostile'],['cyrus','Cyrus Belview','🐾','hostile'],['ludmilla','Ludmilla Vilisevic','🧛','hostile'],
-  ['anastrasya','Anastrasya Karelova','🧛','hostile'],['volenta','Volenta Popofsky','🧛','hostile'],['sergei','Sergei von Zarovich','👻','friendly'],
-  ['tatyana','Tatyana','🌹','neutral'],['leo','Leo Dilisnya','🗡','hostile'],['emil','Emil Toranescu','🐺','neutral'],['zuleika','Zuleika Toranescu','🐺','neutral'],
-  ['kiril','Kiril Stoyanovich','🐺','hostile'],['rose','Rosavalda Durst','👻','neutral'],['thorn','Thornboldt Durst','👻','neutral'],
-  ['lief','Lief Lipsiege','🍺','neutral'],['bluto','Bluto Krogarov','🎣','neutral'],
+  ['adrian-martikov','Adrian Martikov','','','friendly'],
+  ['alenka','Alenka','','','neutral'],
+  ['alexei','Alexei','','','neutral'],
+  ['amalthia','Amalthia','','','neutral'],
+  ['anastrasya-karelova','Anastrasya Karelova','','','hostile'],
+  ['angrath-woodwise','Angrath Woodwise','','','neutral'],
+  ['anna-krezkov','Anna Krezkov','','','neutral'],
+  ['arabelle','Arabelle','','','neutral'],
+  ['ariel-du-plumette','Ariel du Plumette','','','neutral'],
+  ['arik-lorensk','Arik Lorensk','','','neutral'],
+  ['arrigal','Arrigal','','','hostile'],
+  ['aziana','Aziana','','','neutral'],
+  ['baba-lysaga','Baba Lysaga','https://static.wikia.nocookie.net/ravenloft/images/4/42/Babalysaga.png/revision/latest/scale-to-width-down/159?cb=20210130234500','Baba Lysaga','hostile'],
+  ['bella-sunbane','Bella Sunbane','','','hostile'],
+  ['beucephalus','Beucephalus','','','neutral'],
+  ['bianca','Bianca','','','neutral'],
+  ['bildrath-cantemir','Bildrath Cantemir','','','neutral'],
+  ['bluto-krogarov','Bluto Krogarov','','','neutral'],
+  ['bray-martikova','Bray Martikova','','','friendly'],
+  ['brom-martikova','Brom Martikova','','','friendly'],
+  ['carlon-amoffel','Carlon Amoffel','','','neutral'],
+  ['clovin-belview','Clovin Belview','','','neutral'],
+  ['cyrus-belview','Cyrus Belview','','','hostile'],
+  ['dag-tomescu','Dag Tomescu','','','neutral'],
+  ['damia','Damia','','','neutral'],
+  ['danika-dorakova','Danika Dorakova','','','friendly'],
+  ['davanka','Davanka','','','neutral'],
+  ['davian-martikov','Davian Martikov','','','friendly'],
+  ['davra-jassur','Davra Jassur','','','neutral'],
+  ['dmitri-krezkov','Dmitri Krezkov','','','neutral'],
+  ['donavich','Donavich','','','friendly'],
+  ['doru','Doru','','','hostile'],
+  ['elvir-martikov','Elvir Martikov','','','friendly'],
+  ['emil-toranescu','Emil Toranescu','','','neutral'],
+  ['endorovich','Endorovich','','','neutral'],
+  ['eravien-haund','Eravien Haund','','','neutral'],
+  ['ernst-larnak','Ernst Larnak','','','neutral'],
+  ['escher','Escher','','','hostile'],
+  ['exethanter','Exethanter','','Exethanter','neutral'],
+  ['ezmerelda-d-avenir','Ezmerelda d\'Avenir','https://static.wikia.nocookie.net/ravenloft/images/a/ad/Ezmerelda.PNG/revision/latest/scale-to-width-down/126?cb=20210523051154','Ez d\'Avenir','friendly'],
+  ['fiona-wachter','Fiona Wachter','','','neutral'],
+  ['freek','Freek','','','neutral'],
+  ['gadof-blinsky','Gadof Blinsky','','','neutral'],
+  ['gertruda','Gertruda','','','neutral'],
+  ['godfrey-gwilym','Godfrey Gwilym','','','hostile'],
+  ['gunther-arasek','Gunther Arasek','','','neutral'],
+  ['haliq','Haliq','','','neutral'],
+  ['helga-ruvak','Helga Ruvak','','','neutral'],
+  ['henrik-van-der-voort','Henrik van der Voort','https://static.wikia.nocookie.net/ravenloft/images/a/aa/Henrik.jpg/revision/latest/scale-to-width-down/154?cb=20170222230853','Henrik van der Voort','neutral'],
+  ['ireena-kolyana','Ireena Kolyana','https://static.wikia.nocookie.net/ravenloft/images/6/6e/Ireena.png/revision/latest/scale-to-width-down/200?cb=20161212001242','Ireena Kolyana','friendly'],
+  ['ismark-kolyanovich','Ismark Kolyanovich','','','friendly'],
+  ['izek-strazni','Izek Strazni','https://static.wikia.nocookie.net/ravenloft/images/2/21/Kasimir-Patrina-and-Izek-250x300.jpg/revision/latest/scale-to-width-down/163?cb=20211029095258','Izek Strazni','hostile'],
+  ['karl-wachter','Karl Wachter','','','neutral'],
+  ['kasimir-velikov','Kasimir Velikov','','','friendly'],
+  ['kellen','Kellen','','','neutral'],
+  ['kiril-stoyanovich','Kiril Stoyanovich','','','hostile'],
+  ['klutz-tripalotsky','Klutz Tripalotsky','','','neutral'],
+  ['kolya','Kolya','','','neutral'],
+  ['kolyan-indirovich','Kolyan Indirovich','','','friendly'],
+  ['kretyana-dolof','Kretyana Dolof','','','neutral'],
+  ['lanniver-strayl','Lanniver Strayl','','','neutral'],
+  ['lars-kjurls','Lars Kjurls','','','neutral'],
+  ['lazlo-ulrich','Lazlo Ulrich','','','neutral'],
+  ['lief-lipsiege','Lief Lipsiege','','','neutral'],
+  ['lucian-jarov','Lucian Jarov','','','neutral'],
+  ['lucian-petrovich','Lucian Petrovich','','','neutral'],
+  ['ludmilla-vilisevic','Ludmilla Vilisevic','','','hostile'],
+  ['luvash','Luvash','','','neutral'],
+  ['lydia-pertrovna','Lydia Pertrovna','','','neutral'],
+  ['mad-mary','Mad Mary','','','neutral'],
+  ['madalena','Madalena','','','neutral'],
+  ['madam-eva','Madam Eva','https://static.wikia.nocookie.net/ravenloft/images/2/2b/Madame_Eva.jpeg/revision/latest/scale-to-width-down/200?cb=20211017053354','Madam Eva','neutral'],
+  ['majesto','Majesto','','','neutral'],
+  ['marzena-belview','Marzena Belview','','','neutral'],
+  ['milivoj','Milivoj','','','neutral'],
+  ['mirabel','Mirabel','','','neutral'],
+  ['mishka-belview','Mishka Belview','','','neutral'],
+  ['mordenkainen','Mordenkainen','https://static.wikia.nocookie.net/ravenloft/images/f/ff/Mordenkainen02.jpg/revision/latest/scale-to-width-down/200?cb=20170217222642','Mordenkainen','neutral'],
+  ['morgantha','Morgantha','','','hostile'],
+  ['morwen-daggerford','Morwen Daggerford','','','neutral'],
+  ['muriel-vinshaw','Muriel Vinshaw','','','neutral'],
+  ['myrtle','Myrtle','','','neutral'],
+  ['neferon','Neferon','','','neutral'],
+  ['nikolai-wachter','Nikolai Wachter','','','neutral'],
+  ['norganas','Norganas','','','neutral'],
+  ['offalia-wormwiggle','Offalia Wormwiggle','','','hostile'],
+  ['otto-belview','Otto Belview','','','neutral'],
+  ['parpol-cantemir','Parpol Cantemir','','','neutral'],
+  ['patrina-velikovna','Patrina Velikovna','https://static.wikia.nocookie.net/ravenloft/images/2/21/Kasimir-Patrina-and-Izek-250x300.jpg/revision/latest/scale-to-width-down/163?cb=20211029095258','Patrina Velikovna','hostile'],
+  ['piccolo','Piccolo','','','neutral'],
+  ['pidlwick-ii','Pidlwick II','https://static.wikia.nocookie.net/ravenloft/images/1/16/Pidlwick_II.jpeg/revision/latest/scale-to-width-down/138?cb=20210503135326','Pidlwick II','hostile'],
+  ['rahadin','Rahadin','https://static.wikia.nocookie.net/ravenloft/images/a/af/Rahadin.jpg/revision/latest/scale-to-width-down/164?cb=20210503144653','Rahadin','hostile'],
+  ['ratka','Ratka','','','neutral'],
+  ['rudolph-van-richten','Rudolph van Richten','https://static.wikia.nocookie.net/ravenloft/images/f/f7/Van_richten.jpg/revision/latest/scale-to-width-down/167?cb=20161120171450','Rudolph van Richten','neutral'],
+  ['sangzor','Sangzor','','','neutral'],
+  ['savid','Savid','','','neutral'],
+  ['sasha-ivliskova','Sasha Ivliskova','','','neutral'],
+  ['selvek-serelim','Selvek Serelim','','','neutral'],
+  ['skennis','Skennis','','','neutral'],
+  ['sorvia','Sorvia','','','neutral'],
+  ['strahd-von-zarovich','Strahd von Zarovich','https://static.wikia.nocookie.net/ravenloft/images/a/ac/Strahd.jpg/revision/latest/scale-to-width-down/200?cb=20240227011023','Strahd von Zarovich','hostile'],
+  ['stefania-martikov','Stefania Martikov','','','neutral'],
+  ['stella-wachter','Stella Wachter','','','neutral'],
+  ['stanimir','Stanimir','','','neutral'],
+  ['szoldar-szoldarovich','Szoldar Szoldarovich','','','neutral'],
+  ['udo-lukovich','Udo Lukovich','','','neutral'],
+  ['urwin-martikov','Urwin Martikov','','','friendly'],
+  ['vargas-vallakovich','Vargas Vallakovich','https://static.wikia.nocookie.net/ravenloft/images/0/05/Vallakoviches.jpg/revision/latest/scale-to-width-down/195?cb=20221105022057','Vargas Vallakovich','neutral'],
+  ['varushka','Varushka','','','neutral'],
+  ['vasilka','Vasilka','','','neutral'],
+  ['victor-vallakovich','Victor Vallakovich','','','neutral'],
+  ['vilnius','Vilnius','','','neutral'],
+  ['vladimir-horngaard','Vladimir Horngaard','','','hostile'],
+  ['volenta-popofsky','Volenta Popofsky','','','hostile'],
+  ['wencensia','Wencensia','','','neutral'],
+  ['wintersplinter','Wintersplinter','https://static.wikia.nocookie.net/ravenloft/images/8/82/Treeblight.jpeg/revision/latest/scale-to-width-down/200?cb=20210505083308','Wintersplinter','neutral'],
+  ['yelena-arasek','Yelena Arasek','','','neutral'],
+  ['yeska','Yeska','','','neutral'],
+  ['yevgeni-krushkin','Yevgeni Krushkin','','','neutral'],
+  ['zelraun-roaringhorn','Zelraun Roaringhorn','','','neutral'],
+  ['zuleika-toranescu','Zuleika Toranescu','','','neutral'],
+  ['zygfrek-belview','Zygfrek Belview','','','neutral'],
 ];
 const COS_CREATURES = [
-  ['vampire-spawn','Vampire spawn','🧛'],['strahd-zombie','Strahd zombie','🧟'],['zombie','Zombie','🧟'],['skeleton','Skeleton','💀'],
-  ['ghoul','Ghoul','🧟'],['ghast','Ghast','🧟'],['ghost','Ghost','👻'],['specter','Specter','👻'],['wraith','Wraith','👻'],['wight','Wight','💀'],['shadow','Shadow','🌑'],
-  ['dire-wolf','Dire wolf','🐺'],['wolf','Wolf','🐺'],['werewolf','Werewolf','🐺'],['wereraven','Wereraven','🐦'],
-  ['swarm-bats','Swarm of bats','🦇'],['swarm-ravens','Swarm of ravens','🐦'],['swarm-rats','Swarm of rats','🐀'],['giant-spider','Giant spider','🕷'],
-  ['barovian-witch','Barovian witch','🧙'],['druid','Druid','🌿'],['berserker','Berserker','🪓'],
-  ['twig-blight','Twig blight','🌿'],['needle-blight','Needle blight','🌵'],['vine-blight','Vine blight','🌿'],['tree-blight','Tree blight','🌳'],
-  ['mongrelfolk','Mongrelfolk','🐾'],['revenant','Revenant','⚔'],['flesh-golem','Flesh golem','🧟'],['night-hag','Night hag','🧙'],
-  ['scarecrow','Scarecrow','🎃'],['gargoyle','Gargoyle','🗿'],['animated-armor','Animated armor','🛡'],['broom','Broom of animated attack','🧹'],
-  ['phantom-warrior','Phantom warrior','👻'],['mummy','Mummy','🧟'],['crawling-claw','Crawling claw','✋'],['shambling-mound','Shambling mound','🌿'],
-  ['nightmare','Nightmare','🐴'],['guard','Guard','💂'],['bandit','Bandit','🗡'],['commoner','Commoner','👤'],
+  ['amber-golem','Amber golem','https://static.wikia.nocookie.net/ravenloft/images/a/a1/AmberGolem.png/revision/latest/scale-to-width-down/128?cb=20210507064016','Amber golem','🗿'],
+  ['animated-object','Animated object','','','🧹'],
+  ['arcanaloth','Arcanaloth','','','😈'],
+  ['banshee','Banshee','','','👻'],
+  ['bat','Bat','','','🦇'],
+  ['barovian','Barovian','','','👤'],
+  ['black-pudding','Black pudding','','','🫧'],
+  ['blue-dragon','Blue dragon','','','🐉'],
+  ['cat','Cat','','','🐈'],
+  ['clay-golem','Clay golem','https://static.wikia.nocookie.net/ravenloft/images/e/e0/Claygolem.png/revision/latest/scale-to-width-down/159?cb=20211015092553','Clay golem','🗿'],
+  ['crawling-claw','Crawling claw','','','✋'],
+  ['death-slaad','Death slaad','','','🐸'],
+  ['deer','Deer','https://static.wikia.nocookie.net/forgottenrealms/images/1/1a/Deer_portrait_NWN.png/revision/latest/scale-to-width-down/128?cb=20210705181418','Deer','🦌'],
+  ['deva','Deva','https://static.wikia.nocookie.net/ravenloft/images/9/93/Deva.jpg/revision/latest/scale-to-width-down/200?cb=20170221210935','Deva','😇'],
+  ['dire-wolf','Dire wolf','','','🐺'],
+  ['dretch','Dretch','','','😈'],
+  ['dusk-elf','Dusk Elf','','','🧝'],
+  ['elf','Elf','','','🧝'],
+  ['flameskull','Flameskull','https://static.wikia.nocookie.net/ravenloft/images/2/20/Flameskull.jpg/revision/latest/scale-to-width-down/154?cb=20210506144303','Flameskull','💀'],
+  ['flesh-golem','Flesh golem','','','🧟'],
+  ['gargoyle','Gargoyle','','','🗿'],
+  ['ghast','Ghast','','','🧟'],
+  ['ghoul','Ghoul','','','🧟'],
+  ['ghost','Ghost','','','👻'],
+  ['giant-goat','Giant goat','','','🐐'],
+  ['giant-spider','Giant spider','','','🕷'],
+  ['goat','Goat','','','🐐'],
+  ['gray-ooze','Gray ooze','','','🫧'],
+  ['grick','Grick','','','🐛'],
+  ['hell-hound','Hell hound','','','🐕'],
+  ['horse','Horse','','','🐴'],
+  ['human','Human','','','👤'],
+  ['imp','Imp','','','😈'],
+  ['invisible-stalker','Invisible stalker','','','👻'],
+  ['iron-golem','Iron golem','','','🗿'],
+  ['lich','Lich','https://static.wikia.nocookie.net/ravenloft/images/e/e3/Lich_MM_4e.jpg/revision/latest/scale-to-width-down/128?cb=20161214222149','Lich','💀'],
+  ['mastiff','Mastiff','','','🐕'],
+  ['mongrelfolk','Mongrelfolk','','','🐾'],
+  ['monkey','Monkey','','','🐒'],
+  ['needle-blight','Needle blight','','','🌵'],
+  ['night-hag','Night hag','','','🧙'],
+  ['nightmare','Nightmare','','','🐴'],
+  ['nothic','Nothic','','','👁'],
+  ['phantom','Phantom','','','👻'],
+  ['quasit','Quasit','','','😈'],
+  ['rat','Rat','','','🐀'],
+  ['raven','Raven','','','🐦'],
+  ['red-dragon','Red dragon','','','🐉'],
+  ['revenant','Revenant','','','⚔'],
+  ['roc','Roc','','','🦅'],
+  ['saber-toothed-tiger','Saber-toothed tiger','','','🐅'],
+  ['scarecrow','Scarecrow','','','🎃'],
+  ['shadow','Shadow','','','🌑'],
+  ['shadow-demon','Shadow demon','','','😈'],
+  ['shambling-mound','Shambling mound','','','🌿'],
+  ['shield-guardian','Shield guardian','','','🗿'],
+  ['skeleton','Skeleton','','Skeleton','💀'],
+  ['smoke-mephit','Smoke mephit','','','💨'],
+  ['spectre','Spectre','','','👻'],
+  ['strahd-s-animated-armor','Strahd\'s animated armor','https://static.wikia.nocookie.net/ravenloft/images/f/fd/Mark-behm-markbehm-strahdsanimatedarmor.jpg/revision/latest/scale-to-width-down/160?cb=20170209210710','Strahd\'s animated armor','🛡'],
+  ['stirge','Stirge','','','🦟'],
+  ['stone-golem','Stone golem','','','🗿'],
+  ['toad','Toad','','','🐸'],
+  ['tree-blight','Tree blight','https://static.wikia.nocookie.net/ravenloft/images/8/82/Treeblight.jpeg/revision/latest/scale-to-width-down/200?cb=20210505083308','Tree blight','🌳'],
+  ['troglodyte','Troglodyte','','','🦎'],
+  ['twig-blight','Twig blight','','','🌿'],
+  ['vampire','Vampire','','Vampire','🧛'],
+  ['vampire-spawn','Vampire spawn','','','🧛'],
+  ['vine-blight','Vine blight','','','🌿'],
+  ['vistani','Vistani','','Vistani','🔮'],
+  ['vrock','Vrock','','','😈'],
+  ['wereraven','Wereraven','','','🐦'],
+  ['werewolf','Werewolf','','','🐺'],
+  ['wight','Wight','','','💀'],
+  ['will-o-wisp','Will-o\'-wisp','','Will-o\'-wisp','✨'],
+  ['wolf','Wolf','','','🐺'],
+  ['wraith','Wraith','','','👻'],
+  ['zombie','Zombie','https://static.wikia.nocookie.net/ravenloft/images/b/b5/Zombie-5e.png/revision/latest/scale-to-width-down/154?cb=20211230162339','Zombie','🧟'],
 ];
+// Keys from the first (hand-written) list → the wiki list, so placed tokens keep working.
+const COS_KEY_ALIAS = {"n:cos-strahd": "n:cos-strahd-von-zarovich", "n:cos-ireena": "n:cos-ireena-kolyana", "n:cos-ismark": "n:cos-ismark-kolyanovich", "n:cos-kolyan": "n:cos-kolyan-indirovich", "n:cos-ezmerelda": "n:cos-ezmerelda-d-avenir", "n:cos-van-richten": "n:cos-rudolph-van-richten", "n:cos-bildrath": "n:cos-bildrath-cantemir", "n:cos-bella": "n:cos-bella-sunbane", "n:cos-offalia": "n:cos-offalia-wormwiggle", "n:cos-lucian": "n:cos-lucian-petrovich", "n:cos-vargas": "n:cos-vargas-vallakovich", "n:cos-lydia": "n:cos-lydia-pertrovna", "n:cos-victor": "n:cos-victor-vallakovich", "n:cos-izek": "n:cos-izek-strazni", "n:cos-fiona": "n:cos-fiona-wachter", "n:cos-nikolai": "n:cos-nikolai-wachter", "n:cos-karl": "n:cos-karl-wachter", "n:cos-stella": "n:cos-stella-wachter", "n:cos-urwin": "n:cos-urwin-martikov", "n:cos-danika": "n:cos-danika-dorakova", "n:cos-brom": "n:cos-brom-martikova", "n:cos-bray": "n:cos-bray-martikova", "n:cos-davian": "n:cos-davian-martikov", "n:cos-adrian": "n:cos-adrian-martikov", "n:cos-elvir": "n:cos-elvir-martikov", "n:cos-blinsky": "n:cos-gadof-blinsky", "n:cos-szoldar": "n:cos-szoldar-szoldarovich", "n:cos-yevgeni": "n:cos-yevgeni-krushkin", "n:cos-kasimir": "n:cos-kasimir-velikov", "n:cos-patrina": "n:cos-patrina-velikovna", "n:cos-dmitri": "n:cos-dmitri-krezkov", "n:cos-anna": "n:cos-anna-krezkov", "n:cos-ilya": "n:cos-anna-krezkov", "n:cos-clovin": "n:cos-clovin-belview", "n:cos-vladimir": "n:cos-vladimir-horngaard", "n:cos-godfrey": "n:cos-godfrey-gwilym", "n:cos-pidlwick": "n:cos-pidlwick-ii", "n:cos-cyrus": "n:cos-cyrus-belview", "n:cos-ludmilla": "n:cos-ludmilla-vilisevic", "n:cos-anastrasya": "n:cos-anastrasya-karelova", "n:cos-volenta": "n:cos-volenta-popofsky", "n:cos-sergei": "n:cos-strahd-von-zarovich", "n:cos-emil": "n:cos-emil-toranescu", "n:cos-zuleika": "n:cos-zuleika-toranescu", "n:cos-kiril": "n:cos-kiril-stoyanovich", "n:cos-lief": "n:cos-lief-lipsiege", "n:cos-bluto": "n:cos-bluto-krogarov", "c:cos-specter": "c:cos-spectre", "c:cos-barovian-witch": "c:cos-barovian", "c:cos-animated-armor": "c:cos-strahd-s-animated-armor", "c:cos-phantom-warrior": "c:cos-phantom"};
+// First-list entries the wiki list does not have; kept only so tokens already placed still draw.
+const COS_RETIRED = {"n:cos-parriwimple": ["Parriwimple", "🧱"], "n:cos-abbot": ["The Abbot", "😇"], "n:cos-argynvost": ["Argynvost", "🐉"], "n:cos-tatyana": ["Tatyana", "🌹"], "n:cos-leo": ["Leo Dilisnya", "🗡"], "n:cos-rose": ["Rosavalda Durst", "👻"], "n:cos-thorn": ["Thornboldt Durst", "👻"], "c:cos-strahd-zombie": ["Strahd zombie", "🧟"], "c:cos-swarm-bats": ["Swarm of bats", "🦇"], "c:cos-swarm-ravens": ["Swarm of ravens", "🐦"], "c:cos-swarm-rats": ["Swarm of rats", "🐀"], "c:cos-druid": ["Druid", "🌿"], "c:cos-berserker": ["Berserker", "🪓"], "c:cos-broom": ["Broom of animated attack", "🧹"], "c:cos-mummy": ["Mummy", "🧟"], "c:cos-guard": ["Guard", "💂"], "c:cos-bandit": ["Bandit", "🗡"], "c:cos-commoner": ["Commoner", "👤"]};
 const TOK_REL_COLOR = {allied:'#27ae60', friendly:'#16a085', neutral:'#8a8aa0', hostile:'#c0392b'};
 const TOK_CREATURE_COLOR = '#8e3b3b';
 function _safeLink(u){ return /^https?:\/\//i.test(String(u||'').trim()); }
 function _wikiSearch(name){ return 'https://ravenloft.fandom.com/wiki/Special:Search?query='+encodeURIComponent(name); }
+function _wikiPage(page, name){ return page ? 'https://ravenloft.fandom.com/wiki/'+encodeURIComponent(String(page).replace(/ /g,'_')).replace(/%2F/g,'/') : _wikiSearch(name); }
 // Map label: long names keep their first and last word ("Strahd Zarovich").
 function _shortName(name){ const n=String(name||'').split(' (')[0].trim(); if(n.length<=18) return n; const w=n.split(/\s+/); const s=w.length>2?w[0]+' '+w[w.length-1]:n; return s.length<=20?s:s.slice(0,19)+'…'; }
 function _initials(name){ return String(name||'?').trim().split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase(); }
@@ -20427,11 +20602,20 @@ function _tokLibrary(camp){
   const art = camp.tokenArt||{}, out = {npc:[], creature:[]};
   (camp.npcs||[]).forEach(n=>out.npc.push({key:'n:c-'+n.id, kind:'npc', name:n.name, img:n.portrait||art['n:c-'+n.id]||'', icon:'', color:_npcColor(n), link:_safeLink(n.link)?n.link:'', group:'camp', dead:n.alive===false}));
   (camp.customCreatures||[]).forEach(c=>out.creature.push({key:'c:c-'+c.id, kind:'creature', name:c.name, img:art['c:c-'+c.id]||'', icon:c.icon||'', color:TOK_CREATURE_COLOR, link:'', group:'camp'}));
-  COS_NPCS.forEach(([k,name,icon,rel])=>out.npc.push({key:'n:cos-'+k, kind:'npc', name, img:art['n:cos-'+k]||'', icon, color:TOK_REL_COLOR[rel]||TOK_REL_COLOR.neutral, link:_wikiSearch(name), group:'cos'}));
-  COS_CREATURES.forEach(([k,name,icon])=>out.creature.push({key:'c:cos-'+k, kind:'creature', name, img:art['c:cos-'+k]||'', icon, color:TOK_CREATURE_COLOR, link:_wikiSearch(name), group:'cos'}));
+  COS_NPCS.forEach(([k,name,img,page,rel])=>out.npc.push({key:'n:cos-'+k, kind:'npc', name, img:art['n:cos-'+k]||img||'', icon:'', color:TOK_REL_COLOR[rel]||TOK_REL_COLOR.neutral, link:_wikiPage(page, name), group:'cos'}));
+  COS_CREATURES.forEach(([k,name,img,page,icon])=>out.creature.push({key:'c:cos-'+k, kind:'creature', name, img:art['c:cos-'+k]||img||'', icon, color:TOK_CREATURE_COLOR, link:_wikiPage(page, name), group:'cos'}));
   return out;
 }
-function _tokEntry(camp, key){ const L=_tokLibrary(camp); return L.npc.concat(L.creature).find(e=>e.key===key)||null; }
+// A marker's library entry. Keys from the first hand-written list resolve to
+// their wiki-list entry (or, if the wiki list has no match, a plain token).
+function _tokEntry(camp, key){
+  const L=_tokLibrary(camp), all=L.npc.concat(L.creature);
+  const hit = all.find(e=>e.key===key) || (COS_KEY_ALIAS[key] && all.find(e=>e.key===COS_KEY_ALIAS[key]));
+  if(hit) return hit;
+  const r = COS_RETIRED[key]; if(!r) return null;
+  const npc = key[0]==='n', art=(camp.tokenArt||{})[key]||'';
+  return {key, kind:npc?'npc':'creature', name:r[0], img:art, icon:r[1]||'', color:npc?TOK_REL_COLOR.neutral:TOK_CREATURE_COLOR, link:_wikiSearch(r[0]), group:'cos'};
+}
 // The map's markers, including NPC tokens saved by the earlier per-map NPC tray.
 function _mapMarkers(map){
   const legacy = Object.entries(map.npcTokens||{}).filter(([,p])=>p).map(([nid,p])=>({id:'lg-'+nid, key:'n:c-'+nid, x:p.x, y:p.y}));
@@ -20443,14 +20627,17 @@ function _migrateLegacyMarkers(camp){
   return changed;
 }
 // Token face at radius 10 (same frame as a player mini).
+// The icon / initials are always drawn, under the picture, so a picture that
+// fails to load still leaves a readable token.
 function _libTokSvg(e){
-  return `<circle r="11.2" style="fill:#0d0a1a;stroke:${e.color};stroke-width:1.8"/>`
-    + (e.img
-        ? `<image href="${esc(e.img)}" x="-10" y="-10" width="20" height="20" preserveAspectRatio="xMidYMid slice" clip-path="url(#mtokClip)"${e.dead?' style="filter:grayscale(1) brightness(0.7)"':''}/>`
-        : `<circle r="10" style="fill:${e.color}55"/>` + (e.icon
-            ? `<text text-anchor="middle" dy="4.2" style="font-size:12px;stroke:none;fill:#fff">${esc(e.icon)}</text>`
-            : `<text text-anchor="middle" dy="3.4" style="font-size:9px;stroke:none;fill:#fff;font-weight:700">${esc(_initials(e.name))}</text>`));
+  return `<circle r="11.2" style="fill:#0d0a1a;stroke:${e.color};stroke-width:1.8"/><circle r="10" style="fill:${e.color}55"/>`
+    + (e.icon
+        ? `<text text-anchor="middle" dy="4.2" style="font-size:12px;stroke:none;fill:#fff">${esc(e.icon)}</text>`
+        : `<text text-anchor="middle" dy="3.4" style="font-size:9px;stroke:none;fill:#fff;font-weight:700">${esc(_initials(e.name))}</text>`)
+    + (e.img ? `<image href="${esc(e.img)}" x="-10" y="-10" width="20" height="20" preserveAspectRatio="xMidYMid slice" clip-path="url(#mtokClip)"${e.dead?' style="filter:grayscale(1) brightness(0.7)"':''}/>` : '');
 }
+// <img> for a token face that falls back to its icon / initials if it can't load.
+function _tokFaceImg(e){ return `<img src="${esc(e.img)}" alt="" referrerpolicy="no-referrer" data-f="${esc(e.icon||_initials(e.name))}" onerror="this.replaceWith(document.createTextNode(this.dataset.f||''))">`; }
 // Could the party see a token at this spot? (fog they have cleared, or the
 // halo around the party marker / minis when the map reveals around pins)
 function _npcSeenByParty(camp, map, pos, VW, VH){
@@ -20462,13 +20649,12 @@ function _npcSeenByParty(camp, map, pos, VW, VH){
 }
 function _markersSvg(camp, map, VW, VH, gm){
   const ms = _mapMarkers(map); if(!ms.length) return '';
-  const lib = _tokLibrary(camp), all = lib.npc.concat(lib.creature);
-  const seen = {};
+  const seen = {}, entry = {};
   const PS = _pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4);
   const R = Math.max(0.6,_pinPx(map)*2.2), tr = _tokR(map,VW,R)*_tokScale(map), lf = Math.max(R*_tokScale(map), tr*0.42).toFixed(2);
   const count = {}; ms.forEach(m=>{ count[m.key]=(count[m.key]||0)+1; });
   return ms.map(m=>{
-    const e = all.find(x=>x.key===m.key); if(!e) return '';
+    const e = entry[m.key] || (entry[m.key] = _tokEntry(camp, m.key)); if(!e) return '';
     seen[m.key] = (seen[m.key]||0)+1;
     if(!gm && !_npcSeenByParty(camp, map, m, VW, VH)) return '';
     const label = _shortName(e.name) + (count[m.key]>1 ? ' '+seen[m.key] : '');
@@ -20487,8 +20673,8 @@ function addMarker(key, nx, ny, mapId){
   _migrateLegacyMarkers(camp);
   const x = +Math.max(0.02,Math.min(0.98,nx)).toFixed(4), y = +Math.max(0.02,Math.min(0.98,ny)).toFixed(4);
   if(!map.markers) map.markers = [];
-  const same = e.kind==='npc' && map.markers.find(m=>m.key===key);
-  if(same){ same.x=x; same.y=y; } else map.markers.push({id:genItemId(), key, x, y});
+  const same = e.kind==='npc' && map.markers.find(m=>m.key===key || COS_KEY_ALIAS[m.key]===key);
+  if(same){ same.x=x; same.y=y; same.key=key; } else map.markers.push({id:genItemId(), key, x, y});
   _placingKey = null; saveCampaign(camp); renderMap(); _tokWinRestore();
   toast((e.kind==='npc'?'🧙 ':'🐺 ')+e.name+(same?' moved':' placed')+' — players see it where the map isn\'t fogged','var(--gold)');
   return true;
@@ -20549,9 +20735,9 @@ function _tokWinFill(kind){
   const items = _tokLibrary(camp)[kind].filter(e=>!q || e.name.toLowerCase().includes(q));
   const cos = _looksLikeStrahd(camp) || q;
   const sec = (title, list)=> list.length ? `<div class="tokwin-sec">${title}</div>` + list.map(e=>{
-      const n = ms.filter(m=>m.key===e.key).length;
+      const n = ms.filter(m=>m.key===e.key || COS_KEY_ALIAS[m.key]===e.key).length;
       return `<div class="tokitem ${_placingKey===e.key?'on':''}" draggable="true" data-key="${esc(e.key)}" ondragstart="_tokDragStart(event)" onclick="_armToken('${jsq(e.key)}')" title="${esc(e.name)}">
-        <span class="tokav" style="box-shadow:0 0 0 2px ${e.color};background:${e.color}55">${e.img?`<img src="${esc(e.img)}" alt="" referrerpolicy="no-referrer">`:(e.icon?esc(e.icon):esc(_initials(e.name)))}</span>
+        <span class="tokav" style="box-shadow:0 0 0 2px ${e.color};background:${e.color}55">${e.img?_tokFaceImg(e):(e.icon?esc(e.icon):esc(_initials(e.name)))}</span>
         <span class="tokname">${esc(e.name)}${n?`<small>on map${n>1?' ×'+n:''}</small>`:''}</span>
         <button class="tokbtn" onclick="event.stopPropagation();openTokArt('${jsq(e.key)}')" title="Picture &amp; reference">✎</button></div>`; }).join('') : '';
   const own = items.filter(e=>e.group==='camp'), lib = items.filter(e=>e.group==='cos');
@@ -20641,7 +20827,7 @@ function openMarkerCard(markerId){
       <div style="min-width:0"><div class="gw-title">${esc(e.name)}</div><div class="gw-sub">On ${esc(map.name)} · players see it where the map isn't fogged</div></div>
       <button class="gw-x" onclick="closeTokArt()" aria-label="Close">✕</button></div>
     <div class="ms-body" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
-      <div class="tokav" style="width:92px;height:92px;font-size:34px;box-shadow:0 0 0 3px ${e.color};background:${e.color}55">${e.img?`<img src="${esc(e.img)}" alt="" referrerpolicy="no-referrer">`:esc(e.icon||_initials(e.name))}</div>
+      <div class="tokav" style="width:92px;height:92px;font-size:34px;box-shadow:0 0 0 3px ${e.color};background:${e.color}55">${e.img?_tokFaceImg(e):esc(e.icon||_initials(e.name))}</div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${e.link?`<a class="pc-pill" href="${esc(e.link)}" target="_blank" rel="noopener">📖 Reference</a>`:''}
         <button class="pc-pill" onclick="closeTokArt();openTokArt('${jsq(e.key)}')">${e.key.startsWith('n:c-')?'✎ Edit NPC':'🖼 Change picture'}</button>
