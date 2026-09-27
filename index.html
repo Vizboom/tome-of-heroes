@@ -15865,67 +15865,6 @@ function renderCampaignSwitchBanner() {
   </div>`;
 }
 
-// Seed preset campaigns AFTER all consts are defined
-function seedPresetCampaigns(){
-  // With server-first approach, only seed _db if empty (offline fallback)
-  if(!PRESET_CAMPAIGNS || !PRESET_CAMPAIGNS.length) return;
-  if(_db.campaigns.length > 0) return;
-  PRESET_CAMPAIGNS.forEach(p => {
-    const camp = JSON.parse(JSON.stringify(p));
-    camp.sessions=camp.sessions||[]; camp.quests=camp.quests||[];
-    camp.npcs=camp.npcs||[]; camp.arcs=camp.arcs||[];
-    camp.notes=camp.notes||[]; camp.charIds=camp.charIds||[];
-    if(!_db.campaigns.find(c=>c.id===camp.id)) _db.campaigns.push(camp);
-  });
-}
-
-async function forceReinstallPresets(){
-  if(!PRESET_CAMPAIGNS || !PRESET_CAMPAIGNS.length){
-    alert('Preset data not found. Try reloading the page.');
-    return;
-  }
-  if(!getGroupId()){
-    toast('Connect to a group first before restoring presets','var(--red)');
-    return;
-  }
-
-  toast('Restoring built-in campaigns…','var(--purple)');
-  const gid = getGroupId();
-  const errors = [];
-  let count = 0;
-
-  for(const p of PRESET_CAMPAIGNS){
-    const camp = JSON.parse(JSON.stringify(p));
-    camp.sessions=camp.sessions||[]; camp.quests=camp.quests||[];
-    camp.npcs=camp.npcs||[]; camp.arcs=camp.arcs||[];
-    camp.notes=camp.notes||[]; camp.charIds=camp.charIds||[];
-    // Preserve existing charIds
-    const existing = _db.campaigns.find(c=>c.id===camp.id);
-    if(existing?.charIds?.length) camp.charIds = existing.charIds;
-
-    // Save directly to Supabase with composite key
-    const rowId = gid + '_' + camp.id;
-    const row = { id: rowId, group_id: gid, name: camp.name||'', data: camp };
-    const { error } = await supa.from('campaigns').upsert(row, {onConflict:'id'});
-    if(error){
-      console.error('Preset save error for', camp.name, ':', error.message, error.code);
-      errors.push(`${esc(camp.name)}: ${error.message} (${error.code})`);
-    } else {
-      // Update _db cache
-      const i = _db.campaigns.findIndex(c=>c.id===camp.id);
-      if(i>=0) _db.campaigns[i]=camp; else _db.campaigns.push(camp);
-      count++;
-    }
-  }
-
-  if(errors.length){
-    alert(`${count} restored, ${errors.length} failed:\n\n${errors.join('\n')}\n\nCheck that your Supabase 'data' column is type 'jsonb' and your RLS policies are open.`);
-  } else {
-    if(!getActiveCampId() && _db.campaigns.length) setActiveCampId(_db.campaigns[0].id);
-    toast(`✦ ${count} built-in campaign${count!==1?'s':''} restored!`,'var(--gold)');
-  }
-  renderCampList();
-}
 
 /* ══════════════════════════════════════════════════════════════════
 
