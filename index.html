@@ -13562,13 +13562,15 @@ function renderNPCs() {
       byRel[rel].forEach(n => {
         const initials = n.name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
         html += `<div class="npc-card">
-          <div class="npc-avatar rel-${n.relationship||'neutral'}">${initials}</div>
+          <div class="npc-avatar rel-${n.relationship||'neutral'}" ${n.portrait?'style="padding:0;overflow:hidden"':''}>${n.portrait?`<img src="${n.portrait}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`:esc(initials)}</div>
           <div style="flex:1;min-width:0">
             <div class="npc-name">${esc(n.name)}${!n.alive?(' <span style="color:var(--red);font-size:10px">[Deceased]</span>'):''}</div>
-            <div class="npc-role">${n.race?n.race+' · ':''}${n.role||'Unknown'} ${n.location?'· '+n.location:''}</div>
-            ${n.desc?('<div style="font-size:12px;color:var(--muted);font-style:italic;line-height:1.4;margin-top:4px">'+n.desc+'</div>'):''}
+            <div class="npc-role">${n.race?esc(n.race)+' · ':''}${esc(n.role||'Unknown')} ${n.location?'· '+esc(n.location):''}</div>
+            ${n.desc?('<div style="font-size:12px;color:var(--muted);font-style:italic;line-height:1.4;margin-top:4px">'+esc(n.desc)+'</div>'):''}
+            ${_safeLink(n.link)?`<a href="${esc(n.link)}" target="_blank" rel="noopener" style="font-size:11px;color:var(--gold)">📖 reference</a>`:''}
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0">
+            ${canDesignMaps(camp)?`<button class="icon-btn" style="font-size:12px" onclick="openNpcEditor('${jsq(String(n.id))}')" title="Portrait, notes and reference link">✎</button>`:''}
             <button class="icon-btn" style="font-size:12px" onclick="toggleNPCAlive('${n.id}')" title="${n.alive?'Mark Deceased':'Mark Alive'}">${n.alive?'💀':'❤️'}</button>
             <button class="icon-btn" style="color:var(--red);font-size:12px" onclick="deleteNPC('${n.id}')">✕</button>
           </div>
@@ -14460,6 +14462,7 @@ function renderMap(){
           <text text-anchor="middle" y="${(tr*1.15+(+lf)).toFixed(2)}" style="font-size:${lf}px;stroke-width:${(lf*0.28).toFixed(2)}px">${esc(String(c.name).split(' ')[0].slice(0,14))}</text>
           ${tSel?_tokSelSvg(tr, tr*0.3):''}
         </g></g>`; }).join('')}
+      ${_npcTokensSvg(camp, map, VW, VH, gm)}
       ${_fogLayerSvg(camp, map, VW, VH, pinned)}
     </svg>`;
     // A sub-map leads with the places that plausibly belong there — linked to
@@ -14476,6 +14479,7 @@ function renderMap(){
     const _legend = _painting
       ? (_paintMode==='reveal' ? 'drag to rub the fog away · '+Math.round(_brushR(map))+'px brush' : 'drag to paint the fog back · '+Math.round(_brushR(map))+'px brush')
       : _placingTok ? 'tap where '+esc((_campMembers(camp).find(c=>String(c.id)===_placingTok)||{}).name||'the mini')+' goes'
+      : _placingNpc ? 'tap where '+esc(((camp.npcs||[]).find(n=>String(n.id)===_placingNpc)||{}).name||'the NPC')+' goes — the party sees them once placed'
       : (_placingParty?'tap to drop the party marker':(_placingId?'tap where “'+esc(placeById(_placingId)?.name||'')+'” goes':(_selPinId?'drag the gold grip to resize · drag pin to move':(_mapWheelZoom?'scroll to zoom · tap off the map to exit':'tap the map to zoom · scroll moves the page'))));
     // Peeking is the odd state, so it is the one that gets marked.
     const _peeking = gm && _fogOn(map) && !map.fogFull && _gmPeek;
@@ -14488,7 +14492,7 @@ function renderMap(){
         ${_fix?`<label class="pc-pill" style="color:var(--gold);border-color:var(--gold);cursor:pointer">⬆ Re-upload image<input type="file" accept="image/*" style="display:none" onchange="reuploadMapImage('${jsq(map.id)}', this.files[0]); this.value=''"></label>`:''}
       </div>`;
     }
-    html += `<div class="map-wrap ${(_placingId||_placingParty||_placingTok)?'placing':''} ${_painting?'painting-fog':''} ${_peeking?'gm-preview':''} ${_mapWheelZoom?'zoom-active':''}" id="campMapWrap">${svg}<div class="map-legend">${_legend2}</div></div>`;
+    html += `<div class="map-wrap ${(_placingId||_placingParty||_placingTok||_placingNpc)?'placing':''} ${_painting?'painting-fog':''} ${_peeking?'gm-preview':''} ${_mapWheelZoom?'zoom-active':''}" id="campMapWrap">${svg}<div class="map-legend">${_legend2}</div></div>`;
     html += _gmMapCtrlsHtml(camp, map);
     html += `<div class="map-ctrls">
       ${(chain.length>1)?`<button class="pc-pill" onclick="switchMap('${chain[chain.length-2].id}')" title="Back to ${esc(chain[chain.length-2].name)}">↑ up a map</button>`:''}
@@ -14497,6 +14501,7 @@ function renderMap(){
       <button class="pc-pill" style="border-color:var(--gold);color:var(--gold)" onclick="beginPlaceParty()" title="${map.party?'Reposition the party marker':'Drop a party marker anywhere on the map'}">🚩 ${map.party?'move party':'drop party'}</button>
       ${map.party?`<button class="pc-pill" onclick="removeParty()">✕ party</button>`:''}
       ${_campMembers(camp).length?`<button class="pc-pill ${_tokMenu?'on':''}" onclick="toggleTokMenu()" title="Place characters' minis on their own, away from the party marker">🧍 minis</button>`:''}
+      ${gm?`<button class="pc-pill ${_npcMenu?'on':''}" onclick="toggleNpcMenu()" title="GM: this map's NPC tokens — hidden from the party until you place them">🧙 NPCs</button>`:''}
       <button class="pc-pill" onclick="popOutMap()" title="Open this map full-screen in its own window">⛶ pop out</button>
 
 <span class="pc-pill" style="cursor:default">📌 ${_pinPx(map)}px</span>
@@ -14519,6 +14524,7 @@ function renderMap(){
           ${placed?`<button class="pc-pill" onclick="removeTok('${jsq(k)}')" title="Back to the party">✕</button>`:''}</span>`; }).join('')}
         <button class="pc-pill" onclick="openMiniStudio()" title="Frame the selected character's token">🎯 frame my token</button></div>`;
     }
+    if(_npcMenu && gm) html += _npcTrayHtml(camp, map);
     if(unplaced.length || _rest.length){
       html += `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">${unplaced.length?'NOT ON THIS MAP YET — tap one, then tap the map':'EVERYTHING NEARBY IS PINNED — pull in a place from another map'}</div>
       <div class="map-tray">${unplaced.map(p=>`<button class="pc-pill ${_placingId===p.id?'on gold':''}" onclick="beginPlace('${p.id}')">${PLACE_ICONS[p.type]||'📍'} ${esc(p.name)}</button>`).join('')}${_placingId?`<button class="pc-pill" onclick="beginPlace(null)">cancel</button>`:''}${_rest.length?`<button class="pc-pill ${window._showAllUnplaced?'on':''}" onclick="toggleAllUnplaced()" title="Places already pinned elsewhere — pin one here too to nest it inside this map">${window._showAllUnplaced?'show fewer':'+ '+_rest.length+' pinned elsewhere'}</button>`:''}</div>`;
@@ -14776,9 +14782,9 @@ function _bindMapDrag(camp, map){
   if(!map) map={ id:'__sketch__' };   // the sketch graph has no illustrated map behind it
   const VW=+svg.dataset.vw, VH=+svg.dataset.vh, sketch=!!svg.dataset.sketch;
   const toLocal=(e)=>{ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; const m=svg.getScreenCTM(); return m?pt.matrixTransform(m.inverse()):pt; };
-  const getPos=p=>{ if(p&&p.__party) return map.party||null; if(p&&p.__tok) return (map.tokens||{})[p.__tok]||null; return sketch?{x:p.x,y:p.y}:(p&&p.pins&&p.pins[map.id])||null; };
-  const setPos=(p,x,y)=>{ if(p&&p.__party){ map.party={x,y}; return; } if(p&&p.__tok){ if(!map.tokens) map.tokens={}; map.tokens[p.__tok]={x,y}; return; } if(sketch){ p.x=x; p.y=y; } else { if(!p.pins) p.pins={}; p.pins[map.id]={x,y}; } };
-  const nodeObj=id=> id==='__party__' ? {__party:true, id:'__party__'} : String(id).startsWith('__tok_') ? {__tok:String(id).slice(6), id} : (camp.places||[]).find(q=>q.id===id);
+  const getPos=p=>{ if(p&&p.__party) return map.party||null; if(p&&p.__tok) return (map.tokens||{})[p.__tok]||null; if(p&&p.__npc) return (map.npcTokens||{})[p.__npc]||null; return sketch?{x:p.x,y:p.y}:(p&&p.pins&&p.pins[map.id])||null; };
+  const setPos=(p,x,y)=>{ if(p&&p.__party){ map.party={x,y}; return; } if(p&&p.__tok){ if(!map.tokens) map.tokens={}; map.tokens[p.__tok]={x,y}; return; } if(p&&p.__npc){ if(!map.npcTokens) map.npcTokens={}; map.npcTokens[p.__npc]={x,y}; return; } if(sketch){ p.x=x; p.y=y; } else { if(!p.pins) p.pins={}; p.pins[map.id]={x,y}; } };
+  const nodeObj=id=> id==='__party__' ? {__party:true, id:'__party__'} : String(id).startsWith('__tok_') ? {__tok:String(id).slice(6), id} : String(id).startsWith('__npc_') ? {__npc:String(id).slice(6), id} : (camp.places||[]).find(q=>q.id===id);
 
   // ── Pan & zoom (viewBox). Icons live in the SVG, so they scale with zoom. ──
   const view=_mapView[map.id]||(_mapView[map.id]={z:1,x:0,y:0}); view.vw=VW; view.vh=VH;
@@ -14793,7 +14799,7 @@ function _bindMapDrag(camp, map){
   },{passive:false});
   // A single stationary tap on the empty map enables scroll-to-zoom (tap off to exit).
   let _zTap=null;
-  svg.addEventListener('pointerdown',e=>{ if(pts.size>=2||_placingId||_placingParty||_placingTok||_paintMode||e.target.closest('.map-node')||e.target.closest('.mn-resize')){ _zTap=null; return; } _zTap={x:e.clientX,y:e.clientY}; });
+  svg.addEventListener('pointerdown',e=>{ if(pts.size>=2||_placingId||_placingParty||_placingTok||_placingNpc||_paintMode||e.target.closest('.map-node')||e.target.closest('.mn-resize')){ _zTap=null; return; } _zTap={x:e.clientX,y:e.clientY}; });
   svg.addEventListener('pointerup',e=>{ if(!_zTap) return; const moved=Math.abs(e.clientX-_zTap.x)>6||Math.abs(e.clientY-_zTap.y)>6; _zTap=null; if(!moved && !_mapWheelZoom && pts.size<=1) _setMapWheelZoom(true); });
   svg.addEventListener('pointerdown',e=>{ pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(pts.size===2){ const[a,b]=[...pts.values()]; gest={d:Math.hypot(a.x-b.x,a.y-b.y)||1, cx:(a.x+b.x)/2, cy:(a.y+b.y)/2, z:view.z, x:view.x, y:view.y}; _mapGesture=true; bgPan=null; } });
   svg.addEventListener('pointermove',e=>{ if(pts.has(e.pointerId)) pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
@@ -14802,11 +14808,19 @@ function _bindMapDrag(camp, map){
   const gestUp=e=>{ pts.delete(e.pointerId); if(pts.size<2){ gest=null; setTimeout(()=>{ _mapGesture=false; },60); } };
   svg.addEventListener('pointerup',gestUp); svg.addEventListener('pointercancel',gestUp);
   // Single-finger pan on empty backdrop when zoomed in (pins/paint/place take priority)
-  svg.addEventListener('pointerdown',e=>{ if(pts.size>=2||view.z<=1||_placingId||_placingParty||_placingTok||_paintMode) return; if(e.target.closest('.map-node')) return; bgPan={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y}; });
+  svg.addEventListener('pointerdown',e=>{ if(pts.size>=2||view.z<=1||_placingId||_placingParty||_placingTok||_placingNpc||_paintMode) return; if(e.target.closest('.map-node')) return; bgPan={x:e.clientX,y:e.clientY,vx:view.x,vy:view.y}; });
   svg.addEventListener('pointermove',e=>{ if(!bgPan||pts.size>=2) return; const r=rectOf(); view.x=bgPan.vx-(e.clientX-bgPan.x)/r.width*(VW/view.z); view.y=bgPan.vy-(e.clientY-bgPan.y)/r.height*(VH/view.z); applyView(); e.preventDefault(); });
   const bgEnd=()=>{ bgPan=null; }; svg.addEventListener('pointerup',bgEnd); svg.addEventListener('pointercancel',bgEnd);
 
-  // Tap-to-place mode (party marker or a place)
+  // Tap-to-place mode (party marker, a mini, an NPC token or a place)
+  if(_placingNpc && !sketch){
+    svg.addEventListener('pointerup',e=>{
+      if(pts.size>=1 || _mapGesture) return;
+      const l=toLocal(e); const nx=Math.max(0.02,Math.min(0.98,l.x/VW)), ny=Math.max(0.02,Math.min(0.98,l.y/VH));
+      placeNpcToken(_placingNpc, nx, ny);
+    });
+    return;
+  }
   if(_placingTok && !sketch){
     svg.addEventListener('pointerup',e=>{
       const l=toLocal(e); const nx=Math.max(0.02,Math.min(0.98,l.x/VW)), ny=Math.max(0.02,Math.min(0.98,l.y/VH));
@@ -14893,7 +14907,9 @@ function _bindMapDrag(camp, map){
     el.addEventListener('click',e=>{ e.preventDefault(); e.stopPropagation(); if(el.dataset.sub) switchMap(el.dataset.sub); });
   });
   svg.querySelectorAll('.map-node').forEach(g=>{
-    g.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-sub')||e.target.closest('.mn-resize')||pts.size>=2||_mapGesture) return; drag={g, id:g.dataset.id, moved:false, t:Date.now(), locked:!!map.pinsLocked}; g.setPointerCapture(e.pointerId); e.preventDefault(); });
+    g.addEventListener('pointerdown',e=>{ if(e.target.closest('.mn-sub')||e.target.closest('.mn-resize')||pts.size>=2||_mapGesture) return;
+      if(String(g.dataset.id).startsWith('__npc_') && !canDesignMaps(camp)) return;
+      drag={g, id:g.dataset.id, moved:false, t:Date.now(), locked:!!map.pinsLocked}; g.setPointerCapture(e.pointerId); e.preventDefault(); });
     // Double-click / double-tap a pin to open its own map, if it has one.
     g.addEventListener('dblclick',e=>{ e.preventDefault(); e.stopPropagation(); const sub=subMapFor(g.dataset.id); if(sub){ switchMap(sub.id); } else { const pl=(camp.places||[]).find(q=>q.id===g.dataset.id); toast((pl?pl.name:'This place')+' has no map yet — use “+ sub-map” or “+ own map” to add one','var(--muted)'); } });
   });
@@ -14920,6 +14936,7 @@ function _bindMapDrag(camp, map){
       if(drag.moved){ const pp=(camp.places||[]).find(q=>q.id===drag.id); const gp=pp&&getPos(pp); if(gp) _noteMapAction(camp, gp.x, gp.y); saveCampaign(camp); }
       else if(!sketch){
         const now=Date.now();
+        if(String(drag.id).startsWith('__npc_')){ const nid=String(drag.id).slice(6); drag=null; openNpcEditor(nid, map.id); return; }
         if(drag.id==='__party__' || String(drag.id).startsWith('__tok_')){
           // Tap selects the marker so its resize grip shows, like a place pin
           if(!map.pinsLocked && _selPinId!==drag.id){ _selPinId=drag.id; drag=null; renderMap(); return; }
@@ -15506,24 +15523,42 @@ function bumpTypeScale(t, dir){ const camp=getCampaigns().find(c=>c.id===editing
 function toggleTypeVisible(t){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const m=_curMap(camp); if(!m) return; if(!m.hiddenTypes) m.hiddenTypes=[]; const i=m.hiddenTypes.indexOf(t); if(i>=0) m.hiddenTypes.splice(i,1); else m.hiddenTypes.push(t); saveCampaign(camp); renderMap(); }
 function togglePlaceName(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return; const pl=(camp.places||[]).find(p=>p.id===id); if(!pl) return; pl.hideName=!pl.hideName; saveCampaign(camp); renderMap(); }
 function togglePinLabels(id){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_campMaps(camp).find(x=>x.id===id); if(!m) return; m.hidePinLabels=!m.hidePinLabels; saveCampaign(camp); renderMap(); }
-function beginPlace(id){ _placingId = (id && _placingId!==id) ? id : null; _placingParty=false; _placingTok=null; renderMap(); if(_placingId) document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
-function beginPlaceParty(){ _placingParty=true; _placingId=null; _placingTok=null; _selPinId=null; renderMap(); document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
+function beginPlace(id){ _placingId = (id && _placingId!==id) ? id : null; _placingParty=false; _placingTok=null; _placingNpc=null; renderMap(); if(_placingId) document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
+function beginPlaceParty(){ _placingParty=true; _placingId=null; _placingTok=null; _placingNpc=null; _selPinId=null; renderMap(); document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
 function removeParty(){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_curMap(camp); if(!m) return; delete m.party; saveCampaign(camp); renderMap(); toast('Party marker removed','var(--muted)'); }
-/* Open the current map full-screen in its own window — a self-contained,
-   interactive (pan/zoom) snapshot that runs independently of the app. */
+/* Open the current map full-screen in its own window — a live, interactive
+   (pan/zoom) copy that the table can play on. Minis and the party marker can
+   be dragged there (and, for the GM, NPC tokens); a tray places minis split
+   off from the party and the GM's NPCs. Every move goes back through this
+   window (window.opener.__tohPop) so it is saved and synced like any other. */
 const _popouts = [];   // live pop-out windows: {win, mapId}
 // Clean, full-extent clone of the current map SVG (no selection/resize chrome).
+// Tokens this user may move in the pop-out are tagged .pop-drag.
 function _mapSnapshotSvg(){
   const svg=document.getElementById('campMapSvg'); if(!svg) return null;
+  const camp=getCampaigns().find(c=>c.id===editingCampId); const map=camp&&_curMap(camp);
   const c=svg.cloneNode(true); c.removeAttribute('id');
   c.setAttribute('viewBox', `0 0 ${svg.dataset.vw} ${svg.dataset.vh}`);
   c.setAttribute('preserveAspectRatio','xMidYMid meet');
   c.querySelectorAll('.mn-resize').forEach(n=>n.remove());
   c.querySelectorAll('circle[stroke-dasharray]').forEach(n=>{ if(!n.classList.contains('pinring')) n.remove(); });
   // A pop-out is what the table sees, so fog is always at full strength here
-  // even while the GM is peeking through it on their own screen.
+  // even while the GM is peeking through it on their own screen — and NPC
+  // tokens the party can't see yet stay off it.
   c.querySelectorAll('.map-fog').forEach(n=>n.setAttribute('opacity','1'));
+  if(camp && map){
+    const VW=+svg.dataset.vw, VH=+svg.dataset.vh;
+    c.querySelectorAll('.map-node.npc').forEach(g=>{ const pos=(map.npcTokens||{})[String(g.dataset.id).slice(6)]; if(!pos || !_npcSeenByParty(camp, map, pos, VW, VH)) g.remove(); });
+    c.querySelectorAll('.map-node').forEach(g=>{ if(_popCanDrag(camp, map, g.dataset.id)) g.classList.add('pop-drag'); });
+  }
   return c;
+}
+function _popCanDrag(camp, map, id){
+  id = String(id||'');
+  if(map.pinsLocked) return false;
+  if(id==='__party__' || id.startsWith('__tok_')) return true;
+  if(id.startsWith('__npc_')) return canDesignMaps(camp);
+  return false;
 }
 // Push the current map into every open pop-out (same-origin direct DOM update).
 // Called from renderMap, so any pin/party/size/zoom change or map switch shows live.
@@ -15545,6 +15580,119 @@ function _pushToPopouts(){
     }catch(e){ /* window navigating or blocked — drop it */ _popouts.splice(i,1); }
   }
 }
+// What the pop-out may call back into. Each call re-checks who is allowed.
+function _popCtx(mapId){
+  const camp=getCampaigns().find(c=>c.id===editingCampId);
+  const map=camp&&_campMaps(camp).find(m=>m.id===mapId);
+  return (camp&&map) ? {camp, map} : null;
+}
+window.__tohPop = {
+  move(mapId, id, nx, ny){
+    const cx=_popCtx(mapId); if(!cx) return false; const {camp, map}=cx; id=String(id);
+    if(!_popCanDrag(camp, map, id)) return false;
+    const x=+Math.max(0.02,Math.min(0.98,nx)).toFixed(4), y=+Math.max(0.02,Math.min(0.98,ny)).toFixed(4);
+    if(id==='__party__'){ map.party={x,y}; _noteMapAction(camp, x, y); }
+    else if(id.startsWith('__tok_')){ if(!map.tokens) map.tokens={}; map.tokens[id.slice(6)]={x,y}; }
+    else if(id.startsWith('__npc_')){ if(!map.npcTokens) map.npcTokens={}; map.npcTokens[id.slice(6)]={x,y}; }
+    saveCampaign(camp); renderMap(); return true;
+  },
+  // Things the tray can place: minis still travelling with the party, and
+  // (GM only) this map's NPCs, placed or not.
+  tray(mapId){
+    const cx=_popCtx(mapId); if(!cx) return null; const {camp, map}=cx; const solo=map.tokens||{}, np=map.npcTokens||{};
+    const minis=_campMembers(camp).map(c=>({kind:'tok', id:String(c.id), name:c.name, img:c.token||c.portrait||'', color:classColor(c.classIdx), placed:!!solo[String(c.id)], label:classIcon(c.classIdx)}));
+    const npcs=canDesignMaps(camp) ? (camp.npcs||[]).filter(n=>np[String(n.id)] || _npcRelevant(camp, map, n))
+      .map(n=>({kind:'npc', id:String(n.id), name:n.name, img:n.portrait||'', color:_npcColor(n), placed:!!np[String(n.id)], label:_npcInitials(n)})) : [];
+    return {minis, npcs, locked:!!map.pinsLocked, gm:canDesignMaps(camp)};
+  },
+  place(mapId, kind, id, nx, ny){
+    const cx=_popCtx(mapId); if(!cx) return false; const {camp, map}=cx;
+    if(map.pinsLocked) return false;
+    if(kind==='npc') return placeNpcToken(id, nx, ny, map.id);
+    if(kind==='tok'){ if(!_campMembers(camp).some(c=>String(c.id)===String(id))) return false;
+      if(!map.tokens) map.tokens={}; map.tokens[String(id)]={x:+nx.toFixed(4), y:+ny.toFixed(4)}; saveCampaign(camp); renderMap(); return true; }
+    return false;
+  },
+  remove(mapId, kind, id){
+    const cx=_popCtx(mapId); if(!cx) return false; const {camp, map}=cx;
+    if(kind==='npc'){ if(!canDesignMaps(camp)) return false; removeNpcToken(id, map.id); return true; }
+    if(kind==='tok' && map.tokens){ delete map.tokens[String(id)]; saveCampaign(camp); renderMap(); return true; }
+    return false;
+  },
+};
+
+// Runs inside the pop-out window (serialised with toString, so it may only use
+// its own variables and window.opener).
+function _popoutMain(cfg){
+  var VW=cfg.vw, VH=cfg.vh, MAPID=cfg.mapId, ZMAX=8;
+  var svg=document.querySelector('#vp svg'); var v={z:1,x:0,y:0};
+  var vp=document.getElementById('vp'), trayEl=document.getElementById('tray'), hint=document.getElementById('hint');
+  var placing=null, trayOpen=false;
+  function api(){ try{ return window.opener && !window.opener.closed && window.opener.__tohPop; }catch(e){ return null; } }
+  function say(t){ if(!hint) return; hint.textContent=t||''; hint.style.display=t?'block':'none'; }
+  function ap(){ if(!svg) return; v.z=Math.max(1,Math.min(ZMAX,v.z)); var w=VW/v.z,h=VH/v.z; v.x=Math.max(0,Math.min(VW-w,v.x)); v.y=Math.max(0,Math.min(VH-h,v.y)); svg.setAttribute('viewBox',v.x+' '+v.y+' '+w+' '+h); }
+  function toMap(e){ var pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; var m=svg.getScreenCTM(); return m?pt.matrixTransform(m.inverse()):pt; }
+  window.Z=function(f){ var cx=v.x+(VW/v.z)/2, cy=v.y+(VH/v.z)/2; v.z=Math.max(1,Math.min(ZMAX,v.z*f)); v.x=cx-(VW/v.z)/2; v.y=cy-(VH/v.z)/2; ap(); };
+  window.FIT=function(){ v={z:1,x:0,y:0}; ap(); };
+  window.FS=function(){ var e=document.documentElement; (e.requestFullscreen||e.webkitRequestFullscreen||function(){}).call(e); };
+  window.TRAY=function(){ trayOpen=!trayOpen; renderTray(); };
+  window.__rebind=function(mapId, vw, vh, keepView){ svg=document.querySelector('#vp svg'); VW=vw; VH=vh; MAPID=mapId; if(!keepView){ v={z:1,x:0,y:0}; placing=null; say(''); } ap(); renderTray(); };
+  function esc(t){ return String(t==null?'':t).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function chip(it){
+    var face = it.img ? '<img src="'+esc(it.img)+'" alt="" style="width:22px;height:22px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 1.5px '+esc(it.color)+'">'
+      : '<span style="width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;background:'+esc(it.color)+'55;box-shadow:0 0 0 1.5px '+esc(it.color)+'">'+esc(it.label)+'</span>';
+    var on = placing && placing.kind===it.kind && placing.id===it.id;
+    return '<span class="ti"><button class="tb'+(on?' on':'')+'" data-k="'+it.kind+'" data-id="'+esc(it.id)+'" data-a="place">'+face+' '+esc(it.name)+(it.placed?'':(it.kind==='npc'?' · hidden':' · with party'))+'</button>'
+      + (it.placed?'<button class="tb x" data-k="'+it.kind+'" data-id="'+esc(it.id)+'" data-a="remove" title="'+(it.kind==='npc'?'Hide from the party':'Back to the party')+'">✕</button>':'')+'</span>';
+  }
+  function renderTray(){
+    if(!trayEl) return;
+    var a=api(), d=a&&a.tray(MAPID);
+    document.getElementById('trayBtn').style.display = d ? '' : 'none';
+    if(!d || !trayOpen){ trayEl.style.display='none'; return; }
+    var h='';
+    if(d.locked) h+='<div class="th">Tokens are locked on this map — unlock them in the app to move them.</div>';
+    h+='<div class="th">MINIS — tap one, then tap the map. Drag a mini or the party marker to move it.</div><div class="tr">'+(d.minis.map(chip).join('')||'<span class="th">No characters in this campaign.</span>')+'</div>';
+    if(d.gm) h+='<div class="th">NPCs (GM only) — hidden from the table until you place them.</div><div class="tr">'+(d.npcs.map(chip).join('')||'<span class="th">No NPCs listed for this map.</span>')+'</div>';
+    trayEl.innerHTML=h; trayEl.style.display='block';
+  }
+  trayEl.addEventListener('click', function(e){
+    var b=e.target.closest('button[data-a]'); if(!b) return; var a=api(); if(!a) return;
+    var k=b.getAttribute('data-k'), id=b.getAttribute('data-id');
+    if(b.getAttribute('data-a')==='remove'){ a.remove(MAPID, k, id); placing=null; say(''); return; }
+    placing = (placing && placing.kind===k && placing.id===id) ? null : {kind:k, id:id};
+    say(placing ? 'Tap the map where it goes' : ''); renderTray();
+  });
+  vp.addEventListener('wheel',function(e){ e.preventDefault(); var r=vp.getBoundingClientRect(); var px=(e.clientX-r.left)/r.width,py=(e.clientY-r.top)/r.height; var ux=v.x+px*(VW/v.z),uy=v.y+py*(VH/v.z); v.z=Math.max(1,Math.min(ZMAX,v.z*(e.deltaY<0?1.15:1/1.15))); v.x=ux-px*(VW/v.z); v.y=uy-py*(VH/v.z); ap(); },{passive:false});
+  var P=new Map(), g=null, pan=null, drag=null, tap=null;
+  vp.addEventListener('pointerdown',function(e){
+    P.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(P.size===2){ var a=[...P.values()]; g={d:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1,cx:(a[0].x+a[1].x)/2,cy:(a[0].y+a[1].y)/2,z:v.z,x:v.x,y:v.y}; pan=null; drag=null; tap=null; vp.setPointerCapture(e.pointerId); return; }
+    var node=!placing && e.target.closest && e.target.closest('.pop-drag');
+    if(node){ drag={node:node, id:node.getAttribute('data-id'), moved:false, tr:node.getAttribute('transform')||''}; vp.setPointerCapture(e.pointerId); e.preventDefault(); return; }
+    tap={x:e.clientX,y:e.clientY}; pan={x:e.clientX,y:e.clientY,vx:v.x,vy:v.y}; vp.setPointerCapture(e.pointerId);
+  });
+  vp.addEventListener('pointermove',function(e){
+    if(P.has(e.pointerId)) P.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    var r=vp.getBoundingClientRect();
+    if(P.size>=2&&g){ var a=[...P.values()]; var nd=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1,ncx=(a[0].x+a[1].x)/2,ncy=(a[0].y+a[1].y)/2; var nz=Math.max(1,Math.min(ZMAX,g.z*(nd/g.d))); var ux=g.x+(g.cx-r.left)/r.width*(VW/g.z),uy=g.y+(g.cy-r.top)/r.height*(VH/g.z); v.z=nz; v.x=ux-(ncx-r.left)/r.width*(VW/nz); v.y=uy-(ncy-r.top)/r.height*(VH/nz); ap(); e.preventDefault(); return; }
+    if(drag){ var l=toMap(e); var x=Math.max(8,Math.min(VW-8,l.x)), y=Math.max(8,Math.min(VH-8,l.y)); drag.moved=true; drag.x=x; drag.y=y;
+      drag.node.setAttribute('transform', drag.tr.replace(/translate\([^)]*\)/, 'translate('+x.toFixed(1)+','+y.toFixed(1)+')')); e.preventDefault(); return; }
+    if(pan){ if(tap && Math.hypot(e.clientX-tap.x,e.clientY-tap.y)>6) tap=null; v.x=pan.vx-(e.clientX-pan.x)/r.width*(VW/v.z); v.y=pan.vy-(e.clientY-pan.y)/r.height*(VH/v.z); ap(); }
+  });
+  function up(e){
+    P.delete(e.pointerId); if(P.size<2) g=null;
+    if(drag && P.size===0){ var d=drag; drag=null;
+      if(d.moved){ var a=api(); var ok=a && a.move(MAPID, d.id, d.x/VW, d.y/VH);
+        if(!ok){ d.node.setAttribute('transform', d.tr); say(a?'That token can\'t be moved here':'The app window is closed — reopen the pop-out from the app'); setTimeout(function(){ say(''); }, 2600); } } }
+    if(tap && placing && P.size===0){ var l=toMap(e); var a2=api(); var pl=placing; placing=null; say('');
+      if(!(a2 && a2.place(MAPID, pl.kind, pl.id, l.x/VW, l.y/VH))){ say('Could not place that token'); setTimeout(function(){ say(''); }, 2600); }
+      renderTray(); }
+    if(P.size===0){ pan=null; tap=null; }
+  }
+  vp.addEventListener('pointerup',up); vp.addEventListener('pointercancel',up);
+  ap(); renderTray();
+}
 
 function popOutMap(){
   const svg=document.getElementById('campMapSvg');
@@ -15557,37 +15705,31 @@ function popOutMap(){
   const title=esc((map.name||'Map')+' — '+(camp.name||''));
   const w=window.open('', 'toh_map_'+map.id, 'width=1280,height=860');
   if(!w){ toast('Pop-out blocked — allow pop-ups for this site','var(--red)'); return; }
+  const cfg=JSON.stringify({vw:VW, vh:VH, mapId:map.id}).replace(/</g,'\\u003c');
   w.document.open();
   w.document.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
     +'<title>'+title+'</title><style>'+cssText
     +'html,body{margin:0;height:100%;background:#0d0a1a;overflow:hidden;font-family:system-ui,sans-serif}'
     +'#vp{position:fixed;inset:0;touch-action:none;cursor:grab}#vp:active{cursor:grabbing}'
     +'#vp svg{position:absolute;inset:0;width:100%;height:100%;display:block}'
+    +'#vp .map-node{pointer-events:none}#vp .map-node.pop-drag{pointer-events:all;cursor:move}'
     +'#bar{position:fixed;top:10px;right:10px;display:flex;gap:6px;z-index:10}'
     +'#bar button{font-family:inherit;font-size:13px;padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.25);background:rgba(20,16,40,0.85);color:#e8e0ff;cursor:pointer}'
     +'#ttl{position:fixed;top:10px;left:12px;z-index:10;color:#e8e0ff;font-family:Cinzel,serif;font-size:14px;letter-spacing:1px;text-shadow:0 1px 3px #000}'
+    +'#tray{position:fixed;left:10px;bottom:10px;max-width:min(760px,calc(100% - 20px));max-height:42vh;overflow:auto;z-index:10;background:rgba(20,16,40,0.92);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:10px 12px;display:none;color:#e8e0ff}'
+    +'#tray .th{font-size:11px;letter-spacing:0.5px;color:#b8b0d8;margin:4px 0 6px}#tray .tr{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}'
+    +'#tray .ti{display:inline-flex;gap:3px}#tray .tb{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12px;padding:5px 10px;border-radius:999px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.06);color:#e8e0ff;cursor:pointer}'
+    +'#tray .tb.on{border-color:#c9a227;color:#c9a227}#tray .tb.x{padding:5px 8px}'
+    +'#hint{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:11;background:rgba(201,162,39,0.95);color:#1a1300;font-size:13px;font-weight:600;padding:6px 14px;border-radius:999px;display:none}'
     +'</style></head><body>'
-    +'<div id="ttl">'+title+'</div>'
+    +'<div id="ttl">'+title+'</div><div id="hint"></div>'
     +'<div id="vp">'+clone.outerHTML+'</div>'
-    +'<div id="bar"><span id="live" style="align-self:center;color:#27ae60;font-size:11px;font-weight:600;margin-right:4px">&#9679; LIVE</span><button onclick="Z(1/1.4)">&minus;</button><button onclick="Z(1.4)">&plus;</button><button onclick="FIT()">fit</button><button onclick="FS()">&#9974; full screen</button></div>'
-    +'<script>'
-    +'var VW='+VW+',VH='+VH+',ZMAX=8;var svg=document.querySelector("#vp svg");var v={z:1,x:0,y:0};var LIVE=false;'
-    +'function ap(){if(!svg)return;v.z=Math.max(1,Math.min(ZMAX,v.z));var w=VW/v.z,h=VH/v.z;v.x=Math.max(0,Math.min(VW-w,v.x));v.y=Math.max(0,Math.min(VH-h,v.y));svg.setAttribute("viewBox",v.x+" "+v.y+" "+w+" "+h);}'
-    +'window.__rebind=function(mapId,vw,vh,keepView){svg=document.querySelector("#vp svg");VW=vw;VH=vh;if(!keepView){v={z:1,x:0,y:0};}ap();var l=document.getElementById("live");if(l){l.textContent="\u25cf LIVE";}};'
-    +'function Z(f){var cx=v.x+(VW/v.z)/2,cy=v.y+(VH/v.z)/2;v.z=Math.max(1,Math.min(ZMAX,v.z*f));v.x=cx-(VW/v.z)/2;v.y=cy-(VH/v.z)/2;ap();}'
-    +'function FIT(){v={z:1,x:0,y:0};ap();}'
-    +'function FS(){var e=document.documentElement;(e.requestFullscreen||e.webkitRequestFullscreen||function(){}).call(e);}'
-    +'var vp=document.getElementById("vp");'
-    +'vp.addEventListener("wheel",function(e){e.preventDefault();var r=vp.getBoundingClientRect();var px=(e.clientX-r.left)/r.width,py=(e.clientY-r.top)/r.height;var ux=v.x+px*(VW/v.z),uy=v.y+py*(VH/v.z);v.z=Math.max(1,Math.min(ZMAX,v.z*(e.deltaY<0?1.15:1/1.15)));v.x=ux-px*(VW/v.z);v.y=uy-py*(VH/v.z);ap();},{passive:false});'
-    +'var P=new Map(),g=null,pan=null;'
-    +'vp.addEventListener("pointerdown",function(e){P.set(e.pointerId,{x:e.clientX,y:e.clientY});if(P.size===2){var a=[...P.values()];g={d:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1,cx:(a[0].x+a[1].x)/2,cy:(a[0].y+a[1].y)/2,z:v.z,x:v.x,y:v.y};pan=null;}else{pan={x:e.clientX,y:e.clientY,vx:v.x,vy:v.y};}vp.setPointerCapture(e.pointerId);});'
-    +'vp.addEventListener("pointermove",function(e){if(P.has(e.pointerId))P.set(e.pointerId,{x:e.clientX,y:e.clientY});var r=vp.getBoundingClientRect();if(P.size>=2&&g){var a=[...P.values()];var nd=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)||1,ncx=(a[0].x+a[1].x)/2,ncy=(a[0].y+a[1].y)/2;var nz=Math.max(1,Math.min(ZMAX,g.z*(nd/g.d)));var ux=g.x+(g.cx-r.left)/r.width*(VW/g.z),uy=g.y+(g.cy-r.top)/r.height*(VH/g.z);v.z=nz;v.x=ux-(ncx-r.left)/r.width*(VW/nz);v.y=uy-(ncy-r.top)/r.height*(VH/nz);ap();e.preventDefault();}else if(pan){v.x=pan.vx-(e.clientX-pan.x)/r.width*(VW/v.z);v.y=pan.vy-(e.clientY-pan.y)/r.height*(VH/v.z);ap();}});'
-    +'function up(e){P.delete(e.pointerId);if(P.size<2)g=null;if(P.size===0)pan=null;}vp.addEventListener("pointerup",up);vp.addEventListener("pointercancel",up);'
-    +'ap();'
-    +'<\/script></body></html>');
+    +'<div id="bar"><span id="live" style="align-self:center;color:#27ae60;font-size:11px;font-weight:600;margin-right:4px">&#9679; LIVE</span><button id="trayBtn" onclick="TRAY()">&#129485; tokens</button><button onclick="Z(1/1.4)">&minus;</button><button onclick="Z(1.4)">&plus;</button><button onclick="FIT()">fit</button><button onclick="FS()">&#9974; full screen</button></div>'
+    +'<div id="tray"></div>'
+    +'<script>('+_popoutMain.toString()+')('+cfg+');<\/script></body></html>');
   w.document.close();
   _popouts.push({ win:w, mapId:map.id });
-  toast('🗺 Live map popped out — it follows this map','var(--gold)');
+  toast('🗺 Live map popped out — drag minis there to move them','var(--gold)');
 }
 
 function unpinPlace(id){
@@ -20185,12 +20327,187 @@ function _tokSelSvg(ext, u){ // u: stroke/handle unit, ext: half-size of the mar
     +`<rect x="${(gh-u*1.6).toFixed(2)}" y="${(gh-u*1.6).toFixed(2)}" width="${(u*3.2).toFixed(2)}" height="${(u*3.2).toFixed(2)}" fill="transparent" style="cursor:nwse-resize"/>`
     +`<rect x="${(gh-u*0.55).toFixed(2)}" y="${(gh-u*0.55).toFixed(2)}" width="${(u*1.1).toFixed(2)}" height="${(u*1.1).toFixed(2)}" rx="${(u*0.2).toFixed(2)}" fill="var(--gold)" stroke="#0d0a1a" stroke-width="${(u*0.1).toFixed(2)}" style="pointer-events:none"/></g>`;
 }
-function beginPlaceTok(id){ _placingTok = _placingTok===String(id) ? null : String(id); _placingId=null; _placingParty=false; _selPinId=null; renderMap(); document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
+function beginPlaceTok(id){ _placingTok = _placingTok===String(id) ? null : String(id); _placingId=null; _placingParty=false; _placingNpc=null; _selPinId=null; renderMap(); document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
 function removeTok(id){
   const camp = getCampaigns().find(c=>c.id===editingCampId); const m = camp && _curMap(camp); if(!m || !m.tokens) return;
   delete m.tokens[String(id)]; saveCampaign(camp); renderMap(); toast('Mini returned to the party','var(--muted)');
 }
 function toggleTokMenu(){ _tokMenu = !_tokMenu; renderMap(); }
+
+/* ── NPC tokens (GM) ────────────────────────────────────────────────────── */
+// Each map keeps its own NPC tokens in map.npcTokens {npcId:{x,y}}. An NPC is
+// hidden from the party until the GM places it; once placed it shows like a
+// player mini (never under fog the party hasn't cleared). Only the GM can
+// place, move or remove them, and only the GM gets the tray and the NPC card.
+let _placingNpc = null, _npcMenu = false, _npcShowAll = false;
+const NPC_REL_COLOR = {allied:'#27ae60', friendly:'#16a085', neutral:'#8a8aa0', hostile:'#c0392b'};
+function _safeLink(u){ return /^https?:\/\//i.test(String(u||'').trim()); }
+function _npcColor(n){ return NPC_REL_COLOR[n && n.relationship] || NPC_REL_COLOR.neutral; }
+function _npcInitials(n){ return String(n.name||'?').trim().split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase(); }
+function _npcById(camp, id){ return (camp.npcs||[]).find(n=>String(n.id)===String(id)); }
+// One round token at radius 10, like _tokSvg for characters.
+function _npcTokSvg(n){
+  const cc = _npcColor(n), dead = n.alive===false;
+  return `<circle r="11.2" style="fill:#0d0a1a;stroke:${cc};stroke-width:1.8"/>`
+    + (n.portrait
+        ? `<image href="${n.portrait}" x="-10" y="-10" width="20" height="20" preserveAspectRatio="xMidYMid slice" clip-path="url(#mtokClip)"${dead?' style="filter:grayscale(1) brightness(0.7)"':''}/>`
+        : `<circle r="10" style="fill:${cc}55"/><text text-anchor="middle" dy="3.4" style="font-size:9px;stroke:none;fill:#fff;font-weight:700">${esc(_npcInitials(n))}</text>`)
+    + (dead ? `<text text-anchor="middle" dy="-12.5" style="font-size:7px;stroke:none;fill:#fff">✝</text>` : '');
+}
+// Could the party see a token at this spot? (fog they have cleared, or the
+// halo around the party marker / minis when the map reveals around pins)
+function _npcSeenByParty(camp, map, pos, VW, VH){
+  if(_ptRevealed(camp, map, pos.x, pos.y, VW, VH)) return true;
+  if(!map.fogPins) return false;
+  const near = (t, r)=> t && Math.hypot((t.x-pos.x)*VW, (t.y-pos.y)*VH) <= r;
+  if(near(map.party, Math.max(22,_pinPx(map)*24))) return true;
+  return Object.values(map.tokens||{}).some(t=>near(t, Math.max(14,_pinPx(map)*14)));
+}
+function _npcTokensSvg(camp, map, VW, VH, gm){
+  const out = [];
+  Object.entries(map.npcTokens||{}).forEach(([nid,pos])=>{
+    const n = _npcById(camp, nid); if(!n || !pos) return;
+    if(!gm && !_npcSeenByParty(camp, map, pos, VW, VH)) return;
+    const PS = _pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4);
+    const R = Math.max(0.6,_pinPx(map)*2.2), tr = _tokR(map,VW,R)*_tokScale(map);
+    const px=(pos.x*VW).toFixed(1), py=(pos.y*VH).toFixed(1), lf=Math.max(R*_tokScale(map), tr*0.42).toFixed(2);
+    out.push(`<g class="map-node party token npc pinlabel" data-id="__npc_${esc(nid)}" data-cx="${px}" data-cy="${py}" transform="translate(${px},${py}) scale(${PS})"><g class="tokbody">
+      <g transform="scale(${(tr/10).toFixed(3)})"><title>${esc(n.name)}</title>${_npcTokSvg(n)}</g>
+      <text text-anchor="middle" y="${(tr*1.15+(+lf)).toFixed(2)}" style="font-size:${lf}px;stroke-width:${(lf*0.28).toFixed(2)}px">${esc(String(n.name).slice(0,16))}</text>
+    </g></g>`);
+  });
+  return out.join('');
+}
+// NPCs that belong on this map: assigned to it, or whose Location names the
+// map, the place the map is of, or a place pinned on it.
+function _npcRelevant(camp, map, n){
+  if((n.maps||[]).includes(map.id)) return true;
+  const loc = String(n.location||'').trim().toLowerCase(); if(loc.length<3) return false;
+  const names = [map.name];
+  const own = map.placeId && (camp.places||[]).find(p=>p.id===map.placeId); if(own) names.push(own.name);
+  (camp.places||[]).forEach(p=>{ if(p.pins && p.pins[map.id]) names.push(p.name); });
+  return names.filter(Boolean).some(nm=>{
+    const s = String(nm).trim().toLowerCase(); if(s.length<3) return false;
+    return (s.length>=4 && (loc.includes(s) || s.includes(loc))) || _fuzzyMatch(nm, n.location)>=0.8;
+  });
+}
+function _npcTrayHtml(camp, map){
+  const npcs = camp.npcs||[], placed = map.npcTokens||{};
+  const here = npcs.filter(n=>placed[String(n.id)] || _npcRelevant(camp, map, n));
+  const rest = npcs.filter(n=>!here.includes(n));
+  const shown = _npcShowAll ? here.concat(rest) : here;
+  const chip = n=>{ const k=String(n.id), on=!!placed[k];
+    return `<span style="display:inline-flex;gap:4px;align-items:center">
+      <button class="pc-pill ${_placingNpc===k?'on gold':''}" onclick="beginPlaceNpc('${jsq(k)}')" title="${on?'Move':'Place'} ${esc(n.name)} — hidden from the party until placed" style="display:inline-flex;align-items:center;gap:6px">
+        ${n.portrait?`<img src="${n.portrait}" alt="" style="width:20px;height:20px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 1.5px ${_npcColor(n)}">`:`<span style="width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:9px;background:${_npcColor(n)}55;box-shadow:0 0 0 1.5px ${_npcColor(n)}">${esc(_npcInitials(n))}</span>`}
+        ${esc(n.name)}${on?' · move':' · hidden'}</button>
+      ${on?`<button class="pc-pill" onclick="removeNpcToken('${jsq(k)}')" title="Take ${esc(n.name)} off the map (hidden again)">✕</button>`:''}
+      <button class="pc-pill" onclick="openNpcEditor('${jsq(k)}','${jsq(map.id)}')" title="Portrait, notes and reference link">✎</button>
+      ${_safeLink(n.link)?`<a class="pc-pill" href="${esc(n.link)}" target="_blank" rel="noopener" title="Open reference">📖</a>`:''}</span>`; };
+  return `<div style="font-family:'Cinzel',serif;font-size:9px;color:var(--muted);letter-spacing:1px;margin:2px 0 6px">NPCs FOR THIS MAP — GM only. Tap one, then tap the map. The party can't see an NPC until you place it.</div>
+    <div class="map-tray">${shown.map(chip).join('') || '<span style="font-size:12px;color:var(--muted)">No NPCs match this map yet — give an NPC this map as its location, or add one here.</span>'}
+      ${rest.length?`<button class="pc-pill ${_npcShowAll?'on':''}" onclick="_npcShowAll=!_npcShowAll;renderMap()">${_npcShowAll?'this map only':'+ '+rest.length+' other NPC'+(rest.length>1?'s':'')}</button>`:''}
+      <button class="pc-pill" style="border-color:var(--gold);color:var(--gold)" onclick="openNpcEditor(null,'${jsq(map.id)}')">＋ NPC for this map</button>
+      ${_placingNpc?`<button class="pc-pill" onclick="beginPlaceNpc(null)">cancel</button>`:''}</div>`;
+}
+function toggleNpcMenu(){ _npcMenu = !_npcMenu; if(!_npcMenu) _placingNpc=null; renderMap(); }
+function beginPlaceNpc(id){
+  _placingNpc = (id && _placingNpc!==String(id)) ? String(id) : null;
+  _placingId=null; _placingParty=false; _placingTok=null; _selPinId=null; renderMap();
+  if(_placingNpc) document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function placeNpcToken(id, nx, ny, mapId){
+  const camp = getCampaigns().find(c=>c.id===editingCampId); if(!camp || !canDesignMaps(camp)) return false;
+  const m = mapId ? _campMaps(camp).find(x=>x.id===mapId) : _curMap(camp); const n = _npcById(camp, id);
+  if(!m || !n) return false;
+  if(!m.npcTokens) m.npcTokens = {};
+  m.npcTokens[String(id)] = {x:+nx.toFixed(4), y:+ny.toFixed(4)};
+  if(!(n.maps||[]).includes(m.id)) n.maps = [...(n.maps||[]), m.id];   // keep them on this map's list
+  _placingNpc = null; saveCampaign(camp); renderMap(); toast('🧙 '+n.name+' placed — the party can see them now','var(--gold)');
+  return true;
+}
+function removeNpcToken(id, mapId){
+  const camp = getCampaigns().find(c=>c.id===editingCampId); if(!camp || !canDesignMaps(camp)) return;
+  const m = mapId ? _campMaps(camp).find(x=>x.id===mapId) : _curMap(camp); if(!m || !m.npcTokens) return;
+  delete m.npcTokens[String(id)]; saveCampaign(camp); renderMap(); toast('NPC hidden from the party','var(--muted)');
+}
+// NPC card: name, notes, portrait and a reference link (e.g. the adventure
+// page for that NPC). Opened from the tray, a GM tap on the token, or the NPCs tab.
+let _npcEd = null;
+function openNpcEditor(id, mapId){
+  const camp = getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
+  if(!canDesignMaps(camp)){ toast('Only the GM can edit NPCs','var(--muted)'); return; }
+  const map = mapId ? _campMaps(camp).find(x=>x.id===mapId) : null;
+  const n = id ? _npcById(camp, id) : null;
+  if(id && !n) return;
+  const d = n ? {...n} : {name:'', race:'', role:'', location: map ? map.name : '', relationship:'neutral', desc:'', link:'', portrait:'', alive:true, maps: map?[map.id]:[]};
+  _npcEd = {id: n ? String(n.id) : null, mapId: map ? map.id : null, portrait: d.portrait||''};
+  const onMap = map && map.npcTokens && n && map.npcTokens[String(n.id)];
+  const rel = ['allied','friendly','neutral','hostile'];
+  document.getElementById('npcEdModal')?.remove();
+  const md = document.createElement('div'); md.id='npcEdModal'; md.className='gw-backdrop';
+  md.innerHTML = `<div class="ms-dialog" role="dialog" aria-modal="true" aria-label="NPC" style="max-width:640px">
+    <div class="gw-head"><div class="gw-emblem" style="border-color:${_npcColor(d)}">🧙</div>
+      <div style="min-width:0"><div class="gw-title">${n?esc(n.name):'New NPC'}</div><div class="gw-sub">${map?'On '+esc(map.name)+' · ':''}only the GM sees this card</div></div>
+      <button class="gw-x" onclick="closeNpcEditor()" aria-label="Close">✕</button></div>
+    <div class="ms-body" style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;gap:14px;align-items:center">
+        <div id="npcEdPic" style="width:84px;height:84px;border-radius:50%;flex-shrink:0;overflow:hidden;box-shadow:0 0 0 3px ${_npcColor(d)};background:${_npcColor(d)}33;display:flex;align-items:center;justify-content:center;font-family:Cinzel,serif;font-size:26px;color:#fff">${d.portrait?`<img src="${d.portrait}" alt="" style="width:100%;height:100%;object-fit:cover">`:esc(_npcInitials(d))}</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <label class="pc-pill" style="cursor:pointer">🖼 ${d.portrait?'Change':'Add'} portrait<input type="file" accept="image/*" style="display:none" onchange="npcEdPortrait(this.files[0]); this.value=''"></label>
+          ${d.portrait?`<button class="pc-pill" onclick="npcEdPortrait(null)">Remove portrait</button>`:''}
+        </div></div>
+      <div class="form-row two"><div class="field"><label>Name</label><input id="npcEdName" value="${esc(d.name)}"></div>
+        <div class="field"><label>Race / Type</label><input id="npcEdRace" value="${esc(d.race||'')}"></div></div>
+      <div class="form-row two"><div class="field"><label>Role</label><input id="npcEdRole" value="${esc(d.role||'')}"></div>
+        <div class="field"><label>Location</label><input id="npcEdLoc" value="${esc(d.location||'')}" placeholder="Matches the map or a place pinned on it"></div></div>
+      <div class="field"><label>Relationship</label><select id="npcEdRel">${rel.map(r=>`<option value="${r}" ${d.relationship===r?'selected':''}>${r[0].toUpperCase()+r.slice(1)}</option>`).join('')}</select></div>
+      <div class="field"><label>Reference link</label><input id="npcEdLink" value="${esc(d.link||'')}" placeholder="https://… e.g. the adventure page for this NPC"></div>
+      <div class="field"><label>Notes (GM only)</label><textarea id="npcEdDesc" rows="4">${esc(d.desc||'')}</textarea></div>
+      ${map?`<label style="font-size:12px;display:flex;gap:8px;align-items:center"><input type="checkbox" id="npcEdOnList" ${(d.maps||[]).includes(map.id)?'checked':''}> Keep on ${esc(map.name)}'s NPC list</label>`:''}
+    </div>
+    <div class="gw-foot" style="flex-wrap:wrap;gap:8px">
+      ${_safeLink(d.link)?`<a class="gw-btn" href="${esc(d.link)}" target="_blank" rel="noopener">📖 Open reference</a>`:''}
+      ${map&&n?(onMap?`<button class="gw-btn" onclick="closeNpcEditor();removeNpcToken('${jsq(String(n.id))}','${jsq(map.id)}')">Hide from party</button>`:`<button class="gw-btn" onclick="npcEdSave(true)">Save &amp; place</button>`):''}
+      <div class="gw-count"></div><button class="gw-btn" onclick="closeNpcEditor()">Cancel</button>
+      <button class="gw-btn pri" onclick="npcEdSave(false)">Save</button></div></div>`;
+  md.addEventListener('click', e=>{ if(e.target===md) closeNpcEditor(); });
+  document.body.appendChild(md);
+}
+function closeNpcEditor(){ document.getElementById('npcEdModal')?.remove(); _npcEd = null; }
+// Portrait → a small square JPEG so it syncs with the campaign comfortably.
+function npcEdPortrait(file){
+  if(!_npcEd) return;
+  const show = ()=>{ const b=document.getElementById('npcEdPic'); if(b) b.innerHTML = _npcEd.portrait ? `<img src="${_npcEd.portrait}" alt="" style="width:100%;height:100%;object-fit:cover">` : '—'; };
+  if(!file){ _npcEd.portrait=''; show(); return; }
+  const rd = new FileReader();
+  rd.onload = ()=>{ const img = new Image(); img.onload = ()=>{
+    const S = 192, side = Math.min(img.width, img.height);
+    const c = document.createElement('canvas'); c.width = c.height = S;
+    c.getContext('2d').drawImage(img, (img.width-side)/2, Math.max(0,(img.height-side)/4), side, side, 0, 0, S, S); // bias toward the face
+    _npcEd.portrait = c.toDataURL('image/jpeg', 0.82); show();
+  }; img.onerror = ()=>toast('That image could not be read','var(--red)'); img.src = rd.result; };
+  rd.readAsDataURL(file);
+}
+function npcEdSave(andPlace){
+  const camp = getCampaigns().find(c=>c.id===editingCampId); if(!camp || !_npcEd) return;
+  const v = id => (document.getElementById(id)?.value||'').trim();
+  const name = v('npcEdName'); if(!name){ toast('Enter a name','var(--red)'); return; }
+  const link = v('npcEdLink');
+  if(link && !/^https?:\/\//i.test(link)){ toast('The reference link should start with http:// or https://','var(--red)'); return; }
+  if(!camp.npcs) camp.npcs = [];
+  let n = _npcEd.id ? _npcById(camp, _npcEd.id) : null;
+  if(!n){ n = {id:genItemId(), alive:true}; camp.npcs.push(n); }
+  Object.assign(n, {name, race:v('npcEdRace'), role:v('npcEdRole'), location:v('npcEdLoc'), relationship:document.getElementById('npcEdRel')?.value||'neutral', desc:v('npcEdDesc'), link});
+  if(_npcEd.portrait) n.portrait = _npcEd.portrait; else delete n.portrait;
+  const mapId = _npcEd.mapId, box = document.getElementById('npcEdOnList');
+  if(mapId && box){ const set = new Set(n.maps||[]); box.checked ? set.add(mapId) : set.delete(mapId); n.maps = [...set]; }
+  saveCampaign(camp);
+  closeNpcEditor();
+  toast('🧙 '+name+' saved','var(--green)');
+  if(andPlace && mapId){ _npcMenu = true; beginPlaceNpc(n.id); } else { try{ renderMap(); }catch(e){} }
+  try{ if(document.getElementById('ctab-npcs')) renderNPCs(); }catch(e){}
+}
 
 bootApp();
 </script>
