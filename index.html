@@ -6101,11 +6101,11 @@ function auditChar(char){
   // Speed from Fast Movement / Unarmored Movement
   const sp = _expectedSpeed(char);
   if(sp!=null && (char.speed||30) < sp) out.push({level:'fix', msg:`Speed is ${char.speed||30} ft; race and class give ${sp} ft (Fast Movement / Unarmored Movement).`, fix:{label:`Set speed to ${sp} ft`, id:'speed'}});
-  // Max HP against what the class levels allow
+  // Max HP: this table always takes the average hit points
   const hp = _hpBounds(char), mhp = char.maxHP||0;
-  if(hp.lv && (mhp < hp.min || mhp > hp.max)){
+  if(hp.lv && mhp !== hp.avg){
     const who = classes.map(r=>`${(CLASSES[r.classIdx]||{}).name||'?'} ${r.level}`).join(' / ');
-    out.push({level:'fix', msg:`Max HP is ${mhp}, but a ${who} with CON ${(char.abilities||{}).CON||10}${hp.notes.length?' ('+hp.notes.join(', ')+')':''} can have ${hp.min}–${hp.max} (average ${hp.avg}).${mhp>hp.max?' A magic item or feat the app doesn\'t track could explain the extra.':''}`, fix:{label:`Set max HP to ${hp.avg}`, id:'hp'}});
+    out.push({level:'fix', msg:`Max HP is ${mhp}; the average for a ${who} with CON ${(char.abilities||{}).CON||10}${hp.notes.length?' ('+hp.notes.join(', ')+')':''} is ${hp.avg}.${mhp>hp.avg?' A magic item or feat the app doesn\'t track could explain the extra.':''}`, fix:{label:`Set max HP to ${hp.avg}`, id:'hp'}});
   }
   // XP below the level's threshold
   if((char.xp||0) < xpForLevel(char.level||1)) out.push({level:'fix', msg:`XP ${char.xp||0} is below the ${xpForLevel(char.level)} needed for level ${char.level}.`, fix:{label:`Set XP to ${xpForLevel(char.level)}`, id:'xp'}});
@@ -6116,7 +6116,8 @@ function auditChar(char){
   }
   return out;
 }
-// Lowest / average / highest max HP the class levels allow: first level takes
+// Lowest / average / highest max HP the class levels allow (the table uses the
+// average; min/max are kept for reference): first level takes
 // the full hit die, each later level 1…die (average die/2+1), every level adds
 // the CON modifier (at least 1 HP per level), plus Tough (+2/level), Hill Dwarf
 // toughness (+1/level) and Draconic Bloodline resilience (+1/sorcerer level).
@@ -19918,15 +19919,15 @@ const GW_LEVEL_STEPS = [
      const con = parseInt(_gwMod((s.char.abilities||{}).CON))||0, hill = s.char.race==='Dwarf (Hill)'?1:0;
      const avg = Math.floor(hit/2)+1;
      const gain = _gwLvHpGain(s);
-     return `<div class="gw-help">Each level adds your ${esc(t.cls.name)} hit die (d${hit}) plus your Constitution modifier (${con>=0?'+':''}${con})${hill?' and +1 for Dwarven Toughness':''}. Take the fixed average, or roll for it.</div>
+     const tough = _hasTough(s.char);
+     return `<div class="gw-help">Each level adds the fixed average of your ${esc(t.cls.name)} hit die (d${hit} → ${avg}) plus your Constitution modifier (${con>=0?'+':''}${con})${hill?', +1 for Dwarven Toughness':''}${tough?', +2 for Tough':''}. This table always takes the average.</div>
        <div class="gw-hp">
-         <button class="gw-hpbtn ${s.hp.mode==='avg'?'sel':''}" onclick="GW.s.hp.mode='avg';gwRefresh()"><em>Average</em><b>+${Math.max(1,avg+con)+hill}</b><span>${avg} ${con>=0?'+':'−'} ${Math.abs(con)}${hill?' + 1':''}</span></button>
-         <button class="gw-hpbtn ${s.hp.mode==='roll'?'sel':''}" onclick="gwLvRollHp()"><em>Roll d${hit}</em><b>${s.hp.roll!=null?'+'+(Math.max(1,s.hp.roll+con)+hill):'🎲'}</b><span>${s.hp.roll!=null?`rolled ${s.hp.roll} · tap to re-roll`:'tap to roll'}</span></button>
+         <div class="gw-hpbtn sel" style="cursor:default"><em>Average</em><b>+${gain}</b><span>${avg} ${con>=0?'+':'−'} ${Math.abs(con)}${hill?' + 1':''}${tough?' + 2':''}</span></div>
        </div>
        ${(()=>{ const x=_gwLvExtras(s); return x.hp ? `<div class="gw-mini" style="margin-top:10px">${x.notes.filter(n=>/HP/.test(n)).map(esc).join('<br>')}</div>` : ''; })()}
        <div class="gw-note" style="margin-top:16px">Max HP: <b>${s.char.maxHP||0}</b> → <b style="color:var(--green)">${(s.char.maxHP||0)+gain+_gwLvExtras(s).hp}</b></div>`;
    },
-   valid:(s)=>s.hp.mode==='roll' && s.hp.roll==null ? 'Roll your hit die, or take the average' : ''},
+   valid:()=>''},
 
   {id:'review', icon:'✦', title:'Review', q:'Ready to level up?', render:(s)=>{
      const t = _gwLvTarget(s), ld = _gwLvLd(s);
@@ -19950,7 +19951,7 @@ const GW_LEVEL_STEPS = [
 const _hasTough = char => (char.feats||[]).some(f=>/^tough$/i.test(String(f).trim()));
 function _gwLvHpGain(s){
   const t = _gwLvTarget(s), con = parseInt(_gwMod((s.char.abilities||{}).CON))||0, hill = s.char.race==='Dwarf (Hill)'?1:0;
-  const die = s.hp.mode==='roll' && s.hp.roll!=null ? s.hp.roll : Math.floor(t.cls.hit/2)+1;
+  const die = Math.floor(t.cls.hit/2)+1;   // this table always takes the average
   return Math.max(1, die+con)+hill+(_hasTough(s.char)?2:0);
 }
 // Knock-on changes from this level beyond the hit die: a CON increase raises
@@ -19979,7 +19980,6 @@ function _gwLvExtras(s){
   return out;
 }
 function gwLvPickSub(i){ const t=_gwLvTarget(GW.s); GW.s.sub = t.cls.subclasses[i]||''; GW.s.choices={}; gwRefresh(); }
-function gwLvRollHp(){ const t=_gwLvTarget(GW.s); GW.s.hp.mode='roll'; GW.s.hp.roll = 1+Math.floor(Math.random()*t.cls.hit); gwRefresh(); }
 function _gwLvPathStep(s){
   const classes = _gwCharClasses(s.char);
   const ab = s.char.abilities||{};
