@@ -866,13 +866,18 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 /* The 3-column grid with body silhouette */
 .paperdoll-grid {
   display: grid;
-  grid-template-columns: 62px 1fr 62px;
+  /* The doll window is a fixed size per layout, centred between the slot columns */
+  --doll-w: 200px;
+  grid-template-columns: 62px minmax(0, var(--doll-w)) 62px;
   grid-template-rows: repeat(5, 62px);
+  justify-content: center;
   gap: 5px;
   align-items: center;
   justify-items: center;
   position: relative;
 }
+@media (min-width: 720px) { .paperdoll-grid { --doll-w: 230px; } }
+@media (min-width: 1200px) { .paperdoll-grid { --doll-w: 250px; } }
 
 .paperdoll-body {
   grid-column: 2; grid-row: 1 / 6;
@@ -21545,6 +21550,9 @@ async function buildFigure(spec, L){
   root.updateMatrixWorld(true);
   const hp0=new T.Vector3(); boneBy.Head.getWorldPosition(hp0);
   const top0=hp0.y+0.21*spec.build.head;
+  // Overall height: the whole figure is scaled so the top of the head lands
+  // at the character's height (applied once the pose is set, below).
+  const k=spec.height/top0, w=spec.build.w;
   // Neutral standing pose. Bone axes differ per side and per export, so each
   // bone is aimed at a direction in figure space (+Z is the front, +X the figure's left).
   const aim=(bone, child, dir)=>{
@@ -21563,7 +21571,9 @@ async function buildFigure(spec, L){
     aim(B['lowerarm_'+sd],B['hand_'+sd],mx([0.1,-1,0.32],sd));
     aim(B['hand_'+sd],B['middle_01_'+sd],mx([0.12,-1,0.18],sd));
   });
-  const held={r:false,l:false};
+  const held={r:false,l:false}, holders=[];
+  root.updateMatrixWorld(true);
+  const floor0=new T.Box3().setFromObject(root).min.y;   // the feet, before anything is held
   const models=await Promise.all(spec.weapons.map(w=>w.model?glb('weapons/'+w.model.m).catch(()=>null):null));
   spec.weapons.forEach((w,wi)=>{
     const sd=w.hand, hb=B['hand_'+sd], mid=B['middle_01_'+sd]; if(!hb||!mid) return;
@@ -21580,8 +21590,8 @@ async function buildFigure(spec, L){
     const qb=new T.Quaternion(); hb.getWorldQuaternion(qb);
     const ws=new T.Vector3(); hb.getWorldScale(ws);
     const holder=new T.Group(); holder.add(m);
-    holder.position.copy(hb.worldToLocal(grip)); holder.quaternion.copy(qb.invert().multiply(qd)); holder.scale.setScalar(1/ws.x);
-    hb.add(holder);
+    holder.position.copy(hb.worldToLocal(grip)); holder.quaternion.copy(qb.invert().multiply(qd)); holder.scale.setScalar(1/(ws.x*k));   // weapons stay life-size: a halfling's longsword looks long
+    hb.add(holder); holders.push(holder);
   });
   if(spec.horns && B.Head) addHorns(B.Head, spec.horns, spec.hornCol);
   if(spec.hat && B.Head) addHat(B.Head, spec.hat);
@@ -21593,12 +21603,19 @@ async function buildFigure(spec, L){
   });
   root.updateMatrixWorld(true);
   if(spec.cape) addCape(B);
-  // Overall height and breadth: scale the whole figure so the top of the head
-  // lands at the character's height.
-  const k=spec.height/top0, w=spec.build.w;
   root.scale.set(k*w, k, k*w);
   root.updateMatrixWorld(true);
-  return {root, bones:boneBy, tail, rest:{spine:boneBy.spine_03?.quaternion.clone(), head:boneBy.Head?.quaternion.clone()}};
+  // A life-size blade in a small hand would reach the floor: tip it forward
+  // about the grip until it clears.
+  const floor=floor0*k, X=new T.Vector3(1,0,0);
+  holders.forEach(h=>{
+    for(let i=0;i<14 && new T.Box3().setFromObject(h).min.y<floor+0.04;i++){
+      const pq=h.parent.getWorldQuaternion(new T.Quaternion());
+      h.quaternion.premultiply(pq.clone().invert().multiply(new T.Quaternion().setFromAxisAngle(X,-0.09)).multiply(pq));
+      h.updateMatrixWorld(true);
+    }
+  });
+  return {root, floor, bones:boneBy, tail, rest:{spine:boneBy.spine_03?.quaternion.clone(), head:boneBy.Head?.quaternion.clone()}};
 }
 
 /* ── Stage: one shared renderer, moved into whichever doll is showing ── */
@@ -21632,11 +21649,11 @@ function _resize(){
 }
 function _frame(){
   if(!S.fig) return;
-  const hh=Math.max(S.fig.height,1.95), vfov=S.cam.fov*Math.PI/180;   // human-height frame: small folk look small
-  const fitH=(hh*1.12/2)/Math.tan(vfov/2);
-  const fitW=(0.62*hh*0.5)/(Math.tan(vfov/2)*S.cam.aspect);
-  const d=Math.max(fitH,fitW);
-  S.cam.position.set(0,hh*0.54,d); S.cam.lookAt(0,hh*0.5,0); S.cam.updateProjectionMatrix();
+  // Fit the figure, centred. Stature reads from the race's proportions and
+  // from the life-size weapons, not from where it stands in the frame.
+  const hh=S.fig.height, ww=Math.max(S.fig.width,hh*0.45), t=Math.tan(S.cam.fov*Math.PI/360);
+  const d=Math.max((hh*1.14/2)/t, (ww*1.1/2)/(t*S.cam.aspect));
+  S.cam.position.set(0,hh*0.53,d); S.cam.lookAt(0,hh*0.5,0); S.cam.updateProjectionMatrix();
 }
 function setLights(L){
   if(S.lights) S.scene.remove(S.lights);
@@ -21693,7 +21710,9 @@ async function mount(host, char){
   if(S.building!==my) return;              // a newer build started meanwhile
   if(S.fig) S.scene.remove(S.fig.root);
   const bb=new T.Box3().setFromObject(fig.root); const c=bb.getCenter(new T.Vector3());
-  fig.root.position.set(-c.x,-bb.min.y,-c.z); fig.height=bb.max.y-bb.min.y;
+  const y0=Math.min(fig.floor,bb.min.y+0.3);   // stand on the feet, not on a weapon tip
+  fig.root.position.set(-c.x,-y0,-c.z); fig.height=bb.max.y-y0;
+  fig.width=bb.max.x-bb.min.x;   // side to side as it faces you; a blade held forward may clip when turned
   S.fig=fig; S.scene.add(fig.root); setLights(L); _frame();
   if(!S.t0) S.t0=performance.now();
   if(S.host===host) host.classList.remove('doll3d-loading');
