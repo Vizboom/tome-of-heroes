@@ -1581,8 +1581,6 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <button class="roll-btn roll-n" id="rollBtn" onclick="doRoll()" style="margin-bottom:12px">Roll ⬡</button>
     <div id="rollResult" style="display:none"></div>
     <div id="diceTable" class="dice-table" title="The table — every roll lands here"></div>
-    <div class="divider"><span>Damage</span></div>
-    <div id="dmgPanel" class="dmg-panel"></div>
     <div class="divider"><span>Roll Mode<button type="button" class="gi" onclick="openGlossary('Advantage')" aria-label="What are advantage and disadvantage?">ⓘ</button></span></div>
     <div class="mode-row">
       <button class="mode-btn adv-on" id="mAdv" onclick="setMode('advantage')"><span class="mi">↑</span>Advantage</button>
@@ -1608,6 +1606,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <div class="divider" id="condEffectsDivider" style="display:none"><span>Active Effects</span></div>
       <div id="condEffects"></div>
     </div>
+    <div class="divider"><span>Damage</span></div>
+    <div id="dmgPanel" class="dmg-panel"></div>
     <div class="divider"><span>History</span></div>
     <div class="hist-list" id="rollHistory"></div>
     </div>
