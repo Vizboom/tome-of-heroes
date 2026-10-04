@@ -2637,9 +2637,15 @@ const _ICON_PICK=(n,list)=>list[(_hashStr(n)>>>0)%list.length];
 // Weapon/ammunition icon from a bit of text; '' means "known, but no icon".
 function _weaponIconOf(n,gilded){
   const g=b=>gilded?b+'_Golden':b;
-  if(/\bshield\b/.test(n)) return '';
+  // Shields and staffs are rendered from their paperdoll models, picked as _weaponModel does
+  if(/\bshield\b/.test(n)){
+    if(gilded) return 'Shield_Celtic_Golden';
+    if(/round|buckler|targe|wooden/.test(n)) return /\+\d|painted/.test(n)?'Shield_Round_2':'Shield_Round';
+    return /\+\d|tower|kite/.test(n)?'Shield_Heater_2':'Shield_Heater';
+  }
   if(/\barrows?\b|\bbolts?\b|ammunition/.test(n)) return g('Arrow');
-  if(/crossbow|\bsling\b|\bnet\b|whip|staff|spear|pike|halberd|glaive|trident|lance|javelin/.test(n)) return '';
+  if(/\bstaff\b|quarterstaff/.test(n)) return _staffIcon(n);
+  if(/crossbow|\bsling\b|\bnet\b|whip|spear|pike|halberd|glaive|trident|lance|javelin/.test(n)) return '';
   if(/\bbow\b|longbow|shortbow|oathbow/.test(n)) return gilded?'Bow_Golden':'Bow_Wooden';
   if(/\bdarts?\b/.test(n)) return g('Dart');
   if(/dagger|knife|sickle|kukri/.test(n)) return g('Dagger');
@@ -2649,6 +2655,11 @@ function _weaponIconOf(n,gilded){
   if(/\baxe|hand ?axe/.test(n)) return g('Axe_Small');
   if(/maul|hammer|mace|morningstar|flail|club|war pick/.test(n)) return g('Hammer_Double');
   return null;
+}
+function _staffIcon(n){
+  if(/frost|ice|cold|winter|snow/.test(n)) return 'IceStaff';
+  if(/quarterstaff|wood|druid|oak|thorn|vine|nature/.test(n)) return 'WoodenStaff';
+  return 'Staff';
 }
 function itemIconName(item){
   if(!item) return null;
@@ -2674,6 +2685,7 @@ function itemIconName(item){
     if(/water|frost|cold|ice/.test(n)) return 'Potion1_Filled_Blue';
     return _ICON_PICK(n,['Potion2_Filled','Potion4_Filled','Potion5_Filled','Potion6_Filled','Potion7_Filled','Potion8_Filled','Potion9_Filled','Potion10_Filled','Potion11_Filled']);
   }
+  if(t==='staff') return _staffIcon(n);
   if(t==='scroll') return /map|chart|letter|deed|contract/.test(n)?'Parchment':'Scroll';
   if(t==='ring') return _ICON_PICK(n,['Ring1','Ring2','Ring3','Ring4','Ring5','Ring6','Ring7']);
   if(t==='gem'||/ioun stone|\bgem of\b|crystal|\bshard\b/.test(n)){
