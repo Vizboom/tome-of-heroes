@@ -14578,6 +14578,7 @@ function renderMap(){
     const svg = `<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="campMapSvg" data-vw="${VW}" data-vh="${VH}">
       ${src?`<image href="${src}" x="0" y="0" width="${VW}" height="${VH}" preserveAspectRatio="none"/>`
            :`<rect width="${VW}" height="${VH}" fill="#1a1530"/><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="#8880b0" font-size="11" font-family="Cinzel,serif">${map.imgKey?(_mapImgMissing.has(map.id)?'map image missing — see below':'loading map…'):'no image yet'}</text>`}
+      ${_hexSvg(map, VW, VH)}
       ${_bGridSvg(map, VW, VH)}
       ${edges.map(([p,q])=>`<line class="map-edge" x1="${X(p)}" y1="${Y(p)}" x2="${X(q)}" y2="${Y(q)}"/>`).join('')}
       ${(()=>{ const PS=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4);
@@ -15582,6 +15583,7 @@ function _gmMapCtrlsHtml(camp, map){
     <button class="pc-pill ${map.fogPins?'on gold':''}" onclick="toggleFogPins('${map.id}')" title="${map.fogPins?'Pins currently clear their own halo of fog — tap to keep them hidden until you erase':'Let every pin (and the party marker) clear a halo of fog around itself'}">📌 pins clear fog</button>
     <span class="pc-pill" style="cursor:default;color:var(--muted2)">${dabs} stroke${dabs===1?'':'s'}${map.fogFull?' · fully revealed':''}</span>`;
   }
+  h += _hexCtrlsHtml(map);
   return h + `</div>`;
 }
 
@@ -15727,9 +15729,52 @@ function _bTurnPos(camp, map){
   if(e.kind==='mk'){ const m=_mapMarkers(map).find(x=>String(x.id)===String(e.ref)); return m ? {x:m.x, y:m.y, mk:m} : null; }
   return null;
 }
+/* ── Hex overlay ──────────────────────────────────────────────────────────
+   For maps drawn without a grid: the GM lays a hex grid over the map and
+   sizes, shifts, turns and fades it to fit. Saved on the map (map.hex) so the
+   party and every pop-out see the same grid. s is the hex radius in map
+   units, ox/oy shift it as a fraction of one tile, rot 0 = pointy-top, 90 = flat-top. */
+const HEX_DEF={on:false, s:10, ox:0, oy:0, rot:0, op:0.4, col:'#ffffff'};
+function _hex(map){ return Object.assign({}, HEX_DEF, map.hex||{}); }
+function _hexSvg(map, VW, VH){
+  const h=_hex(map); if(!h.on) return '<g class="hex-grid"></g>';
+  const r=Math.max(2, Math.min(80, +h.s||10)), W=Math.sqrt(3)*r, H=3*r;
+  const tx=(+h.ox||0)*W, ty=(+h.oy||0)*H, sw=Math.max(0.2, r*0.04).toFixed(2);
+  const d=`M ${(W/2).toFixed(3)} 0 L ${W.toFixed(3)} ${(r/2).toFixed(3)} L ${W.toFixed(3)} ${(1.5*r).toFixed(3)} L ${(W/2).toFixed(3)} ${(2*r).toFixed(3)} L 0 ${(1.5*r).toFixed(3)} L 0 ${(r/2).toFixed(3)} Z M ${(W/2).toFixed(3)} ${(2*r).toFixed(3)} L ${(W/2).toFixed(3)} ${H.toFixed(3)}`;
+  return `<g class="hex-grid" style="pointer-events:none"><defs><pattern id="hexPat" width="${W.toFixed(3)}" height="${H.toFixed(3)}" patternUnits="userSpaceOnUse" patternTransform="rotate(${+h.rot||0} ${VW/2} ${VH/2}) translate(${tx.toFixed(2)},${ty.toFixed(2)})"><path d="${d}" fill="none" stroke="${esc(h.col)}" stroke-width="${sw}" stroke-opacity="${(+h.op).toFixed(2)}"/></pattern></defs><rect width="${VW}" height="${VH}" fill="url(#hexPat)"/></g>`;
+}
+function _hexMap(){ const camp=getCampaigns().find(c=>c.id===editingCampId); const map=camp&&_curMap(camp); return (map&&canDesignMaps(camp)) ? {camp, map} : null; }
+// Sliders redraw the grid as they move and save once let go.
+function hexSet(key, val, commit){
+  const cx=_hexMap(); if(!cx) return; const {camp, map}=cx;
+  const h=_hex(map);
+  if(key==='on') h.on=!h.on;
+  else if(key==='rot') h.rot=h.rot?0:90;
+  else if(key==='reset'){ Object.assign(h, HEX_DEF, {on:true}); }
+  else if(key==='col') h.col=/^#[0-9a-f]{6}$/i.test(val)?val:'#ffffff';
+  else h[key]=+val;
+  map.hex=h;
+  const svg=document.getElementById('campMapSvg'), g=svg&&svg.querySelector('.hex-grid');
+  if(!commit && g){ g.outerHTML=_hexSvg(map, +svg.dataset.vw, +svg.dataset.vh); const lbl=document.getElementById('hexSizeLbl'); if(lbl) lbl.textContent=(+h.s).toFixed(1); return; }
+  saveCampaign(camp); renderMap();
+}
+function _hexCtrlsHtml(map){
+  const h=_hex(map);
+  let o=`<span class="gf-label" style="margin-top:4px">HEX OVERLAY — for maps without a grid</span>
+    <button class="pc-pill ${h.on?'on gold':''}" onclick="hexSet('on',0,true)" title="${h.on?'Hide the hex grid':'Lay a hex grid over this map — the party sees it too'}">⬡ ${h.on?'hexes on':'hexes off'}</button>`;
+  if(h.on) o+=`
+    <span class="pc-pill" style="cursor:default;gap:6px;display:flex;align-items:center" title="Hex size">size <input type="range" min="2" max="60" step="0.25" value="${h.s}" oninput="hexSet('s',this.value)" onchange="hexSet('s',this.value,true)"><span id="hexSizeLbl" style="min-width:26px">${(+h.s).toFixed(1)}</span></span>
+    <span class="pc-pill" style="cursor:default;gap:6px;display:flex;align-items:center" title="Shift the grid left / right to line up with the map">↔ <input type="range" min="0" max="1" step="0.01" value="${h.ox}" oninput="hexSet('ox',this.value)" onchange="hexSet('ox',this.value,true)"></span>
+    <span class="pc-pill" style="cursor:default;gap:6px;display:flex;align-items:center" title="Shift the grid up / down to line up with the map">↕ <input type="range" min="0" max="1" step="0.01" value="${h.oy}" oninput="hexSet('oy',this.value)" onchange="hexSet('oy',this.value,true)"></span>
+    <button class="pc-pill" onclick="hexSet('rot',0,true)" title="Switch between pointy-top and flat-top hexes">${h.rot?'⬢ flat-top':'⬣ pointy-top'}</button>
+    <span class="pc-pill" style="cursor:default;gap:6px;display:flex;align-items:center" title="How strongly the grid shows">opacity <input type="range" min="0.05" max="1" step="0.05" value="${h.op}" oninput="hexSet('op',this.value)" onchange="hexSet('op',this.value,true)"></span>
+    <label class="pc-pill" style="gap:6px;display:flex;align-items:center;cursor:pointer" title="Grid colour">colour <input type="color" value="${esc(h.col)}" oninput="hexSet('col',this.value)" onchange="hexSet('col',this.value,true)" style="width:22px;height:18px;border:none;background:none;padding:0"></label>
+    <button class="pc-pill" onclick="hexSet('reset',0,true)" title="Back to the default size and position">↺ reset</button>`;
+  return o;
+}
 function _bGridSvg(map, VW, VH){
   const b=_battle(map); if(!b) return '';
-  const c=+b.grid||0;
+  const c=_hex(map).on ? 0 : (+b.grid||0);   // the GM's hex overlay replaces the square grid
   return `<g class="battle-grid" style="pointer-events:none">${c?`<defs><pattern id="bGridPat" width="${c}" height="${c}" patternUnits="userSpaceOnUse"><path d="M ${c} 0 L 0 0 0 ${c}" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="0.35"/></pattern></defs><rect width="${VW}" height="${VH}" fill="url(#bGridPat)"/>`:''}<rect x="1" y="1" width="${VW-2}" height="${VH-2}" fill="none" stroke="rgba(192,57,43,0.85)" stroke-width="2.5"/></g>`;
 }
 function _bTurnSvg(camp, map, VW, VH, gm){
@@ -16067,7 +16112,7 @@ function _popoutMain(cfg){
     document.body.classList.toggle('battle', on);
     var bb=document.getElementById('battleBtn');
     if(bb){ bb.style.display=(b&&b.gm)?'':'none'; bb.innerHTML=on?'&#9876; end battle':'&#9876; battle'; }
-    if(!on){ bEl.style.display='none'; dEl.style.display='none'; ban.style.display='none'; dCur=null; return; }
+    if(!on){ bEl.style.display='none'; dEl.style.display='none'; ban.style.display='none'; dCur=null; document.body.classList.remove('dice-on'); return; }
     var act=b.active;
     ban.style.display='block';
     ban.textContent='⚔ ENCOUNTER · ROUND '+b.round+(act?' · '+act.name+'’s turn':'');
@@ -16090,10 +16135,12 @@ function _popoutMain(cfg){
     nIn=document.getElementById('bAddN'); iIn=document.getElementById('bAddI');
     if(nIn){ nIn.value=keepN; if(focus==='bAddN') nIn.focus(); } if(iIn){ iIn.value=keepI; if(focus==='bAddI') iIn.focus(); }
     // The dice come up for each hero as their turn starts
-    if(!act || act.kind!=='pc'){ dEl.style.display='none'; dCur=null; return; }
+    // The dice column on the left follows the turn: heroes roll for themselves, the GM for foes
+    document.body.classList.toggle('dice-on', !!act);
+    if(!act){ dEl.style.display='none'; dCur=null; return; }
     if(dCur!==act.id){ dCur=act.id; dMin=false; dMod=0; dMode='normal'; }
     var last=null; for(var i=0;i<b.log.length;i++){ if(b.log[i].cid===act.id){ last=b.log[i]; break; } if(b.log[i].total==null) break; }
-    var d='<div class="dh">'+face(act, 34)+'<div style="flex:1;min-width:0"><div class="dt">'+esc(act.name)+'’s turn</div><div class="ds">'+(act.canRoll?'Roll here, or from the dice screen in the app':'Waiting for '+esc(act.name)+' to roll&hellip;')+'</div></div><button data-dop="min" title="'+(dMin?'Show':'Hide')+' the dice">'+(dMin?'&#9650;':'&#9660;')+'</button></div>';
+    var d='<div class="dh">'+face(act, 34)+'<div style="flex:1;min-width:0"><div class="dt">'+esc(act.name)+'’s turn</div><div class="ds">'+(act.kind!=='pc'?(act.canRoll?'GM: roll for this foe':'The GM is rolling&hellip;'):act.canRoll?'Roll here, or from the dice screen in the app':'Waiting for '+esc(act.name)+' to roll&hellip;')+'</div></div><button data-dop="min" title="'+(dMin?'Show':'Hide')+' the dice">'+(dMin?'&#9650;':'&#9660;')+'</button></div>';
     if(last) d+='<div class="dr"><div class="dv '+(last.crit?'crit':last.fail?'fail':'')+'">'+esc(last.total)+'</div><div class="dd">'+esc(last.label)+'<br><span>'+esc(last.detail||'')+'</span>'+(last.crit?'<br><b class="crit">CRITICAL!</b>':last.fail?'<br><b class="fail">FUMBLE</b>':'')+'</div></div>';
     if(!dMin && act.canRoll){
       d+='<div class="dm">'+[['advantage','&#8593; adv'],['normal','normal'],['disadvantage','&#8595; dis']].map(function(m){ return '<button data-dop="mode" data-v="'+m[0]+'" class="'+(dMode===m[0]?'on':'')+'">'+m[1]+'</button>'; }).join('')
@@ -16155,7 +16202,7 @@ function popOutMap(){
     +'#tray .tb.on{border-color:#c9a227;color:#c9a227}#tray .tb.x{padding:5px 8px}'
     +'#hint{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:11;background:rgba(201,162,39,0.95);color:#1a1300;font-size:13px;font-weight:600;padding:6px 14px;border-radius:999px;display:none}'
     // Battle mode: red frame, round banner, initiative tracker on the right, dice panel for the current hero
-    +'body.battle #vp{box-shadow:inset 0 0 0 3px #c0392b,inset 0 0 60px rgba(192,57,43,0.45)}body.battle #vp{right:290px}body.battle #ttl{display:none}'
+    +'body.battle #vp{box-shadow:inset 0 0 0 3px #c0392b,inset 0 0 60px rgba(192,57,43,0.45)}body.battle #vp{right:290px}body.battle.dice-on #vp{left:280px}body.battle.dice-on #tray{left:280px}body.battle.dice-on #bban{left:292px}body.battle #ttl{display:none}'
     +'#bban{position:fixed;top:12px;left:12px;z-index:10;display:none;background:rgba(120,20,15,0.92);border:1px solid #e74c3c;color:#fff;font-family:Cinzel,serif;font-size:13px;letter-spacing:1px;padding:6px 14px;border-radius:999px;max-width:40vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
     +'#battle{position:fixed;top:56px;right:10px;bottom:10px;width:270px;overflow:auto;z-index:10;background:rgba(20,16,40,0.94);border:1px solid rgba(231,76,60,0.6);border-radius:12px;padding:10px;display:none;color:#e8e0ff;box-sizing:border-box}'
     +'#battle .bh{font-family:Cinzel,serif;font-size:11px;letter-spacing:1px;color:#e74c3c;margin:0 0 8px}#battle .bn0{font-size:12px;color:#b8b0d8;margin:8px 0}'
@@ -16170,13 +16217,13 @@ function popOutMap(){
     +'#battle .bx{padding:2px 6px;font-size:10px;border-color:transparent;background:none;color:#b8b0d8}'
     +'#battle .badd{display:flex;gap:5px;margin-top:8px}#battle .badd input{min-width:0;flex:1;font:inherit;font-size:12px;padding:5px 7px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:#e8e0ff}#battle .badd input[type=number]{flex:none;width:52px}'
     +'#battle .bl{font-size:11px;color:#b8b0d8;margin:3px 0}#battle .bl b{color:#e8e0ff;font-size:13px}.crit{color:#27ae60!important}.fail{color:#e74c3c!important}'
-    +'#dice{position:fixed;left:50%;bottom:12px;transform:translateX(calc(-50% - 145px));width:min(440px,calc(100% - 310px));z-index:10;background:rgba(20,16,40,0.95);border:1px solid #c9a227;border-radius:14px;padding:10px 12px;display:none;color:#e8e0ff;box-sizing:border-box;box-shadow:0 6px 30px rgba(0,0,0,0.6)}'
-    +'#dice .dh{display:flex;align-items:center;gap:10px}#dice .dt{font-family:Cinzel,serif;font-size:14px;color:#c9a227;letter-spacing:0.5px}#dice .ds{font-size:11px;color:#b8b0d8}'
+    +'#dice{position:fixed;left:10px;top:10px;bottom:10px;width:260px;overflow:auto;z-index:10;background:rgba(20,16,40,0.95);border:1px solid #c9a227;border-radius:14px;padding:10px 12px;display:none;color:#e8e0ff;box-sizing:border-box;box-shadow:0 6px 30px rgba(0,0,0,0.6)}'
+    +'#dice .dh{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid rgba(201,162,39,0.35)}#dice .dt{font-family:Cinzel,serif;font-size:14px;color:#c9a227;letter-spacing:0.5px}#dice .ds{font-size:11px;color:#b8b0d8}'
     +'#dice button{font:inherit;font-size:12px;padding:6px 9px;border-radius:9px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.06);color:#e8e0ff;cursor:pointer}'
     +'#dice .dr{display:flex;align-items:center;gap:12px;margin:8px 0 2px;padding:6px 10px;border-radius:10px;background:rgba(0,0,0,0.25)}#dice .dv{font-family:Cinzel,serif;font-size:34px;font-weight:700;color:#c9a227;min-width:52px;text-align:center}#dice .dd{font-size:12px}#dice .dd span{color:#b8b0d8;font-size:11px}'
-    +'#dice .dm{display:flex;gap:5px;align-items:center;margin-top:8px}#dice .dm .on{border-color:#c9a227;color:#c9a227}#dice .dmod{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:13px}'
-    +'#dice .dk,#dice .dq{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}#dice .dk button{flex:1;min-width:44px;font-weight:600}#dice .dq button{font-size:11px;padding:4px 8px}'
-    +'@media (max-width:760px){body.battle #vp{right:0;bottom:46vh}#battle{top:auto;left:10px;width:auto;height:44vh}#dice{left:10px;right:10px;width:auto;transform:none;bottom:calc(44vh + 18px)}#bban{max-width:calc(100% - 24px);top:52px}}'
+    +'#dice .dm{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:10px}#dice .dm .on{border-color:#c9a227;color:#c9a227}#dice .dmod{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;font-size:14px;margin-top:4px}#dice .dm>button{flex:1}'
+    +'#dice .dk,#dice .dq{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}#dice .dk button{flex:1 0 calc(25% - 5px);font-weight:600;padding:10px 0}#dice .dq button{flex:1 0 calc(50% - 5px)}#dice .dq button{font-size:11px;padding:4px 8px}'
+    +'@media (max-width:760px){body.battle #vp{right:0;bottom:46vh}#battle{top:auto;left:10px;width:auto;height:44vh}body.battle.dice-on #vp{left:0}body.battle.dice-on #tray{left:10px}body.battle.dice-on #bban{left:12px}#dice{top:auto;left:10px;right:10px;width:auto;max-height:30vh;bottom:calc(44vh + 18px)}#bban{max-width:calc(100% - 24px);top:52px}}'
     +'</style></head><body>'
     +'<div id="ttl">'+title+'</div><div id="bban"></div><div id="hint"></div>'
     +'<div id="vp">'+clone.outerHTML+'</div>'
