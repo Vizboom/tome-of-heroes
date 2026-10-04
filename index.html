@@ -1211,6 +1211,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .dmg-term{display:inline-flex;align-items:center;gap:4px;padding:3px 4px 3px 10px;border-radius:999px;border:1px solid var(--gold);color:var(--gold);font-family:'Cinzel',serif;font-size:13px}
 .dmg-term button{width:20px;height:20px;border-radius:50%;border:none;background:rgba(201,162,39,0.18);color:var(--gold);cursor:pointer;line-height:1}
 .dmg-hint{font-size:12px;color:var(--muted);font-style:italic}
+.dmg-wpn{font-family:'Cinzel',serif;font-size:13px;color:var(--gold);margin-bottom:4px}
+.dmg-wpn span{font-family:inherit;font-size:11px;color:var(--muted);font-style:italic}
 .dmg-go{display:flex;gap:6px;align-items:stretch;margin-bottom:12px}
 .dmg-go .pc-pill{flex:none}.dmg-roll{flex:1;margin:0!important}.dmg-roll:disabled{opacity:0.45;cursor:default}
 /* Conditions fold into one line; the full list opens on tap */
@@ -11176,7 +11178,7 @@ function renderDiceCharPanel(){
           html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+mhItem.name+' Attack" data-b="'+atkBonus2+'" style="cursor:pointer">';
           html+='<div style="font-family:\'Cinzel\',serif;font-size:11px;color:'+rarC2+'">⚔ '+mhItem.name+'</div>';
           html+='<div style="font-size:11px;color:var(--muted)">'+atkStr2+' · '+dmgStr2+'</div></div>';
-          if(dmgMatch){ const dx=_mainhandDamage(char, mhItem); html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(mhItem.name)+'" data-x="'+esc(dx)+'" title="Roll damage — dice double straight after a critical hit">🎲 damage '+esc(dx)+'</button>'; }
+          if(dmgMatch){ const dx=_mainhandDamage(char, mhItem); html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(mhItem.name)+'" data-x="'+esc(dx)+'" title="Put this damage on the table — add extra dice, then Roll damage. Dice double straight after a critical hit">🎲 damage '+esc(dx)+'</button>'; }
           html+=makeInfoBtn(uid2, mhItem.desc||'');
           html+='</div>';
         }
@@ -11188,7 +11190,7 @@ function renderDiceCharPanel(){
           html+='<div style="background:var(--surface);border:1px solid var(--red);border-radius:8px;padding:5px 10px;cursor:pointer">';
           html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+atk.name+' Attack" data-b="'+bonus+'" style="font-family:\'Cinzel\',serif;font-size:11px;color:var(--red)">'+atk.name+'</div>';
           html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+atk.name+' Attack" data-b="'+bonus+'" style="font-size:11px;color:var(--muted)">'+(atk.bonus||atk.atk||'+0')+' · '+(atk.damage||atk.dmg||'—')+'</div>';
-          { const dx=String(atk.damage||atk.dmg||''); const px=parseDiceExpr(dx); if(px) html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(atk.name)+'" data-x="'+esc(dx)+'" title="Roll damage — dice double straight after a critical hit">🎲 damage '+esc(_diceExprText(px.terms,px.mod))+'</button>'; }
+          { const dx=String(atk.damage||atk.dmg||''); const px=parseDiceExpr(dx); if(px) html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(atk.name)+'" data-x="'+esc(dx)+'" title="Put this damage on the table — add extra dice, then Roll damage. Dice double straight after a critical hit">🎲 damage '+esc(_diceExprText(px.terms,px.mod))+'</button>'; }
           html+=makeInfoBtn(uid, atk.type||atk.notes||'');
           html+='</div>';
         });
@@ -11202,7 +11204,7 @@ function renderDiceCharPanel(){
           html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+atk.name+' Attack" data-b="'+bonus+'" style="cursor:pointer">';
           html+='<div style="font-family:\'Cinzel\',serif;font-size:11px;color:'+rarityColor+'">'+atk.name+'</div>';
           html+='<div style="font-size:11px;color:var(--muted)">'+atk.bonus+' · '+atk.damage+'</div></div>';
-          { const dx=String(atk.damage||''); const px=parseDiceExpr(dx); if(px) html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(atk.name)+'" data-x="'+esc(dx)+'" title="Roll damage — dice double straight after a critical hit">🎲 damage '+esc(_diceExprText(px.terms,px.mod))+'</button>'; }
+          { const dx=String(atk.damage||''); const px=parseDiceExpr(dx); if(px) html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(atk.name)+'" data-x="'+esc(dx)+'" title="Put this damage on the table — add extra dice, then Roll damage. Dice double straight after a critical hit">🎲 damage '+esc(_diceExprText(px.terms,px.mod))+'</button>'; }
           html+=makeInfoBtn(uid, atk.desc||'');
           html+='</div>';
         });
@@ -11685,9 +11687,10 @@ function renderDamagePanel(){
   el.innerHTML=(atks.length?'<div class="dmg-atks">'+atks.map(a=>{
       const px=parseDiceExpr(a.expr), crit=!!(last && last.isCrit && last.label===a.name+' Attack');
       const shown=_diceExprText(crit?px.terms.map(t=>({...t, n:t.n*2})):px.terms, px.mod);
-      return '<button type="button" class="dmg-atk'+(crit?' crit':'')+'" onclick="rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(a.name)+'" data-x="'+esc(a.expr)+'" title="Roll '+esc(a.name)+' damage">'
+      return '<button type="button" class="dmg-atk'+(crit?' crit':'')+'" onclick="rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(a.name)+'" data-x="'+esc(a.expr)+'" title="Put '+esc(a.name)+' damage on the table, then add any extra dice">'
         +'<span class="dn">⚔ '+esc(a.name)+'</span><span class="dx">'+esc(shown)+(crit?' · crit!':'')+'</span></button>'; }).join('')+'</div>':'')
     +'<div class="dmg-dice">'+[4,6,8,10,12,20].map(sd=>'<button type="button" class="dmg-die'+(P[sd]?' on':'')+'" onclick="poolAdd('+sd+',1)" aria-label="Add a d'+sd+'">d'+sd+(P[sd]?'<b>'+P[sd]+'</b>':'')+'</button>').join('')+'</div>'
+    +(diceState.poolWeapon && (diceState.poolList||[]).some(x=>x.w) ? '<div class="dmg-wpn">⚔ '+esc(diceState.poolWeapon.name)+' <span>· tap a die above to add extra damage</span></div>' : '')
     +'<div class="dmg-sum">'+(terms.length ? terms.map(t=>'<span class="dmg-term">'+t.n+'d'+t.s+'<button type="button" onclick="poolAdd('+t.s+',-1)" aria-label="One fewer d'+t.s+'">−</button></span>').join('') : '<span class="dmg-hint">Tap a die to drop it on the table — as many as you like. Tap one on the table to pick it back up.</span>')
     +'<span class="dcount" style="margin-left:auto"><button type="button" onclick="poolModStep(-1)" aria-label="Lower modifier">−</button><b>'+(mod>=0?'+':'')+mod+'</b><button type="button" onclick="poolModStep(1)" aria-label="Raise modifier">+</button></span></div>'
     +'<div class="dmg-go"><button type="button" class="pc-pill'+(diceState.poolCrit?' on gold':'')+'" onclick="poolCritToggle()" title="Critical hit: double the dice">✦ crit ×2</button>'
@@ -11710,15 +11713,16 @@ function poolAdd(sides, d){
 function poolRemove(id){ diceState.poolList=(diceState.poolList||[]).filter(x=>x.id!==String(id)); renderDamagePanel(); _diceTableStage(); }
 function poolModStep(d){ diceState.poolMod=Math.max(-30, Math.min(30, (diceState.poolMod||0)+d)); renderDamagePanel(); }
 function poolCritToggle(){ diceState.poolCrit=!diceState.poolCrit; renderDamagePanel(); }
-function poolClear(){ diceState.poolList=[]; diceState.poolMod=0; diceState.poolCrit=false; renderDamagePanel(); _diceTableStage(); }
+function poolClear(){ diceState.poolList=[]; diceState.poolMod=0; diceState.poolCrit=false; diceState.poolWeapon=null; renderDamagePanel(); _diceTableStage(); }
 // Throw the dice waiting on the table; "again" throws the same handful once more.
 // The modifier stays for the next swing; crit ×2 is for one roll.
 function rollPool(again){
   const list=again ? (diceState.lastPool||[]) : (diceState.poolList||[]); if(!list.length) return;
   const crit=!!diceState.poolCrit; diceState.poolCrit=false;
-  diceState.lastPool=list.map(x=>({id:x.id, s:x.s}));
+  diceState.lastPool=list.map(x=>({id:x.id, s:x.s, w:x.w}));
   if(!again) diceState.poolList=[];
-  _rollExpr('Damage'+(crit?' (critical)':''), _poolTerms(list), diceState.poolMod||0, {damage:true, crit, fromTable:!again});
+  const w=diceState.poolWeapon, extra=list.some(x=>!x.w);
+  _rollExpr((w&&list.some(x=>x.w) ? w.name+' damage'+(extra?' + extra':'') : 'Damage')+(crit?' (critical)':''), _poolTerms(list), diceState.poolMod||0, {damage:true, crit, fromTable:!again});
 }
 // The conditions list folds into one line (active ones stay in view)
 function toggleCondPanel(){
@@ -11731,11 +11735,22 @@ function _applyCondPanel(){
   if(b) b.style.display=open?'':'none';
   if(a) a.textContent=open?'▾ hide':(diceState.activeConds.size?'▸ edit':'▸ all');
 }
-// An attack's damage. Straight after that attack crits, its dice are doubled.
+// An attack's damage drops its dice on the table rather than rolling, so
+// extra dice (a smite, Hunter's Mark, a flaming blade) can join them before
+// "Roll damage". Picking another weapon swaps only the weapon's own dice and
+// modifier; extras stay. Straight after that attack crits, crit ×2 is on.
 function rollDamage(name, expr){
   const p=parseDiceExpr(expr); if(!p){ toast('No damage dice listed for '+name,'var(--muted)'); return; }
   const last=diceState.history[0], crit=!!(last && last.isCrit && last.label===name+' Attack');
-  _rollExpr(name+' damage'+(crit?' (critical)':''), p.terms, p.mod, {damage:true, crit});
+  const old=diceState.poolWeapon, L=(diceState.poolList||[]).filter(x=>!x.w);
+  const wd=[]; p.terms.forEach(t=>{ for(let i=0;i<t.n && wd.length<30;i++) wd.push({id:'p'+(++_poolSeq), s:t.s, w:1}); });
+  diceState.poolList=wd.concat(L).slice(0,30);
+  diceState.poolMod=Math.max(-30, Math.min(30, (diceState.poolMod||0)-(old?old.mod:0)+p.mod));
+  diceState.poolWeapon={name, mod:p.mod};
+  if(crit) diceState.poolCrit=true;
+  renderDamagePanel(); _diceTableStage();
+  document.querySelector('#dmgPanel .dmg-roll')?.scrollIntoView({block:'nearest', behavior:'smooth'});
+  toast('⚔ '+name+' on the table · add extra dice, then roll','var(--gold)');
 }
 function renderDiceHistory(){const el=document.getElementById('rollHistory');if(!el)return;if(!diceState.history.length){el.innerHTML=`<p style="font-size:13px;color:var(--muted);font-style:italic;text-align:center;padding:12px 0">No rolls yet.</p>`;return;}el.innerHTML=diceState.history.map(r=>{const mc=r.mode==='advantage'?'var(--green)':r.mode==='disadvantage'?'var(--red)':'var(--muted)';const ml=r.mode==='advantage'?'↑ADV':r.mode==='disadvantage'?'↓DIS':'NRM';const tc=r.isCrit?'var(--green)':r.isFail?'var(--red)':'var(--text)';const ci=r.conds.map(id=>{const c=CONDITIONS.find(x=>x.id===id);return c?c.i:'';}).join('');return`<div class="hist-row"><div class="hist-die">${r.label?('<span style="font-size:11px;color:var(--muted);display:block;line-height:1">'+r.label.split(' ')[0]+'</span>'):''}${r.dl||('d'+r.d)}</div><div class="hist-val" style="color:${tc}">${r.total}</div><div class="hist-info">${r.label||('rolled '+r.kept)}${r.mod!==0?(r.mod>0?' +'+r.mod:' '+r.mod):''}${r.bonuses.length?' + bonuses':''} ${ci}</div><span class="hist-mode" style="color:${mc};border-color:${mc}">${ml}</span></div>`;}).join('');}
 
@@ -17244,7 +17259,7 @@ const _turnConds={}; let _turnKey=null;
 function _diceFreshTurn(key){
   if(_turnKey!==null) _turnConds[_turnKey]=[...diceState.activeConds];
   if(key!==undefined){ diceState.activeConds=new Set(_turnConds[key]||[]); _turnKey=key; }
-  diceState.die=20; diceState.count=1; diceState.poolList=[]; diceState.lastPool=[]; diceState.poolMod=0; diceState.poolCrit=false;
+  diceState.die=20; diceState.count=1; diceState.poolList=[]; diceState.lastPool=[]; diceState.poolMod=0; diceState.poolCrit=false; diceState.poolWeapon=null;
   const m=document.getElementById('dMod'); if(m) m.value=0;
   const r=document.getElementById('rollResult'); if(r){ r.style.display='none'; r.innerHTML=''; }
   try{ renderDiceScreen(); _diceTableStage(); }catch(err){}
