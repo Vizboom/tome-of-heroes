@@ -1189,6 +1189,31 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .dice-table{height:170px;margin:0 0 14px;border-radius:14px;overflow:hidden;border:6px solid #4a2f17;box-shadow:inset 0 0 0 1px #00000088,0 4px 14px rgba(0,0,0,0.45);background:#16402a}
 .atk-dmg{margin-top:4px;font:inherit;font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--border2);background:none;color:var(--gold);cursor:pointer}
 .atk-dmg:hover{border-color:var(--gold)}
+/* Damage section: big attack buttons, a dice builder and the "any dice" box */
+.dmg-panel{margin-bottom:6px}
+.dmg-atks{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;margin-bottom:10px}
+.dmg-atk{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px;border-radius:10px;border:1px solid var(--red);background:rgba(192,57,43,0.1);color:var(--text);cursor:pointer;text-align:left;font:inherit}
+.dmg-atk .dn{font-family:'Cinzel',serif;font-size:12px;color:var(--red)}.dmg-atk .dx{font-family:'Cinzel',serif;font-size:16px;color:var(--gold)}
+.dmg-atk.crit{border-color:var(--green);background:rgba(39,174,96,0.12);box-shadow:0 0 10px rgba(39,174,96,0.35)}.dmg-atk.crit .dx{color:var(--green)}
+.dmg-atk:active{transform:scale(0.97)}
+.dmg-dice{display:flex;gap:5px;margin-bottom:8px}
+.dmg-die{flex:1;position:relative;padding:12px 0;border-radius:9px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-family:'Cinzel',serif;font-size:12px;cursor:pointer}
+.dmg-die.on{border-color:var(--gold);color:var(--gold)}
+.dmg-die b{position:absolute;top:-7px;right:-5px;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;border-radius:9px;background:var(--gold);color:#1a1300;font:700 11px/18px system-ui,sans-serif}
+.dmg-sum{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:34px;margin-bottom:8px}
+.dmg-term{display:inline-flex;align-items:center;gap:4px;padding:3px 4px 3px 10px;border-radius:999px;border:1px solid var(--gold);color:var(--gold);font-family:'Cinzel',serif;font-size:13px}
+.dmg-term button{width:20px;height:20px;border-radius:50%;border:none;background:rgba(201,162,39,0.18);color:var(--gold);cursor:pointer;line-height:1}
+.dmg-hint{font-size:12px;color:var(--muted);font-style:italic}
+.dmg-go{display:flex;gap:6px;align-items:stretch;margin-bottom:12px}
+.dmg-go .pc-pill{flex:none}.dmg-roll{flex:1;margin:0!important}.dmg-roll:disabled{opacity:0.45;cursor:default}
+/* Conditions fold into one line; the full list opens on tap */
+.cond-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:14px 0 8px;cursor:pointer;user-select:none}
+.cond-head .section-label{margin:0}.cond-head .active-conds{flex:1;margin:0;min-width:0}
+.cond-arrow{font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;color:var(--muted);margin-left:auto}
+.condition-grid.compact{grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:4px;margin-bottom:10px}
+.condition-grid.compact .cond-chip{display:flex;align-items:center;gap:5px;padding:5px 7px;text-align:left}
+.condition-grid.compact .cond-chip .ci{font-size:14px!important;display:inline;margin:0}
+.condition-grid.compact .cond-chip .cn{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mod-row label{font-family:'Cinzel',serif;font-size:11px;color:var(--muted);letter-spacing:1px;white-space:nowrap;}
 .mod-row input{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:'Cinzel',serif;font-size:16px;padding:8px 12px;outline:none;width:70px;text-align:center;transition:var(--trans);}
 .mod-row input:focus{border-color:var(--gold);}
@@ -1556,6 +1581,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <button class="roll-btn roll-n" id="rollBtn" onclick="doRoll()" style="margin-bottom:12px">Roll ⬡</button>
     <div id="rollResult" style="display:none"></div>
     <div id="diceTable" class="dice-table" title="The table — every roll lands here"></div>
+    <div class="divider"><span>Damage</span></div>
+    <div id="dmgPanel" class="dmg-panel"></div>
     <div class="divider"><span>Roll Mode<button type="button" class="gi" onclick="openGlossary('Advantage')" aria-label="What are advantage and disadvantage?">ⓘ</button></span></div>
     <div class="mode-row">
       <button class="mode-btn adv-on" id="mAdv" onclick="setMode('advantage')"><span class="mi">↑</span>Advantage</button>
@@ -1571,16 +1598,16 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <input type="number" id="dMod" value="0" min="-10" max="20" step="1">
     </div>
     <div style="font-size:12px;color:var(--muted);font-style:italic;text-align:right;margin:-8px 0 12px" id="rollDesc">rolling 1d20</div>
-    <div class="mod-row expr-row">
-      <label>Any dice</label>
-      <input id="dExpr" placeholder="2d6+1d4+3" autocomplete="off" onkeydown="if(event.key==='Enter')rollDiceExpr()">
-      <button type="button" class="pc-pill" onclick="rollDiceExpr()">Roll</button>
+    <div class="cond-head" onclick="toggleCondPanel()" role="button" aria-controls="condBody">
+      <span class="section-label">Conditions<button type="button" class="gi" onclick="event.stopPropagation();openGlossary('Conditions')" aria-label="What are conditions?">ⓘ</button></span>
+      <span class="active-conds" id="activeConds"></span>
+      <span class="cond-arrow" id="condArrow">▸ all</span>
     </div>
-    <div class="section-label">Conditions<button type="button" class="gi" onclick="openGlossary('Conditions')" aria-label="What are conditions?">ⓘ</button></div>
-    <div class="active-conds" id="activeConds"></div>
-    <div class="condition-grid" id="condGrid"></div>
-    <div class="divider" id="condEffectsDivider" style="display:none"><span>Active Effects</span></div>
-    <div id="condEffects"></div>
+    <div id="condBody" style="display:none">
+      <div class="condition-grid compact" id="condGrid"></div>
+      <div class="divider" id="condEffectsDivider" style="display:none"><span>Active Effects</span></div>
+      <div id="condEffects"></div>
+    </div>
     <div class="divider"><span>History</span></div>
     <div class="hist-list" id="rollHistory"></div>
     </div>
@@ -10728,8 +10755,10 @@ function copyText(txt){navigator.clipboard?.writeText(txt).then(()=>toast('Copie
 /* ══ THE TABLE ══
    Dice thrown onto a felt table: they fly in from the side, bounce off the
    rim and each other, tumble (a little height and shadow) and settle on the
-   values actually rolled. Self-contained, so the map pop-out runs the same
-   code (it is copied in with toString). */
+   values actually rolled. Dice can also be dropped on first (stage): they
+   fall in and wait, labelled with their type, until the roll throws them
+   from where they lie; tapping a waiting die picks it back up (onTap).
+   Self-contained, so the map pop-out runs the same code (copied in with toString). */
 function _diceTableKit(){
   var COL={4:'#c0392b',6:'#ece3cf',8:'#8e44ad',10:'#16a085',12:'#d35400',20:'#c9a227',100:'#7f8c8d'};
   var INK={6:'#2a2118'};
@@ -10746,7 +10775,8 @@ function _diceTableKit(){
     var p=r*0.42, d=r*0.13, L={1:[[0,0]],2:[[-p,-p],[p,p]],3:[[-p,-p],[0,0],[p,p]],4:[[-p,-p],[p,-p],[-p,p],[p,p]],5:[[-p,-p],[p,-p],[0,0],[-p,p],[p,p]],6:[[-p,-p],[p,-p],[-p,0],[p,0],[-p,p],[p,p]]}[v];
     ctx.fillStyle=ink; (L||[]).forEach(function(q){ ctx.beginPath(); ctx.arc(q[0],q[1],d,0,2*Math.PI); ctx.fill(); });
   }
-  function mount(el){
+  function mount(el, opts){
+    opts=opts||{};
     var cv=document.createElement('canvas'), ctx=cv.getContext('2d'), W=0, H=0, dpr=1, bodies=[], raf=0, t0=0, info=null;
     cv.style.cssText='display:block;width:100%;height:100%';
     el.innerHTML=''; el.appendChild(cv);
@@ -10760,7 +10790,7 @@ function _diceTableKit(){
       for(var x=-H;x<W;x+=9){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x+H,H); ctx.stroke(); }
     }
     function die(b){
-      var s=b.s, r=b.r*(1+b.z*0.012), face=b.done?b.v:b.show, col=COL[s]||'#bdc3c7', pts=shape(s, r), dim=b.done&&!b.k;
+      var s=b.s, r=b.r*(1+b.z*0.012), face=b.staged?'d'+s:b.done?b.v:b.show, col=COL[s]||'#bdc3c7', pts=shape(s, r), dim=b.done&&!b.k&&!b.staged;
       ctx.save();
       // shadow on the felt, further off and softer while the die is in the air
       ctx.translate(b.x+3+b.z*0.35, b.y+4+b.z*0.5); ctx.rotate(b.a); ctx.fillStyle='rgba(0,0,0,'+(0.35-Math.min(0.2,b.z*0.006))+')';
@@ -10771,10 +10801,10 @@ function _diceTableKit(){
       var g=ctx.createLinearGradient(-r,-r,r,r); g.addColorStop(0,'#ffffff55'); g.addColorStop(0.45,col); g.addColorStop(1,'#00000066');
       ctx.beginPath(); if(pts){ pts.forEach(function(q,i){ i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); }); ctx.closePath(); } else ctx.arc(0,0,r,0,2*Math.PI);
       ctx.fillStyle=col; ctx.fill(); ctx.fillStyle=g; ctx.fill(); ctx.shadowBlur=0;
-      ctx.lineWidth=1.4; ctx.strokeStyle='rgba(0,0,0,0.45)'; ctx.stroke();
+      ctx.lineWidth=b.staged?2:1.4; ctx.strokeStyle=b.staged?'rgba(255,240,190,0.9)':'rgba(0,0,0,0.45)'; if(b.staged) ctx.setLineDash([4,3]); ctx.stroke(); ctx.setLineDash([]);
       if(s===20 && pts){ ctx.beginPath(); [0,2,4].forEach(function(i,j){ var q=[pts[i][0]*0.55,pts[i][1]*0.55]; j?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); }); ctx.closePath(); ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.stroke(); }
       ctx.rotate(-b.a*(b.done?1:0.6));   // numbers stay mostly upright so they can be read
-      if(s===6 && face<=6) pips(ctx, face, r, INK[6]);
+      if(s===6 && !b.staged && face<=6) pips(ctx, face, r, INK[6]);
       else { var txt=String(face); ctx.fillStyle=s===6?INK[6]:'#fff'; ctx.font='700 '+Math.round(r*(txt.length>2?0.62:txt.length>1?0.78:0.92))+'px Cinzel, Georgia, serif';
         ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineWidth=3; ctx.strokeStyle='rgba(0,0,0,0.55)'; ctx.strokeText(txt,0,r*0.06); ctx.fillText(txt,0,r*0.06); }
       if(b.neg && b.done){ ctx.fillStyle='#fff'; ctx.font='700 '+Math.round(r*0.55)+'px sans-serif'; ctx.fillText('−',-r*0.95,-r*0.7); }
@@ -10783,7 +10813,8 @@ function _diceTableKit(){
     function draw(){
       ctx.setTransform(dpr,0,0,dpr,0,0); felt();
       bodies.slice().sort(function(p,q){ return p.z-q.z; }).forEach(die);
-      if(info && bodies.length && bodies.every(function(b){ return b.done; })){
+      var thrown=bodies.filter(function(b){ return !b.staged; });
+      if(info && thrown.length && thrown.every(function(b){ return b.done; })){
         ctx.textAlign='right'; ctx.textBaseline='bottom';
         var t=info.caption||'', tot=info.total!=null?String(info.total):'', tw=0;
         if(tot){ ctx.font='700 22px Cinzel, Georgia, serif'; tw=ctx.measureText(tot).width; ctx.fillStyle=info.crit?'#2ecc71':info.fail?'#e74c3c':'#f1d77a'; ctx.fillText(tot, W-10, H-8); }
@@ -10796,6 +10827,7 @@ function _diceTableKit(){
       bodies.forEach(function(b){
         if(b.done) return;
         b.vz-=900*dt; b.z+=b.vz*dt; if(b.z<0){ b.z=0; b.vz=-b.vz*0.42; if(Math.abs(b.vz)<40) b.vz=0; }
+        if(b.staged){ b.a+=b.va*dt; b.va*=0.9; if(b.z===0 && b.vz===0){ b.done=true; b.va=0; } else moving=true; return; }
         var f=b.z>0?0.995:0.955; b.vx*=f; b.vy*=f; b.va*=b.z>0?0.99:0.93;
         b.x+=b.vx*dt; b.y+=b.vy*dt; b.a+=b.va*dt;
         if(b.x<b.r){ b.x=b.r; b.vx=Math.abs(b.vx)*0.6; } if(b.x>W-b.r){ b.x=W-b.r; b.vx=-Math.abs(b.vx)*0.6; }
@@ -10805,46 +10837,84 @@ function _diceTableKit(){
         if((sp<14 && b.z===0 && b.vz===0) || el2>2.4){ b.done=true; b.va=0; b.a=b.a%(2*Math.PI); } else moving=true;
       });
       for(var i=0;i<bodies.length;i++) for(var j=i+1;j<bodies.length;j++){ var p=bodies[i], q=bodies[j], dx=q.x-p.x, dy=q.y-p.y, d=Math.hypot(dx,dy)||0.01, m=p.r+q.r;
-        if(d<m){ var nx=dx/d, ny=dy/d, o=(m-d)/2; p.x-=nx*o; p.y-=ny*o; q.x+=nx*o; q.y+=ny*o;
-          var rv=(q.vx-p.vx)*nx+(q.vy-p.vy)*ny; if(rv<0){ var im=-rv*0.8; p.vx-=im*nx; p.vy-=im*ny; q.vx+=im*nx; q.vy+=im*ny; } } }
+        if(d<m){ var nx=dx/d, ny=dy/d, o=(m-d)/2, pf=p.staged?0:q.staged?2:1, qf=q.staged?0:p.staged?2:1;   // waiting dice don't get pushed
+          if(p.staged && q.staged) continue;
+          p.x-=nx*o*pf; p.y-=ny*o*pf; q.x+=nx*o*qf; q.y+=ny*o*qf;
+          var rv=(q.vx-p.vx)*nx+(q.vy-p.vy)*ny; if(rv<0){ var im=-rv*0.8; if(pf){ p.vx-=im*nx*pf; p.vy-=im*ny*pf; } if(qf){ q.vx+=im*nx*qf; q.vy+=im*ny*qf; } } } }
+      // a nudge from a collision never pushes a die off the table
+      bodies.forEach(function(b){ var m=b.r*1.05; b.x=Math.max(m, Math.min(W-m, b.x)); b.y=Math.max(m, Math.min(H-m, b.y)); });
       draw();
       raf=moving?requestAnimationFrame(step):0;
     }
+    function radius(n){ return Math.max(11, Math.min(24, Math.sqrt(W*H/(Math.max(1,n)*9)))); }
     function roll(dice, o){
       size(); o=o||{}; info=o; cancelAnimationFrame(raf); step.last=0;
-      var n=Math.min(40, (dice||[]).length), r=Math.max(11, Math.min(24, Math.sqrt(W*H/(Math.max(1,n)*9)))), fromLeft=Math.random()<0.5;
+      var waiting=bodies.filter(function(b){ return b.staged; }), pool=o.useStaged?waiting.slice():[];
+      var n=Math.min(40, (dice||[]).length+waiting.length), r=radius(n), fromLeft=Math.random()<0.5;
       bodies=(dice||[]).slice(0,40).map(function(d,i){
         var s=+d.s||6, b={s:s, v:+d.v||1, k:d.k!==0&&d.k!==false, neg:!!(d.neg||d.n), r:s===100?r*1.1:r, show:1, tick:0, done:false};
+        var src=null; for(var j=0;j<pool.length;j++){ if(pool[j].s===s){ src=pool.splice(j,1)[0]; break; } }
+        if(src){ b.x=src.x; b.y=src.y; b.a=src.a; b.vx=(Math.random()-0.5)*W*1.6; b.vy=(Math.random()-0.5)*H*2.2; b.va=(Math.random()<0.5?-1:1)*(10+Math.random()*10); b.z=4; b.vz=260+Math.random()*120; return b; }
         b.x=fromLeft? -r*(1+i*0.6) : W+r*(1+i*0.6); b.y=H*(0.25+Math.random()*0.5);
         b.vx=(fromLeft?1:-1)*(W*(1.25+Math.random()*0.7)); b.vy=(Math.random()-0.5)*H*2.4; b.a=Math.random()*6.3; b.va=(Math.random()<0.5?-1:1)*(8+Math.random()*10);
         b.z=24+Math.random()*30; b.vz=120+Math.random()*120;
         if(s===20 && b.k){ if(o.crit && b.v===20) b.glow='#2ecc71'; else if(o.fail && b.v===1) b.glow='#e74c3c'; }
         return b; });
-      if(still){ bodies.forEach(function(b,i){ b.done=true; b.z=0; b.x=W*(i+1)/(bodies.length+1); b.y=H/2; }); draw(); return; }
+      if(o.useStaged) waiting=pool;                    // the ones thrown are gone; any others keep waiting
+      bodies=waiting.concat(bodies);
+      if(still){ bodies.forEach(function(b,i){ b.done=true; b.z=0; if(!b.staged){ b.x=W*(i+1)/(bodies.length+1); b.y=H/2; } }); draw(); return; }
       t0=performance.now(); raf=requestAnimationFrame(step);
     }
+    // Dice dropped on to wait for the throw: [{id, s}]. New ones fall in where
+    // there is room; ones no longer listed are picked back up.
+    function stage(list){
+      size(); list=list||[];
+      var ids=list.map(function(x){ return String(x.id); }), had=bodies.filter(function(b){ return b.staged; });
+      bodies=bodies.filter(function(b){ return !b.staged || ids.indexOf(b.id)>=0; });
+      var r=radius(Math.max(list.length, 6)), added=false;
+      list.slice(0,40).forEach(function(x){
+        if(had.some(function(b){ return b.id===String(x.id); })) return;
+        var s=+x.s||6, b={id:String(x.id), s:s, v:0, k:1, staged:true, r:s===100?r*1.1:r, show:0, tick:0, done:false, vx:0, vy:0, a:(Math.random()-0.5)*0.8, va:(Math.random()-0.5)*6, z:70, vz:0};
+        for(var t=0;t<30;t++){ b.x=b.r+Math.random()*(W-2*b.r); b.y=b.r+Math.random()*(H-2*b.r);
+          if(!bodies.some(function(o){ return Math.hypot(o.x-b.x, o.y-b.y)<o.r+b.r+4; })) break; }
+        bodies.push(b); added=true; });
+      if(still){ bodies.forEach(function(b){ if(b.staged){ b.z=0; b.done=true; } }); draw(); return; }
+      if(added && !raf){ t0=performance.now(); step.last=0; raf=requestAnimationFrame(step); } else if(!raf) draw();
+    }
+    // Tapping a waiting die picks it back up
+    cv.addEventListener('pointerdown', function(e){
+      if(!opts.onTap) return; var rc=cv.getBoundingClientRect(), x=e.clientX-rc.left, y=e.clientY-rc.top;
+      for(var i=bodies.length-1;i>=0;i--){ var b=bodies[i]; if(b.staged && Math.hypot(b.x-x, b.y-b.z*0.6-y)<=b.r*1.15){ e.preventDefault(); opts.onTap(b.id); return; } }
+    });
+    cv.addEventListener('pointermove', function(e){ if(!opts.onTap) return; var rc=cv.getBoundingClientRect(), x=e.clientX-rc.left, y=e.clientY-rc.top;
+      cv.style.cursor=bodies.some(function(b){ return b.staged && Math.hypot(b.x-x, b.y-y)<=b.r*1.15; })?'pointer':''; });
     var ro=window.ResizeObserver?new ResizeObserver(function(){ size(); }):null; if(ro) ro.observe(el);
     size();
-    return {el:el, roll:roll};
+    return {el:el, roll:roll, stage:stage};
   }
   return {mount:mount};
 }
 const DiceTable=_diceTableKit();
 let _mainTable=null;
 // Every roll on the dice screen lands on its table
-function _diceTableRoll(dice, crit, fail, total){
-  const el=document.getElementById('diceTable'); if(!el || !dice || !dice.length) return;
-  try{
-    if(!_mainTable || _mainTable.el!==el) _mainTable=DiceTable.mount(el);
-    _mainTable.roll(dice, {crit, fail, total});
-  }catch(e){}
+function _diceTableGet(){
+  const el=document.getElementById('diceTable'); if(!el) return null;
+  if(!_mainTable || _mainTable.el!==el) _mainTable=DiceTable.mount(el, {onTap:poolRemove});
+  return _mainTable;
 }
+function _diceTableRoll(dice, crit, fail, total, useStaged){
+  if(!dice || !dice.length) return;
+  try{ const t=_diceTableGet(); if(t) t.roll(dice, {crit, fail, total, useStaged}); }catch(e){}
+}
+// The damage dice dropped on the table, waiting for the throw
+function _diceTableStage(){ try{ const t=_diceTableGet(); if(t) t.stage(diceState.poolList||[]); }catch(e){} }
 /* ══ DICE ══ */
 let diceState={mode:'normal',die:20,count:1,activeConds:new Set(),history:[]};
 function renderDiceScreen(){
   renderDiceCharPanel();
   document.getElementById('dieStrip').innerHTML=[4,6,8,10,12,20,100].map(d=>`<button class="die-btn ${d===diceState.die?'sel':''}" onclick="selectDie(${d})">d${d}</button>`).join('');
   const dc=document.getElementById('dCount'); if(dc) dc.textContent=diceState.count||1;
+  renderDamagePanel(); _applyCondPanel();
   renderCondGrid();renderActiveConds();updateRollBtn();renderDiceHistory();
 }
 
@@ -11051,7 +11121,7 @@ function renderDiceCharPanel(){
           html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+mhItem.name+' Attack" data-b="'+atkBonus2+'" style="cursor:pointer">';
           html+='<div style="font-family:\'Cinzel\',serif;font-size:11px;color:'+rarC2+'">⚔ '+mhItem.name+'</div>';
           html+='<div style="font-size:11px;color:var(--muted)">'+atkStr2+' · '+dmgStr2+'</div></div>';
-          if(dmgMatch){ const dx=dmgDie+((magic2+mod2)?((magic2+mod2)>0?'+':'')+(magic2+mod2):''); html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(mhItem.name)+'" data-x="'+esc(dx)+'" title="Roll damage — dice double straight after a critical hit">🎲 damage '+esc(dx)+'</button>'; }
+          if(dmgMatch){ const dx=_mainhandDamage(char, mhItem); html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(mhItem.name)+'" data-x="'+esc(dx)+'" title="Roll damage — dice double straight after a critical hit">🎲 damage '+esc(dx)+'</button>'; }
           html+=makeInfoBtn(uid2, mhItem.desc||'');
           html+='</div>';
         }
@@ -11454,7 +11524,7 @@ function switchDiceChar(charId){
     _userSettings['active_char_'+campId] = String(charId);
     setUserSetting('active_char_'+campId, charId).catch(()=>{});
   }
-  renderDiceCharPanel();
+  renderDiceCharPanel(); renderDamagePanel();
 }
 
 
@@ -11463,9 +11533,9 @@ function setDiceCount(delta){ diceState.count=Math.max(1,Math.min(20,(diceState.
 function setMode(m){diceState.mode=m;document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('adv-on','dis-on','neu-on'));if(m==='advantage')document.getElementById('mAdv').classList.add('adv-on');else if(m==='disadvantage')document.getElementById('mDis').classList.add('dis-on');else document.getElementById('mNeu').classList.add('neu-on');updateRollBtn();}
 function getEffMode(){let adv=false,dis=false;for(const id of diceState.activeConds){const c=CONDITIONS.find(x=>x.id===id);if(c?.force==='advantage')adv=true;if(c?.force==='disadvantage')dis=true;}if(adv&&dis)return diceState.mode;if(adv)return'advantage';if(dis)return'disadvantage';return diceState.mode;}
 function updateRollBtn(){const em=getEffMode();const btn=document.getElementById('rollBtn');if(!btn)return;btn.className='roll-btn '+(em==='advantage'?'roll-a':em==='disadvantage'?'roll-d':'roll-n');const nD=diceState.count||1;btn.textContent=nD>1?'Roll '+nD+'d'+diceState.die+' ⬡':em==='advantage'?'Roll Advantage ↑':em==='disadvantage'?'Roll Disadvantage ↓':'Roll ⬡';const mod=parseInt(document.getElementById('dMod')?.value)||0;const mT=em!=='normal'?(' ('+em.slice(0,3)+')'):'';if(document.getElementById('rollDesc'))document.getElementById('rollDesc').textContent=`rolling ${nD}d${diceState.die}${nD>1?'':mT}${mod?(' '+(mod>0?'+':'')+mod):''}`;}
-function toggleCond(id){if(diceState.activeConds.has(id))diceState.activeConds.delete(id);else diceState.activeConds.add(id);renderCondGrid();renderActiveConds();renderCondEffects();updateRollBtn();}
+function toggleCond(id){if(diceState.activeConds.has(id))diceState.activeConds.delete(id);else diceState.activeConds.add(id);renderCondGrid();renderActiveConds();renderCondEffects();updateRollBtn();_applyCondPanel();}
 function renderCondGrid(){const el=document.getElementById('condGrid');if(!el)return;el.innerHTML=CONDITIONS.map(c=>`<div class="cond-chip ${diceState.activeConds.has(c.id)?'con-active':''}" style="--chip-c:${c.c}" onclick="toggleCond('${c.id}')"><span class="ci" style="font-size:18px">${c.i}</span><span class="cn">${c.n}</span></div>`).join('');}
-function renderActiveConds(){const el=document.getElementById('activeConds');if(!el)return;if(!diceState.activeConds.size){el.innerHTML='';return;}el.innerHTML=[...diceState.activeConds].map(id=>{const c=CONDITIONS.find(x=>x.id===id);if(!c)return'';return`<span class="cond-tag" style="--chip-c:${c.c}">${c.i} ${c.n}<span class="cond-rm" onclick="toggleCond('${c.id}')">✕</span></span>`;}).join('');}
+function renderActiveConds(){const el=document.getElementById('activeConds');if(!el)return;if(!diceState.activeConds.size){el.innerHTML='';return;}el.innerHTML=[...diceState.activeConds].map(id=>{const c=CONDITIONS.find(x=>x.id===id);if(!c)return'';return`<span class="cond-tag" style="--chip-c:${c.c}">${c.i} ${c.n}<span class="cond-rm" onclick="event.stopPropagation();toggleCond('${c.id}')">✕</span></span>`;}).join('');}
 function renderCondEffects(){const el=document.getElementById('condEffects');const div=document.getElementById('condEffectsDivider');if(!el||!div)return;if(!diceState.activeConds.size){el.innerHTML='';div.style.display='none';return;}div.style.display='flex';el.innerHTML=[...diceState.activeConds].map(id=>{const c=CONDITIONS.find(x=>x.id===id);if(!c)return'';const fl=c.force?('<span style="color:'+c.force==='advantage'?'var(--green)':'var(--red)'+';">'+c.force==='advantage'?'↑ Advantage':'↓ Disadvantage'+'</span> · '):'';const bl=c.bonus?('<span style="color:var(--gold)">Bonus: '+c.bonus+'</span> · '):'';return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 13px;margin-bottom:7px;"><div style="font-family:'Cinzel',serif;font-size:11px;color:${c.c};letter-spacing:0.5px;margin-bottom:4px">${c.i} ${c.n}</div><div style="font-size:12px;color:var(--muted);font-style:italic;margin-bottom:4px">${c.d}</div><div style="font-size:11px">${fl}${bl}</div></div>`;}).join('');}
 function doRoll(){if((diceState.count||1)>1)return doRollPool();const _pendingLabel=(document.getElementById('rollDesc')?.textContent||'').replace(/\s*\(.*\)$/,'').trim()||null;if(document.getElementById('rollDesc'))document.getElementById('rollDesc').textContent='rolling 1d20';const mod=parseInt(document.getElementById('dMod')?.value)||0;const em=getEffMode();const d=diceState.die;const r1=Math.ceil(Math.random()*d);let r2=null,kept,dropped;if(em!=='normal'){r2=Math.ceil(Math.random()*d);kept=em==='advantage'?Math.max(r1,r2):Math.min(r1,r2);dropped=em==='advantage'?Math.min(r1,r2):Math.max(r1,r2);}else{kept=r1;}let bonusTotal=0,bonusBreak=[],dmgNotes=[];for(const id of diceState.activeConds){const c=CONDITIONS.find(x=>x.id===id);if(!c?.bonus)continue;if(c.damageOnly){dmgNotes.push(`${c.n}:${c.bonus} dmg`);continue;}if(c.bonus.startsWith('+d')){const sides=parseInt(c.bonus.slice(2));const rolled=Math.ceil(Math.random()*sides);bonusTotal+=rolled;bonusBreak.push(`${c.n}:+${rolled}`);}else if(c.bonus.startsWith('+')){const v=parseInt(c.bonus.slice(1))||0;bonusTotal+=v;bonusBreak.push(`${c.n}:+${v}`);}}
 const total=kept+mod+bonusTotal;const isCrit=d===20&&kept===20;const isFail=d===20&&kept===1;document.querySelectorAll('.die-btn.sel').forEach(b=>{b.classList.add('rolling');setTimeout(()=>b.classList.remove('rolling'),400);});
@@ -11475,7 +11545,7 @@ const el=document.getElementById('rollResult');el.style.display='block';el.inner
 // Scroll dice screen so roll button + result are in view
 const scrollEl2 = document.getElementById('diceRollPanel') || document.getElementById('scr-dice');
 if(scrollEl2) scrollEl2.scrollTop = 0;
-diceState.history.unshift({d,kept,total,mode:em,mod,bonuses:bonusBreak,isCrit,isFail,conds:[...diceState.activeConds],label:_pendingLabel});if(diceState.history.length>8)diceState.history.pop();renderDiceHistory();const _dice=r2!==null?[{s:d,v:r1,k:r1===kept?1:0},{s:d,v:r2,k:r1===kept?0:1}]:[{s:d,v:kept,k:1}];_diceTableRoll(_dice,isCrit,isFail,total);_battleNoteRoll(_pendingLabel&&!/^rolling /.test(_pendingLabel)?_pendingLabel:'d'+d,total,breakdown,isCrit,isFail,_dice);}
+diceState.history.unshift({d,kept,total,mode:em,mod,bonuses:bonusBreak,isCrit,isFail,conds:[...diceState.activeConds],label:_pendingLabel});if(diceState.history.length>8)diceState.history.pop();renderDiceHistory();renderDamagePanel();const _dice=r2!==null?[{s:d,v:r1,k:r1===kept?1:0},{s:d,v:r2,k:r1===kept?0:1}]:[{s:d,v:kept,k:1}];_diceTableRoll(_dice,isCrit,isFail,total);_battleNoteRoll(_pendingLabel&&!/^rolling /.test(_pendingLabel)?_pendingLabel:'d'+d,total,breakdown,isCrit,isFail,_dice);}
 /* Several dice at once: a pool from the die strip (3d6), any expression
    ("2d6+1d4+3") and an attack's damage, which doubles its dice on a crit. */
 // "1d8 + 1d6 + 3 slashing" → {terms:[{n:1,s:8},{n:1,s:6}], mod:3}. Text after
@@ -11514,8 +11584,8 @@ function _rollExpr(label, terms, mod, opt){
   }
   diceState.history.unshift({d:terms.length===1?terms[0].s:'', dl:expr, kept:total, total, mode:'normal', mod, bonuses:extra, isCrit:false, isFail:false, conds:[...diceState.activeConds], label});
   if(diceState.history.length>8) diceState.history.pop();
-  renderDiceHistory();
-  _diceTableRoll(dice, !!opt.crit, false, total);
+  renderDiceHistory(); renderDamagePanel();
+  _diceTableRoll(dice, !!opt.crit, false, total, !!opt.fromTable);
   _battleNoteRoll(label||expr, total, breakdown, false, false, dice);
   return total;
 }
@@ -11531,6 +11601,80 @@ function rollDiceExpr(){
   const inp=document.getElementById('dExpr'), p=parseDiceExpr(inp&&inp.value);
   if(!p){ toast('Type dice like 2d6+3 or 1d8+1d6+2','var(--red)'); return; }
   _rollExpr(null, p.terms, p.mod);
+}
+// The equipped weapon's damage: its die (from the description) + magic + STR/DEX
+function _mainhandDamage(char, it){
+  const m=it && it.desc && it.desc.match(/(\d+d\d+)/); if(!m) return '';
+  const str=parseInt(getMod(char.abilities?.STR||10))||0, dex=parseInt(getMod(char.abilities?.DEX||10))||0;
+  const magicM=it.name.match(/[+](\d)/), magic=magicM?parseInt(magicM[1]):0;
+  const mod=(/rapier|shortsword|dagger|whip/i.test(it.name)||/bow|crossbow|dart|sling/i.test(it.name))?Math.max(str,dex):str;
+  const b=magic+mod; return m[1]+(b?(b>0?'+':'')+b:'');
+}
+// Every attack the hero can roll damage for. As in the hero panel, an
+// equipped weapon stands alone; otherwise the sheet's attacks and loot weapons.
+function _attackDamageList(char){
+  if(!char) return [];
+  const mh=getEquippedItems(char)['mainhand'];
+  if(mh && !mh._2hBlocked){ const x=_mainhandDamage(char, mh); return x ? [{name:mh.name, expr:x}] : []; }
+  return [...(char.attacks||[]).map(a=>({name:a.name, expr:String(a.damage||a.dmg||'')})), ...getCharLootWeapons(char).map(a=>({name:a.name, expr:String(a.damage||'')}))]
+    .filter(a=>a.name && parseDiceExpr(a.expr));
+}
+// The damage section: a big button per attack (green and doubled straight
+// after that attack crits), a dice builder (tap d6 twice and d4 once for
+// 2d6+1d4), a modifier, crit ×2, and the "any dice" box.
+function renderDamagePanel(){
+  const el=document.getElementById('dmgPanel'); if(!el) return;
+  const typed=document.getElementById('dExpr')?.value||'';
+  const P=_poolCounts(diceState.poolList), terms=_poolTerms(), mod=diceState.poolMod||0, last=diceState.history[0], again=diceState.lastPool&&diceState.lastPool.length?_diceExprText(_poolTerms(diceState.lastPool),0):'';
+  const atks=_attackDamageList(getActiveDiceChar());
+  el.innerHTML=(atks.length?'<div class="dmg-atks">'+atks.map(a=>{
+      const px=parseDiceExpr(a.expr), crit=!!(last && last.isCrit && last.label===a.name+' Attack');
+      const shown=_diceExprText(crit?px.terms.map(t=>({...t, n:t.n*2})):px.terms, px.mod);
+      return '<button type="button" class="dmg-atk'+(crit?' crit':'')+'" onclick="rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(a.name)+'" data-x="'+esc(a.expr)+'" title="Roll '+esc(a.name)+' damage">'
+        +'<span class="dn">⚔ '+esc(a.name)+'</span><span class="dx">'+esc(shown)+(crit?' · crit!':'')+'</span></button>'; }).join('')+'</div>':'')
+    +'<div class="dmg-dice">'+[4,6,8,10,12,20].map(sd=>'<button type="button" class="dmg-die'+(P[sd]?' on':'')+'" onclick="poolAdd('+sd+',1)" aria-label="Add a d'+sd+'">d'+sd+(P[sd]?'<b>'+P[sd]+'</b>':'')+'</button>').join('')+'</div>'
+    +'<div class="dmg-sum">'+(terms.length ? terms.map(t=>'<span class="dmg-term">'+t.n+'d'+t.s+'<button type="button" onclick="poolAdd('+t.s+',-1)" aria-label="One fewer d'+t.s+'">−</button></span>').join('') : '<span class="dmg-hint">Tap a die to drop it on the table — as many as you like. Tap one on the table to pick it back up.</span>')
+    +'<span class="dcount" style="margin-left:auto"><button type="button" onclick="poolModStep(-1)" aria-label="Lower modifier">−</button><b>'+(mod>=0?'+':'')+mod+'</b><button type="button" onclick="poolModStep(1)" aria-label="Raise modifier">+</button></span></div>'
+    +'<div class="dmg-go"><button type="button" class="pc-pill'+(diceState.poolCrit?' on gold':'')+'" onclick="poolCritToggle()" title="Critical hit: double the dice">✦ crit ×2</button>'
+    +(terms.length ? '<button type="button" class="pc-pill" onclick="poolClear()">clear</button>' : again ? '<button type="button" class="pc-pill" onclick="rollPool(true)" title="Throw the same dice again">↻ '+again+'</button>' : '')
+    +'<button type="button" class="roll-btn roll-d dmg-roll" onclick="rollPool()"'+(terms.length?'':' disabled')+'>Roll damage 🎲</button></div>'
+    +'<div class="mod-row expr-row"><label>Any dice</label><input id="dExpr" placeholder="2d6+1d4+3" autocomplete="off" onkeydown="if(event.key===\'Enter\')rollDiceExpr()"><button type="button" class="pc-pill" onclick="rollDiceExpr()">Roll</button></div>';
+  const ex=document.getElementById('dExpr'); if(ex) ex.value=typed;
+}
+// Damage dice are picked one at a time: each tap on a die drops one more on
+// the table (diceState.poolList, in order), tapping one there picks it back up.
+function _poolCounts(list){ const P={}; (list||[]).forEach(x=>{ P[x.s]=(P[x.s]||0)+1; }); return P; }
+function _poolTerms(list){ const P=_poolCounts(list||diceState.poolList); return [20,12,10,8,6,4].filter(sd=>P[sd]>0).map(sd=>({n:P[sd], s:sd})); }
+let _poolSeq=0;
+function poolAdd(sides, d){
+  const L=diceState.poolList||(diceState.poolList=[]);
+  if(d>0){ if(L.length<30) L.push({id:'p'+(++_poolSeq), s:sides}); }
+  else { for(let i=L.length-1;i>=0;i--) if(L[i].s===sides){ L.splice(i,1); break; } }
+  renderDamagePanel(); _diceTableStage();
+}
+function poolRemove(id){ diceState.poolList=(diceState.poolList||[]).filter(x=>x.id!==String(id)); renderDamagePanel(); _diceTableStage(); }
+function poolModStep(d){ diceState.poolMod=Math.max(-30, Math.min(30, (diceState.poolMod||0)+d)); renderDamagePanel(); }
+function poolCritToggle(){ diceState.poolCrit=!diceState.poolCrit; renderDamagePanel(); }
+function poolClear(){ diceState.poolList=[]; diceState.poolMod=0; diceState.poolCrit=false; renderDamagePanel(); _diceTableStage(); }
+// Throw the dice waiting on the table; "again" throws the same handful once more.
+// The modifier stays for the next swing; crit ×2 is for one roll.
+function rollPool(again){
+  const list=again ? (diceState.lastPool||[]) : (diceState.poolList||[]); if(!list.length) return;
+  const crit=!!diceState.poolCrit; diceState.poolCrit=false;
+  diceState.lastPool=list.map(x=>({id:x.id, s:x.s}));
+  if(!again) diceState.poolList=[];
+  _rollExpr('Damage'+(crit?' (critical)':''), _poolTerms(list), diceState.poolMod||0, {damage:true, crit, fromTable:!again});
+}
+// The conditions list folds into one line (active ones stay in view)
+function toggleCondPanel(){
+  try{ localStorage.setItem('toh_dice_conds_open', _condPanelOpen()?'0':'1'); }catch(e){}
+  _applyCondPanel();
+}
+function _condPanelOpen(){ try{ return localStorage.getItem('toh_dice_conds_open')==='1'; }catch(e){ return false; } }
+function _applyCondPanel(){
+  const open=_condPanelOpen(), b=document.getElementById('condBody'), a=document.getElementById('condArrow');
+  if(b) b.style.display=open?'':'none';
+  if(a) a.textContent=open?'▾ hide':(diceState.activeConds.size?'▸ edit':'▸ all');
 }
 // An attack's damage. Straight after that attack crits, its dice are doubled.
 function rollDamage(name, expr){
@@ -16859,9 +17003,12 @@ window.__tohPop = {
     const b=_battle(map), e=b&&b.list.find(x=>x.id===b.cur); if(!e || !_bCanRoll(camp, map)) return null;
     if(e.kind!=='pc' && !canDesignMaps(camp)) return null;
     if(e.kind==='pc'){ const ch=getActiveDiceChar(); if(!ch || String(ch.id)!==String(e.ref)){ try{ switchDiceChar(e.ref); }catch(err){} } }
-    _diceFreshTurn();
+    _diceFreshTurn(String(e.id));
     return e.kind==='pc' ? 'hero' : 'foe';
   },
+  // The damage dice waiting on the dice screen's table, for the pop-out's table
+  staged(mapId){ return _popCtx(mapId) ? (diceState.poolList||[]).map(x=>({id:x.id, s:x.s})) : []; },
+  unstage(mapId, id){ if(!_popCtx(mapId)) return false; poolRemove(id); return true; },
   // Mirrors: live copies of app panels (the dice screen; the NPC tab for the
   // GM) and of the dialogs they open. Taps and typing in a copy come back
   // here and are replayed on the real panel, so everything works as in the app.
@@ -16897,11 +17044,14 @@ window.__tohPop = {
   },
 };
 // A new turn in the pop-out starts the dice screen clean: one d20, no modifier.
-function _diceFreshTurn(){
-  diceState.die=20; diceState.count=1;
+const _turnConds={}; let _turnKey=null;
+function _diceFreshTurn(key){
+  if(_turnKey!==null) _turnConds[_turnKey]=[...diceState.activeConds];
+  if(key!==undefined){ diceState.activeConds=new Set(_turnConds[key]||[]); _turnKey=key; }
+  diceState.die=20; diceState.count=1; diceState.poolList=[]; diceState.lastPool=[]; diceState.poolMod=0; diceState.poolCrit=false;
   const m=document.getElementById('dMod'); if(m) m.value=0;
   const r=document.getElementById('rollResult'); if(r){ r.style.display='none'; r.innerHTML=''; }
-  try{ renderDiceScreen(); }catch(err){}
+  try{ renderDiceScreen(); _diceTableStage(); }catch(err){}
 }
 // What the pop-out may mirror, and which of them only the GM sees.
 const _MIRRORS={
@@ -17066,8 +17216,10 @@ function _popoutMain(cfg){
     });
   }
   var diceMir=null, npcMir=null, dHead=null, dMirEl=null, dLast=null, table=null;
+  var stagedSig='';
   function refreshAll(force){
     if(diceMir && dMirEl.style.display!=='none') diceMir.pull(false, force);
+    if(table){ var a0=api(), mine=dMirEl && dMirEl.style.display!=='none', st=(mine&&a0)?a0.staged(MAPID):[], sig=JSON.stringify(st); if(sig!==stagedSig){ stagedSig=sig; table.stage(st); } }
     if(npcMir && gmDrawer.style.display==='flex') npcMir.pull(false, force);
     syncOverlays(force);
   }
@@ -17120,7 +17272,7 @@ function _popoutMain(cfg){
     var newest=b.log[0];
     // (rolls already in the log when this window opened aren't thrown again)
     if(seenLog===null) seenLog=newest?newest.id:'';
-    else if(newest && newest.id!==seenLog){ seenLog=newest.id; if(newest.dice && newest.dice.length && table) table.roll(newest.dice, {crit:newest.crit, fail:newest.fail, total:newest.total, caption:newest.who+' · '+newest.label}); }
+    else if(newest && newest.id!==seenLog){ seenLog=newest.id; if(newest.dice && newest.dice.length && table){ table.roll(newest.dice, {crit:newest.crit, fail:newest.fail, total:newest.total, caption:newest.who+' · '+newest.label, useStaged:newest.cid===dCur && dMirEl.style.display!=='none'}); } }
     if(!act){ dEl.style.display='none'; dCur=null; document.body.classList.remove('dice-full'); return; }
     if(dCur!==act.id){ dCur=act.id; dMin=false; dFor=a.diceFor(MAPID); if(diceMir) diceMir.reset(); }
     var full=!!(act.canRoll && dFor && !dMin);
@@ -17211,7 +17363,7 @@ function _popoutMain(cfg){
   dEl.innerHTML='<div id="dHead"></div><div id="dMir" class="mir"></div><div id="dTab" class="dice-table" title="The table &mdash; every roll in the fight lands here"></div>';
   dHead=document.getElementById('dHead'); dMirEl=document.getElementById('dMir');
   diceMir=Mirror('dice', dMirEl);
-  try{ table=DiceTable.mount(document.getElementById('dTab')); }catch(_){ table=null; }
+  try{ table=DiceTable.mount(document.getElementById('dTab'), {onTap:function(id){ var a=api(); if(a){ a.unstage(MAPID, id); refreshAll(true); } }}); }catch(_){ table=null; }
   dHead.addEventListener('click', function(e){ var t=e.target.closest('button[data-dop]'); if(!t) return; if(t.getAttribute('data-dop')==='min') dMin=!dMin; renderBattle(); });
   // Esc puts down a token being placed
   document.addEventListener('keydown', function(e){ if(e.key!=='Escape' || !placing) return; placing=null; say(''); renderTray(); if(pOpen) fillPick(); });
@@ -17277,7 +17429,7 @@ function popOutMap(){
     +'#dHead{flex:none}#dMir{flex:1 1 auto;min-height:0;overflow:auto;color:var(--text);font-size:14px;padding-right:2px}#dTab{flex:none;height:150px;margin:0;border-width:5px}'
     // the dice screen copied in from the app: one column, its own table hidden (the pop-out has the table below)
     +'.mir #diceCharPanel,.mir #diceRollPanel{flex:none!important;width:auto!important;max-width:none!important;height:auto!important;max-height:none!important;overflow:visible!important;padding:0!important;border:0!important;position:static!important;background:none!important;margin:0 0 10px!important}'
-    +'#dice.foe .mir #diceCharPanel{display:none!important}.mir #diceCharPanel .dice-toggle-arrow{display:inline!important}.mir #diceCharPanel.collapsed .dice-char-body{display:none!important}.mir #diceCharPanel>div:first-child{position:static!important}.mir #diceTable{display:none}.mir .mode-btn{padding:8px 4px}'
+    +'#dice.foe .mir #diceCharPanel,#dice.foe .mir .dmg-atks{display:none!important}.mir #diceCharPanel .dice-toggle-arrow{display:inline!important}.mir #diceCharPanel.collapsed .dice-char-body{display:none!important}.mir #diceCharPanel>div:first-child{position:static!important}.mir #diceTable{display:none}.mir .mode-btn{padding:8px 4px}'
     +'body.battle.dice-full #dice{width:370px}body.battle.dice-full #vp{left:390px}body.battle.dice-full #tray{left:390px}body.battle.dice-full #bban{left:402px}'
     // GM: the campaign NPC tab beside the initiative panel
     +'#gmDrawer{position:fixed;top:56px;right:310px;bottom:10px;width:min(380px,calc(100vw - 340px));z-index:11;background:rgba(20,16,40,0.97);border:1px solid #c9a227;border-radius:12px;display:none;flex-direction:column;color:var(--text);box-shadow:0 6px 30px rgba(0,0,0,0.6)}'
