@@ -1182,6 +1182,13 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .die-btn.sel{border-color:var(--gold);color:var(--gold);background:var(--gold-dim);}
 .die-btn:active{transform:scale(0.92);}
 .mod-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+.dcount{display:inline-flex;align-items:center;gap:6px}.dcount button{width:30px;height:30px;border-radius:8px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:16px;cursor:pointer}
+.dcount b{font-family:'Cinzel',serif;font-size:16px;min-width:22px;text-align:center;color:var(--gold)}
+.expr-row input{flex:1;width:auto!important;text-align:left!important;font-size:14px!important}
+.die-face.sm{width:42px;height:42px}.die-face.sm .dv{font-size:18px}
+.dice-table{height:170px;margin:0 0 14px;border-radius:14px;overflow:hidden;border:6px solid #4a2f17;box-shadow:inset 0 0 0 1px #00000088,0 4px 14px rgba(0,0,0,0.45);background:#16402a}
+.atk-dmg{margin-top:4px;font:inherit;font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--border2);background:none;color:var(--gold);cursor:pointer}
+.atk-dmg:hover{border-color:var(--gold)}
 .mod-row label{font-family:'Cinzel',serif;font-size:11px;color:var(--muted);letter-spacing:1px;white-space:nowrap;}
 .mod-row input{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:'Cinzel',serif;font-size:16px;padding:8px 12px;outline:none;width:70px;text-align:center;transition:var(--trans);}
 .mod-row input:focus{border-color:var(--gold);}
@@ -1548,6 +1555,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <div id="diceRollPanel">
     <button class="roll-btn roll-n" id="rollBtn" onclick="doRoll()" style="margin-bottom:12px">Roll ⬡</button>
     <div id="rollResult" style="display:none"></div>
+    <div id="diceTable" class="dice-table" title="The table — every roll lands here"></div>
     <div class="divider"><span>Roll Mode<button type="button" class="gi" onclick="openGlossary('Advantage')" aria-label="What are advantage and disadvantage?">ⓘ</button></span></div>
     <div class="mode-row">
       <button class="mode-btn adv-on" id="mAdv" onclick="setMode('advantage')"><span class="mi">↑</span>Advantage</button>
@@ -1557,9 +1565,16 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     <div class="section-label">Die Type</div>
     <div class="die-strip" id="dieStrip"></div>
     <div class="mod-row">
-      <label>Modifier</label>
+      <label>Dice</label>
+      <span class="dcount"><button type="button" onclick="setDiceCount(-1)" aria-label="Fewer dice">−</button><b id="dCount">1</b><button type="button" onclick="setDiceCount(1)" aria-label="More dice">+</button></span>
+      <label style="margin-left:auto">Modifier</label>
       <input type="number" id="dMod" value="0" min="-10" max="20" step="1">
-      <span style="font-size:12px;color:var(--muted);font-style:italic;flex:1;text-align:right" id="rollDesc">rolling 1d20</span>
+    </div>
+    <div style="font-size:12px;color:var(--muted);font-style:italic;text-align:right;margin:-8px 0 12px" id="rollDesc">rolling 1d20</div>
+    <div class="mod-row expr-row">
+      <label>Any dice</label>
+      <input id="dExpr" placeholder="2d6+1d4+3" autocomplete="off" onkeydown="if(event.key==='Enter')rollDiceExpr()">
+      <button type="button" class="pc-pill" onclick="rollDiceExpr()">Roll</button>
     </div>
     <div class="section-label">Conditions<button type="button" class="gi" onclick="openGlossary('Conditions')" aria-label="What are conditions?">ⓘ</button></div>
     <div class="active-conds" id="activeConds"></div>
@@ -10710,11 +10725,126 @@ function renderPartyHistory(){
 }
 function copyText(txt){navigator.clipboard?.writeText(txt).then(()=>toast('Copied!')).catch(()=>{const t=document.createElement('textarea');t.value=txt;document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);toast('Copied!');});}
 
+/* ══ THE TABLE ══
+   Dice thrown onto a felt table: they fly in from the side, bounce off the
+   rim and each other, tumble (a little height and shadow) and settle on the
+   values actually rolled. Self-contained, so the map pop-out runs the same
+   code (it is copied in with toString). */
+function _diceTableKit(){
+  var COL={4:'#c0392b',6:'#ece3cf',8:'#8e44ad',10:'#16a085',12:'#d35400',20:'#c9a227',100:'#7f8c8d'};
+  var INK={6:'#2a2118'};
+  function shape(s, r){ // polygon points for a die seen from above
+    var n=s===4?3:s===6?4:s===8?4:s===10||s===100?5:s===12?5:s===20?6:0, pts=[], i, a0=s===6?Math.PI/4:-Math.PI/2;
+    if(!n) return null;
+    for(i=0;i<n;i++){ var a=a0+i*2*Math.PI/n, rr=r;
+      if(s===8) rr=r*(i%2?0.78:1.08);
+      if(s===10||s===100) rr=r*(i===0?1.15:i===2||i===3?0.82:0.95);
+      pts.push([Math.cos(a)*rr, Math.sin(a)*rr]); }
+    return pts;
+  }
+  function pips(ctx, v, r, ink){
+    var p=r*0.42, d=r*0.13, L={1:[[0,0]],2:[[-p,-p],[p,p]],3:[[-p,-p],[0,0],[p,p]],4:[[-p,-p],[p,-p],[-p,p],[p,p]],5:[[-p,-p],[p,-p],[0,0],[-p,p],[p,p]],6:[[-p,-p],[p,-p],[-p,0],[p,0],[-p,p],[p,p]]}[v];
+    ctx.fillStyle=ink; (L||[]).forEach(function(q){ ctx.beginPath(); ctx.arc(q[0],q[1],d,0,2*Math.PI); ctx.fill(); });
+  }
+  function mount(el){
+    var cv=document.createElement('canvas'), ctx=cv.getContext('2d'), W=0, H=0, dpr=1, bodies=[], raf=0, t0=0, info=null;
+    cv.style.cssText='display:block;width:100%;height:100%';
+    el.innerHTML=''; el.appendChild(cv);
+    var still=window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function size(){ var w=el.clientWidth||300, h=el.clientHeight||170; dpr=Math.min(2, window.devicePixelRatio||1);
+      if(w===W && h===H) return; W=w; H=h; cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr); draw(); }
+    function felt(){
+      var g=ctx.createRadialGradient(W/2,H*0.45,10,W/2,H/2,Math.max(W,H)*0.75);
+      g.addColorStop(0,'#2d6b45'); g.addColorStop(1,'#123321'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+      ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;   // a faint weave
+      for(var x=-H;x<W;x+=9){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x+H,H); ctx.stroke(); }
+    }
+    function die(b){
+      var s=b.s, r=b.r*(1+b.z*0.012), face=b.done?b.v:b.show, col=COL[s]||'#bdc3c7', pts=shape(s, r), dim=b.done&&!b.k;
+      ctx.save();
+      // shadow on the felt, further off and softer while the die is in the air
+      ctx.translate(b.x+3+b.z*0.35, b.y+4+b.z*0.5); ctx.rotate(b.a); ctx.fillStyle='rgba(0,0,0,'+(0.35-Math.min(0.2,b.z*0.006))+')';
+      ctx.beginPath(); if(pts){ pts.forEach(function(q,i){ i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); }); ctx.closePath(); } else ctx.arc(0,0,r,0,2*Math.PI); ctx.fill();
+      ctx.restore(); ctx.save();
+      ctx.translate(b.x, b.y-b.z*0.6); ctx.rotate(b.a); ctx.globalAlpha=dim?0.38:1;
+      if(b.done && b.glow){ ctx.shadowColor=b.glow; ctx.shadowBlur=18; }
+      var g=ctx.createLinearGradient(-r,-r,r,r); g.addColorStop(0,'#ffffff55'); g.addColorStop(0.45,col); g.addColorStop(1,'#00000066');
+      ctx.beginPath(); if(pts){ pts.forEach(function(q,i){ i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); }); ctx.closePath(); } else ctx.arc(0,0,r,0,2*Math.PI);
+      ctx.fillStyle=col; ctx.fill(); ctx.fillStyle=g; ctx.fill(); ctx.shadowBlur=0;
+      ctx.lineWidth=1.4; ctx.strokeStyle='rgba(0,0,0,0.45)'; ctx.stroke();
+      if(s===20 && pts){ ctx.beginPath(); [0,2,4].forEach(function(i,j){ var q=[pts[i][0]*0.55,pts[i][1]*0.55]; j?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]); }); ctx.closePath(); ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.stroke(); }
+      ctx.rotate(-b.a*(b.done?1:0.6));   // numbers stay mostly upright so they can be read
+      if(s===6 && face<=6) pips(ctx, face, r, INK[6]);
+      else { var txt=String(face); ctx.fillStyle=s===6?INK[6]:'#fff'; ctx.font='700 '+Math.round(r*(txt.length>2?0.62:txt.length>1?0.78:0.92))+'px Cinzel, Georgia, serif';
+        ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineWidth=3; ctx.strokeStyle='rgba(0,0,0,0.55)'; ctx.strokeText(txt,0,r*0.06); ctx.fillText(txt,0,r*0.06); }
+      if(b.neg && b.done){ ctx.fillStyle='#fff'; ctx.font='700 '+Math.round(r*0.55)+'px sans-serif'; ctx.fillText('−',-r*0.95,-r*0.7); }
+      ctx.restore();
+    }
+    function draw(){
+      ctx.setTransform(dpr,0,0,dpr,0,0); felt();
+      bodies.slice().sort(function(p,q){ return p.z-q.z; }).forEach(die);
+      if(info && bodies.length && bodies.every(function(b){ return b.done; })){
+        ctx.textAlign='right'; ctx.textBaseline='bottom';
+        var t=info.caption||'', tot=info.total!=null?String(info.total):'', tw=0;
+        if(tot){ ctx.font='700 22px Cinzel, Georgia, serif'; tw=ctx.measureText(tot).width; ctx.fillStyle=info.crit?'#2ecc71':info.fail?'#e74c3c':'#f1d77a'; ctx.fillText(tot, W-10, H-8); }
+        if(t){ ctx.font='600 11px system-ui, sans-serif'; ctx.fillStyle='rgba(255,255,255,0.75)'; ctx.fillText(t.length>46?t.slice(0,45)+'…':t, W-(tot?20+tw:10), H-11); }
+      }
+    }
+    function step(now){
+      var dt=Math.min(0.033, (now-(step.last||now))/1000)||0.016; step.last=now;
+      var moving=false, el2=(now-t0)/1000;
+      bodies.forEach(function(b){
+        if(b.done) return;
+        b.vz-=900*dt; b.z+=b.vz*dt; if(b.z<0){ b.z=0; b.vz=-b.vz*0.42; if(Math.abs(b.vz)<40) b.vz=0; }
+        var f=b.z>0?0.995:0.955; b.vx*=f; b.vy*=f; b.va*=b.z>0?0.99:0.93;
+        b.x+=b.vx*dt; b.y+=b.vy*dt; b.a+=b.va*dt;
+        if(b.x<b.r){ b.x=b.r; b.vx=Math.abs(b.vx)*0.6; } if(b.x>W-b.r){ b.x=W-b.r; b.vx=-Math.abs(b.vx)*0.6; }
+        if(b.y<b.r){ b.y=b.r; b.vy=Math.abs(b.vy)*0.6; } if(b.y>H-b.r){ b.y=H-b.r; b.vy=-Math.abs(b.vy)*0.6; }
+        b.tick-=dt*Math.min(1, Math.hypot(b.vx,b.vy)/60+0.3); if(b.tick<=0){ b.tick=0.07; b.show=1+Math.floor(Math.random()*b.s); }
+        var sp=Math.hypot(b.vx,b.vy);
+        if((sp<14 && b.z===0 && b.vz===0) || el2>2.4){ b.done=true; b.va=0; b.a=b.a%(2*Math.PI); } else moving=true;
+      });
+      for(var i=0;i<bodies.length;i++) for(var j=i+1;j<bodies.length;j++){ var p=bodies[i], q=bodies[j], dx=q.x-p.x, dy=q.y-p.y, d=Math.hypot(dx,dy)||0.01, m=p.r+q.r;
+        if(d<m){ var nx=dx/d, ny=dy/d, o=(m-d)/2; p.x-=nx*o; p.y-=ny*o; q.x+=nx*o; q.y+=ny*o;
+          var rv=(q.vx-p.vx)*nx+(q.vy-p.vy)*ny; if(rv<0){ var im=-rv*0.8; p.vx-=im*nx; p.vy-=im*ny; q.vx+=im*nx; q.vy+=im*ny; } } }
+      draw();
+      raf=moving?requestAnimationFrame(step):0;
+    }
+    function roll(dice, o){
+      size(); o=o||{}; info=o; cancelAnimationFrame(raf); step.last=0;
+      var n=Math.min(40, (dice||[]).length), r=Math.max(11, Math.min(24, Math.sqrt(W*H/(Math.max(1,n)*9)))), fromLeft=Math.random()<0.5;
+      bodies=(dice||[]).slice(0,40).map(function(d,i){
+        var s=+d.s||6, b={s:s, v:+d.v||1, k:d.k!==0&&d.k!==false, neg:!!(d.neg||d.n), r:s===100?r*1.1:r, show:1, tick:0, done:false};
+        b.x=fromLeft? -r*(1+i*0.6) : W+r*(1+i*0.6); b.y=H*(0.25+Math.random()*0.5);
+        b.vx=(fromLeft?1:-1)*(W*(1.25+Math.random()*0.7)); b.vy=(Math.random()-0.5)*H*2.4; b.a=Math.random()*6.3; b.va=(Math.random()<0.5?-1:1)*(8+Math.random()*10);
+        b.z=24+Math.random()*30; b.vz=120+Math.random()*120;
+        if(s===20 && b.k){ if(o.crit && b.v===20) b.glow='#2ecc71'; else if(o.fail && b.v===1) b.glow='#e74c3c'; }
+        return b; });
+      if(still){ bodies.forEach(function(b,i){ b.done=true; b.z=0; b.x=W*(i+1)/(bodies.length+1); b.y=H/2; }); draw(); return; }
+      t0=performance.now(); raf=requestAnimationFrame(step);
+    }
+    var ro=window.ResizeObserver?new ResizeObserver(function(){ size(); }):null; if(ro) ro.observe(el);
+    size();
+    return {el:el, roll:roll};
+  }
+  return {mount:mount};
+}
+const DiceTable=_diceTableKit();
+let _mainTable=null;
+// Every roll on the dice screen lands on its table
+function _diceTableRoll(dice, crit, fail, total){
+  const el=document.getElementById('diceTable'); if(!el || !dice || !dice.length) return;
+  try{
+    if(!_mainTable || _mainTable.el!==el) _mainTable=DiceTable.mount(el);
+    _mainTable.roll(dice, {crit, fail, total});
+  }catch(e){}
+}
 /* ══ DICE ══ */
-let diceState={mode:'normal',die:20,activeConds:new Set(),history:[]};
+let diceState={mode:'normal',die:20,count:1,activeConds:new Set(),history:[]};
 function renderDiceScreen(){
   renderDiceCharPanel();
   document.getElementById('dieStrip').innerHTML=[4,6,8,10,12,20,100].map(d=>`<button class="die-btn ${d===diceState.die?'sel':''}" onclick="selectDie(${d})">d${d}</button>`).join('');
+  const dc=document.getElementById('dCount'); if(dc) dc.textContent=diceState.count||1;
   renderCondGrid();renderActiveConds();updateRollBtn();renderDiceHistory();
 }
 
@@ -10921,6 +11051,7 @@ function renderDiceCharPanel(){
           html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+mhItem.name+' Attack" data-b="'+atkBonus2+'" style="cursor:pointer">';
           html+='<div style="font-family:\'Cinzel\',serif;font-size:11px;color:'+rarC2+'">⚔ '+mhItem.name+'</div>';
           html+='<div style="font-size:11px;color:var(--muted)">'+atkStr2+' · '+dmgStr2+'</div></div>';
+          if(dmgMatch){ const dx=dmgDie+((magic2+mod2)?((magic2+mod2)>0?'+':'')+(magic2+mod2):''); html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(mhItem.name)+'" data-x="'+esc(dx)+'" title="Roll damage — dice double straight after a critical hit">🎲 damage '+esc(dx)+'</button>'; }
           html+=makeInfoBtn(uid2, mhItem.desc||'');
           html+='</div>';
         }
@@ -10932,6 +11063,7 @@ function renderDiceCharPanel(){
           html+='<div style="background:var(--surface);border:1px solid var(--red);border-radius:8px;padding:5px 10px;cursor:pointer">';
           html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+atk.name+' Attack" data-b="'+bonus+'" style="font-family:\'Cinzel\',serif;font-size:11px;color:var(--red)">'+atk.name+'</div>';
           html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+atk.name+' Attack" data-b="'+bonus+'" style="font-size:11px;color:var(--muted)">'+(atk.bonus||atk.atk||'+0')+' · '+(atk.damage||atk.dmg||'—')+'</div>';
+          { const dx=String(atk.damage||atk.dmg||''); const px=parseDiceExpr(dx); if(px) html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(atk.name)+'" data-x="'+esc(dx)+'" title="Roll damage — dice double straight after a critical hit">🎲 damage '+esc(_diceExprText(px.terms,px.mod))+'</button>'; }
           html+=makeInfoBtn(uid, atk.type||atk.notes||'');
           html+='</div>';
         });
@@ -10945,6 +11077,7 @@ function renderDiceCharPanel(){
           html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+atk.name+' Attack" data-b="'+bonus+'" style="cursor:pointer">';
           html+='<div style="font-family:\'Cinzel\',serif;font-size:11px;color:'+rarityColor+'">'+atk.name+'</div>';
           html+='<div style="font-size:11px;color:var(--muted)">'+atk.bonus+' · '+atk.damage+'</div></div>';
+          { const dx=String(atk.damage||''); const px=parseDiceExpr(dx); if(px) html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(atk.name)+'" data-x="'+esc(dx)+'" title="Roll damage — dice double straight after a critical hit">🎲 damage '+esc(_diceExprText(px.terms,px.mod))+'</button>'; }
           html+=makeInfoBtn(uid, atk.desc||'');
           html+='</div>';
         });
@@ -11184,6 +11317,8 @@ function quickPreparedSpell(name, castTime, range, duration){
 }
 
 function quickRoll(label, mod){
+  // Checks, saves and attacks are a single d20
+  if(diceState.die!==20 || (diceState.count||1)!==1){ diceState.die=20; diceState.count=1; renderDiceScreen(); }
   // Set the modifier in the input
   const modEl = document.getElementById('dMod');
   if(modEl) modEl.value = mod;
@@ -11324,14 +11459,15 @@ function switchDiceChar(charId){
 
 
 function selectDie(d){diceState.die=d;renderDiceScreen();}
+function setDiceCount(delta){ diceState.count=Math.max(1,Math.min(20,(diceState.count||1)+delta)); const el=document.getElementById('dCount'); if(el) el.textContent=diceState.count; updateRollBtn(); }
 function setMode(m){diceState.mode=m;document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('adv-on','dis-on','neu-on'));if(m==='advantage')document.getElementById('mAdv').classList.add('adv-on');else if(m==='disadvantage')document.getElementById('mDis').classList.add('dis-on');else document.getElementById('mNeu').classList.add('neu-on');updateRollBtn();}
 function getEffMode(){let adv=false,dis=false;for(const id of diceState.activeConds){const c=CONDITIONS.find(x=>x.id===id);if(c?.force==='advantage')adv=true;if(c?.force==='disadvantage')dis=true;}if(adv&&dis)return diceState.mode;if(adv)return'advantage';if(dis)return'disadvantage';return diceState.mode;}
-function updateRollBtn(){const em=getEffMode();const btn=document.getElementById('rollBtn');if(!btn)return;btn.className='roll-btn '+(em==='advantage'?'roll-a':em==='disadvantage'?'roll-d':'roll-n');btn.textContent=em==='advantage'?'Roll Advantage ↑':em==='disadvantage'?'Roll Disadvantage ↓':'Roll ⬡';const mod=parseInt(document.getElementById('dMod')?.value)||0;const mT=em!=='normal'?(' ('+em.slice(0,3)+')'):'';if(document.getElementById('rollDesc'))document.getElementById('rollDesc').textContent=`rolling 1d${diceState.die}${mT}${mod?(' '+(mod>0?'+':'')+mod):''}`;}
+function updateRollBtn(){const em=getEffMode();const btn=document.getElementById('rollBtn');if(!btn)return;btn.className='roll-btn '+(em==='advantage'?'roll-a':em==='disadvantage'?'roll-d':'roll-n');const nD=diceState.count||1;btn.textContent=nD>1?'Roll '+nD+'d'+diceState.die+' ⬡':em==='advantage'?'Roll Advantage ↑':em==='disadvantage'?'Roll Disadvantage ↓':'Roll ⬡';const mod=parseInt(document.getElementById('dMod')?.value)||0;const mT=em!=='normal'?(' ('+em.slice(0,3)+')'):'';if(document.getElementById('rollDesc'))document.getElementById('rollDesc').textContent=`rolling ${nD}d${diceState.die}${nD>1?'':mT}${mod?(' '+(mod>0?'+':'')+mod):''}`;}
 function toggleCond(id){if(diceState.activeConds.has(id))diceState.activeConds.delete(id);else diceState.activeConds.add(id);renderCondGrid();renderActiveConds();renderCondEffects();updateRollBtn();}
 function renderCondGrid(){const el=document.getElementById('condGrid');if(!el)return;el.innerHTML=CONDITIONS.map(c=>`<div class="cond-chip ${diceState.activeConds.has(c.id)?'con-active':''}" style="--chip-c:${c.c}" onclick="toggleCond('${c.id}')"><span class="ci" style="font-size:18px">${c.i}</span><span class="cn">${c.n}</span></div>`).join('');}
 function renderActiveConds(){const el=document.getElementById('activeConds');if(!el)return;if(!diceState.activeConds.size){el.innerHTML='';return;}el.innerHTML=[...diceState.activeConds].map(id=>{const c=CONDITIONS.find(x=>x.id===id);if(!c)return'';return`<span class="cond-tag" style="--chip-c:${c.c}">${c.i} ${c.n}<span class="cond-rm" onclick="toggleCond('${c.id}')">✕</span></span>`;}).join('');}
 function renderCondEffects(){const el=document.getElementById('condEffects');const div=document.getElementById('condEffectsDivider');if(!el||!div)return;if(!diceState.activeConds.size){el.innerHTML='';div.style.display='none';return;}div.style.display='flex';el.innerHTML=[...diceState.activeConds].map(id=>{const c=CONDITIONS.find(x=>x.id===id);if(!c)return'';const fl=c.force?('<span style="color:'+c.force==='advantage'?'var(--green)':'var(--red)'+';">'+c.force==='advantage'?'↑ Advantage':'↓ Disadvantage'+'</span> · '):'';const bl=c.bonus?('<span style="color:var(--gold)">Bonus: '+c.bonus+'</span> · '):'';return`<div style="background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 13px;margin-bottom:7px;"><div style="font-family:'Cinzel',serif;font-size:11px;color:${c.c};letter-spacing:0.5px;margin-bottom:4px">${c.i} ${c.n}</div><div style="font-size:12px;color:var(--muted);font-style:italic;margin-bottom:4px">${c.d}</div><div style="font-size:11px">${fl}${bl}</div></div>`;}).join('');}
-function doRoll(){const _pendingLabel=(document.getElementById('rollDesc')?.textContent||'').replace(/\s*\(.*\)$/,'').trim()||null;if(document.getElementById('rollDesc'))document.getElementById('rollDesc').textContent='rolling 1d20';const mod=parseInt(document.getElementById('dMod')?.value)||0;const em=getEffMode();const d=diceState.die;const r1=Math.ceil(Math.random()*d);let r2=null,kept,dropped;if(em!=='normal'){r2=Math.ceil(Math.random()*d);kept=em==='advantage'?Math.max(r1,r2):Math.min(r1,r2);dropped=em==='advantage'?Math.min(r1,r2):Math.max(r1,r2);}else{kept=r1;}let bonusTotal=0,bonusBreak=[],dmgNotes=[];for(const id of diceState.activeConds){const c=CONDITIONS.find(x=>x.id===id);if(!c?.bonus)continue;if(c.damageOnly){dmgNotes.push(`${c.n}:${c.bonus} dmg`);continue;}if(c.bonus.startsWith('+d')){const sides=parseInt(c.bonus.slice(2));const rolled=Math.ceil(Math.random()*sides);bonusTotal+=rolled;bonusBreak.push(`${c.n}:+${rolled}`);}else if(c.bonus.startsWith('+')){const v=parseInt(c.bonus.slice(1))||0;bonusTotal+=v;bonusBreak.push(`${c.n}:+${v}`);}}
+function doRoll(){if((diceState.count||1)>1)return doRollPool();const _pendingLabel=(document.getElementById('rollDesc')?.textContent||'').replace(/\s*\(.*\)$/,'').trim()||null;if(document.getElementById('rollDesc'))document.getElementById('rollDesc').textContent='rolling 1d20';const mod=parseInt(document.getElementById('dMod')?.value)||0;const em=getEffMode();const d=diceState.die;const r1=Math.ceil(Math.random()*d);let r2=null,kept,dropped;if(em!=='normal'){r2=Math.ceil(Math.random()*d);kept=em==='advantage'?Math.max(r1,r2):Math.min(r1,r2);dropped=em==='advantage'?Math.min(r1,r2):Math.max(r1,r2);}else{kept=r1;}let bonusTotal=0,bonusBreak=[],dmgNotes=[];for(const id of diceState.activeConds){const c=CONDITIONS.find(x=>x.id===id);if(!c?.bonus)continue;if(c.damageOnly){dmgNotes.push(`${c.n}:${c.bonus} dmg`);continue;}if(c.bonus.startsWith('+d')){const sides=parseInt(c.bonus.slice(2));const rolled=Math.ceil(Math.random()*sides);bonusTotal+=rolled;bonusBreak.push(`${c.n}:+${rolled}`);}else if(c.bonus.startsWith('+')){const v=parseInt(c.bonus.slice(1))||0;bonusTotal+=v;bonusBreak.push(`${c.n}:+${v}`);}}
 const total=kept+mod+bonusTotal;const isCrit=d===20&&kept===20;const isFail=d===20&&kept===1;document.querySelectorAll('.die-btn.sel').forEach(b=>{b.classList.add('rolling');setTimeout(()=>b.classList.remove('rolling'),400);});
 let diceHTML='';if(r2!==null){const f1=em==='advantage'?(r1>=r2?'kept':'dropped'):(r1<=r2?'kept':'dropped');const f2=f1==='kept'?'dropped':'kept';const c1=f1==='kept'&&isCrit?'crit':f1==='kept'&&isFail?'fail':f1;const c2=f2==='kept'&&isCrit?'crit':f2==='kept'&&isFail?'fail':f2;diceHTML=`<div class="die-face ${c1}"><span style="font-size:11px">d${d}</span><span class="dv">${r1}</span></div><span style="font-family:'Cinzel',serif;font-size:11px;color:var(--muted)">${em==='advantage'?'keep↑':'keep↓'}</span><div class="die-face ${c2}"><span style="font-size:11px">d${d}</span><span class="dv">${r2}</span></div>`;}else{const cls=isCrit?'crit':isFail?'fail':'kept';diceHTML=`<div class="die-face ${cls}"><span style="font-size:11px">d${d}</span><span class="dv">${kept}</span></div>`;}
 const numColor=isCrit?'var(--green)':isFail?'var(--red)':'var(--gold)';let breakdown=`d${d}: ${kept}`;if(mod!==0)breakdown+=(mod>0?' + '+mod:' − '+Math.abs(mod));if(bonusBreak.length)breakdown+=' + '+bonusBreak.join(', ');if(em!=='normal')breakdown+=` (${em})`;if(dmgNotes.length)breakdown+=` · ${dmgNotes.join(', ')}`;const verdict=isCrit?`<span style="background:rgba(39,174,96,0.15);color:var(--green);border:1px solid var(--green);border-radius:12px;padding:4px 14px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px">✦ CRITICAL HIT ✦</span>`:isFail?('<span style="background:rgba(192,57,43,0.15);color:var(--red);border:1px solid var(--red);border-radius:12px;padding:4px 14px;font-family:\'Cinzel\',serif;font-size:11px;letter-spacing:1px">💀 CRITICAL FAIL</span>'):'';
@@ -11339,8 +11475,70 @@ const el=document.getElementById('rollResult');el.style.display='block';el.inner
 // Scroll dice screen so roll button + result are in view
 const scrollEl2 = document.getElementById('diceRollPanel') || document.getElementById('scr-dice');
 if(scrollEl2) scrollEl2.scrollTop = 0;
-diceState.history.unshift({d,kept,total,mode:em,mod,bonuses:bonusBreak,isCrit,isFail,conds:[...diceState.activeConds],label:_pendingLabel});if(diceState.history.length>8)diceState.history.pop();renderDiceHistory();_battleNoteRoll(_pendingLabel&&!/^rolling /.test(_pendingLabel)?_pendingLabel:'d'+d,total,breakdown,isCrit,isFail);}
-function renderDiceHistory(){const el=document.getElementById('rollHistory');if(!el)return;if(!diceState.history.length){el.innerHTML=`<p style="font-size:13px;color:var(--muted);font-style:italic;text-align:center;padding:12px 0">No rolls yet.</p>`;return;}el.innerHTML=diceState.history.map(r=>{const mc=r.mode==='advantage'?'var(--green)':r.mode==='disadvantage'?'var(--red)':'var(--muted)';const ml=r.mode==='advantage'?'↑ADV':r.mode==='disadvantage'?'↓DIS':'NRM';const tc=r.isCrit?'var(--green)':r.isFail?'var(--red)':'var(--text)';const ci=r.conds.map(id=>{const c=CONDITIONS.find(x=>x.id===id);return c?c.i:'';}).join('');return`<div class="hist-row"><div class="hist-die">${r.label?('<span style="font-size:11px;color:var(--muted);display:block;line-height:1">'+r.label.split(' ')[0]+'</span>'):''}d${r.d}</div><div class="hist-val" style="color:${tc}">${r.total}</div><div class="hist-info">${r.label||('rolled '+r.kept)}${r.mod!==0?(r.mod>0?' +'+r.mod:' '+r.mod):''}${r.bonuses.length?' + bonuses':''} ${ci}</div><span class="hist-mode" style="color:${mc};border-color:${mc}">${ml}</span></div>`;}).join('');}
+diceState.history.unshift({d,kept,total,mode:em,mod,bonuses:bonusBreak,isCrit,isFail,conds:[...diceState.activeConds],label:_pendingLabel});if(diceState.history.length>8)diceState.history.pop();renderDiceHistory();const _dice=r2!==null?[{s:d,v:r1,k:r1===kept?1:0},{s:d,v:r2,k:r1===kept?0:1}]:[{s:d,v:kept,k:1}];_diceTableRoll(_dice,isCrit,isFail,total);_battleNoteRoll(_pendingLabel&&!/^rolling /.test(_pendingLabel)?_pendingLabel:'d'+d,total,breakdown,isCrit,isFail,_dice);}
+/* Several dice at once: a pool from the die strip (3d6), any expression
+   ("2d6+1d4+3") and an attack's damage, which doubles its dice on a crit. */
+// "1d8 + 1d6 + 3 slashing" → {terms:[{n:1,s:8},{n:1,s:6}], mod:3}. Text after
+// "(", "/" or "or" is an alternative ("versatile 1d10"), not more damage.
+function parseDiceExpr(str){
+  const s=String(str||'').split(/[(\/]|\bor\b/)[0].toLowerCase().replace(/[−–]/g,'-').replace(/\s+/g,'');
+  const terms=[]; let mod=0, m; const re=/([+-]?)(\d*)d(\d+)|([+-]?)(\d+)/g;
+  while((m=re.exec(s))){
+    if(m[3]){ const n=Math.min(50, parseInt(m[2]||'1',10)), sides=parseInt(m[3],10); if(n>0 && sides>=2 && sides<=1000) terms.push({n, s:sides, neg:m[1]==='-'}); }
+    else mod += (m[4]==='-'?-1:1)*parseInt(m[5],10);
+  }
+  return terms.length ? {terms, mod:Math.max(-999, Math.min(999, mod))} : null;
+}
+function _diceExprText(terms, mod){
+  return terms.map((t,i)=>(t.neg?'−':(i?'+':''))+t.n+'d'+t.s).join('')+(mod?(mod>0?'+':'−')+Math.abs(mod):'');
+}
+function _rollExpr(label, terms, mod, opt){
+  opt=opt||{};
+  if(opt.crit) terms=terms.map(t=>({...t, n:t.n*2}));
+  const dice=[]; let sum=0;
+  terms.forEach(t=>{ for(let i=0;i<t.n;i++){ const v=Math.ceil(Math.random()*t.s); dice.push({s:t.s, v, k:1, neg:t.neg?1:0}); sum+=t.neg?-v:v; } });
+  // Damage-only effects (Rage) add to damage rolls
+  const extra=[]; let bonus=0;
+  if(opt.damage) for(const id of diceState.activeConds){ const c=CONDITIONS.find(x=>x.id===id); if(c && c.damageOnly){ const v=parseInt(String(c.bonus).replace('+',''),10)||0; if(v){ bonus+=v; extra.push(c.n+' +'+v); } } }
+  const total=sum+mod+bonus, expr=_diceExprText(terms, mod);
+  const breakdown=expr+': '+dice.map(x=>(x.neg?'−':'')+x.v).join(', ')+(mod?(mod>0?' + '+mod:' − '+Math.abs(mod)):'')+(extra.length?' + '+extra.join(', '):'');
+  const el=document.getElementById('rollResult');
+  if(el){
+    const sm=dice.length>6?' sm':'';
+    el.style.display='block';
+    el.innerHTML='<div class="result-box fadein">'+(label?'<div style="font-family:\'Cinzel\',serif;font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:6px;text-align:center">'+esc(label)+'</div>':'')
+      +'<div class="result-dice">'+dice.map(x=>'<div class="die-face kept'+sm+'"><span style="font-size:11px">d'+x.s+'</span><span class="dv">'+(x.neg?'−':'')+x.v+'</span></div>').join('')+'</div>'
+      +'<div class="result-total" style="color:var(--gold)">'+total+'</div><div class="result-break">'+esc(breakdown)+'</div>'
+      +(opt.crit?'<div class="verdict"><span style="background:rgba(39,174,96,0.15);color:var(--green);border:1px solid var(--green);border-radius:12px;padding:4px 14px;font-family:\'Cinzel\',serif;font-size:11px;letter-spacing:1px">✦ CRITICAL — DICE DOUBLED ✦</span></div>':'')+'</div>';
+    const sc=document.getElementById('diceRollPanel')||document.getElementById('scr-dice'); if(sc) sc.scrollTop=0;
+  }
+  diceState.history.unshift({d:terms.length===1?terms[0].s:'', dl:expr, kept:total, total, mode:'normal', mod, bonuses:extra, isCrit:false, isFail:false, conds:[...diceState.activeConds], label});
+  if(diceState.history.length>8) diceState.history.pop();
+  renderDiceHistory();
+  _diceTableRoll(dice, !!opt.crit, false, total);
+  _battleNoteRoll(label||expr, total, breakdown, false, false, dice);
+  return total;
+}
+// The die strip with more than one die: 3d6 + the modifier
+function doRollPool(){
+  const rd=document.getElementById('rollDesc'), pending=(rd&&rd.textContent||'').replace(/\s*\(.*\)$/,'').trim();
+  const mod=parseInt(document.getElementById('dMod')?.value)||0;
+  _rollExpr(pending && !/^rolling /.test(pending) ? pending : null, [{n:diceState.count||1, s:diceState.die}], mod);
+  updateRollBtn();
+}
+// The "any dice" box: 2d6+1d4+3
+function rollDiceExpr(){
+  const inp=document.getElementById('dExpr'), p=parseDiceExpr(inp&&inp.value);
+  if(!p){ toast('Type dice like 2d6+3 or 1d8+1d6+2','var(--red)'); return; }
+  _rollExpr(null, p.terms, p.mod);
+}
+// An attack's damage. Straight after that attack crits, its dice are doubled.
+function rollDamage(name, expr){
+  const p=parseDiceExpr(expr); if(!p){ toast('No damage dice listed for '+name,'var(--muted)'); return; }
+  const last=diceState.history[0], crit=!!(last && last.isCrit && last.label===name+' Attack');
+  _rollExpr(name+' damage'+(crit?' (critical)':''), p.terms, p.mod, {damage:true, crit});
+}
+function renderDiceHistory(){const el=document.getElementById('rollHistory');if(!el)return;if(!diceState.history.length){el.innerHTML=`<p style="font-size:13px;color:var(--muted);font-style:italic;text-align:center;padding:12px 0">No rolls yet.</p>`;return;}el.innerHTML=diceState.history.map(r=>{const mc=r.mode==='advantage'?'var(--green)':r.mode==='disadvantage'?'var(--red)':'var(--muted)';const ml=r.mode==='advantage'?'↑ADV':r.mode==='disadvantage'?'↓DIS':'NRM';const tc=r.isCrit?'var(--green)':r.isFail?'var(--red)':'var(--text)';const ci=r.conds.map(id=>{const c=CONDITIONS.find(x=>x.id===id);return c?c.i:'';}).join('');return`<div class="hist-row"><div class="hist-die">${r.label?('<span style="font-size:11px;color:var(--muted);display:block;line-height:1">'+r.label.split(' ')[0]+'</span>'):''}${r.dl||('d'+r.d)}</div><div class="hist-val" style="color:${tc}">${r.total}</div><div class="hist-info">${r.label||('rolled '+r.kept)}${r.mod!==0?(r.mod>0?' +'+r.mod:' '+r.mod):''}${r.bonuses.length?' + bonuses':''} ${ci}</div><span class="hist-mode" style="color:${mc};border-color:${mc}">${ml}</span></div>`;}).join('');}
 
 /* ══ LOOT ══ */
 let lootOwner='pool',lootFilter='all';
@@ -16306,7 +16504,8 @@ function _bDoRoll(camp, map, spec){
   const kept=r2==null?r1:(mode==='advantage'?Math.max(r1,r2):Math.min(r1,r2));
   const res={total:kept+mod, crit:sides===20&&kept===20, fail:sides===20&&kept===1,
     detail:'d'+sides+': '+(r2!=null?'['+r1+','+r2+']→':'')+kept+(mod?(mod>0?' + '+mod:' − '+Math.abs(mod)):'')+(mode!=='normal'?' ('+mode+')':'')};
-  _bLog(b, {cid:e.id, who:_bInfo(camp, map, e, true).name, label:String(spec.label||('d'+sides)).slice(0,40), ...res});
+  _bLog(b, {cid:e.id, who:e.hidden?'Unknown foe':_bInfo(camp, map, e, true).name, label:String(spec.label||('d'+sides)).slice(0,40), ...res,
+    dice:_bLogDice(r2==null?[{s:sides,v:r1,k:1}]:[{s:sides,v:r1,k:r1===kept},{s:sides,v:r2,k:r1!==kept}])});
   return res;
 }
 // The library key an initiative entry stands for (its marker's key for a token on the map).
@@ -16503,14 +16702,21 @@ function _battleWatch(camp){
     toast('⚔ '+c.name+', it’s your turn!','var(--red)');
   });
 }
-// Rolls made on the dice screen during your hero's turn go into the battle log.
-function _battleNoteRoll(label, total, detail, crit, fail){
+// Rolls made on the dice screen during your hero's turn go into the battle
+// log, and so do the GM's on a foe's turn. The dice go with them, so every
+// pop-out at the table can tumble them on its tabletop.
+function _bLogDice(dice){ return (dice||[]).slice(0,40).map(x=>({s:+x.s, v:+x.v, k:x.k?1:0, ...(x.neg?{n:1}:{})})); }
+function _battleNoteRoll(label, total, detail, crit, fail, dice){
   try{
-    const camp=getCampaigns().find(c=>c.id===getActiveCampId()); const ch=getActiveDiceChar(); if(!camp||!ch) return;
+    const camp=getCampaigns().find(c=>c.id===getActiveCampId()); if(!camp) return;
+    const ch=getActiveDiceChar(), gm=canDesignMaps(camp);
     for(const map of _campMaps(camp)){
-      const b=_battle(map); const e=b&&b.list.find(x=>x.id===b.cur);
-      if(!e || e.kind!=='pc' || String(e.ref)!==String(ch.id)) continue;
-      _bLog(b, {cid:e.id, who:ch.name, label:String(label||'Roll').slice(0,40), total, detail, crit, fail});
+      const b=_battle(map); const e=b&&b.list.find(x=>x.id===b.cur); if(!e) continue;
+      let who=null;
+      if(e.kind==='pc'){ if(ch && String(e.ref)===String(ch.id)) who=ch.name; }
+      else if(gm) who=e.hidden ? 'Unknown foe' : _bInfo(camp, map, e, true).name;
+      if(!who) continue;
+      _bLog(b, {cid:e.id, who, label:String(label||'Roll').slice(0,40), total, detail:String(detail||'').slice(0,160), crit, fail, dice:_bLogDice(dice)});
       saveCampaign(camp);
       if(document.getElementById('campMapSvg') && editingCampId===camp.id) renderMap();
       return;
@@ -16636,7 +16842,82 @@ window.__tohPop = {
     const cx=_popCtx(mapId); if(!cx) return false;
     return battleDo(cx.camp, cx.map, op, a1, a2);
   },
+  // GM only: open the app's dialog for a new creature, a new NPC, or a token's
+  // picture. The pop-out mirrors the dialog, so it is filled in from there.
+  gmAct(mapId, act, key){
+    const cx=_popCtx(mapId); if(!cx || !canDesignMaps(cx.camp)) return false;
+    if(act==='newCreature'){ addCustomCreature(); return true; }
+    if(act==='newNpc'){ openNpcEditor(null); return true; }
+    if(act==='art' && key){ openTokArt(String(key)); return true; }
+    return false;
+  },
+  // Battle mode: whose dice the pop-out shows for the current turn. A hero's
+  // turn brings up that hero on the dice screen (for their player, or the GM
+  // rolling for them); a foe's turn gives the GM the dice with no hero.
+  diceFor(mapId){
+    const cx=_popCtx(mapId); if(!cx) return null; const {camp, map}=cx;
+    const b=_battle(map), e=b&&b.list.find(x=>x.id===b.cur); if(!e || !_bCanRoll(camp, map)) return null;
+    if(e.kind!=='pc' && !canDesignMaps(camp)) return null;
+    if(e.kind==='pc'){ const ch=getActiveDiceChar(); if(!ch || String(ch.id)!==String(e.ref)){ try{ switchDiceChar(e.ref); }catch(err){} } }
+    _diceFreshTurn();
+    return e.kind==='pc' ? 'hero' : 'foe';
+  },
+  // Mirrors: live copies of app panels (the dice screen; the NPC tab for the
+  // GM) and of the dialogs they open. Taps and typing in a copy come back
+  // here and are replayed on the real panel, so everything works as in the app.
+  mirror(mapId, name, fresh){
+    const cx=_popCtx(mapId); if(!cx) return null;
+    const def=_MIRRORS[name]; if(def && fresh){ try{ def.render(); }catch(err){} }
+    const root=_mirRoot(cx.camp, name); if(!root) return null;
+    return {html:root.innerHTML, fields:_mirFields(root)};
+  },
+  overlays(mapId){
+    if(!_popCtx(mapId)) return [];
+    return [...document.querySelectorAll(_MIRROR_OVERLAYS)].filter(o=>o.id).map(o=>({id:o.id, cls:o.className, html:o.innerHTML, fields:_mirFields(o)}));
+  },
+  fire(mapId, name, path, ev, fields){
+    const cx=_popCtx(mapId); if(!cx) return false;
+    const root=_mirRoot(cx.camp, name); if(!root) return false;
+    (fields||[]).forEach(([p, v])=>{ const f=_mirAt(root, p); if(!f || f.type==='file' || !/^(INPUT|SELECT|TEXTAREA)$/.test(f.tagName)) return;
+      if(f.type==='checkbox'||f.type==='radio') f.checked=!!v; else if(f.value!==v) f.value=v; });
+    const t=_mirAt(root, path); if(!t) return false;
+    ev=ev||{};
+    if(ev.t==='click') t.dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true, view:window}));
+    else if(ev.t==='input' || ev.t==='change'){
+      if(t.type==='checkbox'||t.type==='radio') t.checked=!!ev.v; else if('v' in ev) t.value=ev.v;
+      t.dispatchEvent(new Event(ev.t, {bubbles:true}));
+    }
+    else if(ev.t==='key') t.dispatchEvent(new KeyboardEvent('keydown', {key:ev.k, bubbles:true, cancelable:true}));
+    else if(ev.t==='files' && t.type==='file'){
+      try{ const dt=new DataTransfer(); (ev.files||[]).forEach(f=>dt.items.add(f)); t.files=dt.files; }catch(err){ return false; }
+      t.dispatchEvent(new Event('change', {bubbles:true}));
+    }
+    else return false;
+    return true;
+  },
 };
+// A new turn in the pop-out starts the dice screen clean: one d20, no modifier.
+function _diceFreshTurn(){
+  diceState.die=20; diceState.count=1;
+  const m=document.getElementById('dMod'); if(m) m.value=0;
+  const r=document.getElementById('rollResult'); if(r){ r.style.display='none'; r.innerHTML=''; }
+  try{ renderDiceScreen(); }catch(err){}
+}
+// What the pop-out may mirror, and which of them only the GM sees.
+const _MIRRORS={
+  dice:{el:()=>document.getElementById('scr-dice'), render:()=>renderDiceScreen(), gm:false},
+  npcs:{el:()=>document.getElementById('ctab-npcs'), render:()=>renderNPCs(), gm:true},
+};
+const _MIRROR_OVERLAYS='body > .slot-picker-overlay, body > .gw-backdrop';
+function _mirRoot(camp, name){
+  if(String(name).startsWith('ov:')){ const id=String(name).slice(3); return [...document.querySelectorAll(_MIRROR_OVERLAYS)].find(o=>o.id===id)||null; }
+  const def=_MIRRORS[name]; if(!def || (def.gm && !canDesignMaps(camp))) return null;
+  return def.el();
+}
+// An element's place under its root as child indices, and back.
+function _mirPath(root, node){ const p=[]; while(node && node!==root){ const par=node.parentElement; if(!par) return null; p.unshift([].indexOf.call(par.children, node)); node=par; } return node===root ? p : null; }
+function _mirAt(root, path){ let n=root; for(const i of (path||[])){ n=n && n.children[i]; } return n||null; }
+function _mirFields(root){ return [...root.querySelectorAll('input,select,textarea')].filter(f=>f.type!=='file').map(f=>[_mirPath(root, f), (f.type==='checkbox'||f.type==='radio') ? (f.checked?1:0) : f.value]); }
 
 // Runs inside the pop-out window (serialised with toString, so it may only use
 // its own variables and window.opener).
@@ -16716,7 +16997,80 @@ function _popoutMain(cfg){
     if(!(a && a.place(MAPID,'key',key,l.x/VW,l.y/VH))){ say('Only the GM can place that token'); setTimeout(function(){ say(''); },2600); } });
   // ── Battle mode: initiative on the right, dice for the hero whose turn it is
   var bEl=document.getElementById('battle'), dEl=document.getElementById('dice'), ban=document.getElementById('bban');
-  var dMode='normal', dMod=0, dMin=false, dCur=null;
+  var dMin=false, dCur=null, dFor=null, seenLog=null;
+  // ── Mirrors: a live copy of an app panel (or a dialog it opened). Taps and
+  // typing here are replayed on the real one in the app (__tohPop.fire), so
+  // it all works exactly as it does there. ovBase holds the dialogs already
+  // open before the last tap here; only ones opened from this window show.
+  var ovBase=null;
+  function Mirror(name, el, scroller){
+    var last=null, M={el:el, has:false};
+    function path(node){ var p=[]; while(node && node!==el){ var par=node.parentElement; if(!par) return null; p.unshift([].indexOf.call(par.children,node)); node=par; } return node===el?p:null; }
+    function at(p){ var n=el; (p||[]).forEach(function(i){ n=n&&n.children[i]; }); return n||null; }
+    function fields(){ return [].slice.call(el.querySelectorAll('input,select,textarea')).filter(function(f){ return f.type!=='file'; }).map(function(f){ return [path(f), (f.type==='checkbox'||f.type==='radio')?(f.checked?1:0):f.value]; }); }
+    M.set=function(d, force){
+      if(!d){ el.innerHTML=''; last=null; M.has=false; return; }
+      var foc=document.activeElement, typing=foc && el.contains(foc) && /^(INPUT|TEXTAREA|SELECT)$/.test(foc.tagName);
+      if(d.html===last){ if(!typing) d.fields.forEach(function(f){ var n=at(f[0]); if(n && n!==foc){ if(n.type==='checkbox'||n.type==='radio') n.checked=!!f[1]; else if(n.value!==f[1]) n.value=f[1]; } }); return; }
+      // the box being typed in keeps its text, focus and caret across the refresh
+      var fp=typing?path(foc):null, keep=typing?foc.value:null, sel=null; try{ sel=typing&&foc.selectionStart!=null?[foc.selectionStart,foc.selectionEnd]:null; }catch(_){}
+      var sc=scroller||el, top=sc.scrollTop;
+      el.innerHTML=d.html; last=d.html; M.has=true;
+      // the copy is inert: its own handlers never run, the app's do
+      [].slice.call(el.querySelectorAll('*')).forEach(function(n){ [].slice.call(n.attributes).forEach(function(a){ if(/^on/i.test(a.name)) n.removeAttribute(a.name); }); if(n.tagName==='INPUT'&&n.type!=='file') n.removeAttribute('autofocus'); });
+      d.fields.forEach(function(f){ var n=at(f[0]); if(!n) return; if(n.type==='checkbox'||n.type==='radio') n.checked=!!f[1]; else n.value=f[1]; });
+      sc.scrollTop=top;
+      if(fp){ var nf=at(fp); if(nf && nf.focus && nf.tagName===foc.tagName){ if(nf.tagName!=='SELECT') nf.value=keep; nf.focus(); try{ if(sel) nf.setSelectionRange(sel[0], sel[1]); }catch(_){} } }
+    };
+    M.pull=function(fresh, force){ var a=api(); if(!a) return; M.set(a.mirror(MAPID, name, fresh), force); };
+    M.reset=function(){ last=null; };
+    function fire(t, ev){
+      if(!el.isConnected) return;
+      var a=api(); if(!a) return; var p=path(t); if(!p) return;
+      ovBase=ovIds();
+      var inHero=!!(t.closest && t.closest('#diceCharPanel')), rd0=el.querySelector('#rollDesc'), before=rd0&&rd0.textContent;
+      a.fire(MAPID, name, p, ev, fields());
+      after();
+      // a check or attack picked in the hero panel: bring the Roll button into view
+      var rd=el.querySelector('#rollDesc'), rb=el.querySelector('#rollBtn');
+      if(inHero && rd && rb && rd.textContent!==before) rb.scrollIntoView({block:'nearest', behavior:'smooth'});
+    }
+    function after(){ if(M.onfire) M.onfire(); refreshAll(true); setTimeout(function(){ refreshAll(true); }, 90); setTimeout(function(){ refreshAll(false); }, 450); }
+    el.addEventListener('click', function(e){
+      var t=e.target; if(!t || !t.closest) return;
+      if(t.closest('a[href]')) return;                                   // links open here
+      if(t.closest('input[type=file]') || (t.closest('label') && t.closest('label').querySelector('input[type=file]'))) return;   // the file picker opens here
+      if(/^(INPUT|SELECT|TEXTAREA|OPTION)$/.test(t.tagName)){ if(!/^(button|submit|reset)$/.test(t.type)) return; }   // fields are typed into here
+      e.preventDefault(); fire(t, {t:'click'});
+    });
+    el.addEventListener('input', function(e){ var t=e.target; if(/^(checkbox|radio)$/.test(t.type)) return; fire(t, {t:'input', v:t.value}); });
+    el.addEventListener('change', function(e){ var t=e.target;
+      if(t.type==='file'){ fire(t, {t:'files', files:[].slice.call(t.files||[])}); t.value=''; return; }
+      fire(t, {t:'change', v:(t.type==='checkbox'||t.type==='radio')?t.checked:t.value}); });
+    el.addEventListener('keydown', function(e){ var t=e.target; if((e.key==='Enter'||e.key==='Escape') && /^(INPUT|TEXTAREA)$/.test(t.tagName) && !(e.key==='Enter'&&t.tagName==='TEXTAREA')){ e.preventDefault(); fire(t, {t:'key', k:e.key}); } });
+    return M;
+  }
+  // Dialogs (a new creature's name, an NPC card, a rules note) mirrored over the pop-out
+  var ovEl=document.getElementById('ovl'), ovs={};
+  function ovIds(){ var a=api(); return a ? a.overlays(MAPID).map(function(o){ return o.id; }) : []; }
+  function syncOverlays(force){
+    var a=api(), list=a?a.overlays(MAPID):[], ids=list.map(function(o){ return o.id; });
+    if(ovBase===null) ovBase=ids;
+    Object.keys(ovs).forEach(function(id){ if(ids.indexOf(id)<0){ var w=ovs[id].el; delete ovs[id]; if(w.parentNode) w.parentNode.removeChild(w); } });
+    list.forEach(function(o){
+      if(!ovs[o.id]){ if(ovBase.indexOf(o.id)>=0) return;
+        var w=document.createElement('div'); w.className=o.cls||'slot-picker-overlay'; ovEl.appendChild(w);
+        ovs[o.id]=Mirror('ov:'+o.id, w); ovs[o.id].set(o, true);
+        var f=w.querySelector('input:not([type=hidden]):not([type=file]),textarea'); if(f) setTimeout(function(){ try{ f.focus(); f.select&&f.select(); }catch(_){} }, 40);
+      } else ovs[o.id].set(o, force);
+    });
+  }
+  var diceMir=null, npcMir=null, dHead=null, dMirEl=null, dLast=null, table=null;
+  function refreshAll(force){
+    if(diceMir && dMirEl.style.display!=='none') diceMir.pull(false, force);
+    if(npcMir && gmDrawer.style.display==='flex') npcMir.pull(false, force);
+    syncOverlays(force);
+  }
   // GM's picker of campaign NPCs and creatures (the Map tab's token windows)
   var pOpen=false, pTab='npc', pQ='', pN=1, pCos=false;
   function sg(n){ return (n>=0?'+':'')+n; }
@@ -16728,7 +17082,8 @@ function _popoutMain(cfg){
     document.body.classList.toggle('battle', on);
     var bb=document.getElementById('battleBtn');
     if(bb){ bb.style.display=(b&&b.gm)?'':'none'; bb.innerHTML=on?'&#9876; end battle':'&#9876; battle'; }
-    if(!on){ bEl.style.display='none'; dEl.style.display='none'; ban.style.display='none'; dCur=null; document.body.classList.remove('dice-on'); return; }
+    if(!on || !b.gm) gmDrawer.style.display='none';
+    if(!on){ bEl.style.display='none'; dEl.style.display='none'; ban.style.display='none'; dCur=null; document.body.classList.remove('dice-on'); document.body.classList.remove('dice-full'); return; }
     var act=b.active;
     ban.style.display='block';
     ban.textContent='⚔ ENCOUNTER · ROUND '+b.round+(act?' · '+act.name+'’s turn':'');
@@ -16738,7 +17093,8 @@ function _popoutMain(cfg){
     var h='<div class="bh">INITIATIVE <span style="float:right">ROUND '+b.round+'</span></div>';
     if(b.gm) h+='<div class="bc"><button data-op="prev" title="Previous turn">&#9664;</button><button data-op="next" class="go">next turn &#9654;</button></div>'
       +'<div class="bc"><button data-op="rollInit">&#127922; roll initiative</button><button data-op="addTokens" title="Add the NPC and creature tokens on this map">+ tokens</button><button data-op="grid" title="Grid size">&#9638; '+(b.grid||'off')+'</button></div>'
-      +'<div class="bc"><button data-op="pick" class="pk'+(pOpen?' on':'')+'" aria-expanded="'+pOpen+'">'+(pOpen?'&#10005; close picker':'&#65291; NPC or creature')+'</button></div>';
+      +'<div class="bc"><button data-op="pick" class="pk'+(pOpen?' on':'')+'" aria-expanded="'+pOpen+'">'+(pOpen?'&#10005; close picker':'&#65291; NPC or creature')+'</button>'
+      +'<button data-op="npcTab" class="pk'+(gmDrawer.style.display==='flex'?' on':'')+'" title="The campaign&rsquo;s NPC tab &mdash; only you see it">&#128220; NPC tab</button></div>';
     if(b.gm && pOpen) h+=pickHtml();
     if(!b.list.length) h+='<div class="bn0">No one in the fight yet.</div>';
     h+=b.list.map(function(e){ var cur=e.id===b.cur;
@@ -16757,21 +17113,27 @@ function _popoutMain(cfg){
     if(nIn){ nIn.value=keepN; if(focus==='bAddN') nIn.focus(); } if(iIn){ iIn.value=keepI; if(focus==='bAddI') iIn.focus(); }
     pq=document.getElementById('bPQ'); if(pq && caret!=null){ pq.focus(); try{ pq.setSelectionRange(caret, caret); }catch(_){} }
     if(b.gm && pOpen){ fillPick(); pl=document.getElementById('bPL'); if(pl) pl.scrollTop=plTop; }
-    // The dice come up for each hero as their turn starts
-    // The dice column on the left follows the turn: heroes roll for themselves, the GM for foes
+    // The dice column on the left follows the turn: heroes roll for themselves,
+    // the GM for foes. Whoever may roll gets the app's whole dice screen; the
+    // table under it shows every roll made in the fight, from any device.
     document.body.classList.toggle('dice-on', !!act);
-    if(!act){ dEl.style.display='none'; dCur=null; return; }
-    if(dCur!==act.id){ dCur=act.id; dMin=false; dMod=0; dMode='normal'; }
+    var newest=b.log[0];
+    // (rolls already in the log when this window opened aren't thrown again)
+    if(seenLog===null) seenLog=newest?newest.id:'';
+    else if(newest && newest.id!==seenLog){ seenLog=newest.id; if(newest.dice && newest.dice.length && table) table.roll(newest.dice, {crit:newest.crit, fail:newest.fail, total:newest.total, caption:newest.who+' · '+newest.label}); }
+    if(!act){ dEl.style.display='none'; dCur=null; document.body.classList.remove('dice-full'); return; }
+    if(dCur!==act.id){ dCur=act.id; dMin=false; dFor=a.diceFor(MAPID); if(diceMir) diceMir.reset(); }
+    var full=!!(act.canRoll && dFor && !dMin);
+    document.body.classList.toggle('dice-full', full);
+    dEl.classList.toggle('foe', dFor==='foe');   // a foe has no hero panel
     var last=null; for(var i=0;i<b.log.length;i++){ if(b.log[i].cid===act.id){ last=b.log[i]; break; } if(b.log[i].total==null) break; }
-    var d='<div class="dh">'+face(act, 34)+'<div style="flex:1;min-width:0"><div class="dt">'+esc(act.name)+'’s turn</div><div class="ds">'+(act.kind!=='pc'?(act.canRoll?'GM: roll for this foe':'The GM is rolling&hellip;'):act.canRoll?'Roll here, or from the dice screen in the app':'Waiting for '+esc(act.name)+' to roll&hellip;')+'</div></div><button data-dop="min" title="'+(dMin?'Show':'Hide')+' the dice">'+(dMin?'&#9650;':'&#9660;')+'</button></div>';
-    if(last) d+='<div class="dr"><div class="dv '+(last.crit?'crit':last.fail?'fail':'')+'">'+esc(last.total)+'</div><div class="dd">'+esc(last.label)+'<br><span>'+esc(last.detail||'')+'</span>'+(last.crit?'<br><b class="crit">CRITICAL!</b>':last.fail?'<br><b class="fail">FUMBLE</b>':'')+'</div></div>';
-    if(!dMin && act.canRoll){
-      d+='<div class="dm">'+[['advantage','&#8593; adv'],['normal','normal'],['disadvantage','&#8595; dis']].map(function(m){ return '<button data-dop="mode" data-v="'+m[0]+'" class="'+(dMode===m[0]?'on':'')+'">'+m[1]+'</button>'; }).join('')
-        +'<span class="dmod"><button data-dop="mod" data-v="-1">&minus;</button><span>'+sg(dMod)+'</span><button data-dop="mod" data-v="1">+</button></span></div>';
-      d+='<div class="dk">'+[4,6,8,10,12,20,100].map(function(n){ return '<button data-dop="roll" data-s="'+n+'" data-m="'+dMod+'" data-l="d'+n+(dMod?' '+sg(dMod):'')+'">d'+n+'</button>'; }).join('')+'</div>';
-      if(act.mods.length) d+='<div class="dq">'+act.mods.map(function(m){ return '<button data-dop="roll" data-s="20" data-m="'+m.v+'" data-l="'+esc(m.l)+(m.l==='Initiative'?'':' check')+'">'+esc(m.l)+' '+sg(m.v)+'</button>'; }).join('')+'</div>';
-    }
-    dEl.innerHTML=d; dEl.style.display='block';
+    var d='<div class="dh">'+face(act, 34)+'<div style="flex:1;min-width:0"><div class="dt">'+esc(act.name)+'’s turn</div><div class="ds">'+(act.kind!=='pc'?(act.canRoll?'GM: roll for this foe':'The GM is rolling&hellip;'):act.canRoll?'Your dice screen &mdash; every roll goes to the table':'Waiting for '+esc(act.name)+' to roll&hellip;')+'</div></div>'
+      +(act.canRoll&&dFor?'<button data-dop="min" title="'+(dMin?'Show the dice screen':'Hide the dice screen')+'">'+(dMin?'&#9662;':'&#9652;')+'</button>':'')+'</div>';
+    if(last && !full) d+='<div class="dr"><div class="dv '+(last.crit?'crit':last.fail?'fail':'')+'">'+esc(last.total)+'</div><div class="dd">'+esc(last.label)+'<br><span>'+esc(last.detail||'')+'</span>'+(last.crit?'<br><b class="crit">CRITICAL!</b>':last.fail?'<br><b class="fail">FUMBLE</b>':'')+'</div></div>';
+    dHead.innerHTML=d;
+    dMirEl.style.display=full?'':'none';
+    if(full) diceMir.pull(!diceMir.has, false);
+    dEl.style.display='flex';
   }
   // ── The NPC / creature picker inside the initiative panel
   function pickHtml(){
@@ -16779,8 +17141,9 @@ function _popoutMain(cfg){
       +'<button data-pt="npc" class="'+(pTab==='npc'?'on':'')+'">&#129497; NPCs</button><button data-pt="creature" class="'+(pTab==='creature'?'on':'')+'">&#128058; Creatures</button></div>'
       +'<input id="bPQ" placeholder="Search '+(pTab==='npc'?'NPCs':'creatures')+'&hellip;" value="'+esc(pQ)+'" autocomplete="off">'
       +(pTab==='creature'?'<div class="bpn">How many <button data-pn="-1" aria-label="Fewer">&minus;</button><b>'+pN+'</b><button data-pn="1" aria-label="More">+</button><span>share one initiative roll</span></div>':'')
-      +'<div class="bps">Tap one, then tap the map to place it. <b>+ init</b> adds it with no token.</div>'
-      +'<div id="bPL" class="bpl"></div></div>';
+      +'<div class="bps">Tap one, then tap the map to place it. <b>+ init</b> adds it with no token. &#9998; sets its picture.</div>'
+      +'<div id="bPL" class="bpl"></div>'
+      +'<div class="bc" style="margin:6px 0 0"><button data-gm="'+(pTab==='npc'?'newNpc':'newCreature')+'">&#65291; new '+(pTab==='npc'?'NPC':'creature')+'</button></div></div>';
   }
   function fillPick(){
     var el=document.getElementById('bPL'); if(!el) return;
@@ -16792,7 +17155,8 @@ function _popoutMain(cfg){
       return '<div class="bpr'+(arm?' on':'')+(e.dead?' dead':'')+'">'
         +'<button class="bpm" data-pa="'+(npcIn?'':(e.kind==='npc'&&e.onMap?'init':'place'))+'" data-pk="'+esc(e.key)+'" data-pn2="'+esc(e.name)+'"'+(npcIn?' disabled':'')+'>'
         +face(e, 24)+'<span class="bpx">'+esc(e.name)+(e.dead?' &#9760;':'')+(tag?'<small>'+tag+'</small>':'')+'</span></button>'
-        +(npcIn||(e.kind==='npc'&&e.onMap)?'':'<button class="bpi" data-pa="init" data-pk="'+esc(e.key)+'" title="Add to initiative without a token on the map">+ init</button>')+'</div>';
+        +(npcIn||(e.kind==='npc'&&e.onMap)?'':'<button class="bpi" data-pa="init" data-pk="'+esc(e.key)+'" title="Add to initiative without a token on the map">+ init</button>')
+        +'<button class="bpi" data-gm="art" data-pk="'+esc(e.key)+'" title="Picture &amp; reference">&#9998;</button></div>';
     };
     var sec=function(t, list){ return list.length ? '<div class="bph">'+t+'</div>'+list.map(row).join('') : ''; };
     var own=all.filter(function(e){ return e.group==='camp'; }), lib=all.filter(function(e){ return e.group!=='camp'; });
@@ -16801,7 +17165,7 @@ function _popoutMain(cfg){
     if(L.cos || q || pCos) h+=sec('CURSE OF STRAHD', lib);
     else if(lib.length) h+='<button class="bpc" data-pa="cos">Show the Curse of Strahd list</button>';
     if(q && !all.length) h+='<div class="bn0">Nothing matches &ldquo;'+esc(pQ)+'&rdquo;.</div>';
-    el.innerHTML=h;
+    if(el.__h!==h){ el.innerHTML=h; el.__h=h; }
   }
   bEl.addEventListener('input', function(e){ if(e.target.id!=='bPQ') return; pQ=e.target.value; fillPick(); });
   bEl.addEventListener('click', function(e){
@@ -16817,6 +17181,16 @@ function _popoutMain(cfg){
     else { placing={kind:'bkey', id:key, n:n}; say('Tap the map where '+(n>1?n+' × ':'')+(t.getAttribute('data-pn2')||'it')+' '+(n>1?'go':'goes')+' · Esc cancels'); }
     fillPick(); renderTray();
   });
+  // GM: new creature / NPC and token pictures open the app's dialogs, mirrored here
+  bEl.addEventListener('click', function(e){
+    var t=e.target.closest('button[data-gm]'); if(!t) return; var a=api(); if(!a) return;
+    ovBase=ovIds(); a.gmAct(MAPID, t.getAttribute('data-gm'), t.getAttribute('data-pk'));
+    setTimeout(function(){ refreshAll(true); }, 60);
+  });
+  // GM: the campaign's NPC tab in a drawer beside the initiative panel
+  var gmDrawer=document.getElementById('gmDrawer');
+  npcMir=Mirror('npcs', document.getElementById('gdBody'));
+  window.NPCTAB=function(open){ var on=open==null?gmDrawer.style.display!=='flex':open; gmDrawer.style.display=on?'flex':'none'; if(on) npcMir.pull(true, true); renderBattle(); };
   window.BATTLE=function(){ var a=api(); if(!a){ say('The app window is closed — reopen the pop-out from the app'); return; } a.battleDo(MAPID,'toggle'); renderBattle(); };
   bEl.addEventListener('click', function(e){
     var t=e.target.closest('button[data-op]'); if(!t) return; var a=api(); if(!a) return;
@@ -16825,6 +17199,7 @@ function _popoutMain(cfg){
       var v=window.prompt(has?'Damage for '+nm+' (type +N to heal, =N to set)':'Hit points for '+nm, '');
       if(v!=null && String(v).trim() && !a.battleDo(MAPID,'hp', t.getAttribute('data-id'), v)){ say('Type a number, +N to heal or =N to set'); setTimeout(function(){ say(''); },2600); }
       renderBattle(); return; }
+    if(op==='npcTab'){ window.NPCTAB(); return; }
     if(op==='pick'){ pOpen=!pOpen; if(!pOpen && placing && placing.kind==='bkey'){ placing=null; say(''); } renderBattle(); return; }
     if(op==='add'){ var n=document.getElementById('bAddN'), iv=document.getElementById('bAddI'); ok=a.battleDo(MAPID,'add', n?n.value:'', iv?iv.value:''); if(ok){ if(n) n.value=''; if(iv) iv.value=''; } }
     else ok=a.battleDo(MAPID, op, t.getAttribute('data-id'));
@@ -16832,19 +17207,16 @@ function _popoutMain(cfg){
   });
   bEl.addEventListener('change', function(e){ var t=e.target; if(!t.classList.contains('bin')) return; var a=api(); if(!a) return; a.battleDo(MAPID,'setInit', t.getAttribute('data-id'), t.value); renderBattle(); });
   bEl.addEventListener('keydown', function(e){ if(e.key==='Enter' && (e.target.id==='bAddN'||e.target.id==='bAddI')){ var b=bEl.querySelector('button[data-op="add"]'); if(b) b.click(); } });
-  dEl.addEventListener('click', function(e){
-    var t=e.target.closest('button[data-dop]'); if(!t) return; var op=t.getAttribute('data-dop');
-    if(op==='min') dMin=!dMin;
-    else if(op==='mode') dMode=t.getAttribute('data-v');
-    else if(op==='mod') dMod=Math.max(-20,Math.min(20,dMod+(+t.getAttribute('data-v'))));
-    else if(op==='roll'){ var a=api(); if(!a) return;
-      var r=a.battleDo(MAPID,'roll',{sides:+t.getAttribute('data-s'), mod:+t.getAttribute('data-m'), mode:dMode, label:t.getAttribute('data-l')});
-      if(!r){ say('Only the GM or this hero’s player can roll'); setTimeout(function(){ say(''); },2600); } }
-    renderBattle();
-  });
+  // The dice column: a header, the app's dice screen, and the table under it
+  dEl.innerHTML='<div id="dHead"></div><div id="dMir" class="mir"></div><div id="dTab" class="dice-table" title="The table &mdash; every roll in the fight lands here"></div>';
+  dHead=document.getElementById('dHead'); dMirEl=document.getElementById('dMir');
+  diceMir=Mirror('dice', dMirEl);
+  try{ table=DiceTable.mount(document.getElementById('dTab')); }catch(_){ table=null; }
+  dHead.addEventListener('click', function(e){ var t=e.target.closest('button[data-dop]'); if(!t) return; if(t.getAttribute('data-dop')==='min') dMin=!dMin; renderBattle(); });
   // Esc puts down a token being placed
   document.addEventListener('keydown', function(e){ if(e.key!=='Escape' || !placing) return; placing=null; say(''); renderTray(); if(pOpen) fillPick(); });
   window.__rb=renderBattle;
+  setInterval(function(){ if(!api()) return; refreshAll(false); if(pOpen && document.body.classList.contains('battle')) fillPick(); }, 800);
   ap(); renderTray(); renderBattle();
 }
 
@@ -16901,18 +17273,28 @@ function popOutMap(){
     +'#battle .bpr.on .bpm{border-color:#c9a227;background:rgba(201,162,39,0.15)}#battle .bpx{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}#battle .bpx small{display:block;font-size:10px;color:#b8b0d8}'
     +'#battle .bpi{flex:none;font-size:11px;padding:4px 7px}#battle .bpc{width:100%;margin-top:6px}'
     +'#battle .bl{font-size:11px;color:#b8b0d8;margin:3px 0}#battle .bl b{color:#e8e0ff;font-size:13px}.crit{color:#27ae60!important}.fail{color:#e74c3c!important}'
-    +'#dice{position:fixed;left:10px;top:10px;bottom:10px;width:260px;overflow:auto;z-index:10;background:rgba(20,16,40,0.95);border:1px solid #c9a227;border-radius:14px;padding:10px 12px;display:none;color:#e8e0ff;box-sizing:border-box;box-shadow:0 6px 30px rgba(0,0,0,0.6)}'
+    +'#dice{position:fixed;left:10px;top:10px;bottom:10px;width:260px;z-index:10;background:rgba(20,16,40,0.95);border:1px solid #c9a227;border-radius:14px;padding:10px 12px;display:none;flex-direction:column;gap:8px;color:#e8e0ff;box-sizing:border-box;box-shadow:0 6px 30px rgba(0,0,0,0.6)}'
+    +'#dHead{flex:none}#dMir{flex:1 1 auto;min-height:0;overflow:auto;color:var(--text);font-size:14px;padding-right:2px}#dTab{flex:none;height:150px;margin:0;border-width:5px}'
+    // the dice screen copied in from the app: one column, its own table hidden (the pop-out has the table below)
+    +'.mir #diceCharPanel,.mir #diceRollPanel{flex:none!important;width:auto!important;max-width:none!important;height:auto!important;max-height:none!important;overflow:visible!important;padding:0!important;border:0!important;position:static!important;background:none!important;margin:0 0 10px!important}'
+    +'#dice.foe .mir #diceCharPanel{display:none!important}.mir #diceCharPanel .dice-toggle-arrow{display:inline!important}.mir #diceCharPanel.collapsed .dice-char-body{display:none!important}.mir #diceCharPanel>div:first-child{position:static!important}.mir #diceTable{display:none}.mir .mode-btn{padding:8px 4px}'
+    +'body.battle.dice-full #dice{width:370px}body.battle.dice-full #vp{left:390px}body.battle.dice-full #tray{left:390px}body.battle.dice-full #bban{left:402px}'
+    // GM: the campaign NPC tab beside the initiative panel
+    +'#gmDrawer{position:fixed;top:56px;right:310px;bottom:10px;width:min(380px,calc(100vw - 340px));z-index:11;background:rgba(20,16,40,0.97);border:1px solid #c9a227;border-radius:12px;display:none;flex-direction:column;color:var(--text);box-shadow:0 6px 30px rgba(0,0,0,0.6)}'
+    +'#gmDrawer .gdh{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid rgba(201,162,39,0.35);font-family:Cinzel,serif;font-size:12px;letter-spacing:1px;color:#c9a227}#gmDrawer .gdh small{flex:1;font-family:system-ui,sans-serif;letter-spacing:0;font-size:10px;color:#b8b0d8}'
+    +'#gmDrawer .gdh button{font:inherit;font-size:12px;padding:3px 8px;border-radius:8px;border:1px solid rgba(255,255,255,0.25);background:none;color:#e8e0ff;cursor:pointer}#gdBody{flex:1;min-height:0;overflow:auto;padding:10px;font-size:14px}'
+    +'#ovl .slot-picker-overlay,#ovl .gw-backdrop{z-index:100}'
     +'#dice .dh{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid rgba(201,162,39,0.35)}#dice .dt{font-family:Cinzel,serif;font-size:14px;color:#c9a227;letter-spacing:0.5px}#dice .ds{font-size:11px;color:#b8b0d8}'
-    +'#dice button{font:inherit;font-size:12px;padding:6px 9px;border-radius:9px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.06);color:#e8e0ff;cursor:pointer}'
+    +'#dHead button{font:inherit;font-size:12px;padding:6px 9px;border-radius:9px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.06);color:#e8e0ff;cursor:pointer}'
     +'#dice .dr{display:flex;align-items:center;gap:12px;margin:8px 0 2px;padding:6px 10px;border-radius:10px;background:rgba(0,0,0,0.25)}#dice .dv{font-family:Cinzel,serif;font-size:34px;font-weight:700;color:#c9a227;min-width:52px;text-align:center}#dice .dd{font-size:12px}#dice .dd span{color:#b8b0d8;font-size:11px}'
-    +'#dice .dm{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:10px}#dice .dm .on{border-color:#c9a227;color:#c9a227}#dice .dmod{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;font-size:14px;margin-top:4px}#dice .dm>button{flex:1}'
-    +'#dice .dk,#dice .dq{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}#dice .dk button{flex:1 0 calc(25% - 5px);font-weight:600;padding:10px 0}#dice .dq button{flex:1 0 calc(50% - 5px)}#dice .dq button{font-size:11px;padding:4px 8px}'
-    +'@media (max-width:760px){body.battle #vp{right:0;bottom:46vh}#battle{top:auto;left:10px;width:auto;height:44vh}body.battle.dice-on #vp{left:0}body.battle.dice-on #tray{left:10px}body.battle.dice-on #bban{left:12px}#dice{top:auto;left:10px;right:10px;width:auto;max-height:30vh;bottom:calc(44vh + 18px)}#bban{max-width:calc(100% - 24px);top:52px}#battle .bpl{max-height:none}#bar{left:10px;flex-wrap:wrap;justify-content:flex-end;gap:4px}#bar button{padding:6px 8px;font-size:12px}#bar .fsl,#live{display:none}}'
+    +'@media (max-width:760px){body.battle #vp{right:0;bottom:46vh}#battle{top:auto;left:10px;width:auto;height:44vh}body.battle.dice-on #vp{left:0}body.battle.dice-on #tray{left:10px}body.battle.dice-on #bban{left:12px}#dice{top:auto;left:10px;right:10px;width:auto;max-height:30vh;bottom:calc(44vh + 18px)}body.battle.dice-full #dice{width:auto;max-height:52vh;top:52px;bottom:auto}body.battle.dice-full #vp{left:0}body.battle.dice-full #tray{left:10px}body.battle.dice-full #bban{left:12px}#dTab{height:110px}#gmDrawer{right:10px;left:10px;width:auto;top:52px;bottom:calc(44vh + 18px)}#bban{max-width:calc(100% - 24px);top:52px}#battle .bpl{max-height:none}#bar{left:10px;flex-wrap:wrap;justify-content:flex-end;gap:4px}#bar button{padding:6px 8px;font-size:12px}#bar .fsl,#live{display:none}}'
     +'</style></head><body>'
     +'<div id="ttl">'+title+'</div><div id="bban"></div><div id="hint"></div>'
     +'<div id="vp">'+clone.outerHTML+'</div>'
     +'<div id="bar"><span id="live" style="align-self:center;color:#27ae60;font-size:11px;font-weight:600;margin-right:4px">&#9679; LIVE</span><button id="battleBtn" onclick="BATTLE()" style="display:none;border-color:#c0392b;color:#ff8a7a">&#9876; battle</button><button id="trayBtn" onclick="TRAY()">&#129485; tokens</button><button onclick="Z(1/1.4)">&minus;</button><button onclick="Z(1.4)">&plus;</button><button onclick="FIT()">fit</button><button onclick="FS()">&#9974;<span class="fsl"> full screen</span></button></div>'
     +'<div id="tray"></div><div id="battle"></div><div id="dice"></div>'
+    +'<div id="gmDrawer"><div class="gdh">&#128220; NPC TAB <small>GM only &mdash; players don&rsquo;t see this</small><button onclick="NPCTAB(false)" aria-label="Close">&#10005;</button></div><div id="gdBody" class="mir"></div></div><div id="ovl"></div>'
+    +'<script>var DiceTable=('+_diceTableKit.toString()+')();<\/script>'
     +'<script>('+_popoutMain.toString()+')('+cfg+');<\/script></body></html>');
   w.document.close();
   _popouts.push({ win:w, mapId:map.id });
