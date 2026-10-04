@@ -1608,8 +1608,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
     </div>
     <div class="divider"><span>Damage</span></div>
     <div id="dmgPanel" class="dmg-panel"></div>
-    <div class="divider"><span>History</span></div>
-    <div class="hist-list" id="rollHistory"></div>
+    <div class="divider dice-hist"><span>History</span></div>
+    <div class="hist-list dice-hist" id="rollHistory"></div>
     </div>
   </div>
 
@@ -17257,8 +17257,13 @@ function _popoutMain(cfg){
           +'<button class="bx" data-op="hide" data-id="'+esc(e.id)+'" title="'+(e.hidden?'Show its name to the players':'Hide its name from the players')+'">'+(e.hidden?'&#128584;':'&#128065;')+'</button>':'')
         +(b.gm?'<button class="bx" data-op="remove" data-id="'+esc(e.id)+'" title="Remove from the fight">&#10005;</button>':'')+'</div>'; }).join('');
     if(b.gm) h+='<div class="badd"><input id="bAddN" placeholder="Add a foe&hellip;" maxlength="40"><input id="bAddI" type="number" placeholder="init"><button data-op="add">add</button></div>';
-    if(b.log.length) h+='<div class="bh" style="margin-top:10px">ROLLS</div>'+b.log.map(function(l){
-      return '<div class="bl">'+(l.total==null?'<i>'+esc(l.label)+'</i>':'<b class="'+(l.crit?'crit':l.fail?'fail':'')+'">'+esc(l.total)+'</b> '+esc(l.who)+' &middot; '+esc(l.label))+'</div>'; }).join('');
+    // The fight's roll history (every device's rolls) lives here, so the dice column keeps its room
+    if(b.log.length) h+='<div class="bh" style="margin-top:10px">HISTORY</div>'+b.log.map(function(l){
+      if(l.total==null) return '<div class="bl"><i>'+esc(l.label)+'</i></div>';
+      var P={}; (l.dice||[]).forEach(function(x){ if(x.k) P[x.s]=(P[x.s]||0)+1; });
+      var die=Object.keys(P).sort(function(x,y){ return y-x; }).map(function(sd){ return (P[sd]>1?P[sd]:'')+'d'+sd; }).join('+');
+      return '<div class="bhr"><span class="bhd">'+esc(die)+'</span><b class="bhv'+(l.crit?' crit':l.fail?' fail':'')+'">'+esc(l.total)+'</b>'
+        +'<span class="bhi"><span>'+esc(l.who)+' &middot; '+esc(l.label)+'</span>'+(l.detail?'<small>'+esc(l.detail)+'</small>':'')+'</span></div>'; }).join('');
     var pq=document.getElementById('bPQ'), caret=pq&&focus==='bPQ'?pq.selectionStart:null, pl=document.getElementById('bPL'), plTop=pl?pl.scrollTop:0;
     bEl.innerHTML=h; bEl.style.display='block';
     nIn=document.getElementById('bAddN'); iIn=document.getElementById('bAddI');
@@ -17424,6 +17429,8 @@ function popOutMap(){
     +'#battle .bpm{flex:1;min-width:0;display:flex;align-items:center;gap:7px;text-align:left;padding:4px 6px;border-color:transparent;background:rgba(255,255,255,0.04)}#battle .bpm:disabled{opacity:0.55;cursor:default}'
     +'#battle .bpr.on .bpm{border-color:#c9a227;background:rgba(201,162,39,0.15)}#battle .bpx{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}#battle .bpx small{display:block;font-size:10px;color:#b8b0d8}'
     +'#battle .bpi{flex:none;font-size:11px;padding:4px 7px}#battle .bpc{width:100%;margin-top:6px}'
+    +'#battle .bhr{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.08)}#battle .bhr:last-child{border-bottom:none}#battle .bhd{flex:none;width:30px;font-family:Cinzel,serif;font-size:10px;color:#b8b0d8;overflow:hidden;text-overflow:ellipsis}#battle .bhv{flex:none;min-width:28px;font-family:Cinzel,serif;font-size:18px;color:#e8e0ff}#battle .bhi{flex:1;min-width:0;font-size:12px}#battle .bhi small{display:block;font-size:10px;color:#b8b0d8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
+    +'.mir .dice-hist{display:none!important}'
     +'#battle .bl{font-size:11px;color:#b8b0d8;margin:3px 0}#battle .bl b{color:#e8e0ff;font-size:13px}.crit{color:#27ae60!important}.fail{color:#e74c3c!important}'
     +'#dice{position:fixed;left:10px;top:10px;bottom:10px;width:260px;z-index:10;background:rgba(20,16,40,0.95);border:1px solid #c9a227;border-radius:14px;padding:10px 12px;display:none;flex-direction:column;gap:8px;color:#e8e0ff;box-sizing:border-box;box-shadow:0 6px 30px rgba(0,0,0,0.6)}'
     +'#dHead{flex:none}#dMir{flex:1 1 auto;min-height:0;overflow:auto;color:var(--text);font-size:14px;padding-right:2px}#dTab{flex:none;height:150px;margin:0;border-width:5px}'
