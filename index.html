@@ -1413,6 +1413,24 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .tokwin.min{width:auto;min-width:170px}
 @media (max-width:760px){ .tokwin{width:min(260px,calc(100vw - 16px));max-height:min(380px,calc(100vh - 24px))} }
 .tokbtn{background:none;border:1px solid var(--border);border-radius:7px;color:var(--muted);font-size:11px;padding:3px 6px;cursor:pointer}
+
+/* Battle mode (map encounters) */
+.battle-strip{border:1px solid var(--red);border-radius:12px;padding:8px 10px;margin:0 0 8px;background:rgba(192,57,43,0.08);}
+.battle-strip .bt-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:6px;}
+.battle-strip .bt-title{font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;color:var(--red);font-weight:700;}
+.battle-strip .bt-now{font-size:12px;color:var(--text);flex:1;min-width:120px;}
+.battle-strip .bt-list{display:flex;flex-wrap:wrap;gap:5px;}
+.bt-chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text);background:var(--surface2);border:1px solid var(--border2);border-radius:999px;padding:2px 8px 2px 4px;}
+.bt-chip b{font-family:'Cinzel',serif;font-size:10px;color:var(--gold);min-width:16px;text-align:center;}
+.bt-chip img,.bt-chip .bt-ic{width:18px;height:18px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 1.5px var(--cc);display:inline-flex;align-items:center;justify-content:center;font-size:9px;}
+.bt-chip.on{border-color:var(--red);background:rgba(192,57,43,0.18);box-shadow:0 0 8px rgba(231,76,60,0.45);}
+.bt-chip button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;padding:0 0 0 2px;}
+.battle-strip .bt-add{display:flex;gap:6px;margin-top:6px;}
+.battle-strip .bt-add input{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:4px 8px;font-size:12px;min-width:0;}
+.battle-strip .bt-add input[type=number]{width:62px;}
+.map-wrap.battle-on{box-shadow:0 0 0 2px var(--red),0 0 18px rgba(192,57,43,0.35);}
+.battle-turn circle{animation:bTurnPulse 1.3s ease-in-out infinite;}
+@keyframes bTurnPulse{0%,100%{opacity:1}50%{opacity:0.3}}
 </style>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head>
@@ -2431,6 +2449,8 @@ function subscribeRealtime(campId){
         delete updated._ownerGid;
         const i = _db.campaigns.findIndex(c=>String(c.id)===String(updated.id) || c._rowId===payload.new.id);
         const cur = i>=0 ? _db.campaigns[i] : null;
+        try{ if(cur) _battleWatch(cur); }catch(e){}   // remember whose turn it was before this update
+        const _bSig0 = cur ? _battleSig(cur) : '';
         if(cur && cur._rowId===payload.new.id){
           // A copy no newer than ours (usually our own save echoing back)
           // must not replace newer changes made since.
@@ -2443,8 +2463,13 @@ function subscribeRealtime(campId){
           if(i>=0) _db.campaigns[i]=updated; else _db.campaigns.push(updated);
           _setCampBase(updated);
         }
-        // Our own save coming back to us: the screen already shows it.
-        if(_isOwnEcho(updated.id)) return;
+        try{ _battleWatch(i>=0 ? _db.campaigns[i] : updated); }catch(e){}
+        // Our own save coming back to us: the screen already shows it — unless
+        // someone else moved the battle on meanwhile (turns must show at once).
+        if(_isOwnEcho(updated.id)){
+          if(_battleSig(i>=0 ? _db.campaigns[i] : updated)!==_bSig0 && editingCampId===updated.id && document.getElementById('campMapSvg')) renderMap();
+          return;
+        }
         if(document.getElementById('campList')) _refreshCampScreen();
         if(document.getElementById('campDetailHeader') && editingCampId===updated.id) renderCampDetailHeader();
       }
@@ -10879,6 +10904,7 @@ function doRollLabelled(label, mod){
   diceState.history.unshift({d,kept,total,mode:em,mod,bonuses:bonusBreak,isCrit,isFail,conds:[...diceState.activeConds],label});
   if(diceState.history.length>8) diceState.history.pop();
   renderDiceHistory();
+  _battleNoteRoll(label, total, 'd20: '+(em!=='normal'?'['+r1+','+r2+']→':'')+kept+(mod?(mod>0?' + '+mod:' − '+Math.abs(mod)):'')+(bonusTotal?' + '+bonusTotal:''), isCrit, isFail);
 }
 
 function switchDiceChar(charId){
@@ -10912,7 +10938,7 @@ const el=document.getElementById('rollResult');el.style.display='block';el.inner
 // Scroll dice screen so roll button + result are in view
 const scrollEl2 = document.getElementById('diceRollPanel') || document.getElementById('scr-dice');
 if(scrollEl2) scrollEl2.scrollTop = 0;
-diceState.history.unshift({d,kept,total,mode:em,mod,bonuses:bonusBreak,isCrit,isFail,conds:[...diceState.activeConds],label:_pendingLabel});if(diceState.history.length>8)diceState.history.pop();renderDiceHistory();}
+diceState.history.unshift({d,kept,total,mode:em,mod,bonuses:bonusBreak,isCrit,isFail,conds:[...diceState.activeConds],label:_pendingLabel});if(diceState.history.length>8)diceState.history.pop();renderDiceHistory();_battleNoteRoll(_pendingLabel&&!/^rolling /.test(_pendingLabel)?_pendingLabel:'d'+d,total,breakdown,isCrit,isFail);}
 function renderDiceHistory(){const el=document.getElementById('rollHistory');if(!el)return;if(!diceState.history.length){el.innerHTML=`<p style="font-size:13px;color:var(--muted);font-style:italic;text-align:center;padding:12px 0">No rolls yet.</p>`;return;}el.innerHTML=diceState.history.map(r=>{const mc=r.mode==='advantage'?'var(--green)':r.mode==='disadvantage'?'var(--red)':'var(--muted)';const ml=r.mode==='advantage'?'↑ADV':r.mode==='disadvantage'?'↓DIS':'NRM';const tc=r.isCrit?'var(--green)':r.isFail?'var(--red)':'var(--text)';const ci=r.conds.map(id=>{const c=CONDITIONS.find(x=>x.id===id);return c?c.i:'';}).join('');return`<div class="hist-row"><div class="hist-die">${r.label?('<span style="font-size:9px;color:var(--muted);display:block;line-height:1">'+r.label.split(' ')[0]+'</span>'):''}d${r.d}</div><div class="hist-val" style="color:${tc}">${r.total}</div><div class="hist-info">${r.label||('rolled '+r.kept)}${r.mod!==0?(r.mod>0?' +'+r.mod:' '+r.mod):''}${r.bonuses.length?' + bonuses':''} ${ci}</div><span class="hist-mode" style="color:${mc};border-color:${mc}">${ml}</span></div>`;}).join('');}
 
 /* ══ LOOT ══ */
@@ -14552,6 +14578,8 @@ function renderMap(){
     const svg = `<svg viewBox="0 0 ${VW} ${VH}" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="campMapSvg" data-vw="${VW}" data-vh="${VH}">
       ${src?`<image href="${src}" x="0" y="0" width="${VW}" height="${VH}" preserveAspectRatio="none"/>`
            :`<rect width="${VW}" height="${VH}" fill="#1a1530"/><text x="${VW/2}" y="${VH/2}" text-anchor="middle" fill="#8880b0" font-size="11" font-family="Cinzel,serif">${map.imgKey?(_mapImgMissing.has(map.id)?'map image missing — see below':'loading map…'):'no image yet'}</text>`}
+      ${_hexSvg(map, VW, VH)}
+      ${_bGridSvg(map, VW, VH)}
       ${edges.map(([p,q])=>`<line class="map-edge" x1="${X(p)}" y1="${Y(p)}" x2="${X(q)}" y2="${Y(q)}"/>`).join('')}
       ${(()=>{ const PS=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4);
         const _locked=!!map.pinsLocked;
@@ -14594,6 +14622,7 @@ function renderMap(){
           ${tSel?_tokSelSvg(tr, tr*0.3):''}
         </g></g>`; }).join('')}
       ${_markersSvg(camp, map, VW, VH, gm)}
+      ${_bTurnSvg(camp, map, VW, VH, gm)}
       ${_fogLayerSvg(camp, map, VW, VH, pinned)}
     </svg>`;
     // A sub-map leads with the places that plausibly belong there — linked to
@@ -14623,17 +14652,19 @@ function renderMap(){
         ${_fix?`<label class="pc-pill" style="color:var(--gold);border-color:var(--gold);cursor:pointer">⬆ Re-upload image<input type="file" accept="image/*" style="display:none" onchange="reuploadMapImage('${jsq(map.id)}', this.files[0]); this.value=''"></label>`:''}
       </div>`;
     }
-    html += `<div class="map-wrap ${(_placingId||_placingParty||_placingTok||_placingKey)?'placing':''} ${_painting?'painting-fog':''} ${_peeking?'gm-preview':''} ${_mapWheelZoom?'zoom-active':''}" id="campMapWrap">${svg}<div class="map-legend">${_legend2}</div></div>`;
+    html += _battleStripHtml(camp, map);
+    html += `<div class="map-wrap ${_battle(map)?'battle-on':''} ${(_placingId||_placingParty||_placingTok||_placingKey)?'placing':''} ${_painting?'painting-fog':''} ${_peeking?'gm-preview':''} ${_mapWheelZoom?'zoom-active':''}" id="campMapWrap">${svg}<div class="map-legend">${_legend2}</div></div>`;
     html += _gmMapCtrlsHtml(camp, map);
     html += `<div class="map-ctrls">
       ${(chain.length>1)?`<button class="pc-pill" onclick="switchMap('${chain[chain.length-2].id}')" title="Back to ${esc(chain[chain.length-2].name)}">↑ up a map</button>`:''}
       <span class="pc-pill" style="display:flex;align-items:center;gap:4px;cursor:default"><button onclick="zoomMap('${map.id}',1/1.4)" style="background:none;border:none;color:var(--text);font-size:15px;cursor:pointer;padding:0 4px">−</button><span id="mapZoomLbl" style="min-width:34px;text-align:center;font-size:11px">${Math.round((_mapView[map.id]?.z||1)*100)}%</span><button onclick="zoomMap('${map.id}',1.4)" style="background:none;border:none;color:var(--text);font-size:15px;cursor:pointer;padding:0 4px">＋</button></span>
       <button class="pc-pill" onclick="zoomReset('${map.id}')" title="Reset zoom">⟲ fit</button>
       <button class="pc-pill" style="border-color:var(--gold);color:var(--gold)" onclick="beginPlaceParty()" title="${map.party?'Reposition the party marker':'Drop a party marker anywhere on the map'}">🚩 ${map.party?'move party':'drop party'}</button>
-      ${map.party?`<button class="pc-pill" onclick="removeParty()">✕ party</button>`:''}
+      ${map.party?`<button class="pc-pill" onclick="removeParty()">✕ party</button><button class="pc-pill" onclick="matchPartyToPins()" title="Shrink the party marker (and minis) to the same size as the town / place markers">📌 party = pin size</button>`:''}
       ${_campMembers(camp).length?`<button class="pc-pill ${_tokMenu?'on':''}" onclick="toggleTokMenu()" title="Place characters' minis on their own, away from the party marker">🧍 minis</button>`:''}
       ${gm?`<button class="pc-pill ${_tokWin.npc?'on':''}" onclick="toggleTokWin('npc')" title="GM: a window of NPC tokens to drop onto the map">🧙 NPC tokens</button><button class="pc-pill ${_tokWin.creature?'on':''}" onclick="toggleTokWin('creature')" title="GM: a window of creature tokens to drop onto the map">🐺 creature tokens</button>`:''}
       <button class="pc-pill" onclick="popOutMap()" title="Open this map full-screen in its own window">⛶ pop out</button>
+      ${canDesignMaps(camp)?`<button class="pc-pill ${_battle(map)?'on':''}" style="color:var(--red);border-color:var(--red)" onclick="battleOp('toggle')" title="${_battle(map)?'End the encounter — heroes rejoin the party marker':'Turn this map into an encounter everyone sees: grid, initiative and turns'}">⚔ ${_battle(map)?'end battle':'battle mode'}</button>`:''}
 
 <span class="pc-pill" style="cursor:default">📌 ${_pinPx(map)}px</span>
       <button class="pc-pill ${map.hidePinLabels?'on':''}" onclick="togglePinLabels('${map.id}')" title="Master switch — hide every place name on this map">${map.hidePinLabels?'all names off':'all names on'}</button>
@@ -15009,7 +15040,7 @@ function _bindMapDrag(camp, map){
         rz.s=Math.max(TOK_SCALE_MIN, Math.min(TOK_SCALE_MAX, rz.s0*Math.hypot(l.x-rz.cx,l.y-rz.cy)/rz.d0));
         body.setAttribute('transform',`scale(${(rz.s/rz.s0).toFixed(4)})`);
         const lg=svg.parentElement.querySelector('.map-legend'); if(lg) lg.textContent='token size: '+Math.round(rz.s*100)+'%'; e.preventDefault(); });
-      const rzEnd=()=>{ if(rz){ map.tokScale=Math.round(rz.s*20)/20; saveCampaign(camp); renderMap(); } rz=null; };
+      const rzEnd=()=>{ if(rz){ map.tokScale=Math.max(TOK_SCALE_MIN, rz.s>=0.5 ? Math.round(rz.s*20)/20 : +rz.s.toPrecision(2)); saveCampaign(camp); renderMap(); } rz=null; };
       tg.addEventListener('pointerup',rzEnd); tg.addEventListener('pointercancel',rzEnd);
     }
   }
@@ -15552,6 +15583,7 @@ function _gmMapCtrlsHtml(camp, map){
     <button class="pc-pill ${map.fogPins?'on gold':''}" onclick="toggleFogPins('${map.id}')" title="${map.fogPins?'Pins currently clear their own halo of fog — tap to keep them hidden until you erase':'Let every pin (and the party marker) clear a halo of fog around itself'}">📌 pins clear fog</button>
     <span class="pc-pill" style="cursor:default;color:var(--muted2)">${dabs} stroke${dabs===1?'':'s'}${map.fogFull?' · fully revealed':''}</span>`;
   }
+  h += _hexCtrlsHtml(map);
   return h + `</div>`;
 }
 
@@ -15662,6 +15694,231 @@ function togglePinLabels(id){ const camp=getCampaigns().find(c=>c.id===editingCa
 function beginPlace(id){ _placingId = (id && _placingId!==id) ? id : null; _placingParty=false; _placingTok=null; _placingKey=null; renderMap(); if(_placingId) document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
 function beginPlaceParty(){ _placingParty=true; _placingId=null; _placingTok=null; _placingKey=null; _selPinId=null; renderMap(); document.getElementById('campMapWrap')?.scrollIntoView({behavior:'smooth',block:'center'}); }
 function removeParty(){ const camp=getCampaigns().find(c=>c.id===editingCampId); const m=camp&&_curMap(camp); if(!m) return; delete m.party; saveCampaign(camp); renderMap(); toast('Party marker removed','var(--muted)'); }
+/* ── Battle mode ──────────────────────────────────────────────────────────
+   The GM can turn a map into an encounter. The state lives on the map
+   (map.battle) so it is saved and synced like pins, and every pop-out and
+   player sees it: a combat grid over the map, an initiative order, whose turn
+   it is (ringed on the map) and the rolls made on each turn.
+   map.battle = { on, round, cur (entry id), grid (cell px, 0 = none),
+                  split [character ids pulled out of the party marker],
+                  list [{id, kind:'pc'|'mk'|'foe', ref, name, init}],
+                  log [{id, cid, who, label, total, detail, crit, fail, t}] } */
+const BATTLE_GRIDS=[0, 8, 14, 22];
+function _battle(map){ return map && map.battle && map.battle.on ? map.battle : null; }
+function _bVH(map){ return Math.round(440*((map.h&&map.w)?map.h/map.w:0.68)); }
+function _bD(n){ return Math.ceil(Math.random()*n); }
+function _bSort(b){ b.list.sort((x,y)=>((y.init==null?-99:y.init)-(x.init==null?-99:x.init)) || String(x.name||'').localeCompare(String(y.name||''))); }
+function _bChar(camp, ref){ return _campMembers(camp).find(c=>String(c.id)===String(ref)) || null; }
+// Characters this device plays (not ones shared in from other players).
+function _bMine(c){ return !!c && !c._sharedCampId; }
+// Name and face of an initiative entry. NPC tokens the party can't see stay unnamed for players.
+function _bInfo(camp, map, e, gm){
+  if(e.kind==='pc'){ const c=_bChar(camp, e.ref);
+    return c ? {name:c.name, img:c.token||c.portrait||'', color:classColor(c.classIdx), label:classIcon(c.classIdx), char:c}
+             : {name:e.name||'Hero', img:'', color:'#8880b0', label:'?'}; }
+  if(e.kind==='mk'){ const m=_mapMarkers(map).find(x=>String(x.id)===String(e.ref)); const t=m&&_tokEntry(camp, m.key);
+    if(t){ if(!gm && !_npcSeenByParty(camp, map, m, 440, _bVH(map))) return {name:'Unknown foe', img:'', color:t.color, label:'?', pos:null};
+      return {name:e.name||_shortName(t.name), img:t.img, color:t.color, label:t.icon||_initials(t.name), pos:m}; } }
+  return {name:e.name||'Foe', img:'', color:'#c0392b', label:'👹'};
+}
+// Where the current turn's token stands (normalised), for the ring on the map.
+function _bTurnPos(camp, map){
+  const b=_battle(map); if(!b || !b.cur) return null;
+  const e=b.list.find(x=>x.id===b.cur); if(!e) return null;
+  if(e.kind==='pc') return (map.tokens||{})[String(e.ref)] || map.party || null;
+  if(e.kind==='mk'){ const m=_mapMarkers(map).find(x=>String(x.id)===String(e.ref)); return m ? {x:m.x, y:m.y, mk:m} : null; }
+  return null;
+}
+/* ── Hex overlay ──────────────────────────────────────────────────────────
+   For maps drawn without a grid: the GM lays a hex grid over the map and
+   sizes, shifts, turns and fades it to fit. Saved on the map (map.hex) so the
+   party and every pop-out see the same grid. s is the hex radius in map
+   units, ox/oy shift it as a fraction of one tile, rot 0 = pointy-top, 90 = flat-top. */
+const HEX_DEF={on:false, s:10, ox:0, oy:0, rot:0, op:0.4, col:'#ffffff'};
+function _hex(map){ return Object.assign({}, HEX_DEF, map.hex||{}); }
+function _hexSvg(map, VW, VH){
+  const h=_hex(map); if(!h.on) return '<g class="hex-grid"></g>';
+  const r=Math.max(2, Math.min(80, +h.s||10)), W=Math.sqrt(3)*r, H=3*r;
+  const tx=(+h.ox||0)*W, ty=(+h.oy||0)*H, sw=Math.max(0.2, r*0.04).toFixed(2);
+  const d=`M ${(W/2).toFixed(3)} 0 L ${W.toFixed(3)} ${(r/2).toFixed(3)} L ${W.toFixed(3)} ${(1.5*r).toFixed(3)} L ${(W/2).toFixed(3)} ${(2*r).toFixed(3)} L 0 ${(1.5*r).toFixed(3)} L 0 ${(r/2).toFixed(3)} Z M ${(W/2).toFixed(3)} ${(2*r).toFixed(3)} L ${(W/2).toFixed(3)} ${H.toFixed(3)}`;
+  return `<g class="hex-grid" style="pointer-events:none"><defs><pattern id="hexPat" width="${W.toFixed(3)}" height="${H.toFixed(3)}" patternUnits="userSpaceOnUse" patternTransform="rotate(${+h.rot||0} ${VW/2} ${VH/2}) translate(${tx.toFixed(2)},${ty.toFixed(2)})"><path d="${d}" fill="none" stroke="${esc(h.col)}" stroke-width="${sw}" stroke-opacity="${(+h.op).toFixed(2)}"/></pattern></defs><rect width="${VW}" height="${VH}" fill="url(#hexPat)"/></g>`;
+}
+function _hexMap(){ const camp=getCampaigns().find(c=>c.id===editingCampId); const map=camp&&_curMap(camp); return (map&&canDesignMaps(camp)) ? {camp, map} : null; }
+// Sliders redraw the grid as they move and save once let go.
+function hexSet(key, val, commit){
+  const cx=_hexMap(); if(!cx) return; const {camp, map}=cx;
+  const h=_hex(map);
+  if(key==='on') h.on=!h.on;
+  else if(key==='rot') h.rot=h.rot?0:90;
+  else if(key==='reset'){ Object.assign(h, HEX_DEF, {on:true}); }
+  else if(key==='col') h.col=/^#[0-9a-f]{6}$/i.test(val)?val:'#ffffff';
+  else h[key]=+val;
+  map.hex=h;
+  const svg=document.getElementById('campMapSvg'), g=svg&&svg.querySelector('.hex-grid');
+  if(!commit && g){ g.outerHTML=_hexSvg(map, +svg.dataset.vw, +svg.dataset.vh); const lbl=document.getElementById('hexSizeLbl'); if(lbl) lbl.textContent=(+h.s).toFixed(1); return; }
+  saveCampaign(camp); renderMap();
+}
+function _hexCtrlsHtml(map){
+  const h=_hex(map);
+  let o=`<span class="gf-label" style="margin-top:4px">HEX OVERLAY — for maps without a grid</span>
+    <button class="pc-pill ${h.on?'on gold':''}" onclick="hexSet('on',0,true)" title="${h.on?'Hide the hex grid':'Lay a hex grid over this map — the party sees it too'}">⬡ ${h.on?'hexes on':'hexes off'}</button>`;
+  if(h.on) o+=`
+    <span class="pc-pill" style="cursor:default;gap:6px;display:flex;align-items:center" title="Hex size">size <input type="range" min="2" max="60" step="0.25" value="${h.s}" oninput="hexSet('s',this.value)" onchange="hexSet('s',this.value,true)"><span id="hexSizeLbl" style="min-width:26px">${(+h.s).toFixed(1)}</span></span>
+    <span class="pc-pill" style="cursor:default;gap:6px;display:flex;align-items:center" title="Shift the grid left / right to line up with the map">↔ <input type="range" min="0" max="1" step="0.01" value="${h.ox}" oninput="hexSet('ox',this.value)" onchange="hexSet('ox',this.value,true)"></span>
+    <span class="pc-pill" style="cursor:default;gap:6px;display:flex;align-items:center" title="Shift the grid up / down to line up with the map">↕ <input type="range" min="0" max="1" step="0.01" value="${h.oy}" oninput="hexSet('oy',this.value)" onchange="hexSet('oy',this.value,true)"></span>
+    <button class="pc-pill" onclick="hexSet('rot',0,true)" title="Switch between pointy-top and flat-top hexes">${h.rot?'⬢ flat-top':'⬣ pointy-top'}</button>
+    <span class="pc-pill" style="cursor:default;gap:6px;display:flex;align-items:center" title="How strongly the grid shows">opacity <input type="range" min="0.05" max="1" step="0.05" value="${h.op}" oninput="hexSet('op',this.value)" onchange="hexSet('op',this.value,true)"></span>
+    <label class="pc-pill" style="gap:6px;display:flex;align-items:center;cursor:pointer" title="Grid colour">colour <input type="color" value="${esc(h.col)}" oninput="hexSet('col',this.value)" onchange="hexSet('col',this.value,true)" style="width:22px;height:18px;border:none;background:none;padding:0"></label>
+    <button class="pc-pill" onclick="hexSet('reset',0,true)" title="Back to the default size and position">↺ reset</button>`;
+  return o;
+}
+function _bGridSvg(map, VW, VH){
+  const b=_battle(map); if(!b) return '';
+  const c=_hex(map).on ? 0 : (+b.grid||0);   // the GM's hex overlay replaces the square grid
+  return `<g class="battle-grid" style="pointer-events:none">${c?`<defs><pattern id="bGridPat" width="${c}" height="${c}" patternUnits="userSpaceOnUse"><path d="M ${c} 0 L 0 0 0 ${c}" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="0.35"/></pattern></defs><rect width="${VW}" height="${VH}" fill="url(#bGridPat)"/>`:''}<rect x="1" y="1" width="${VW-2}" height="${VH-2}" fill="none" stroke="rgba(192,57,43,0.85)" stroke-width="2.5"/></g>`;
+}
+function _bTurnSvg(camp, map, VW, VH, gm){
+  const p=_bTurnPos(camp, map); if(!p) return '';
+  if(p.mk && !gm && !_npcSeenByParty(camp, map, p.mk, VW, VH)) return '';
+  const R=Math.max(0.6,_pinPx(map)*2.2), tr=_tokR(map,VW,R)*_tokScale(map);
+  return `<g class="battle-turn" style="pointer-events:none" transform="translate(${(p.x*VW).toFixed(1)},${(p.y*VH).toFixed(1)})"><circle r="${(tr*1.45).toFixed(2)}" fill="none" stroke="#e74c3c" stroke-width="${Math.max(0.4,tr*0.22).toFixed(2)}"/></g>`;
+}
+function _bLog(b, entry){ b.log=[{id:genItemId(), t:Date.now(), ...entry}].concat(b.log||[]).slice(0,12); }
+function _bStart(camp, map){
+  const mem=_campMembers(camp), VH=_bVH(map), split=[];
+  // The party marker breaks up so each hero can be moved on their own.
+  if(map.party){
+    map.tokens=map.tokens||{};
+    const free=mem.filter(c=>!map.tokens[String(c.id)]);
+    const R=Math.max(0.6,_pinPx(map)*2.2), gap=_tokR(map,440,R)*_tokScale(map)*2.6, perRow=Math.min(4,Math.max(1,free.length)), rows=Math.ceil(free.length/perRow);
+    free.forEach((c,i)=>{ const row=Math.floor(i/perRow), inRow=Math.min(perRow, free.length-row*perRow), col=i-row*perRow;
+      const x=map.party.x+(col-(inRow-1)/2)*gap/440, y=map.party.y+(row-(rows-1)/2)*gap/VH;
+      map.tokens[String(c.id)]={x:+Math.max(0.02,Math.min(0.98,x)).toFixed(4), y:+Math.max(0.02,Math.min(0.98,y)).toFixed(4)};
+      split.push(String(c.id)); });
+  }
+  map.battle={on:true, round:1, cur:null, grid:BATTLE_GRIDS[2], split, list:mem.map(c=>({id:genItemId(), kind:'pc', ref:String(c.id), name:c.name, init:null})), log:[]};
+}
+function _bEnd(map){
+  const b=map.battle; if(b && map.tokens) (b.split||[]).forEach(cid=>{ delete map.tokens[cid]; });   // back into the party marker
+  delete map.battle;
+}
+function _bRollInit(camp, map){
+  const b=_battle(map); if(!b) return;
+  b.list.forEach(e=>{
+    const c=e.kind==='pc' && _bChar(camp, e.ref), inf=c?initiativeInfo(c):{total:0, adv:[]};
+    const d=inf.adv.length ? Math.max(_bD(20),_bD(20)) : _bD(20);
+    if(e.kind==='pc' || e.init==null) e.init=d+inf.total;
+  });
+  _bSort(b); b.cur=b.list.length?b.list[0].id:null; b.round=1;
+  _bLog(b, {who:'', label:'Initiative rolled', total:null});
+}
+function _bStep(b, dir){
+  if(!b.list.length) return;
+  let i=b.list.findIndex(e=>e.id===b.cur);
+  if(i<0){ b.cur=b.list[0].id; return; }
+  i+=dir;
+  if(i>=b.list.length){ i=0; b.round=(b.round||1)+1; }
+  if(i<0){ i=b.list.length-1; b.round=Math.max(1,(b.round||1)-1); }
+  b.cur=b.list[i].id;
+}
+// Who may roll for the entry whose turn it is: the GM, or the hero's own player.
+function _bCanRoll(camp, map){
+  const b=_battle(map); const e=b&&b.list.find(x=>x.id===b.cur); if(!e) return false;
+  if(canDesignMaps(camp)) return true;
+  return e.kind==='pc' && _bMine(_bChar(camp, e.ref));
+}
+function _bDoRoll(camp, map, spec){
+  const b=_battle(map); const e=b&&b.list.find(x=>x.id===b.cur); if(!e || !_bCanRoll(camp, map)) return null;
+  const sides=[4,6,8,10,12,20,100].includes(+spec.sides)?+spec.sides:20, mod=Math.max(-30,Math.min(30,parseInt(spec.mod)||0));
+  const mode=sides===20 && (spec.mode==='advantage'||spec.mode==='disadvantage') ? spec.mode : 'normal';
+  const r1=_bD(sides), r2=mode!=='normal'?_bD(sides):null;
+  const kept=r2==null?r1:(mode==='advantage'?Math.max(r1,r2):Math.min(r1,r2));
+  const res={total:kept+mod, crit:sides===20&&kept===20, fail:sides===20&&kept===1,
+    detail:'d'+sides+': '+(r2!=null?'['+r1+','+r2+']→':'')+kept+(mod?(mod>0?' + '+mod:' − '+Math.abs(mod)):'')+(mode!=='normal'?' ('+mode+')':'')};
+  _bLog(b, {cid:e.id, who:_bInfo(camp, map, e, true).name, label:String(spec.label||('d'+sides)).slice(0,40), ...res});
+  return res;
+}
+// Every battle change, from the app or a pop-out, goes through here.
+function battleDo(camp, map, op, a1, a2){
+  const gm=canDesignMaps(camp), b=_battle(map);
+  let out=true;
+  if(op==='toggle'){ if(!gm) return false;
+    if(b){ _bEnd(map); toast('⚔ Battle over — the party regroups','var(--muted)'); }
+    else { _bStart(camp, map); toast('⚔ Battle! Roll initiative to begin','var(--red)'); } }
+  else if(!b) return false;
+  else if(op==='roll'){ out=_bDoRoll(camp, map, a1||{}); if(!out) return false; }
+  else if(!gm) return false;
+  else if(op==='next' || op==='prev') _bStep(b, op==='next'?1:-1);
+  else if(op==='rollInit') _bRollInit(camp, map);
+  else if(op==='grid'){ const i=BATTLE_GRIDS.indexOf(+b.grid||0); b.grid=BATTLE_GRIDS[(i+1)%BATTLE_GRIDS.length]; }
+  else if(op==='setInit'){ const e=b.list.find(x=>x.id===a1); if(!e) return false; e.init=(a2===''||a2==null||isNaN(+a2))?null:Math.round(+a2); _bSort(b); }
+  else if(op==='remove'){ if(b.cur===a1) _bStep(b, 1); b.list=b.list.filter(x=>x.id!==a1); if(!b.list.length) b.cur=null; }
+  else if(op==='add'){ const name=String(a1||'').trim().slice(0,40); if(!name) return false;
+    b.list.push({id:genItemId(), kind:'foe', ref:'', name, init:(a2===''||a2==null||isNaN(+a2))?_bD(20):Math.round(+a2)}); _bSort(b); }
+  else if(op==='addTokens'){ // NPC / creature tokens on this map join the fight
+    const have=new Set(b.list.filter(e=>e.kind==='mk').map(e=>String(e.ref))); let n=0;
+    _mapMarkers(map).forEach(m=>{ if(have.has(String(m.id))) return; const t=_tokEntry(camp, m.key); if(!t) return;
+      b.list.push({id:genItemId(), kind:'mk', ref:String(m.id), name:'', init:_bD(20)}); n++; });
+    if(!n){ toast('No new NPC or creature tokens on this map','var(--muted)'); return false; }
+    _bSort(b); }
+  else if(op==='addHeroes'){ // characters who joined the campaign after the fight began
+    const have=new Set(b.list.filter(e=>e.kind==='pc').map(e=>String(e.ref)));
+    _campMembers(camp).forEach(c=>{ if(!have.has(String(c.id))) b.list.push({id:genItemId(), kind:'pc', ref:String(c.id), name:c.name, init:null}); }); _bSort(b); }
+  else return false;
+  saveCampaign(camp);
+  if(document.getElementById('campMapSvg') && editingCampId===camp.id) renderMap();
+  return out;
+}
+function battleOp(op, a1, a2){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); const map=camp&&_curMap(camp); if(!map) return;
+  if(op==='add'){ a1=document.getElementById('bAddName')?.value; a2=document.getElementById('bAddInit')?.value; }
+  battleDo(camp, map, op, a1, a2);
+}
+// The battle strip shown above the map in the app.
+function _battleStripHtml(camp, map){
+  const b=_battle(map); if(!b) return '';
+  const gm=canDesignMaps(camp);
+  const cur=b.list.find(e=>e.id===b.cur), ci=cur&&_bInfo(camp, map, cur, gm);
+  const chips=b.list.map(e=>{ const i=_bInfo(camp, map, e, gm), on=e.id===b.cur;
+    return `<span class="bt-chip ${on?'on':''}" style="--cc:${i.color}" title="${esc(i.name)}"><b>${e.init==null?'–':e.init}</b>${i.img?`<img src="${esc(i.img)}" alt="" referrerpolicy="no-referrer">`:`<span class="bt-ic">${esc(i.label)}</span>`}${esc(_shortName(i.name))}${gm?`<button onclick="battleOp('remove','${jsq(e.id)}')" title="Remove from the fight">✕</button>`:''}</span>`; }).join('');
+  return `<div class="battle-strip">
+    <div class="bt-head"><span class="bt-title">⚔ ENCOUNTER · ROUND ${b.round||1}</span><span class="bt-now">${ci?esc(ci.name)+'’s turn':(b.list.length?'roll initiative to begin':'no combatants')}</span>
+    ${gm?`<button class="pc-pill" onclick="battleOp('prev')">◀ prev</button><button class="pc-pill on gold" onclick="battleOp('next')">next turn ▶</button><button class="pc-pill" onclick="battleOp('rollInit')">🎲 roll initiative</button><button class="pc-pill" onclick="battleOp('addTokens')" title="Add the NPC and creature tokens on this map to the initiative order">+ map tokens</button><button class="pc-pill" onclick="battleOp('grid')">▦ grid ${b.grid||'off'}</button>`:''}
+    <button class="pc-pill" onclick="popOutMap()" title="Open the encounter for the table — initiative on the right, dice on each hero's turn">⛶ pop out</button></div>
+    <div class="bt-list">${chips}</div>
+    ${gm?`<div class="bt-add"><input id="bAddName" placeholder="Add a foe…" maxlength="40"><input id="bAddInit" type="number" placeholder="init"><button class="pc-pill" onclick="battleOp('add')">add</button></div>`:''}
+  </div>`;
+}
+function _battleSig(camp){ try{ return JSON.stringify(_campMaps(camp).map(m=>m.battle||0)); }catch(e){ return ''; } }
+// A player's own app opens the dice screen when it becomes their hero's turn.
+const _bSeen = new Map();   // map id → last turn key seen
+function _battleWatch(camp){
+  if(!camp) return;
+  _campMaps(camp).forEach(map=>{
+    const b=_battle(map), key=b&&b.cur ? b.cur+'@'+(b.round||1) : '';
+    const prev=_bSeen.get(map.id); _bSeen.set(map.id, key);
+    if(prev===undefined || prev===key || !b || !b.cur || canDesignMaps(camp)) return;
+    const e=b.list.find(x=>x.id===b.cur), c=e&&e.kind==='pc'&&_bChar(camp, e.ref);
+    if(!_bMine(c)) return;
+    try{ switchDiceChar(c.id); nav('dice'); renderDiceScreen(); }catch(err){}
+    toast('⚔ '+c.name+', it’s your turn!','var(--red)');
+  });
+}
+// Rolls made on the dice screen during your hero's turn go into the battle log.
+function _battleNoteRoll(label, total, detail, crit, fail){
+  try{
+    const camp=getCampaigns().find(c=>c.id===getActiveCampId()); const ch=getActiveDiceChar(); if(!camp||!ch) return;
+    for(const map of _campMaps(camp)){
+      const b=_battle(map); const e=b&&b.list.find(x=>x.id===b.cur);
+      if(!e || e.kind!=='pc' || String(e.ref)!==String(ch.id)) continue;
+      _bLog(b, {cid:e.id, who:ch.name, label:String(label||'Roll').slice(0,40), total, detail, crit, fail});
+      saveCampaign(camp);
+      if(document.getElementById('campMapSvg') && editingCampId===camp.id) renderMap();
+      return;
+    }
+  }catch(err){}
+}
+
 /* Open the current map full-screen in its own window — a live, interactive
    (pan/zoom) copy that the table can play on. Minis and the party marker can
    be dragged there (and, for the GM, NPC tokens); a tray places minis split
@@ -15751,6 +16008,22 @@ window.__tohPop = {
     if(kind==='tok' && map.tokens){ delete map.tokens[String(id)]; saveCampaign(camp); renderMap(); return true; }
     return false;
   },
+  // Battle mode: what the initiative tracker and dice panel show. The pop-out
+  // is the table's screen, so hidden NPC tokens stay unnamed even for the GM.
+  battle(mapId){
+    const cx=_popCtx(mapId); if(!cx) return null; const {camp, map}=cx; const b=_battle(map), gm=canDesignMaps(camp);
+    if(!b) return {on:false, gm};
+    const list=b.list.map(e=>{ const i=_bInfo(camp, map, e, false); return {id:e.id, kind:e.kind, init:e.init, name:i.name, img:i.img, color:i.color, label:i.label}; });
+    let active=null; const e=b.list.find(x=>x.id===b.cur);
+    if(e){ const i=_bInfo(camp, map, e, false); active={id:e.id, kind:e.kind, name:i.name, img:i.img, color:i.color, label:i.label, canRoll:_bCanRoll(camp, map), mods:[]};
+      if(i.char){ const inf=initiativeInfo(i.char); active.mods.push({l:'Initiative', v:inf.total});
+        ['STR','DEX','CON','INT','WIS','CHA'].forEach(ab=>active.mods.push({l:ab, v:_abMod(i.char, ab)})); } }
+    return {on:true, gm, round:b.round||1, cur:b.cur, grid:+b.grid||0, list, active, log:(b.log||[]).slice(0,8)};
+  },
+  battleDo(mapId, op, a1, a2){
+    const cx=_popCtx(mapId); if(!cx) return false;
+    return battleDo(cx.camp, cx.map, op, a1, a2);
+  },
 };
 
 // Runs inside the pop-out window (serialised with toString, so it may only use
@@ -15768,7 +16041,7 @@ function _popoutMain(cfg){
   window.FIT=function(){ v={z:1,x:0,y:0}; ap(); };
   window.FS=function(){ var e=document.documentElement; (e.requestFullscreen||e.webkitRequestFullscreen||function(){}).call(e); };
   window.TRAY=function(){ trayOpen=!trayOpen; renderTray(); };
-  window.__rebind=function(mapId, vw, vh, keepView){ svg=document.querySelector('#vp svg'); VW=vw; VH=vh; MAPID=mapId; if(!keepView){ v={z:1,x:0,y:0}; placing=null; say(''); } ap(); renderTray(); };
+  window.__rebind=function(mapId, vw, vh, keepView){ svg=document.querySelector('#vp svg'); VW=vw; VH=vh; MAPID=mapId; if(!keepView){ v={z:1,x:0,y:0}; placing=null; say(''); } ap(); renderTray(); if(window.__rb) window.__rb(); };
   function esc(t){ return String(t==null?'':t).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   function chip(it){
     var face = it.img ? '<img src="'+esc(it.img)+'" alt="" style="width:22px;height:22px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 1.5px '+esc(it.color)+'">'
@@ -15828,7 +16101,77 @@ function _popoutMain(cfg){
   vp.addEventListener('dragover',function(e){ if(isTok(e)){ e.preventDefault(); e.dataTransfer.dropEffect='copy'; } });
   vp.addEventListener('drop',function(e){ if(!isTok(e)) return; e.preventDefault(); var key=e.dataTransfer.getData('application/x-toh-token'); var l=toMap(e); var a=api();
     if(!(a && a.place(MAPID,'key',key,l.x/VW,l.y/VH))){ say('Only the GM can place that token'); setTimeout(function(){ say(''); },2600); } });
-  ap(); renderTray();
+  // ── Battle mode: initiative on the right, dice for the hero whose turn it is
+  var bEl=document.getElementById('battle'), dEl=document.getElementById('dice'), ban=document.getElementById('bban');
+  var dMode='normal', dMod=0, dMin=false, dCur=null;
+  function sg(n){ return (n>=0?'+':'')+n; }
+  function face(it, px){ return it.img ? '<img src="'+esc(it.img)+'" alt="" referrerpolicy="no-referrer" style="width:'+px+'px;height:'+px+'px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 1.5px '+esc(it.color)+';flex:none">'
+      : '<span style="width:'+px+'px;height:'+px+'px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:'+Math.round(px*0.45)+'px;background:'+esc(it.color)+'55;box-shadow:0 0 0 1.5px '+esc(it.color)+';flex:none">'+esc(it.label)+'</span>'; }
+  function renderBattle(){
+    var a=api(), b=a&&a.battle(MAPID), on=!!(b&&b.on);
+    document.body.classList.toggle('battle', on);
+    var bb=document.getElementById('battleBtn');
+    if(bb){ bb.style.display=(b&&b.gm)?'':'none'; bb.innerHTML=on?'&#9876; end battle':'&#9876; battle'; }
+    if(!on){ bEl.style.display='none'; dEl.style.display='none'; ban.style.display='none'; dCur=null; document.body.classList.remove('dice-on'); return; }
+    var act=b.active;
+    ban.style.display='block';
+    ban.textContent='⚔ ENCOUNTER · ROUND '+b.round+(act?' · '+act.name+'’s turn':'');
+    // keep what the GM was typing across redraws
+    var nIn=document.getElementById('bAddN'), iIn=document.getElementById('bAddI');
+    var keepN=nIn?nIn.value:'', keepI=iIn?iIn.value:'', focus=document.activeElement&&document.activeElement.id;
+    var h='<div class="bh">INITIATIVE <span style="float:right">ROUND '+b.round+'</span></div>';
+    if(b.gm) h+='<div class="bc"><button data-op="prev" title="Previous turn">&#9664;</button><button data-op="next" class="go">next turn &#9654;</button></div>'
+      +'<div class="bc"><button data-op="rollInit">&#127922; roll initiative</button><button data-op="addTokens" title="Add the NPC and creature tokens on this map">+ tokens</button><button data-op="grid" title="Grid size">&#9638; '+(b.grid||'off')+'</button></div>';
+    if(!b.list.length) h+='<div class="bn0">No one in the fight yet.</div>';
+    h+=b.list.map(function(e){ var cur=e.id===b.cur;
+      return '<div class="br'+(cur?' cur':'')+'">'
+        +(b.gm?'<input class="bin" type="number" data-id="'+esc(e.id)+'" value="'+(e.init==null?'':e.init)+'" placeholder="&ndash;">':'<span class="bi">'+(e.init==null?'&ndash;':e.init)+'</span>')
+        +face(e, 26)+'<span class="bn">'+esc(e.name)+(cur?' <em>TURN</em>':'')+'</span>'
+        +(b.gm?'<button class="bx" data-op="remove" data-id="'+esc(e.id)+'" title="Remove from the fight">&#10005;</button>':'')+'</div>'; }).join('');
+    if(b.gm) h+='<div class="badd"><input id="bAddN" placeholder="Add a foe&hellip;" maxlength="40"><input id="bAddI" type="number" placeholder="init"><button data-op="add">add</button></div>';
+    if(b.log.length) h+='<div class="bh" style="margin-top:10px">ROLLS</div>'+b.log.map(function(l){
+      return '<div class="bl">'+(l.total==null?'<i>'+esc(l.label)+'</i>':'<b class="'+(l.crit?'crit':l.fail?'fail':'')+'">'+esc(l.total)+'</b> '+esc(l.who)+' &middot; '+esc(l.label))+'</div>'; }).join('');
+    bEl.innerHTML=h; bEl.style.display='block';
+    nIn=document.getElementById('bAddN'); iIn=document.getElementById('bAddI');
+    if(nIn){ nIn.value=keepN; if(focus==='bAddN') nIn.focus(); } if(iIn){ iIn.value=keepI; if(focus==='bAddI') iIn.focus(); }
+    // The dice come up for each hero as their turn starts
+    // The dice column on the left follows the turn: heroes roll for themselves, the GM for foes
+    document.body.classList.toggle('dice-on', !!act);
+    if(!act){ dEl.style.display='none'; dCur=null; return; }
+    if(dCur!==act.id){ dCur=act.id; dMin=false; dMod=0; dMode='normal'; }
+    var last=null; for(var i=0;i<b.log.length;i++){ if(b.log[i].cid===act.id){ last=b.log[i]; break; } if(b.log[i].total==null) break; }
+    var d='<div class="dh">'+face(act, 34)+'<div style="flex:1;min-width:0"><div class="dt">'+esc(act.name)+'’s turn</div><div class="ds">'+(act.kind!=='pc'?(act.canRoll?'GM: roll for this foe':'The GM is rolling&hellip;'):act.canRoll?'Roll here, or from the dice screen in the app':'Waiting for '+esc(act.name)+' to roll&hellip;')+'</div></div><button data-dop="min" title="'+(dMin?'Show':'Hide')+' the dice">'+(dMin?'&#9650;':'&#9660;')+'</button></div>';
+    if(last) d+='<div class="dr"><div class="dv '+(last.crit?'crit':last.fail?'fail':'')+'">'+esc(last.total)+'</div><div class="dd">'+esc(last.label)+'<br><span>'+esc(last.detail||'')+'</span>'+(last.crit?'<br><b class="crit">CRITICAL!</b>':last.fail?'<br><b class="fail">FUMBLE</b>':'')+'</div></div>';
+    if(!dMin && act.canRoll){
+      d+='<div class="dm">'+[['advantage','&#8593; adv'],['normal','normal'],['disadvantage','&#8595; dis']].map(function(m){ return '<button data-dop="mode" data-v="'+m[0]+'" class="'+(dMode===m[0]?'on':'')+'">'+m[1]+'</button>'; }).join('')
+        +'<span class="dmod"><button data-dop="mod" data-v="-1">&minus;</button><span>'+sg(dMod)+'</span><button data-dop="mod" data-v="1">+</button></span></div>';
+      d+='<div class="dk">'+[4,6,8,10,12,20,100].map(function(n){ return '<button data-dop="roll" data-s="'+n+'" data-m="'+dMod+'" data-l="d'+n+(dMod?' '+sg(dMod):'')+'">d'+n+'</button>'; }).join('')+'</div>';
+      if(act.mods.length) d+='<div class="dq">'+act.mods.map(function(m){ return '<button data-dop="roll" data-s="20" data-m="'+m.v+'" data-l="'+esc(m.l)+(m.l==='Initiative'?'':' check')+'">'+esc(m.l)+' '+sg(m.v)+'</button>'; }).join('')+'</div>';
+    }
+    dEl.innerHTML=d; dEl.style.display='block';
+  }
+  window.BATTLE=function(){ var a=api(); if(!a){ say('The app window is closed — reopen the pop-out from the app'); return; } a.battleDo(MAPID,'toggle'); renderBattle(); };
+  bEl.addEventListener('click', function(e){
+    var t=e.target.closest('button[data-op]'); if(!t) return; var a=api(); if(!a) return;
+    var op=t.getAttribute('data-op'), ok;
+    if(op==='add'){ var n=document.getElementById('bAddN'), iv=document.getElementById('bAddI'); ok=a.battleDo(MAPID,'add', n?n.value:'', iv?iv.value:''); if(ok){ if(n) n.value=''; if(iv) iv.value=''; } }
+    else ok=a.battleDo(MAPID, op, t.getAttribute('data-id'));
+    renderBattle();
+  });
+  bEl.addEventListener('change', function(e){ var t=e.target; if(!t.classList.contains('bin')) return; var a=api(); if(!a) return; a.battleDo(MAPID,'setInit', t.getAttribute('data-id'), t.value); renderBattle(); });
+  bEl.addEventListener('keydown', function(e){ if(e.key==='Enter' && (e.target.id==='bAddN'||e.target.id==='bAddI')){ var b=bEl.querySelector('button[data-op="add"]'); if(b) b.click(); } });
+  dEl.addEventListener('click', function(e){
+    var t=e.target.closest('button[data-dop]'); if(!t) return; var op=t.getAttribute('data-dop');
+    if(op==='min') dMin=!dMin;
+    else if(op==='mode') dMode=t.getAttribute('data-v');
+    else if(op==='mod') dMod=Math.max(-20,Math.min(20,dMod+(+t.getAttribute('data-v'))));
+    else if(op==='roll'){ var a=api(); if(!a) return;
+      var r=a.battleDo(MAPID,'roll',{sides:+t.getAttribute('data-s'), mod:+t.getAttribute('data-m'), mode:dMode, label:t.getAttribute('data-l')});
+      if(!r){ say('Only the GM or this hero’s player can roll'); setTimeout(function(){ say(''); },2600); } }
+    renderBattle();
+  });
+  window.__rb=renderBattle;
+  ap(); renderTray(); renderBattle();
 }
 
 function popOutMap(){
@@ -15858,11 +16201,34 @@ function popOutMap(){
     +'#tray .ti{display:inline-flex;gap:3px}#tray .tb{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12px;padding:5px 10px;border-radius:999px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.06);color:#e8e0ff;cursor:pointer}'
     +'#tray .tb.on{border-color:#c9a227;color:#c9a227}#tray .tb.x{padding:5px 8px}'
     +'#hint{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:11;background:rgba(201,162,39,0.95);color:#1a1300;font-size:13px;font-weight:600;padding:6px 14px;border-radius:999px;display:none}'
+    // Battle mode: red frame, round banner, initiative tracker on the right, dice panel for the current hero
+    +'body.battle #vp{box-shadow:inset 0 0 0 3px #c0392b,inset 0 0 60px rgba(192,57,43,0.45)}body.battle #vp{right:290px}body.battle.dice-on #vp{left:280px}body.battle.dice-on #tray{left:280px}body.battle.dice-on #bban{left:292px}body.battle #ttl{display:none}'
+    +'#bban{position:fixed;top:12px;left:12px;z-index:10;display:none;background:rgba(120,20,15,0.92);border:1px solid #e74c3c;color:#fff;font-family:Cinzel,serif;font-size:13px;letter-spacing:1px;padding:6px 14px;border-radius:999px;max-width:40vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+    +'#battle{position:fixed;top:56px;right:10px;bottom:10px;width:270px;overflow:auto;z-index:10;background:rgba(20,16,40,0.94);border:1px solid rgba(231,76,60,0.6);border-radius:12px;padding:10px;display:none;color:#e8e0ff;box-sizing:border-box}'
+    +'#battle .bh{font-family:Cinzel,serif;font-size:11px;letter-spacing:1px;color:#e74c3c;margin:0 0 8px}#battle .bn0{font-size:12px;color:#b8b0d8;margin:8px 0}'
+    +'#battle .bc{display:flex;gap:5px;margin-bottom:6px}#battle button{font:inherit;font-size:12px;padding:5px 8px;border-radius:8px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.06);color:#e8e0ff;cursor:pointer}'
+    +'#battle .bc button{flex:1}#battle .bc .go{flex:2;border-color:#c9a227;color:#c9a227;font-weight:600}'
+    +'#battle .br{display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:9px;margin-bottom:4px;border:1px solid transparent}'
+    +'#battle .br.cur{border-color:#e74c3c;background:rgba(192,57,43,0.22);box-shadow:0 0 10px rgba(231,76,60,0.35)}'
+    +'#battle .bi{font-family:Cinzel,serif;font-size:14px;color:#c9a227;width:30px;text-align:center;flex:none}'
+    +'#battle .bin{width:38px;flex:none;font:inherit;font-size:13px;text-align:center;padding:3px 2px;border-radius:6px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:#c9a227}'
+    +'#battle .bin::-webkit-inner-spin-button,#battle .bin::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}#battle .bin{-moz-appearance:textfield}'
+    +'#battle .bn{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#battle .bn em{font-style:normal;font-size:9px;letter-spacing:1px;color:#e74c3c;font-weight:700}'
+    +'#battle .bx{padding:2px 6px;font-size:10px;border-color:transparent;background:none;color:#b8b0d8}'
+    +'#battle .badd{display:flex;gap:5px;margin-top:8px}#battle .badd input{min-width:0;flex:1;font:inherit;font-size:12px;padding:5px 7px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:#e8e0ff}#battle .badd input[type=number]{flex:none;width:52px}'
+    +'#battle .bl{font-size:11px;color:#b8b0d8;margin:3px 0}#battle .bl b{color:#e8e0ff;font-size:13px}.crit{color:#27ae60!important}.fail{color:#e74c3c!important}'
+    +'#dice{position:fixed;left:10px;top:10px;bottom:10px;width:260px;overflow:auto;z-index:10;background:rgba(20,16,40,0.95);border:1px solid #c9a227;border-radius:14px;padding:10px 12px;display:none;color:#e8e0ff;box-sizing:border-box;box-shadow:0 6px 30px rgba(0,0,0,0.6)}'
+    +'#dice .dh{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid rgba(201,162,39,0.35)}#dice .dt{font-family:Cinzel,serif;font-size:14px;color:#c9a227;letter-spacing:0.5px}#dice .ds{font-size:11px;color:#b8b0d8}'
+    +'#dice button{font:inherit;font-size:12px;padding:6px 9px;border-radius:9px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.06);color:#e8e0ff;cursor:pointer}'
+    +'#dice .dr{display:flex;align-items:center;gap:12px;margin:8px 0 2px;padding:6px 10px;border-radius:10px;background:rgba(0,0,0,0.25)}#dice .dv{font-family:Cinzel,serif;font-size:34px;font-weight:700;color:#c9a227;min-width:52px;text-align:center}#dice .dd{font-size:12px}#dice .dd span{color:#b8b0d8;font-size:11px}'
+    +'#dice .dm{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:10px}#dice .dm .on{border-color:#c9a227;color:#c9a227}#dice .dmod{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;font-size:14px;margin-top:4px}#dice .dm>button{flex:1}'
+    +'#dice .dk,#dice .dq{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}#dice .dk button{flex:1 0 calc(25% - 5px);font-weight:600;padding:10px 0}#dice .dq button{flex:1 0 calc(50% - 5px)}#dice .dq button{font-size:11px;padding:4px 8px}'
+    +'@media (max-width:760px){body.battle #vp{right:0;bottom:46vh}#battle{top:auto;left:10px;width:auto;height:44vh}body.battle.dice-on #vp{left:0}body.battle.dice-on #tray{left:10px}body.battle.dice-on #bban{left:12px}#dice{top:auto;left:10px;right:10px;width:auto;max-height:30vh;bottom:calc(44vh + 18px)}#bban{max-width:calc(100% - 24px);top:52px}}'
     +'</style></head><body>'
-    +'<div id="ttl">'+title+'</div><div id="hint"></div>'
+    +'<div id="ttl">'+title+'</div><div id="bban"></div><div id="hint"></div>'
     +'<div id="vp">'+clone.outerHTML+'</div>'
-    +'<div id="bar"><span id="live" style="align-self:center;color:#27ae60;font-size:11px;font-weight:600;margin-right:4px">&#9679; LIVE</span><button id="trayBtn" onclick="TRAY()">&#129485; tokens</button><button onclick="Z(1/1.4)">&minus;</button><button onclick="Z(1.4)">&plus;</button><button onclick="FIT()">fit</button><button onclick="FS()">&#9974; full screen</button></div>'
-    +'<div id="tray"></div>'
+    +'<div id="bar"><span id="live" style="align-self:center;color:#27ae60;font-size:11px;font-weight:600;margin-right:4px">&#9679; LIVE</span><button id="battleBtn" onclick="BATTLE()" style="display:none;border-color:#c0392b;color:#ff8a7a">&#9876; battle</button><button id="trayBtn" onclick="TRAY()">&#129485; tokens</button><button onclick="Z(1/1.4)">&minus;</button><button onclick="Z(1.4)">&plus;</button><button onclick="FIT()">fit</button><button onclick="FS()">&#9974; full screen</button></div>'
+    +'<div id="tray"></div><div id="battle"></div><div id="dice"></div>'
     +'<script>('+_popoutMain.toString()+')('+cfg+');<\/script></body></html>');
   w.document.close();
   _popouts.push({ win:w, mapId:map.id });
@@ -20473,8 +20839,25 @@ let _placingTok = null, _tokMenu = false;
 function _tokR(map, VW, R){ return Math.max(R*1.5, VW*0.02); }
 // Party marker and character minis share one size per map, the way place pins
 // share pinPx. Selected (tap) → dashed ring + gold grip; drag the grip to resize.
-const TOK_SCALE_MIN=0.175, TOK_SCALE_MAX=3;
+// The floor is low enough for the whole party marker to shrink to the size of
+// the smallest place pin.
+const TOK_SCALE_MIN=0.005, TOK_SCALE_MAX=3;
 function _tokScale(map){ return Math.max(TOK_SCALE_MIN, Math.min(TOK_SCALE_MAX, +map.tokScale||1)); }
+// Half-size of the party marker at tokScale 1 (same maths as its drawing in renderMap).
+function _partyExt1(camp, map, VW){
+  const R=Math.max(0.6,_pinPx(map)*2.2), solo=map.tokens||{};
+  const n=_campMembers(camp).filter(c=>!solo[String(c.id)]).length;
+  if(!n) return R;
+  const tr=_tokR(map,VW,R), perRow=Math.min(4,n), rows=Math.ceil(n/perRow), gap=tr*1.6;
+  return Math.max((perRow-1)/2*gap, (rows-1)/2*gap)+tr*1.12;
+}
+// Shrink (or grow) the party marker and minis so the party is as big as a place pin.
+function matchPartyToPins(){
+  const camp=getCampaigns().find(c=>c.id===editingCampId); const map=camp&&_curMap(camp); if(!map) return;
+  const target=_pinPx(map)*1.5;   // a pin's outer ring
+  map.tokScale=+Math.max(TOK_SCALE_MIN, Math.min(TOK_SCALE_MAX, target/_partyExt1(camp, map, 440))).toFixed(4);
+  saveCampaign(camp); renderMap(); toast('🚩 Party marker sized to match the place pins','var(--gold)');
+}
 function _tokSelSvg(ext, u){ // u: stroke/handle unit, ext: half-size of the marker
   const gh=ext*1.12;
   return `<circle r="${(ext*1.3).toFixed(2)}" style="fill:none;stroke:var(--gold);stroke-width:${Math.max(0.12,u*0.3).toFixed(2)}px;stroke-dasharray:${(u*0.5).toFixed(2)} ${(u*0.4).toFixed(2)};opacity:0.9;pointer-events:none"/>`
