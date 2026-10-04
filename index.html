@@ -792,6 +792,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .wbar-fill{height:100%;border-radius:3px;transition:width 0.4s;}
 .item-card{background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:12px 13px;margin-bottom:8px;position:relative;}
 .item-top{display:flex;align-items:flex-start;gap:10px;}
+.ii-img{width:1.5em;height:1.5em;object-fit:contain;display:inline-block;vertical-align:middle;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5));-webkit-user-drag:none;user-select:none;}
 .item-icon{width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--surface);border:1px solid var(--border);flex-shrink:0;}
 .item-name{font-family:'Cinzel',serif;font-size:13px;margin-bottom:2px;}
 .item-meta{font-size:12px;color:var(--muted);}
@@ -2628,6 +2629,88 @@ const CONDITIONS=[
   {id:'inspired',n:'Inspired',i:'🌠',c:'#d4ac0d',force:'advantage',d:'Ability check with advantage.'},
 ];
 const TYPE_ICONS={weapon:'⚔',armor:'🛡',potion:'🧪',scroll:'📜',wondrous:'✨',ring:'💍',rod:'🔱',staff:'🪄',wand:'🌟',gem:'💎',treasure:'🪙',tool:'🔧',misc:'📦'};
+
+// Rendered item icons (Quaternius RPG items pack, CC0) in models/icons/.
+// Picked by name, then type; null means the type's emoji. Variants of one
+// kind (rings, potions…) are picked by name so an item always looks the same.
+const _ICON_PICK=(n,list)=>list[(_hashStr(n)>>>0)%list.length];
+// Weapon/ammunition icon from a bit of text; '' means "known, but no icon".
+function _weaponIconOf(n,gilded){
+  const g=b=>gilded?b+'_Golden':b;
+  if(/\bshield\b/.test(n)) return '';
+  if(/\barrows?\b|\bbolts?\b|ammunition/.test(n)) return g('Arrow');
+  if(/crossbow|\bsling\b|\bnet\b|whip|staff|spear|pike|halberd|glaive|trident|lance|javelin/.test(n)) return '';
+  if(/\bbow\b|longbow|shortbow|oathbow/.test(n)) return gilded?'Bow_Golden':'Bow_Wooden';
+  if(/\bdarts?\b/.test(n)) return g('Dart');
+  if(/dagger|knife|sickle|kukri/.test(n)) return g('Dagger');
+  if(/great ?sword|claymore|two.?handed sword|flamberge/.test(n)) return g('Sword_Big');
+  if(/sword|scimitar|rapier|blade|katana|sabre|saber|cutlass|falchion|avenger|vorpal/.test(n)) return g('Sword');
+  if(/great ?axe|battle ?axe/.test(n)) return g('Axe_Double');
+  if(/\baxe|hand ?axe/.test(n)) return g('Axe_Small');
+  if(/maul|hammer|mace|morningstar|flail|club|war pick/.test(n)) return g('Hammer_Double');
+  return null;
+}
+function itemIconName(item){
+  if(!item) return null;
+  const n=String(item.name||'').toLowerCase(), t=item.type;
+  const gilded=/legendary|artifact/.test(item.rarity||'')||/\bgold|gilded|holy|\bsun/.test(n);   // as on the 3D doll
+  // Weapons and ammunition: the name decides; magic weapons that only name
+  // their base in the description ("Longsword, …") fall back to that.
+  if(t==='weapon'||t==='misc'||t==='armor'){
+    let w=_weaponIconOf(n,gilded);
+    if(w==null&&t==='weapon') w=_weaponIconOf(String(item.desc||'').toLowerCase().split(/[.,;(]/)[0],gilded);
+    if(w!=null||t==='weapon') return w||null;
+  }
+  if(t==='armor'){
+    if(/demon|\bvulnerab|smolder|shadow|black|etherealness/.test(n)) return 'Armor_Black';
+    if(/legendary|artifact/.test(item.rarity||'')||/dragon|invulnerab|gold/.test(n)) return 'Armor_Golden';
+    if(/leather|hide|padded|brigandine/.test(n)) return 'Armor_Leather';
+    if(/\bplate|splint|dwarven|adamantine/.test(n)) return 'Armor_Metal2';
+    return 'Armor_Metal';
+  }
+  if(t==='potion'||/\bvial\b|\bflask\b|antitoxin|elixir|philter|bottle/.test(n)){
+    if(/heal|vitality/.test(n)) return 'Potion1_Filled_Red';
+    if(/poison|acid|antitoxin/.test(n)) return 'Potion3_Filled';
+    if(/water|frost|cold|ice/.test(n)) return 'Potion1_Filled_Blue';
+    return _ICON_PICK(n,['Potion2_Filled','Potion4_Filled','Potion5_Filled','Potion6_Filled','Potion7_Filled','Potion8_Filled','Potion9_Filled','Potion10_Filled','Potion11_Filled']);
+  }
+  if(t==='scroll') return /map|chart|letter|deed|contract/.test(n)?'Parchment':'Scroll';
+  if(t==='ring') return _ICON_PICK(n,['Ring1','Ring2','Ring3','Ring4','Ring5','Ring6','Ring7']);
+  if(t==='gem'||/ioun stone|\bgem of\b|crystal|\bshard\b/.test(n)){
+    if(/ioun/.test(n)) return _ICON_PICK(n,['Crystal1','Crystal2','Crystal3','Crystal4','Crystal5']);
+    if(/amethyst/.test(n)) return 'Crystal1';
+    if(/ruby|garnet|blood|fire/.test(n)) return 'Crystal4';
+    if(/emerald|jade|malachite|peridot/.test(n)) return 'Crystal3';
+    if(/diamond|sapphire|turquoise|aquamarine|seeing|brightness/.test(n)) return 'Crystal5';
+    if(/rose|pink|quartz|spinel/.test(n)) return 'Crystal2';
+    if(t==='gem') return 'Mineral';
+  }
+  if(t==='treasure'||/\bcoins?\b|gold piece|ingot|\bbars?\b/.test(n)){
+    if(/ingot|\bbars?\b/.test(n)) return 'Gold_Ingots';
+    if(/chest|hoard|coffer/.test(n)) return 'Chest_Ingots';
+    if(/art|chalice|goblet|cup|idol|statue/.test(n)) return 'Chalice';
+    if(t==='treasure'||/coin|gold piece/.test(n)) return 'Coin';
+  }
+  if(/amulet|necklace|periapt|medallion|pendant|talisman|scarab|brooch|locket|prayer beads/.test(n)) return _ICON_PICK(n,['Necklace1','Necklace2','Necklace3']);
+  if(/crown|circlet|tiara|diadem/.test(n)) return /circlet|tiara|diadem/.test(n)?'Crown':'Crown2';
+  if(/glove|gauntlet/.test(n)) return 'Glove';
+  if(/backpack|haversack/.test(n)) return 'Backpack';
+  if(/pouch|purse/.test(n)) return 'Pouch';
+  if(/\bbag\b|sack|ball bearings|caltrops/.test(n)) return 'Bag';
+  if(/manual|tome|spellbook|\bbook\b|grimoire|libram|codex|journal/.test(n)) return _ICON_PICK(n,['Book1_Closed','Book2_Closed','Book3_Closed','Book4_Closed']);
+  if(/\bchest\b|coffer|strongbox/.test(n)) return 'Chest_Closed';
+  if(/\bkeys?\b/.test(n)) return _ICON_PICK(n,['Key1','Key2','Key3','Key4']);
+  if(/padlock|\block\b/.test(n)) return 'Padlock';
+  if(/ration|\bmeat\b|jerky|\bfood\b/.test(n)) return 'ChickenLeg';
+  if(/skull/.test(n)) return 'Skull';
+  if(/\bbones?\b/.test(n)) return 'Bone';
+  return null;
+}
+// An item's icon as HTML: the rendered icon, else the type's emoji.
+function itemIcon(item){
+  const ic=itemIconName(item), emo=TYPE_ICONS[item&&item.type]||'📦';
+  return ic?'<img class="ii-img" src="models/icons/'+ic+'.webp" alt="'+emo+'" loading="lazy" draggable="false">':emo;
+}
 
 // Returns all loot items assigned to this character
 function getCharLootItems(char){
@@ -4750,7 +4833,7 @@ function renderGearTab(char,cls,elId,editable){
     items.forEach(item=>{
       const pct=Math.max(0,Math.round((char.currentHP/char.maxHP)*100));
       html+=`<div class="item-card"><div class="item-top">
-        <div class="item-icon">${TYPE_ICONS[item.type]||'📦'}</div>
+        <div class="item-icon">${itemIcon(item)}</div>
         <div style="flex:1;min-width:0"><div class="item-name">${esc(item.name)}${item.qty>1?(' ×'+item.qty):''}</div>
         <div class="item-meta">${item.type}${item.value>0?' · '+item.value+' gp':''}</div>
         <div class="item-badges"><span class="ibadge r-${item.rarity}">${item.rarity}</span></div></div>
@@ -11088,7 +11171,7 @@ Rules:
     }
     items.forEach((item,i) => {
       html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px">
-        <span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span>
+        <span style="font-size:18px">${itemIcon(item)}</span>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-family:'Cinzel',serif">${item.qty>1?item.qty+'× ':''}${esc(item.name)}</div>
           <div style="font-size:10px;color:var(--muted)">${item.rarity}${item.value?' · '+item.value+'gp':''}</div>
@@ -11199,7 +11282,7 @@ Rules:
     let html = `<div class="divider"><span>Found ${scanItems.length} item${scanItems.length!==1?'s':''} in Session ${sIdx+1}</span></div>`;
     scanItems.forEach((item,i)=>{
       html += `<div data-loot-idx="${i}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px">
-        <span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span>
+        <span style="font-size:18px">${itemIcon(item)}</span>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-family:'Cinzel',serif">${item.qty>1?item.qty+'× ':''}${esc(item.name)}</div>
           <div style="font-size:10px;color:var(--muted)">${esc(item.rarity||'common')}${item.value?' · '+item.value+'gp':''}${item.found?' · '+esc(item.found):''}</div>
@@ -11346,7 +11429,7 @@ function parseBulkLoot(){
 
   items.forEach((item,i) => {
     html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px">
-      <span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span>
+      <span style="font-size:18px">${itemIcon(item)}</span>
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-family:'Cinzel',serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.qty>1?item.qty+'× ':''}${esc(item.name)}</div>
         <div style="font-size:10px;color:var(--muted)">${item.rarity}${item.value?' · '+item.value+'gp':''} → Party Pool</div>
@@ -11380,7 +11463,7 @@ function parseBulkLootPreviewOnly(){
   }
   items.forEach((item,i) => {
     html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;margin-bottom:5px">
-      <span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span>
+      <span style="font-size:18px">${itemIcon(item)}</span>
       <div style="flex:1;min-width:0"><div style="font-size:12px;font-family:'Cinzel',serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${item.qty>1?item.qty+'× ':''}${esc(item.name)}</div>
       <div style="font-size:10px;color:var(--muted)">${item.rarity}${item.value?' · '+item.value+'gp':''} → Party Pool</div></div>
       <span onclick="removeBulkPreviewItem(${i})" style="color:var(--red);cursor:pointer;font-size:16px;padding:0 6px;flex-shrink:0">✕</span>
@@ -11445,7 +11528,7 @@ function renderInventory(){
   html+=`<div class="inv-summary"><div class="inv-sum-card"><div class="isc-label">ITEMS</div><div class="isc-val">${owned.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val" style="font-size:15px">${fmtGP(totalVal)}<span style="font-size:9px;color:var(--muted)"> gp</span></div></div><div class="inv-sum-card"><div class="isc-label">WEIGHT</div><div class="isc-val" style="font-size:15px;color:${wC}">${totalWt%1===0?totalWt:totalWt.toFixed(1)}<span style="font-size:9px;color:var(--muted)"> lb</span></div></div></div>`;
   if(char)html+=`<div class="wbar-wrap"><div class="wbar-labels"><span>Carry weight</span><span>${totalWt%1===0?totalWt:totalWt.toFixed(1)} / ${maxCarry} lb</span></div><div class="wbar-track"><div class="wbar-fill" style="width:${wPct}%;background:${wC}"></div></div></div>`;
   if(!filtered.length)html+=`<div class="empty-state"><div class="es-icon">🎒</div><p>No items here.</p></div>`;
-  else html+=filtered.map(item=>{const icon=TYPE_ICONS[item.type]||'📦';const al=item.attune==='attuned'?'✦ Attuned':item.attune==='required'?'◇ Needs Attune':'';return`<div class="item-card fadein"><div class="item-top"><div class="item-icon">${icon}</div><div style="flex:1;min-width:0"><div class="item-name">${esc(item.name)}${item.qty>1?(' <span style="color:var(--muted);font-size:11px">×'+item.qty+'</span>'):''}</div><div class="item-meta">${item.type}${item.value>0?' · '+item.value+' gp':''}${item.weight>0?' · '+item.weight+' lb':''}</div><div class="item-badges"><span class="ibadge r-${item.rarity}">${item.rarity.replace('-',' ')}</span>${al?('<span class="ibadge" style="border-color:var(--purple);color:var(--purple)">'+al+'</span>'):''}</div></div></div>${item.desc?('<div class="item-desc">'+esc(item.desc)+'</div>'):''}<div class="item-acts">${item.owner!=='pool'?('<button class="icon-btn" title="To pool" onclick="itemToPool(\''+item.id+'\')">🎒</button>'):''} ${item.owner==='pool'?('<button class="icon-btn" style="color:var(--gold)" title="Assign" onclick="assignFromPool(\''+item.id+'\')">→</button>'):''}<button class="icon-btn" title="Edit" onclick="openItemEdit('${item.id}')">✎</button><button class="icon-btn" style="color:var(--red)" title="Remove" onclick="removeItem('${item.id}')">✕</button></div></div>`;}).join('');
+  else html+=filtered.map(item=>{const icon=itemIcon(item);const al=item.attune==='attuned'?'✦ Attuned':item.attune==='required'?'◇ Needs Attune':'';return`<div class="item-card fadein"><div class="item-top"><div class="item-icon">${icon}</div><div style="flex:1;min-width:0"><div class="item-name">${esc(item.name)}${item.qty>1?(' <span style="color:var(--muted);font-size:11px">×'+item.qty+'</span>'):''}</div><div class="item-meta">${item.type}${item.value>0?' · '+item.value+' gp':''}${item.weight>0?' · '+item.weight+' lb':''}</div><div class="item-badges"><span class="ibadge r-${item.rarity}">${item.rarity.replace('-',' ')}</span>${al?('<span class="ibadge" style="border-color:var(--purple);color:var(--purple)">'+al+'</span>'):''}</div></div></div>${item.desc?('<div class="item-desc">'+esc(item.desc)+'</div>'):''}<div class="item-acts">${item.owner!=='pool'?('<button class="icon-btn" title="To pool" onclick="itemToPool(\''+item.id+'\')">🎒</button>'):''} ${item.owner==='pool'?('<button class="icon-btn" style="color:var(--gold)" title="Assign" onclick="assignFromPool(\''+item.id+'\')">→</button>'):''}<button class="icon-btn" title="Edit" onclick="openItemEdit('${item.id}')">✎</button><button class="icon-btn" style="color:var(--red)" title="Remove" onclick="removeItem('${item.id}')">✕</button></div></div>`;}).join('');
   el.innerHTML=html;
 }
 function removeItem(id){saveItems(getItems().filter(i=>i.id!==id));renderInventory();renderPool();toast('Item removed','var(--red)');}
@@ -11579,7 +11662,7 @@ function renderAddTab(){
   <div class="divider"><span>Quick Add</span></div>
   <div class="quick-grid">${QUICK_ITEMS.map((q,qi)=>`
     <div class="quick-tile" onclick="quickAdd(${qi})">
-      <span style="font-size:22px">${TYPE_ICONS[q.type]}</span>
+      <span style="font-size:22px">${itemIcon(q)}</span>
       <div><div style="font-family:'Cinzel',serif;font-size:11px">${esc(q.name)}</div>
       <div style="font-size:10px;color:var(--muted)" class="rtext-${q.rarity}">${q.rarity} · ${q.value} gp</div></div>
     </div>`).join('')}
@@ -11636,7 +11719,7 @@ function dndItemSearch(q) {
     return `<div class="dnd-sr" data-idx="${i}"
       style="display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border)"
       onmousedown="dndSelectItem(${i})">
-      <span style="font-size:18px;width:22px;text-align:center;flex-shrink:0">${TYPE_ICONS[item.type]||'📦'}</span>
+      <span style="font-size:18px;width:22px;text-align:center;flex-shrink:0">${itemIcon(item)}</span>
       <div style="flex:1;min-width:0;overflow:hidden">
         <div style="font-family:'Cinzel',serif;font-size:12px;color:${rc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(item.name)}${attTag}</div>
         <div style="font-size:10px;color:var(--muted)">${item.rarity} ${item.type}${item.value ? ' · ' + item.value + ' gp' : ''}</div>
@@ -11782,7 +11865,7 @@ function renderPool(){
   }
 
   let html = scanCard + `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px"><div class="inv-sum-card"><div class="isc-label">UNASSIGNED</div><div class="isc-val">${items.reduce((s,i)=>s+i.qty,0)}</div></div><div class="inv-sum-card"><div class="isc-label">VALUE</div><div class="isc-val">${fmtGP(totVal)} <span style="font-size:9px;color:var(--muted)">gp</span></div></div></div>`;
-  if(!items.length)html+=`<div class="empty-state"><div class="es-icon">🪙</div><p>Pool is empty!</p></div>`;else html+=`<div class="card">`+items.map(item=>`<div class="pool-row"><span style="font-size:18px">${TYPE_ICONS[item.type]||'📦'}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${esc(item.name)}${item.qty>1?(' ×'+item.qty):''}</div><div style="font-size:10px"><span class="rtext-${item.rarity}">${item.rarity}</span>${item.value>0?' · '+item.value+' gp':''}</div></div><button class="pool-assign-btn" onclick="assignFromPool('${item.id}')">Assign →</button><button class="icon-btn" title="Edit" onclick="openItemEdit('${item.id}')">✎</button><button class="icon-btn" style="color:var(--red)" onclick="removeItem('${item.id}')">✕</button></div>`).join('')+`</div>`;
+  if(!items.length)html+=`<div class="empty-state"><div class="es-icon">🪙</div><p>Pool is empty!</p></div>`;else html+=`<div class="card">`+items.map(item=>`<div class="pool-row"><span style="font-size:18px">${itemIcon(item)}</span><div style="flex:1"><div style="font-family:'Cinzel',serif;font-size:12px">${esc(item.name)}${item.qty>1?(' ×'+item.qty):''}</div><div style="font-size:10px"><span class="rtext-${item.rarity}">${item.rarity}</span>${item.value>0?' · '+item.value+' gp':''}</div></div><button class="pool-assign-btn" onclick="assignFromPool('${item.id}')">Assign →</button><button class="icon-btn" title="Edit" onclick="openItemEdit('${item.id}')">✎</button><button class="icon-btn" style="color:var(--red)" onclick="removeItem('${item.id}')">✕</button></div>`).join('')+`</div>`;
   el.innerHTML=html;
 }
 function renderWealth(){
@@ -17547,7 +17630,7 @@ function renderPaperdoll(char, cls){
       +' onclick="handleSlotClick(\''+slot.id+'\')" title="'+slot.label+'">';
     if(item){
       if(magicM) html+='<div class="slot-bonus">+'+magicM[1]+'</div>';
-      html+='<div class="slot-icon">'+(TYPE_ICONS[item.type]||'📦')+'</div>';
+      html+='<div class="slot-icon">'+itemIcon(item)+'</div>';
       const shortName = item.name.length>12 ? item.name.slice(0,10)+'…' : item.name;
       html+='<div class="slot-name">'+shortName+'</div>';
       html+='<div class="slot-unequip-hint">✕</div>';
@@ -17690,7 +17773,7 @@ function renderInvBag(char, cls){
       +' style="border-color:'+rc+'44;'+(isEq?'box-shadow:inset 0 0 0 2px var(--green)':'')+'">'
       +(isEq?'<div class="it-equipped-dot"></div>':'')
       +(magicM?'<div class="it-bonus">+'+magicM[1]+'</div>':'')
-      +'<div class="it-icon">'+(TYPE_ICONS[item.type]||'📦')+'</div>'
+      +'<div class="it-icon">'+itemIcon(item)+'</div>'
       +'<div class="it-name" style="color:'+rc+'">'+esc(item.name)+(item.type==='weapon'?' <span style="font-size:9px;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:0 4px;vertical-align:middle">'+weaponHandsLabel(item)+'</span>':'')+'</div>'
       +(item.qty>1?'<div class="it-qty">×'+item.qty+'</div>':'')
       +'</div>';
@@ -17738,7 +17821,7 @@ function renderCharStats(char, cls){
       const eff=getItemEffect(item);
       return '<div class="equipped-item-row">'
         +'<span class="ei-slot-label">'+slot.label.toUpperCase()+'</span>'
-        +'<span class="ei-icon">'+(TYPE_ICONS[item.type]||'📦')+'</span>'
+        +'<span class="ei-icon">'+itemIcon(item)+'</span>'
         +'<div style="flex:1;min-width:0"><div class="ei-name" style="color:'+rc+'">'+esc(item.name)+(item.type==='weapon'?' <span style="font-size:9px;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:0 4px;vertical-align:middle">'+weaponHandsLabel(item)+'</span>':'')+'</div>'+(eff?'<div class="ei-effect">'+eff+'</div>':'')+'</div>'
         +'<span class="ei-unequip" onclick="unequipSlot(\''+slot.id+'\')" title="Unequip">✕</span>'
         +'</div>';
@@ -17770,7 +17853,7 @@ function onItemDragStart(evt, itemId){
   const ghost = document.getElementById('dragGhost');
   const item = getCurrentCharItems().find(function(i){return String(i.id)===String(itemId);});
   if(item && ghost){
-    ghost.textContent = TYPE_ICONS[item.type]||'📦';
+    ghost.innerHTML = itemIcon(item);
     ghost.style.display='flex';
     evt.dataTransfer.setDragImage(ghost, 30, 30);
   }
@@ -17829,7 +17912,7 @@ function attachTouchDrag(tile, itemId){
     var t=e.touches[0]; startX=t.clientX; startY=t.clientY; moved=false;
     const item=getCurrentCharItems().find(function(i){return String(i.id)===String(itemId);});
     const ghost=document.getElementById('dragGhost');
-    ghost.textContent=TYPE_ICONS[item&&item.type||'misc']||'📦';
+    ghost.innerHTML=item?itemIcon(item):'📦';
     ghost.style.display='flex'; ghost.style.left=startX+'px'; ghost.style.top=startY+'px';
   },{passive:true});
   tile.addEventListener('touchmove', function(e){
@@ -18465,7 +18548,7 @@ function handleItemClick(itemId){
   const equippedInSlot=EQUIP_SLOTS.find(function(s){return slots[s.id]&&String(slots[s.id].id)===String(itemId);});
 
   let listHTML='<div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border)">'
-    +'<div style="font-size:28px">'+(TYPE_ICONS[item.type]||'📦')+'</div>'
+    +'<div style="font-size:28px">'+itemIcon(item)+'</div>'
     +'<div><div style="font-family:\'Cinzel\',serif;font-size:14px;color:'+rc+'">'+esc(item.name)+'</div>'
     +'<div style="font-size:11px;color:var(--muted)">'+item.rarity+' '+item.type+(eff?' · '+eff:'')+'</div></div></div>'
     +'<div style="padding:10px 18px 4px;font-family:\'Cinzel\',serif;font-size:9px;letter-spacing:1.5px;color:var(--muted)">EQUIP TO SLOT</div>'
@@ -18525,7 +18608,7 @@ function openSlotPicker(slotId){
       const eff=getItemEffect(item);
       const isEq=Object.values(slots).some(function(s){return s&&String(s.id)===String(item.id);});
       listHTML+='<div class="slot-picker-item" onclick="equipItem(\''+slotId+'\',\''+item.id+'\');closeSlotPicker()">'
-        +'<div class="pi-icon">'+(TYPE_ICONS[item.type]||'📦')+'</div>'
+        +'<div class="pi-icon">'+itemIcon(item)+'</div>'
         +'<div style="flex:1"><div class="pi-name" style="color:'+rc+'">'+esc(item.name)+'</div>'
         +'<div class="pi-meta">'+item.rarity+(item.type==='weapon'?' · '+weaponHandsLabel(item):'')+(eff?' · '+eff:'')+(isEq?' · (equipped elsewhere)':'')+'</div></div>'
         +'</div>';
@@ -21522,26 +21605,27 @@ function _weaponKindOf(n){
   if(/sword|scimitar|rapier|blade|katana|sabre|saber|cutlass|whip/.test(n)) return 'sword';
   return null;
 }
-// Which model in models/weapons/ (Quaternius Medieval Weapons and RPG Asset
-// Pack) shows an item, if any; wands, crossbows and maces stay built in code.
+// Which model in models/weapons/ (Quaternius Medieval Weapons, RPG Asset Pack
+// and RPG items pack) shows an item, if any; wands, crossbows and maces
+// stay built in code. Legendary and artifact gear gets the golden variant.
 // `k` scales it.
 function _weaponModel(it, kind){
   const n=_weaponText(it), grand=/legendary|artifact/.test(it.rarity||'');
   switch(kind){
     case 'sword':
-      if(/great ?sword|claymore|zweih|two.?handed|flamberge/.test(n)) return {m:/flame|blood|infernal/.test(n)?'Claymore':'Sword_Big'};
+      if(/great ?sword|claymore|zweih|two.?handed|flamberge/.test(n)) return {m:/flame|blood|infernal/.test(n)?'Claymore':grand?'Sword_Big_Golden':'Sword_Big'};
       if(grand||/gold|holy|sun/.test(n)) return {m:'Sword_Golden'};
       if(/scimitar|sabre|saber|cutlass|falchion|katana/.test(n)) return {m:'Sword_2'};
       if(/short ?sword|rapier/.test(n)) return {m:'Sword',k:0.85};
       if(/whip/.test(n)) return null;
       return {m:'Sword'};
-    case 'dagger': return {m:/sickle|kukri|curved/.test(n)?'Dagger_2':'Dagger'};
+    case 'dagger': return {m:/sickle|kukri|curved/.test(n)?'Dagger_2':grand?'Dagger_Golden':'Dagger'};
     case 'axe':
-      if(/great ?axe/.test(n)) return {m:'Axe_Double'};
-      if(/hand ?axe|throwing/.test(n)) return {m:'Axe_Small'};
+      if(/great ?axe/.test(n)) return {m:grand?'Axe_Double_Golden':'Axe_Double'};
+      if(/hand ?axe|throwing/.test(n)) return {m:grand?'Axe_Small_Golden':'Axe_Small'};
       return {m:'Axe'};
     case 'mace':
-      if(/maul|great ?hammer/.test(n)) return {m:'Hammer_Double'};
+      if(/maul|great ?hammer/.test(n)) return {m:grand?'Hammer_Double_Golden':'Hammer_Double'};
       if(/hammer|pick/.test(n)) return {m:'Hammer_Small'};
       return null;
     case 'spear': return {m:/scythe/.test(n)?'Scythe':'Spear'};
