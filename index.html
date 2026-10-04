@@ -1211,6 +1211,8 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .dmg-term{display:inline-flex;align-items:center;gap:4px;padding:3px 4px 3px 10px;border-radius:999px;border:1px solid var(--gold);color:var(--gold);font-family:'Cinzel',serif;font-size:13px}
 .dmg-term button{width:20px;height:20px;border-radius:50%;border:none;background:rgba(201,162,39,0.18);color:var(--gold);cursor:pointer;line-height:1}
 .dmg-hint{font-size:12px;color:var(--muted);font-style:italic}
+.dmg-wpn{font-family:'Cinzel',serif;font-size:13px;color:var(--gold);margin-bottom:4px}
+.dmg-wpn span{font-family:inherit;font-size:11px;color:var(--muted);font-style:italic}
 .dmg-go{display:flex;gap:6px;align-items:stretch;margin-bottom:12px}
 .dmg-go .pc-pill{flex:none}.dmg-roll{flex:1;margin:0!important}.dmg-roll:disabled{opacity:0.45;cursor:default}
 /* Conditions fold into one line; the full list opens on tap */
@@ -11176,7 +11178,7 @@ function renderDiceCharPanel(){
           html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+mhItem.name+' Attack" data-b="'+atkBonus2+'" style="cursor:pointer">';
           html+='<div style="font-family:\'Cinzel\',serif;font-size:11px;color:'+rarC2+'">⚔ '+mhItem.name+'</div>';
           html+='<div style="font-size:11px;color:var(--muted)">'+atkStr2+' · '+dmgStr2+'</div></div>';
-          if(dmgMatch){ const dx=_mainhandDamage(char, mhItem); html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(mhItem.name)+'" data-x="'+esc(dx)+'" title="Roll damage — dice double straight after a critical hit">🎲 damage '+esc(dx)+'</button>'; }
+          if(dmgMatch){ const dx=_mainhandDamage(char, mhItem); html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(mhItem.name)+'" data-x="'+esc(dx)+'" title="Put this damage on the table — add extra dice, then Roll damage. Dice double straight after a critical hit">🎲 damage '+esc(dx)+'</button>'; }
           html+=makeInfoBtn(uid2, mhItem.desc||'');
           html+='</div>';
         }
@@ -11188,7 +11190,7 @@ function renderDiceCharPanel(){
           html+='<div style="background:var(--surface);border:1px solid var(--red);border-radius:8px;padding:5px 10px;cursor:pointer">';
           html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+atk.name+' Attack" data-b="'+bonus+'" style="font-family:\'Cinzel\',serif;font-size:11px;color:var(--red)">'+atk.name+'</div>';
           html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+atk.name+' Attack" data-b="'+bonus+'" style="font-size:11px;color:var(--muted)">'+(atk.bonus||atk.atk||'+0')+' · '+(atk.damage||atk.dmg||'—')+'</div>';
-          { const dx=String(atk.damage||atk.dmg||''); const px=parseDiceExpr(dx); if(px) html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(atk.name)+'" data-x="'+esc(dx)+'" title="Roll damage — dice double straight after a critical hit">🎲 damage '+esc(_diceExprText(px.terms,px.mod))+'</button>'; }
+          { const dx=String(atk.damage||atk.dmg||''); const px=parseDiceExpr(dx); if(px) html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(atk.name)+'" data-x="'+esc(dx)+'" title="Put this damage on the table — add extra dice, then Roll damage. Dice double straight after a critical hit">🎲 damage '+esc(_diceExprText(px.terms,px.mod))+'</button>'; }
           html+=makeInfoBtn(uid, atk.type||atk.notes||'');
           html+='</div>';
         });
@@ -11202,7 +11204,7 @@ function renderDiceCharPanel(){
           html+='<div onclick="quickRoll(this.dataset.n,this.dataset.b|0)" data-n="'+atk.name+' Attack" data-b="'+bonus+'" style="cursor:pointer">';
           html+='<div style="font-family:\'Cinzel\',serif;font-size:11px;color:'+rarityColor+'">'+atk.name+'</div>';
           html+='<div style="font-size:11px;color:var(--muted)">'+atk.bonus+' · '+atk.damage+'</div></div>';
-          { const dx=String(atk.damage||''); const px=parseDiceExpr(dx); if(px) html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(atk.name)+'" data-x="'+esc(dx)+'" title="Roll damage — dice double straight after a critical hit">🎲 damage '+esc(_diceExprText(px.terms,px.mod))+'</button>'; }
+          { const dx=String(atk.damage||''); const px=parseDiceExpr(dx); if(px) html+='<button type="button" class="atk-dmg" onclick="event.stopPropagation();rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(atk.name)+'" data-x="'+esc(dx)+'" title="Put this damage on the table — add extra dice, then Roll damage. Dice double straight after a critical hit">🎲 damage '+esc(_diceExprText(px.terms,px.mod))+'</button>'; }
           html+=makeInfoBtn(uid, atk.desc||'');
           html+='</div>';
         });
@@ -11685,9 +11687,10 @@ function renderDamagePanel(){
   el.innerHTML=(atks.length?'<div class="dmg-atks">'+atks.map(a=>{
       const px=parseDiceExpr(a.expr), crit=!!(last && last.isCrit && last.label===a.name+' Attack');
       const shown=_diceExprText(crit?px.terms.map(t=>({...t, n:t.n*2})):px.terms, px.mod);
-      return '<button type="button" class="dmg-atk'+(crit?' crit':'')+'" onclick="rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(a.name)+'" data-x="'+esc(a.expr)+'" title="Roll '+esc(a.name)+' damage">'
+      return '<button type="button" class="dmg-atk'+(crit?' crit':'')+'" onclick="rollDamage(this.dataset.n,this.dataset.x)" data-n="'+esc(a.name)+'" data-x="'+esc(a.expr)+'" title="Put '+esc(a.name)+' damage on the table, then add any extra dice">'
         +'<span class="dn">⚔ '+esc(a.name)+'</span><span class="dx">'+esc(shown)+(crit?' · crit!':'')+'</span></button>'; }).join('')+'</div>':'')
     +'<div class="dmg-dice">'+[4,6,8,10,12,20].map(sd=>'<button type="button" class="dmg-die'+(P[sd]?' on':'')+'" onclick="poolAdd('+sd+',1)" aria-label="Add a d'+sd+'">d'+sd+(P[sd]?'<b>'+P[sd]+'</b>':'')+'</button>').join('')+'</div>'
+    +(diceState.poolWeapon && (diceState.poolList||[]).some(x=>x.w) ? '<div class="dmg-wpn">⚔ '+esc(diceState.poolWeapon.name)+' <span>· tap a die above to add extra damage</span></div>' : '')
     +'<div class="dmg-sum">'+(terms.length ? terms.map(t=>'<span class="dmg-term">'+t.n+'d'+t.s+'<button type="button" onclick="poolAdd('+t.s+',-1)" aria-label="One fewer d'+t.s+'">−</button></span>').join('') : '<span class="dmg-hint">Tap a die to drop it on the table — as many as you like. Tap one on the table to pick it back up.</span>')
     +'<span class="dcount" style="margin-left:auto"><button type="button" onclick="poolModStep(-1)" aria-label="Lower modifier">−</button><b>'+(mod>=0?'+':'')+mod+'</b><button type="button" onclick="poolModStep(1)" aria-label="Raise modifier">+</button></span></div>'
     +'<div class="dmg-go"><button type="button" class="pc-pill'+(diceState.poolCrit?' on gold':'')+'" onclick="poolCritToggle()" title="Critical hit: double the dice">✦ crit ×2</button>'
@@ -11710,15 +11713,16 @@ function poolAdd(sides, d){
 function poolRemove(id){ diceState.poolList=(diceState.poolList||[]).filter(x=>x.id!==String(id)); renderDamagePanel(); _diceTableStage(); }
 function poolModStep(d){ diceState.poolMod=Math.max(-30, Math.min(30, (diceState.poolMod||0)+d)); renderDamagePanel(); }
 function poolCritToggle(){ diceState.poolCrit=!diceState.poolCrit; renderDamagePanel(); }
-function poolClear(){ diceState.poolList=[]; diceState.poolMod=0; diceState.poolCrit=false; renderDamagePanel(); _diceTableStage(); }
+function poolClear(){ diceState.poolList=[]; diceState.poolMod=0; diceState.poolCrit=false; diceState.poolWeapon=null; renderDamagePanel(); _diceTableStage(); }
 // Throw the dice waiting on the table; "again" throws the same handful once more.
 // The modifier stays for the next swing; crit ×2 is for one roll.
 function rollPool(again){
   const list=again ? (diceState.lastPool||[]) : (diceState.poolList||[]); if(!list.length) return;
   const crit=!!diceState.poolCrit; diceState.poolCrit=false;
-  diceState.lastPool=list.map(x=>({id:x.id, s:x.s}));
+  diceState.lastPool=list.map(x=>({id:x.id, s:x.s, w:x.w}));
   if(!again) diceState.poolList=[];
-  _rollExpr('Damage'+(crit?' (critical)':''), _poolTerms(list), diceState.poolMod||0, {damage:true, crit, fromTable:!again});
+  const w=diceState.poolWeapon, extra=list.some(x=>!x.w);
+  _rollExpr((w&&list.some(x=>x.w) ? w.name+' damage'+(extra?' + extra':'') : 'Damage')+(crit?' (critical)':''), _poolTerms(list), diceState.poolMod||0, {damage:true, crit, fromTable:!again});
 }
 // The conditions list folds into one line (active ones stay in view)
 function toggleCondPanel(){
@@ -11731,11 +11735,22 @@ function _applyCondPanel(){
   if(b) b.style.display=open?'':'none';
   if(a) a.textContent=open?'▾ hide':(diceState.activeConds.size?'▸ edit':'▸ all');
 }
-// An attack's damage. Straight after that attack crits, its dice are doubled.
+// An attack's damage drops its dice on the table rather than rolling, so
+// extra dice (a smite, Hunter's Mark, a flaming blade) can join them before
+// "Roll damage". Picking another weapon swaps only the weapon's own dice and
+// modifier; extras stay. Straight after that attack crits, crit ×2 is on.
 function rollDamage(name, expr){
   const p=parseDiceExpr(expr); if(!p){ toast('No damage dice listed for '+name,'var(--muted)'); return; }
   const last=diceState.history[0], crit=!!(last && last.isCrit && last.label===name+' Attack');
-  _rollExpr(name+' damage'+(crit?' (critical)':''), p.terms, p.mod, {damage:true, crit});
+  const old=diceState.poolWeapon, L=(diceState.poolList||[]).filter(x=>!x.w);
+  const wd=[]; p.terms.forEach(t=>{ for(let i=0;i<t.n && wd.length<30;i++) wd.push({id:'p'+(++_poolSeq), s:t.s, w:1}); });
+  diceState.poolList=wd.concat(L).slice(0,30);
+  diceState.poolMod=Math.max(-30, Math.min(30, (diceState.poolMod||0)-(old?old.mod:0)+p.mod));
+  diceState.poolWeapon={name, mod:p.mod};
+  if(crit) diceState.poolCrit=true;
+  renderDamagePanel(); _diceTableStage();
+  document.querySelector('#dmgPanel .dmg-roll')?.scrollIntoView({block:'nearest', behavior:'smooth'});
+  toast('⚔ '+name+' on the table · add extra dice, then roll','var(--gold)');
 }
 function renderDiceHistory(){const el=document.getElementById('rollHistory');if(!el)return;if(!diceState.history.length){el.innerHTML=`<p style="font-size:13px;color:var(--muted);font-style:italic;text-align:center;padding:12px 0">No rolls yet.</p>`;return;}el.innerHTML=diceState.history.map(r=>{const mc=r.mode==='advantage'?'var(--green)':r.mode==='disadvantage'?'var(--red)':'var(--muted)';const ml=r.mode==='advantage'?'↑ADV':r.mode==='disadvantage'?'↓DIS':'NRM';const tc=r.isCrit?'var(--green)':r.isFail?'var(--red)':'var(--text)';const ci=r.conds.map(id=>{const c=CONDITIONS.find(x=>x.id===id);return c?c.i:'';}).join('');return`<div class="hist-row"><div class="hist-die">${r.label?('<span style="font-size:11px;color:var(--muted);display:block;line-height:1">'+r.label.split(' ')[0]+'</span>'):''}${r.dl||('d'+r.d)}</div><div class="hist-val" style="color:${tc}">${r.total}</div><div class="hist-info">${r.label||('rolled '+r.kept)}${r.mod!==0?(r.mod>0?' +'+r.mod:' '+r.mod):''}${r.bonuses.length?' + bonuses':''} ${ci}</div><span class="hist-mode" style="color:${mc};border-color:${mc}">${ml}</span></div>`;}).join('');}
 
@@ -15429,7 +15444,7 @@ function renderMap(){
         ${(!map.hidePinLabels && p.hideName!==true)?`<text text-anchor="middle" y="${LY}" style="font-size:${LF}px;stroke-width:${(_lf*0.28).toFixed(2)}px">${esc(String(p.name).slice(0,20))}</text>`:''}
         ${seld?`<g class="mn-resize"><line x1="${(R).toFixed(2)}" y1="${(R).toFixed(2)}" x2="${gh.toFixed(2)}" y2="${gh.toFixed(2)}" stroke="var(--gold)" stroke-width="${(R*0.12).toFixed(2)}" opacity="0.6"/><rect x="${(gh-R*1.6).toFixed(2)}" y="${(gh-R*1.6).toFixed(2)}" width="${(R*3.2).toFixed(2)}" height="${(R*3.2).toFixed(2)}" fill="transparent" style="cursor:nwse-resize"/><rect x="${(gh-R*0.55).toFixed(2)}" y="${(gh-R*0.55).toFixed(2)}" width="${(R*1.1).toFixed(2)}" height="${(R*1.1).toFixed(2)}" rx="${(R*0.2).toFixed(2)}" fill="var(--gold)" stroke="#0d0a1a" stroke-width="${(R*0.1).toFixed(2)}" style="pointer-events:none"/></g>`:''}
       </g>`; }).join(''); })()}
-      <defs><clipPath id="mtokClip"><circle r="10"/></clipPath></defs>
+      <defs><clipPath id="mtokClip"><circle r="10"/></clipPath><filter id="mkDeadF"><feColorMatrix type="saturate" values="0"/></filter></defs>
       ${map.party?(()=>{ const PS2=_pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4); const R=Math.max(0.6,_pinPx(map)*2.2)*_tokScale(map); const pSel=_selPinId==='__party__'&&!map.pinsLocked; const px=(map.party.x*VW).toFixed(1), py=(map.party.y*VH).toFixed(1); const lf=(R*1.1).toFixed(2), ly=(R+R*1.1*0.95+1).toFixed(2);
         // The party marker shows each member's mini (those not placed on their own)
         const solo=map.tokens||{}; const mem=_campMembers(camp).filter(c=>!solo[String(c.id)]);
@@ -16788,7 +16803,10 @@ function _bStart(camp, map){
   map.battle={on:true, round:1, cur:null, grid:BATTLE_GRIDS[2], split, list:mem.map(c=>({id:genItemId(), kind:'pc', ref:String(c.id), name:c.name, init:null, seenHp:Math.max(0, parseInt(c.currentHP)||0)})), log:[]};
 }
 function _bEnd(map){
-  const b=map.battle; if(b && map.tokens) (b.split||[]).forEach(cid=>{ delete map.tokens[cid]; });   // back into the party marker
+  const b=map.battle;
+  // foes at 0 HP stay on the map as killed once the fight is over
+  const down=_mkDownIds(map); if(down.size) (map.markers||[]).forEach(m=>{ if(down.has(String(m.id))) m.dead=true; });
+  if(b && map.tokens) (b.split||[]).forEach(cid=>{ delete map.tokens[cid]; });   // back into the party marker
   delete map.battle;
 }
 function _bRollInit(camp, map){
@@ -16900,7 +16918,7 @@ function battleDo(camp, map, op, a1, a2){
     b.list.push({id:genItemId(), kind:'foe', ref:'', name, init:(a2===''||a2==null||isNaN(+a2))?_bD(20):Math.round(+a2)}); _bSort(b); }
   else if(op==='addTokens'){ // NPC / creature tokens on this map join the fight
     const have=new Set(b.list.filter(e=>e.kind==='mk').map(e=>String(e.ref))); let n=0;
-    _mapMarkers(map).forEach(m=>{ if(have.has(String(m.id))) return; const t=_tokEntry(camp, m.key); if(!t) return;
+    _mapMarkers(map).forEach(m=>{ if(have.has(String(m.id)) || m.dead) return; const t=_tokEntry(camp, m.key); if(!t) return;   // the killed stay out
       b.list.push({id:genItemId(), kind:'mk', ref:String(m.id), name:'', init:_bFoeInit(camp, t.key), ..._bFoeHp(camp, t.key)}); n++; });
     if(!n){ toast('No new NPC or creature tokens on this map','var(--muted)'); return false; }
     _bSort(b); }
@@ -17185,6 +17203,7 @@ window.__tohPop = {
     if(act==='newCreature'){ addCustomCreature(); return true; }
     if(act==='newNpc'){ openNpcEditor(null); return true; }
     if(act==='art' && key){ openTokArt(String(key)); return true; }
+    if(act==='marker' && key){ openMarkerCard(String(key)); return true; }
     return false;
   },
   // Battle mode: whose dice the pop-out shows for the current turn. A hero's
@@ -17240,7 +17259,7 @@ const _turnConds={}; let _turnKey=null;
 function _diceFreshTurn(key){
   if(_turnKey!==null) _turnConds[_turnKey]=[...diceState.activeConds];
   if(key!==undefined){ diceState.activeConds=new Set(_turnConds[key]||[]); _turnKey=key; }
-  diceState.die=20; diceState.count=1; diceState.poolList=[]; diceState.lastPool=[]; diceState.poolMod=0; diceState.poolCrit=false;
+  diceState.die=20; diceState.count=1; diceState.poolList=[]; diceState.lastPool=[]; diceState.poolMod=0; diceState.poolCrit=false; diceState.poolWeapon=null;
   const m=document.getElementById('dMod'); if(m) m.value=0;
   const r=document.getElementById('rollResult'); if(r){ r.style.display='none'; r.innerHTML=''; }
   try{ renderDiceScreen(); _diceTableStage(); }catch(err){}
@@ -17324,7 +17343,9 @@ function _popoutMain(cfg){
     P.delete(e.pointerId); if(P.size<2) g=null;
     if(drag && P.size===0){ var d=drag; drag=null;
       if(d.moved){ var a=api(); var ok=a && a.move(MAPID, d.id, d.x/VW, d.y/VH);
-        if(!ok){ d.node.setAttribute('transform', d.tr); say(a?'That token can\'t be moved here':'The app window is closed — reopen the pop-out from the app'); setTimeout(function(){ say(''); }, 2600); } } }
+        if(!ok){ d.node.setAttribute('transform', d.tr); say(a?'That token can\'t be moved here':'The app window is closed — reopen the pop-out from the app'); setTimeout(function(){ say(''); }, 2600); } }
+      // GM: a tap on an NPC / creature token opens its card (mark killed, remove)
+      else if(String(d.id).indexOf('__mk_')===0){ var am=api(); if(am){ ovBase=ovIds(); am.gmAct(MAPID, 'marker', String(d.id).slice(5)); setTimeout(function(){ refreshAll(true); }, 60); } } }
     if(tap && placing && P.size===0){ var l=toMap(e); var a2=api(); var pl=placing; placing=null; say('');
       var placed = pl.kind==='bkey' ? (a2 && a2.battleDo(MAPID,'addLib', pl.id, {x:l.x/VW, y:l.y/VH, n:pl.n})) : (a2 && a2.place(MAPID, pl.kind, pl.id, l.x/VW, l.y/VH));
       if(!placed){ say('Could not place that token'); setTimeout(function(){ say(''); }, 2600); }
@@ -22635,17 +22656,19 @@ function _markersSvg(camp, map, VW, VH, gm){
   const PS = _pinScreenScale(_mapView[map.id]?_mapView[map.id].z:1).toFixed(4);
   const R = Math.max(0.6,_pinPx(map)*2.2), tr = _tokR(map,VW,R)*_tokScale(map), lf = Math.max(R*_tokScale(map), tr*0.42).toFixed(2);
   const count = {}; ms.forEach(m=>{ count[m.key]=(count[m.key]||0)+1; });
-  const hid = gm ? new Set() : _bHiddenMarkers(map);
+  const hid = gm ? new Set() : _bHiddenMarkers(map), down = _mkDownIds(map);
   return ms.map(m=>{
     let e = entry[m.key] || (entry[m.key] = _tokEntry(camp, m.key)); if(!e) return '';
     if(hid.has(String(m.id))) e = {...e, name:'?', img:'', icon:'?'};   // the GM keeps this foe's name from the players
     seen[m.key] = (seen[m.key]||0)+1;
     if(!gm && !_npcSeenByParty(camp, map, m, VW, VH)) return '';
-    const label = hid.has(String(m.id)) ? '?' : _shortName(e.name) + (count[m.key]>1 ? ' '+seen[m.key] : '');
+    const dead = m.dead || down.has(String(m.id));
+    const label = (dead ? '☠ ' : '') + (hid.has(String(m.id)) ? '?' : _shortName(e.name) + (count[m.key]>1 ? ' '+seen[m.key] : ''));
     const px=(m.x*VW).toFixed(1), py=(m.y*VH).toFixed(1);
-    return `<g class="map-node party token npc pinlabel" data-id="__mk_${esc(m.id)}" data-cx="${px}" data-cy="${py}" transform="translate(${px},${py}) scale(${PS})"><g class="tokbody">
-      <g transform="scale(${(tr/10).toFixed(3)})"><title>${esc(e.name)}</title>${_libTokSvg(e)}</g>
-      <text text-anchor="middle" y="${(tr*1.15+(+lf)).toFixed(2)}" style="font-size:${lf}px;stroke-width:${(lf*0.28).toFixed(2)}px">${esc(label)}</text>
+    // Killed: grey and faded with a skull over the face, left where it fell
+    return `<g class="map-node party token npc pinlabel${dead?' mk-dead':''}" data-id="__mk_${esc(m.id)}" data-cx="${px}" data-cy="${py}" transform="translate(${px},${py}) scale(${PS})"><g class="tokbody">
+      <g transform="scale(${(tr/10).toFixed(3)})"><title>${esc(e.name)}${dead?' (killed)':''}</title><g${dead?' filter="url(#mkDeadF)" opacity="0.6"':''}>${_libTokSvg(e)}</g>${dead?'<line x1="-7.5" y1="-7.5" x2="7.5" y2="7.5" style="stroke:#c0392b;stroke-width:1.6;opacity:0.85"/><line x1="7.5" y1="-7.5" x2="-7.5" y2="7.5" style="stroke:#c0392b;stroke-width:1.6;opacity:0.85"/><circle cx="7.6" cy="7.6" r="5" style="fill:#0d0a1a;stroke:#c0392b;stroke-width:1"/><text x="7.6" y="7.6" text-anchor="middle" dy="2.5" style="font-size:7px;stroke:none;fill:#fff">☠</text>':''}</g>
+      <text text-anchor="middle" y="${(tr*1.15+(+lf)).toFixed(2)}" style="font-size:${lf}px;stroke-width:${(lf*0.28).toFixed(2)}px${dead?';opacity:0.75':''}">${esc(label)}</text>
     </g></g>`;
   }).join('');
 }
@@ -22671,13 +22694,49 @@ function addMarker(key, nx, ny, mapId){
 }
 // Windows tucked away for a placement come back once it is done.
 function _tokWinRestore(){ document.querySelectorAll('.tokwin.automin').forEach(w=>w.classList.remove('min','automin')); }
+// Tokens whose foe is at 0 HP in the fight on this map show as killed.
+function _mkDownIds(map){ const b=_battle(map); return new Set(b ? b.list.filter(e=>e.kind==='mk' && e.maxHp>0 && e.hp<=0).map(e=>String(e.ref)) : []); }
+function _mkIsDead(map, m){ return !!(m && (m.dead || _mkDownIds(map).has(String(m.id)))); }
+// A token taken off the map leaves the fight too (its hits still count at the end).
+function _mkLeaveBattle(camp, map, ids){
+  const b=_battle(map); if(!b) return;
+  b.list.filter(e=>e.kind==='mk' && ids.has(String(e.ref))).forEach(e=>{
+    if(b.stats && b.stats[e.id]){ b.gone=b.gone||{}; b.gone[e.id]=_bRowInfo(camp, map, e); }
+    if(b.cur===e.id) _bStep(b, 1); b.list=b.list.filter(x=>x!==e); });
+  if(!b.list.length) b.cur=null;
+}
 function removeMarker(id){
   const camp = getCampaigns().find(c=>c.id===editingCampId); if(!camp || !canDesignMaps(camp)) return;
   const map = _curMap(camp); if(!map) return;
   _migrateLegacyMarkers(camp);
   const legacyKey = String(id).startsWith('lg-') ? 'n:c-'+String(id).slice(3) : null;
-  map.markers = (map.markers||[]).filter(m=>m.id!==id && m.key!==legacyKey);
+  const gone = new Set((map.markers||[]).filter(m=>m.id===id || m.key===legacyKey).map(m=>String(m.id)));
+  map.markers = (map.markers||[]).filter(m=>!gone.has(String(m.id)));
+  _mkLeaveBattle(camp, map, gone);
   saveCampaign(camp); renderMap(); toast('Token removed from the map','var(--muted)');
+}
+// GM: mark a placed token killed (it stays on the map, greyed with a skull) or bring it back.
+// In a fight, killed sets its HP to 0 and bringing it back gives it 1 HP.
+function setMarkerDead(id, dead){
+  const camp = getCampaigns().find(c=>c.id===editingCampId); if(!camp || !canDesignMaps(camp)) return;
+  const map = _curMap(camp); if(!map) return;
+  _migrateLegacyMarkers(camp);
+  const m = (map.markers||[]).find(x=>String(x.id)===String(id)); if(!m) return;
+  if(dead) m.dead = true; else delete m.dead;
+  const b=_battle(map);
+  if(b) b.list.forEach(e=>{ if(e.kind!=='mk' || String(e.ref)!==String(m.id) || !(e.maxHp>0)) return; if(dead) e.hp=0; else if(e.hp<=0) e.hp=1; });
+  const e=_tokEntry(camp, m.key);
+  saveCampaign(camp); renderMap(); toast(dead ? '☠ '+(e?e.name:'Token')+' killed' : (e?e.name:'Token')+' is back', dead?'var(--muted)':'var(--gold)');
+}
+// GM: clear every killed token off this map at once.
+function removeDeadMarkers(){
+  const camp = getCampaigns().find(c=>c.id===editingCampId); if(!camp || !canDesignMaps(camp)) return;
+  const map = _curMap(camp); if(!map) return;
+  _migrateLegacyMarkers(camp);
+  const gone = new Set((map.markers||[]).filter(m=>_mkIsDead(map, m)).map(m=>String(m.id))); if(!gone.size) return;
+  map.markers = map.markers.filter(m=>!gone.has(String(m.id)));
+  _mkLeaveBattle(camp, map, gone);
+  saveCampaign(camp); renderMap(); toast(gone.size+' killed token'+(gone.size>1?'s':'')+' removed from the map','var(--muted)');
 }
 function _armToken(key){
   _placingKey = _placingKey===key ? null : key; _bArm = null;
@@ -22806,23 +22865,24 @@ function _shrinkPortrait(file, cb){
   }; img.onerror = ()=>toast('That image could not be read','var(--red)'); img.src = rd.result; };
   rd.readAsDataURL(file);
 }
-// GM tap on a placed token: picture, reference, remove.
+// GM tap on a placed token: picture, reference, killed, remove.
 function openMarkerCard(markerId){
   const camp = getCampaigns().find(c=>c.id===editingCampId); const map = camp && _curMap(camp); if(!map) return;
   const m = _mapMarkers(map).find(x=>String(x.id)===String(markerId)); const e = m && _tokEntry(camp, m.key); if(!e) return;
+  const dead = _mkIsDead(map, m), nDead = _mapMarkers(map).filter(x=>_mkIsDead(map, x)).length;
   document.getElementById('tokArtModal')?.remove();
   const md = document.createElement('div'); md.id='tokArtModal'; md.className='gw-backdrop';
   md.innerHTML = `<div class="ms-dialog" role="dialog" aria-modal="true" aria-label="Token" style="max-width:460px">
     <div class="gw-head"><div class="gw-emblem" style="border-color:${e.color}">${e.kind==='npc'?'🧙':'🐺'}</div>
-      <div style="min-width:0"><div class="gw-title">${esc(e.name)}</div><div class="gw-sub">On ${esc(map.name)} · players see it where the map isn't fogged</div></div>
+      <div style="min-width:0"><div class="gw-title">${dead?'☠ ':''}${esc(e.name)}</div><div class="gw-sub">On ${esc(map.name)} · ${dead?'killed · left on the map, greyed out':'players see it where the map isn\'t fogged'}</div></div>
       <button class="gw-x" onclick="closeTokArt()" aria-label="Close">✕</button></div>
     <div class="ms-body" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
-      <div class="tokav" style="width:92px;height:92px;font-size:34px;box-shadow:0 0 0 3px ${e.color};background:${e.color}55">${e.img?_tokFaceImg(e):esc(e.icon||_initials(e.name))}</div>
+      <div class="tokav" style="width:92px;height:92px;font-size:34px;box-shadow:0 0 0 3px ${e.color};background:${e.color}55${dead?';filter:grayscale(1);opacity:0.6':''}">${e.img?_tokFaceImg(e):esc(e.icon||_initials(e.name))}</div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${e.link?`<a class="pc-pill" href="${esc(e.link)}" target="_blank" rel="noopener">📖 Reference</a>`:''}
         <button class="pc-pill" onclick="closeTokArt();openTokArt('${jsq(e.key)}')">${e.key.startsWith('n:c-')?'✎ Edit NPC':'🖼 Change picture'}</button>
       </div></div>
-    <div class="gw-foot" style="flex-wrap:wrap;gap:8px"><button class="gw-btn" style="border-color:var(--red);color:var(--red)" onclick="closeTokArt();removeMarker('${jsq(String(m.id))}')">Remove from map</button><div class="gw-count"></div><button class="gw-btn pri" onclick="closeTokArt()">Done</button></div></div>`;
+    <div class="gw-foot" style="flex-wrap:wrap;gap:8px">${String(m.id).startsWith('lg-')?'':(dead?`<button class="gw-btn" onclick="closeTokArt();setMarkerDead('${jsq(String(m.id))}',false)" title="Back on its feet (1 HP in a fight)">↺ Not dead</button>`:`<button class="gw-btn" onclick="closeTokArt();setMarkerDead('${jsq(String(m.id))}',true)" title="Leave it on the map, greyed out with a skull">☠ Mark killed</button>`)}<button class="gw-btn" style="border-color:var(--red);color:var(--red)" onclick="closeTokArt();removeMarker('${jsq(String(m.id))}')">Remove from map</button>${nDead>1?`<button class="gw-btn" style="border-color:var(--red);color:var(--red)" onclick="closeTokArt();removeDeadMarkers()" title="Take every killed token off this map">Clear all killed (${nDead})</button>`:''}<div class="gw-count"></div><button class="gw-btn pri" onclick="closeTokArt()">Done</button></div></div>`;
   md.addEventListener('click', ev=>{ if(ev.target===md) closeTokArt(); });
   document.body.appendChild(md);
 }
