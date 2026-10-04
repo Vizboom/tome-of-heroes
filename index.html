@@ -16119,7 +16119,9 @@ function removeParty(){ const camp=getCampaigns().find(c=>c.id===editingCampId);
    it is (ringed on the map) and the rolls made on each turn.
    map.battle = { on, round, cur (entry id), grid (cell px, 0 = none),
                   split [character ids pulled out of the party marker],
-                  list [{id, kind:'pc'|'mk'|'foe', ref, name, init}],
+                  list [{id, kind:'pc'|'mk'|'lib'|'foe', ref, name, init}],
+                  (mk: ref is a map marker id; lib: ref is a token-library key
+                   for an NPC or creature added without a token on the map)
                   log [{id, cid, who, label, total, detail, crit, fail, t}] } */
 const BATTLE_GRIDS=[0, 8, 14, 22];
 function _battle(map){ return map && map.battle && map.battle.on ? map.battle : null; }
@@ -16134,9 +16136,13 @@ function _bInfo(camp, map, e, gm){
   if(e.kind==='pc'){ const c=_bChar(camp, e.ref);
     return c ? {name:c.name, img:c.token||c.portrait||'', color:classColor(c.classIdx), label:classIcon(c.classIdx), char:c}
              : {name:e.name||'Hero', img:'', color:'#8880b0', label:'?'}; }
-  if(e.kind==='mk'){ const m=_mapMarkers(map).find(x=>String(x.id)===String(e.ref)); const t=m&&_tokEntry(camp, m.key);
+  if(e.kind==='mk'){ const ms=_mapMarkers(map), m=ms.find(x=>String(x.id)===String(e.ref)); const t=m&&_tokEntry(camp, m.key);
     if(t){ if(!gm && !_npcSeenByParty(camp, map, m, 440, _bVH(map))) return {name:'Unknown foe', img:'', color:t.color, label:'?', pos:null};
-      return {name:e.name||_shortName(t.name), img:t.img, color:t.color, label:t.icon||_initials(t.name), pos:m}; } }
+      // numbered like the labels on the map ("Wolf 2") when the map has several
+      const same=ms.filter(x=>x.key===m.key), nm=_shortName(t.name)+(same.length>1?' '+(same.indexOf(m)+1):'');
+      return {name:e.name||nm, img:t.img, color:t.color, label:t.icon||_initials(t.name), pos:m}; } }
+  if(e.kind==='lib'){ const t=_tokEntry(camp, e.ref);
+    if(t) return {name:e.name||_shortName(t.name), img:t.img, color:t.color, label:t.icon||_initials(t.name)}; }
   return {name:e.name||'Foe', img:'', color:'#c0392b', label:'👹'};
 }
 // Where the current turn's token stands (normalised), for the ring on the map.
@@ -16201,18 +16207,23 @@ function _bTurnSvg(camp, map, VW, VH, gm){
   const R=Math.max(0.6,_pinPx(map)*2.2), tr=_tokR(map,VW,R)*_tokScale(map);
   return `<g class="battle-turn" style="pointer-events:none" transform="translate(${(p.x*VW).toFixed(1)},${(p.y*VH).toFixed(1)})"><circle r="${(tr*1.45).toFixed(2)}" fill="none" stroke="#e74c3c" stroke-width="${Math.max(0.4,tr*0.22).toFixed(2)}"/></g>`;
 }
+// Spots for n tokens in a tidy block around (cx, cy), all normalised.
+function _bCluster(map, cx, cy, n){
+  const VH=_bVH(map), R=Math.max(0.6,_pinPx(map)*2.2), gap=_tokR(map,440,R)*_tokScale(map)*2.6;
+  const perRow=Math.min(4,Math.max(1,n)), rows=Math.ceil(n/perRow), out=[];
+  for(let i=0;i<n;i++){ const row=Math.floor(i/perRow), inRow=Math.min(perRow, n-row*perRow), col=i-row*perRow;
+    const x=cx+(col-(inRow-1)/2)*gap/440, y=cy+(row-(rows-1)/2)*gap/VH;
+    out.push({x:+Math.max(0.02,Math.min(0.98,x)).toFixed(4), y:+Math.max(0.02,Math.min(0.98,y)).toFixed(4)}); }
+  return out;
+}
 function _bLog(b, entry){ b.log=[{id:genItemId(), t:Date.now(), ...entry}].concat(b.log||[]).slice(0,12); }
 function _bStart(camp, map){
-  const mem=_campMembers(camp), VH=_bVH(map), split=[];
+  const mem=_campMembers(camp), split=[];
   // The party marker breaks up so each hero can be moved on their own.
   if(map.party){
     map.tokens=map.tokens||{};
-    const free=mem.filter(c=>!map.tokens[String(c.id)]);
-    const R=Math.max(0.6,_pinPx(map)*2.2), gap=_tokR(map,440,R)*_tokScale(map)*2.6, perRow=Math.min(4,Math.max(1,free.length)), rows=Math.ceil(free.length/perRow);
-    free.forEach((c,i)=>{ const row=Math.floor(i/perRow), inRow=Math.min(perRow, free.length-row*perRow), col=i-row*perRow;
-      const x=map.party.x+(col-(inRow-1)/2)*gap/440, y=map.party.y+(row-(rows-1)/2)*gap/VH;
-      map.tokens[String(c.id)]={x:+Math.max(0.02,Math.min(0.98,x)).toFixed(4), y:+Math.max(0.02,Math.min(0.98,y)).toFixed(4)};
-      split.push(String(c.id)); });
+    const free=mem.filter(c=>!map.tokens[String(c.id)]), spots=_bCluster(map, map.party.x, map.party.y, free.length);
+    free.forEach((c,i)=>{ map.tokens[String(c.id)]=spots[i]; split.push(String(c.id)); });
   }
   map.battle={on:true, round:1, cur:null, grid:BATTLE_GRIDS[2], split, list:mem.map(c=>({id:genItemId(), kind:'pc', ref:String(c.id), name:c.name, init:null})), log:[]};
 }
@@ -16256,6 +16267,50 @@ function _bDoRoll(camp, map, spec){
   _bLog(b, {cid:e.id, who:_bInfo(camp, map, e, true).name, label:String(spec.label||('d'+sides)).slice(0,40), ...res});
   return res;
 }
+// The library key an initiative entry stands for (its marker's key for a token on the map).
+function _bEntryKey(map, e){
+  if(e.kind==='lib') return e.ref;
+  if(e.kind==='mk'){ const m=_mapMarkers(map).find(x=>String(x.id)===String(e.ref)); return m ? (COS_KEY_ALIAS[m.key]||m.key) : ''; }
+  return '';
+}
+// How many of a library token are in the fight / on the map, for the GM's picker.
+function _bKeyCounts(map, b){
+  const fight={}, onMap={};
+  (b?b.list:[]).forEach(e=>{ const k=_bEntryKey(map, e); if(k) fight[k]=(fight[k]||0)+1; });
+  _mapMarkers(map).forEach(m=>{ const k=COS_KEY_ALIAS[m.key]||m.key; onMap[k]=(onMap[k]||0)+1; });
+  return {fight, onMap};
+}
+// The GM picks a campaign NPC or creature for the fight. With a spot (x, y)
+// it gets a token there (n creatures share one initiative roll, as the DMG
+// suggests for a group); without one it joins the order with no token. An
+// NPC is one person, so their token moves rather than doubles.
+function _bAddLib(camp, map, b, key, o){
+  const t=_tokEntry(camp, key); if(!t) return false;
+  key=t.key; o=o||{};
+  const npc=t.kind==='npc', n=npc?1:Math.max(1,Math.min(12,parseInt(o.n)||1));
+  const at=isFinite(o.x)&&isFinite(o.y)&&o.x!==null&&o.y!==null;
+  _migrateLegacyMarkers(camp); if(!map.markers) map.markers=[];
+  const has=_bKeyCounts(map, b);
+  if(npc && has.fight[key]){ toast(t.name+' is already in the fight','var(--muted)'); return false; }
+  const init=_bD(20), base=_shortName(t.name), add=[];
+  if(npc){
+    const mk=map.markers.find(m=>m.key===key || COS_KEY_ALIAS[m.key]===key);
+    if(mk && at){ const p=_bCluster(map, o.x, o.y, 1)[0]; mk.x=p.x; mk.y=p.y; }
+    if(mk) add.push({kind:'mk', ref:String(mk.id), name:''});
+    else if(at){ const id=genItemId(), p=_bCluster(map, o.x, o.y, 1)[0]; map.markers.push({id, key, x:p.x, y:p.y}); add.push({kind:'mk', ref:id, name:''}); }
+    else add.push({kind:'lib', ref:key, name:''});
+  } else if(at){
+    _bCluster(map, o.x, o.y, n).forEach(p=>{ const id=genItemId(); map.markers.push({id, key, x:p.x, y:p.y}); add.push({kind:'mk', ref:id, name:''}); });
+  } else {
+    // Number them on from those of the kind already fighting ("Wolf 3")
+    let k=has.fight[key]||0;
+    for(let i=0;i<n;i++){ k++; add.push({kind:'lib', ref:key, name:(k>1||n>1)?base+' '+k:''}); }
+  }
+  add.forEach(a=>b.list.push({id:genItemId(), init, ...a}));
+  _bSort(b);
+  toast('⚔ '+(n>1?n+' × ':'')+t.name+' joined the fight','var(--red)');
+  return true;
+}
 // Every battle change, from the app or a pop-out, goes through here.
 function battleDo(camp, map, op, a1, a2){
   const gm=canDesignMaps(camp), b=_battle(map);
@@ -16279,6 +16334,7 @@ function battleDo(camp, map, op, a1, a2){
       b.list.push({id:genItemId(), kind:'mk', ref:String(m.id), name:'', init:_bD(20)}); n++; });
     if(!n){ toast('No new NPC or creature tokens on this map','var(--muted)'); return false; }
     _bSort(b); }
+  else if(op==='addLib'){ if(!_bAddLib(camp, map, b, a1, a2)) return false; }
   else if(op==='addHeroes'){ // characters who joined the campaign after the fight began
     const have=new Set(b.list.filter(e=>e.kind==='pc').map(e=>String(e.ref)));
     _campMembers(camp).forEach(c=>{ if(!have.has(String(c.id))) b.list.push({id:genItemId(), kind:'pc', ref:String(c.id), name:c.name, init:null}); }); _bSort(b); }
@@ -16438,6 +16494,14 @@ window.__tohPop = {
         ['STR','DEX','CON','INT','WIS','CHA'].forEach(ab=>active.mods.push({l:ab, v:_abMod(i.char, ab)})); } }
     return {on:true, gm, round:b.round||1, cur:b.cur, grid:+b.grid||0, list, active, log:(b.log||[]).slice(0,8)};
   },
+  // Battle mode, GM only: the campaign's NPCs and creatures (the Map tab's
+  // token windows) to pick from, with how many are on the map / in the fight.
+  library(mapId){
+    const cx=_popCtx(mapId); if(!cx) return null; const {camp, map}=cx; if(!canDesignMaps(camp)) return null;
+    const L=_tokLibrary(camp), has=_bKeyCounts(map, _battle(map));
+    const row=e=>({key:e.key, kind:e.kind, name:e.name, img:e.img, icon:e.icon, color:e.color, label:e.icon||_initials(e.name), group:e.group, dead:!!e.dead, onMap:has.onMap[e.key]||0, fight:has.fight[e.key]||0});
+    return {npc:L.npc.map(row), creature:L.creature.map(row), cos:_looksLikeStrahd(camp)};
+  },
   battleDo(mapId, op, a1, a2){
     const cx=_popCtx(mapId); if(!cx) return false;
     return battleDo(cx.camp, cx.map, op, a1, a2);
@@ -16509,8 +16573,9 @@ function _popoutMain(cfg){
       if(d.moved){ var a=api(); var ok=a && a.move(MAPID, d.id, d.x/VW, d.y/VH);
         if(!ok){ d.node.setAttribute('transform', d.tr); say(a?'That token can\'t be moved here':'The app window is closed — reopen the pop-out from the app'); setTimeout(function(){ say(''); }, 2600); } } }
     if(tap && placing && P.size===0){ var l=toMap(e); var a2=api(); var pl=placing; placing=null; say('');
-      if(!(a2 && a2.place(MAPID, pl.kind, pl.id, l.x/VW, l.y/VH))){ say('Could not place that token'); setTimeout(function(){ say(''); }, 2600); }
-      renderTray(); }
+      var placed = pl.kind==='bkey' ? (a2 && a2.battleDo(MAPID,'addLib', pl.id, {x:l.x/VW, y:l.y/VH, n:pl.n})) : (a2 && a2.place(MAPID, pl.kind, pl.id, l.x/VW, l.y/VH));
+      if(!placed){ say('Could not place that token'); setTimeout(function(){ say(''); }, 2600); }
+      renderTray(); if(window.__rb) window.__rb(); }
     if(P.size===0){ pan=null; tap=null; }
   }
   vp.addEventListener('pointerup',up); vp.addEventListener('pointercancel',up);
@@ -16522,9 +16587,12 @@ function _popoutMain(cfg){
   // ── Battle mode: initiative on the right, dice for the hero whose turn it is
   var bEl=document.getElementById('battle'), dEl=document.getElementById('dice'), ban=document.getElementById('bban');
   var dMode='normal', dMod=0, dMin=false, dCur=null;
+  // GM's picker of campaign NPCs and creatures (the Map tab's token windows)
+  var pOpen=false, pTab='npc', pQ='', pN=1, pCos=false;
   function sg(n){ return (n>=0?'+':'')+n; }
-  function face(it, px){ return it.img ? '<img src="'+esc(it.img)+'" alt="" referrerpolicy="no-referrer" style="width:'+px+'px;height:'+px+'px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 1.5px '+esc(it.color)+';flex:none">'
-      : '<span style="width:'+px+'px;height:'+px+'px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:'+Math.round(px*0.45)+'px;background:'+esc(it.color)+'55;box-shadow:0 0 0 1.5px '+esc(it.color)+';flex:none">'+esc(it.label)+'</span>'; }
+  // The icon / initials sit under the picture, so a picture that fails to load still leaves a face.
+  function face(it, px){ return '<span style="position:relative;overflow:hidden;width:'+px+'px;height:'+px+'px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:'+Math.round(px*0.45)+'px;background:'+esc(it.color)+'55;box-shadow:0 0 0 1.5px '+esc(it.color)+';flex:none">'+esc(it.label)
+      +(it.img?'<img src="'+esc(it.img)+'" alt="" referrerpolicy="no-referrer" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">':'')+'</span>'; }
   function renderBattle(){
     var a=api(), b=a&&a.battle(MAPID), on=!!(b&&b.on);
     document.body.classList.toggle('battle', on);
@@ -16539,7 +16607,9 @@ function _popoutMain(cfg){
     var keepN=nIn?nIn.value:'', keepI=iIn?iIn.value:'', focus=document.activeElement&&document.activeElement.id;
     var h='<div class="bh">INITIATIVE <span style="float:right">ROUND '+b.round+'</span></div>';
     if(b.gm) h+='<div class="bc"><button data-op="prev" title="Previous turn">&#9664;</button><button data-op="next" class="go">next turn &#9654;</button></div>'
-      +'<div class="bc"><button data-op="rollInit">&#127922; roll initiative</button><button data-op="addTokens" title="Add the NPC and creature tokens on this map">+ tokens</button><button data-op="grid" title="Grid size">&#9638; '+(b.grid||'off')+'</button></div>';
+      +'<div class="bc"><button data-op="rollInit">&#127922; roll initiative</button><button data-op="addTokens" title="Add the NPC and creature tokens on this map">+ tokens</button><button data-op="grid" title="Grid size">&#9638; '+(b.grid||'off')+'</button></div>'
+      +'<div class="bc"><button data-op="pick" class="pk'+(pOpen?' on':'')+'" aria-expanded="'+pOpen+'">'+(pOpen?'&#10005; close picker':'&#65291; NPC or creature')+'</button></div>';
+    if(b.gm && pOpen) h+=pickHtml();
     if(!b.list.length) h+='<div class="bn0">No one in the fight yet.</div>';
     h+=b.list.map(function(e){ var cur=e.id===b.cur;
       return '<div class="br'+(cur?' cur':'')+'">'
@@ -16549,9 +16619,12 @@ function _popoutMain(cfg){
     if(b.gm) h+='<div class="badd"><input id="bAddN" placeholder="Add a foe&hellip;" maxlength="40"><input id="bAddI" type="number" placeholder="init"><button data-op="add">add</button></div>';
     if(b.log.length) h+='<div class="bh" style="margin-top:10px">ROLLS</div>'+b.log.map(function(l){
       return '<div class="bl">'+(l.total==null?'<i>'+esc(l.label)+'</i>':'<b class="'+(l.crit?'crit':l.fail?'fail':'')+'">'+esc(l.total)+'</b> '+esc(l.who)+' &middot; '+esc(l.label))+'</div>'; }).join('');
+    var pq=document.getElementById('bPQ'), caret=pq&&focus==='bPQ'?pq.selectionStart:null, pl=document.getElementById('bPL'), plTop=pl?pl.scrollTop:0;
     bEl.innerHTML=h; bEl.style.display='block';
     nIn=document.getElementById('bAddN'); iIn=document.getElementById('bAddI');
     if(nIn){ nIn.value=keepN; if(focus==='bAddN') nIn.focus(); } if(iIn){ iIn.value=keepI; if(focus==='bAddI') iIn.focus(); }
+    pq=document.getElementById('bPQ'); if(pq && caret!=null){ pq.focus(); try{ pq.setSelectionRange(caret, caret); }catch(_){} }
+    if(b.gm && pOpen){ fillPick(); pl=document.getElementById('bPL'); if(pl) pl.scrollTop=plTop; }
     // The dice come up for each hero as their turn starts
     // The dice column on the left follows the turn: heroes roll for themselves, the GM for foes
     document.body.classList.toggle('dice-on', !!act);
@@ -16568,10 +16641,55 @@ function _popoutMain(cfg){
     }
     dEl.innerHTML=d; dEl.style.display='block';
   }
+  // ── The NPC / creature picker inside the initiative panel
+  function pickHtml(){
+    return '<div class="bp"><div class="bpt">'
+      +'<button data-pt="npc" class="'+(pTab==='npc'?'on':'')+'">&#129497; NPCs</button><button data-pt="creature" class="'+(pTab==='creature'?'on':'')+'">&#128058; Creatures</button></div>'
+      +'<input id="bPQ" placeholder="Search '+(pTab==='npc'?'NPCs':'creatures')+'&hellip;" value="'+esc(pQ)+'" autocomplete="off">'
+      +(pTab==='creature'?'<div class="bpn">How many <button data-pn="-1" aria-label="Fewer">&minus;</button><b>'+pN+'</b><button data-pn="1" aria-label="More">+</button><span>share one initiative roll</span></div>':'')
+      +'<div class="bps">Tap one, then tap the map to place it. <b>+ init</b> adds it with no token.</div>'
+      +'<div id="bPL" class="bpl"></div></div>';
+  }
+  function fillPick(){
+    var el=document.getElementById('bPL'); if(!el) return;
+    var a=api(), L=a&&a.library(MAPID); if(!L){ el.innerHTML='<div class="bn0">Only the GM can add NPCs and creatures.</div>'; return; }
+    var q=pQ.trim().toLowerCase(), all=L[pTab].filter(function(e){ return !q || e.name.toLowerCase().indexOf(q)>=0; });
+    var row=function(e){
+      var npcIn=e.kind==='npc' && e.fight>0, arm=placing && placing.kind==='bkey' && placing.id===e.key;
+      var tag=npcIn?'in the fight':e.kind==='npc'&&e.onMap?'on the map &middot; tap to add':(e.fight?e.fight+' in the fight':'')+(e.onMap&&!npcIn?(e.fight?' &middot; ':'')+e.onMap+' on the map':'');
+      return '<div class="bpr'+(arm?' on':'')+(e.dead?' dead':'')+'">'
+        +'<button class="bpm" data-pa="'+(npcIn?'':(e.kind==='npc'&&e.onMap?'init':'place'))+'" data-pk="'+esc(e.key)+'" data-pn2="'+esc(e.name)+'"'+(npcIn?' disabled':'')+'>'
+        +face(e, 24)+'<span class="bpx">'+esc(e.name)+(e.dead?' &#9760;':'')+(tag?'<small>'+tag+'</small>':'')+'</span></button>'
+        +(npcIn||(e.kind==='npc'&&e.onMap)?'':'<button class="bpi" data-pa="init" data-pk="'+esc(e.key)+'" title="Add to initiative without a token on the map">+ init</button>')+'</div>';
+    };
+    var sec=function(t, list){ return list.length ? '<div class="bph">'+t+'</div>'+list.map(row).join('') : ''; };
+    var own=all.filter(function(e){ return e.group==='camp'; }), lib=all.filter(function(e){ return e.group!=='camp'; });
+    var h=sec(pTab==='npc'?'THIS CAMPAIGN':'CUSTOM', own);
+    if(!own.length && !q) h+='<div class="bn0">'+(pTab==='npc'?'No campaign NPCs yet. Add them from the NPC window on the Map tab.':'No custom creatures yet. Add them from the Creature window on the Map tab.')+'</div>';
+    if(L.cos || q || pCos) h+=sec('CURSE OF STRAHD', lib);
+    else if(lib.length) h+='<button class="bpc" data-pa="cos">Show the Curse of Strahd list</button>';
+    if(q && !all.length) h+='<div class="bn0">Nothing matches &ldquo;'+esc(pQ)+'&rdquo;.</div>';
+    el.innerHTML=h;
+  }
+  bEl.addEventListener('input', function(e){ if(e.target.id!=='bPQ') return; pQ=e.target.value; fillPick(); });
+  bEl.addEventListener('click', function(e){
+    var t=e.target.closest('button[data-pt],button[data-pn],button[data-pa]'); if(!t) return;
+    if(t.hasAttribute('data-pt')){ pTab=t.getAttribute('data-pt'); pQ=''; renderBattle(); return; }
+    if(t.hasAttribute('data-pn')){ pN=Math.max(1,Math.min(12,pN+(+t.getAttribute('data-pn')))); renderBattle(); return; }
+    var pa=t.getAttribute('data-pa'), key=t.getAttribute('data-pk'), a=api();
+    if(pa==='cos'){ pCos=true; fillPick(); return; }
+    if(!pa || !key || !a) return;
+    var n=pTab==='creature'?pN:1;
+    if(pa==='init'){ if(placing && placing.kind==='bkey'){ placing=null; say(''); } a.battleDo(MAPID,'addLib', key, {n:n}); renderBattle(); return; }
+    if(placing && placing.kind==='bkey' && placing.id===key){ placing=null; say(''); }
+    else { placing={kind:'bkey', id:key, n:n}; say('Tap the map where '+(n>1?n+' × ':'')+(t.getAttribute('data-pn2')||'it')+' '+(n>1?'go':'goes')+' (tap the name again to cancel)'); }
+    fillPick(); renderTray();
+  });
   window.BATTLE=function(){ var a=api(); if(!a){ say('The app window is closed — reopen the pop-out from the app'); return; } a.battleDo(MAPID,'toggle'); renderBattle(); };
   bEl.addEventListener('click', function(e){
     var t=e.target.closest('button[data-op]'); if(!t) return; var a=api(); if(!a) return;
     var op=t.getAttribute('data-op'), ok;
+    if(op==='pick'){ pOpen=!pOpen; if(!pOpen && placing && placing.kind==='bkey'){ placing=null; say(''); } renderBattle(); return; }
     if(op==='add'){ var n=document.getElementById('bAddN'), iv=document.getElementById('bAddI'); ok=a.battleDo(MAPID,'add', n?n.value:'', iv?iv.value:''); if(ok){ if(n) n.value=''; if(iv) iv.value=''; } }
     else ok=a.battleDo(MAPID, op, t.getAttribute('data-id'));
     renderBattle();
@@ -16634,6 +16752,16 @@ function popOutMap(){
     +'#battle .bn{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#battle .bn em{font-style:normal;font-size:11px;letter-spacing:1px;color:#e74c3c;font-weight:700}'
     +'#battle .bx{padding:2px 6px;font-size:11px;border-color:transparent;background:none;color:#b8b0d8}'
     +'#battle .badd{display:flex;gap:5px;margin-top:8px}#battle .badd input{min-width:0;flex:1;font:inherit;font-size:12px;padding:5px 7px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:#e8e0ff}#battle .badd input[type=number]{flex:none;width:52px}'
+    +'#battle .bc .pk{border-color:#c9a227;color:#c9a227}#battle .bc .pk.on{border-color:rgba(255,255,255,0.25);color:#e8e0ff}'
+    +'#battle .bp{border:1px solid rgba(201,162,39,0.45);border-radius:10px;padding:8px;margin:0 0 10px;background:rgba(0,0,0,0.22)}'
+    +'#battle .bpt{display:flex;gap:5px;margin-bottom:6px}#battle .bpt button{flex:1}#battle .bpt .on{border-color:#c9a227;color:#c9a227;background:rgba(201,162,39,0.12)}'
+    +'#battle #bPQ{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:6px 8px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:#e8e0ff;margin-bottom:6px}'
+    +'#battle .bpn{display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:6px}#battle .bpn b{min-width:16px;text-align:center;color:#c9a227}#battle .bpn span{font-size:10px;color:#b8b0d8}'
+    +'#battle .bps{font-size:11px;color:#b8b0d8;margin-bottom:6px}#battle .bph{font-family:Cinzel,serif;font-size:10px;letter-spacing:1px;color:#c9a227;margin:8px 0 4px}'
+    +'#battle .bpl{max-height:38vh;overflow:auto}#battle .bpr{display:flex;gap:4px;margin-bottom:3px}#battle .bpr.dead{opacity:0.6}'
+    +'#battle .bpm{flex:1;min-width:0;display:flex;align-items:center;gap:7px;text-align:left;padding:4px 6px;border-color:transparent;background:rgba(255,255,255,0.04)}#battle .bpm:disabled{opacity:0.55;cursor:default}'
+    +'#battle .bpr.on .bpm{border-color:#c9a227;background:rgba(201,162,39,0.15)}#battle .bpx{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}#battle .bpx small{display:block;font-size:10px;color:#b8b0d8}'
+    +'#battle .bpi{flex:none;font-size:11px;padding:4px 7px}#battle .bpc{width:100%;margin-top:6px}'
     +'#battle .bl{font-size:11px;color:#b8b0d8;margin:3px 0}#battle .bl b{color:#e8e0ff;font-size:13px}.crit{color:#27ae60!important}.fail{color:#e74c3c!important}'
     +'#dice{position:fixed;left:10px;top:10px;bottom:10px;width:260px;overflow:auto;z-index:10;background:rgba(20,16,40,0.95);border:1px solid #c9a227;border-radius:14px;padding:10px 12px;display:none;color:#e8e0ff;box-sizing:border-box;box-shadow:0 6px 30px rgba(0,0,0,0.6)}'
     +'#dice .dh{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid rgba(201,162,39,0.35)}#dice .dt{font-family:Cinzel,serif;font-size:14px;color:#c9a227;letter-spacing:0.5px}#dice .ds{font-size:11px;color:#b8b0d8}'
@@ -16641,11 +16769,11 @@ function popOutMap(){
     +'#dice .dr{display:flex;align-items:center;gap:12px;margin:8px 0 2px;padding:6px 10px;border-radius:10px;background:rgba(0,0,0,0.25)}#dice .dv{font-family:Cinzel,serif;font-size:34px;font-weight:700;color:#c9a227;min-width:52px;text-align:center}#dice .dd{font-size:12px}#dice .dd span{color:#b8b0d8;font-size:11px}'
     +'#dice .dm{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:10px}#dice .dm .on{border-color:#c9a227;color:#c9a227}#dice .dmod{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;font-size:14px;margin-top:4px}#dice .dm>button{flex:1}'
     +'#dice .dk,#dice .dq{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}#dice .dk button{flex:1 0 calc(25% - 5px);font-weight:600;padding:10px 0}#dice .dq button{flex:1 0 calc(50% - 5px)}#dice .dq button{font-size:11px;padding:4px 8px}'
-    +'@media (max-width:760px){body.battle #vp{right:0;bottom:46vh}#battle{top:auto;left:10px;width:auto;height:44vh}body.battle.dice-on #vp{left:0}body.battle.dice-on #tray{left:10px}body.battle.dice-on #bban{left:12px}#dice{top:auto;left:10px;right:10px;width:auto;max-height:30vh;bottom:calc(44vh + 18px)}#bban{max-width:calc(100% - 24px);top:52px}}'
+    +'@media (max-width:760px){body.battle #vp{right:0;bottom:46vh}#battle{top:auto;left:10px;width:auto;height:44vh}body.battle.dice-on #vp{left:0}body.battle.dice-on #tray{left:10px}body.battle.dice-on #bban{left:12px}#dice{top:auto;left:10px;right:10px;width:auto;max-height:30vh;bottom:calc(44vh + 18px)}#bban{max-width:calc(100% - 24px);top:52px}#battle .bpl{max-height:none}#bar{left:10px;flex-wrap:wrap;justify-content:flex-end;gap:4px}#bar button{padding:6px 8px;font-size:12px}#bar .fsl,#live{display:none}}'
     +'</style></head><body>'
     +'<div id="ttl">'+title+'</div><div id="bban"></div><div id="hint"></div>'
     +'<div id="vp">'+clone.outerHTML+'</div>'
-    +'<div id="bar"><span id="live" style="align-self:center;color:#27ae60;font-size:11px;font-weight:600;margin-right:4px">&#9679; LIVE</span><button id="battleBtn" onclick="BATTLE()" style="display:none;border-color:#c0392b;color:#ff8a7a">&#9876; battle</button><button id="trayBtn" onclick="TRAY()">&#129485; tokens</button><button onclick="Z(1/1.4)">&minus;</button><button onclick="Z(1.4)">&plus;</button><button onclick="FIT()">fit</button><button onclick="FS()">&#9974; full screen</button></div>'
+    +'<div id="bar"><span id="live" style="align-self:center;color:#27ae60;font-size:11px;font-weight:600;margin-right:4px">&#9679; LIVE</span><button id="battleBtn" onclick="BATTLE()" style="display:none;border-color:#c0392b;color:#ff8a7a">&#9876; battle</button><button id="trayBtn" onclick="TRAY()">&#129485; tokens</button><button onclick="Z(1/1.4)">&minus;</button><button onclick="Z(1.4)">&plus;</button><button onclick="FIT()">fit</button><button onclick="FS()">&#9974;<span class="fsl"> full screen</span></button></div>'
     +'<div id="tray"></div><div id="battle"></div><div id="dice"></div>'
     +'<script>('+_popoutMain.toString()+')('+cfg+');<\/script></body></html>');
   w.document.close();
@@ -21570,7 +21698,11 @@ function _mapMarkers(map){
 }
 function _migrateLegacyMarkers(camp){
   let changed = false;
-  _campMaps(camp).forEach(m=>{ if(m.npcTokens && Object.keys(m.npcTokens).length){ m.markers = _mapMarkers(m).map(x=>({id:String(x.id).startsWith('lg-')?genItemId():x.id, key:x.key, x:x.x, y:x.y})); delete m.npcTokens; changed = true; } else if(m.npcTokens){ delete m.npcTokens; } });
+  _campMaps(camp).forEach(m=>{ if(m.npcTokens && Object.keys(m.npcTokens).length){ const ren={};
+      m.markers = _mapMarkers(m).map(x=>{ const id=String(x.id).startsWith('lg-')?(ren[x.id]=genItemId()):x.id; return {id, key:x.key, x:x.x, y:x.y}; });
+      // a fight already under way keeps hold of these NPCs under their new ids
+      if(m.battle && m.battle.list) m.battle.list.forEach(e=>{ if(e.kind==='mk' && ren[e.ref]) e.ref=ren[e.ref]; });
+      delete m.npcTokens; changed = true; } else if(m.npcTokens){ delete m.npcTokens; } });
   return changed;
 }
 // Token face at radius 10 (same frame as a player mini).
