@@ -5414,7 +5414,7 @@ async function adjHP(id,sign){
 
   const applyHP=(char)=>{
     const prevHP=char.currentHP;
-    char.currentHP=Math.max(0,Math.min(char.maxHP,char.currentHP+delta));
+    char.currentHP=Math.max(0,char.currentHP+delta);   // over the maximum: temporary hit points
     // Auto-log to party history
     if(ci_camp>=0){
       if(prevHP>0 && char.currentHP===0){
@@ -11053,7 +11053,8 @@ function renderDiceCharPanel(){
         const acBoosted = ac !== baseAC;
         const initMod = initiativeInfo(char).total;
         const initSign = initMod>=0?'+':'';
-        const pct = Math.max(0,Math.round((char.currentHP/char.maxHP)*100));
+        const pct = Math.max(0,Math.min(100,Math.round((char.currentHP/char.maxHP)*100)));
+        const tmp = Math.max(0,(parseInt(char.currentHP)||0)-(parseInt(char.maxHP)||0));
         const hpC = pct>60?'var(--green)':pct>25?'var(--gold)':'var(--red)';
         return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:10px">
           <div style="background:var(--surface);border:1px solid ${acBoosted?cc:'var(--border)'};border-radius:8px;padding:6px 4px;text-align:center">
@@ -11066,7 +11067,7 @@ function renderDiceCharPanel(){
           </div>
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 4px;text-align:center">
             <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--muted);letter-spacing:0.5px">HP${gi('HP')}</div>
-            <div style="font-family:'Cinzel',serif;font-size:16px;color:${hpC}">${char.currentHP}</div>
+            <div style="font-family:'Cinzel',serif;font-size:16px;color:${hpC}">${char.currentHP}${tmp?`<div style="font-size:10px;color:var(--purple);font-family:inherit" title="Temporary hit points above the maximum">+${tmp} temp</div>`:''}</div>
           </div>
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 4px;text-align:center">
             <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--muted);letter-spacing:0.5px">MAX</div>
@@ -16682,13 +16683,13 @@ function _bScoreHtml(sc, gm, o){
     const img=(c&&(c.token||c.portrait))||(gm?r.img:r.pimg), lb=gm?r.label:(r.plabel||r.label);
     return '<span class="bs-face'+(sm?' sm':'')+'" style="--cc:'+esc(r.color||'#8880b0')+'">'+esc(lb||'?')+(img?'<img src="'+esc(img)+'" alt="" referrerpolicy="no-referrer" onerror="this.remove()">':'')+'</span>'; };
   const rows=(sc.rows||[]).slice().sort((a,b)=>(b.d-a.d)||(b.h-a.h)||(a.t-b.t));
-  const award=(k, title, unit, ac, only)=>{ const r=_bAward(only||rows, k);
+  const heroes=rows.filter(r=>r.pc), award=(k, title, unit, ac)=>{ const r=_bAward(heroes, k);
     return '<div class="bs-award" style="--ac:'+ac+'">'+(r?face(r):'<span class="bs-face" style="--cc:var(--border2)">–</span>')
       +'<div style="min-width:0"><div class="bs-k">'+title+'</div>'+(r?'<div class="bs-n">'+esc(nm(r))+'</div><div class="bs-v">'+r[k]+'<small>'+unit+'</small></div>':'<div class="bs-n" style="color:var(--muted)">No one</div>')+'</div></div>'; };
   const sum=k=>rows.reduce((n,r)=>n+(r[k]||0), 0), downs=rows.filter(r=>!r.pc && r.down).length;
   const any=sum('d')+sum('t')+sum('h')>0;
   return '<div class="bs-sum">'+(sc.round||1)+' round'+((sc.round||1)>1?'s':'')+' · '+sum('t')+' damage · '+sum('h')+' healing'+(downs?' · '+downs+' foe'+(downs>1?'s':'')+' down':'')+'</div>'
-    +'<div class="bs-awards">'+award('d', '⚔ Most damage dealt', 'dmg', '#e74c3c')+award('t', '🛡 Most damage taken', 'dmg', '#e67e22', rows.filter(r=>r.pc))+award('h', '✚ Most healing done', 'hp', '#2ecc71')+'</div>'
+    +'<div class="bs-awards">'+award('d', '⚔ Most damage dealt', 'dmg', '#e74c3c')+award('t', '🛡 Most damage taken', 'dmg', '#e67e22')+award('h', '✚ Most healing done', 'hp', '#2ecc71')+'</div>'
     +_mvpHtml(sc, o.camp, !!o.live, face, nm)
     +'<div class="bs-h">⚔ EVERY COMBATANT</div>'
     +'<table class="bs-table"><thead><tr><th>COMBATANT</th><th>DEALT</th><th>TAKEN</th><th>HEALED</th></tr></thead><tbody>'
@@ -18909,7 +18910,8 @@ function _charHpBy(id, sign, amt){
   const char=chars[ci];
   const max=Math.max(1,parseInt(char.maxHP)||1);
   const prev=Math.max(0,parseInt(char.currentHP)||0);
-  char.currentHP=Math.max(0,Math.min(max,prev+sign*amt));
+  // healing past the maximum is temporary hit points, which damage takes first
+  char.currentHP=sign>0 ? prev+amt : Math.max(0,prev-amt);
   try{
     const camps=getCampaigns(); const cc=camps.findIndex(c=>c.id===getActiveCampId());
     if(cc>=0){
