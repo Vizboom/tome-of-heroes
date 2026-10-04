@@ -613,6 +613,13 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .chc-hp-row button{width:34px;height:30px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font-size:16px;line-height:1;}
 .chc-hp-row input{width:46px;height:30px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;color:var(--text);text-align:center;font-size:13px;}
 .chc-hp-num{margin-left:auto;font-family:'Cinzel',serif;font-size:13px;}
+.dc-hp{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-4px 0 10px;}
+.dc-hp-bar{flex:1 0 100%;height:5px;border-radius:3px;background:var(--surface);overflow:hidden;}
+.dc-hp-bar span{display:block;height:100%;border-radius:3px;transition:width .3s;}
+.dc-hp input{flex:1;min-width:0;height:34px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;color:var(--text);text-align:center;font-size:15px;}
+.dc-hp-b{flex:0 0 auto;height:34px;padding:0 12px;border-radius:8px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;background:var(--surface);}
+.dc-hp-b.dmg{border:1px solid var(--red);color:#e74c3c;}
+.dc-hp-b.heal{border:1px solid var(--green);color:var(--green);}
 
 /* HP block */
 .hp-block{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:10px 0;}
@@ -1508,6 +1515,43 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .bt-chip.down{opacity:0.55;text-decoration:line-through;}
 .bt-chip .bt-hp{color:#e74c3c;font-weight:700;padding:0 2px;}
 .bt-chip .bt-hp.bloodied{color:#e67e22;}.bt-chip .bt-hp.down{color:var(--muted);}
+/* Score screen when a battle ends */
+.bs-sum{text-align:center;font-size:12px;color:var(--muted);margin:-2px 0 12px;}
+.bs-awards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:14px;}
+.bs-award{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:12px 8px;border-radius:12px;border:1px solid var(--ac);background:color-mix(in srgb,var(--ac) 12%,transparent);min-width:0;}
+.bs-award>div{width:100%}
+.bs-award .bs-k{font-size:10px;letter-spacing:1px;color:var(--ac);font-weight:700;text-transform:uppercase;}
+.bs-award .bs-n{font-size:13px;color:var(--text);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.bs-award .bs-v{font-family:'Cinzel',serif;font-size:20px;color:var(--text);line-height:1.1;}
+.bs-award .bs-v small{font-family:inherit;font-size:11px;color:var(--muted);margin-left:3px;}
+.bs-face{position:relative;overflow:hidden;width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:16px;background:color-mix(in srgb,var(--cc) 33%,transparent);box-shadow:0 0 0 2px var(--cc);flex:none;}
+.bs-face img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+.bs-face.sm{width:22px;height:22px;font-size:11px;box-shadow:0 0 0 1.5px var(--cc);}
+.bs-table{width:100%;border-collapse:collapse;font-size:12px;}
+.bs-table th{font-weight:600;font-size:10px;letter-spacing:1px;color:var(--muted);text-align:right;padding:4px 6px;border-bottom:1px solid var(--border2);}
+.bs-table th:first-child,.bs-table td:first-child{text-align:left;}
+.bs-table td{padding:5px 6px;border-bottom:1px solid var(--border);text-align:right;color:var(--text);font-variant-numeric:tabular-nums;}
+.bs-who{display:flex;align-items:center;gap:6px;min-width:0;}
+.bs-who>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.bs-table tr.foe .bs-who>span:last-child{color:#e8a39a;}
+.bs-table td.z{color:var(--muted);}
+.bs-note{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.4;}
+.bs-h{font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;color:var(--gold);margin:14px 0 6px;}
+.bs-h span{font-family:inherit;color:var(--muted);letter-spacing:0;margin-left:6px;}
+.bs-votes{display:flex;flex-direction:column;gap:5px;}
+.bs-vote{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);font-size:13px;}
+.bs-vote.win{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 10%,var(--surface2));}
+.bs-vn{flex:0 1 auto;min-width:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);}
+.bs-vbar{flex:1;height:6px;border-radius:3px;background:var(--surface);overflow:hidden;min-width:30px;}
+.bs-vbar span{display:block;height:100%;background:var(--gold);border-radius:3px;transition:width .3s;}
+.bs-vote b{font-family:'Cinzel',serif;min-width:16px;text-align:right;color:var(--text);}
+.bs-vb{flex:none;font:inherit;font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--gold);background:none;color:var(--gold);cursor:pointer;}
+.bs-vb.on{background:var(--gold);color:#1a1405;font-weight:700;}
+.bs-crown{text-align:center;font-family:'Cinzel',serif;font-size:14px;color:var(--gold);margin:10px 0 2px;}
+.bs-board{display:flex;flex-wrap:wrap;gap:6px;}
+.bs-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text);border:1px solid var(--border2);border-radius:999px;padding:3px 10px 3px 4px;background:var(--surface2);}
+.bs-chip b{font-family:'Cinzel',serif;font-size:11px;color:#1a1405;background:var(--gold);border-radius:999px;min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;}
+@media(max-width:560px){.bs-awards{grid-template-columns:1fr;gap:6px}.bs-award{flex-direction:row;text-align:left;gap:10px;padding:8px 10px}}
 .battle-strip .bt-pick{border:1px solid rgba(201,162,39,0.45);border-radius:10px;padding:8px;margin:0 0 8px;background:var(--surface);}
 .battle-strip .bt-ptabs{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:6px;}
 .battle-strip .bt-pqty{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);}
@@ -2563,6 +2607,7 @@ function subscribeRealtime(campId){
       if(document.getElementById('rosterList')?.closest('.screen.active')) renderRoster();
       if(document.getElementById('ptab-overview')?.classList.contains('active')) renderPartyOverview();
       if(document.getElementById('ptab-initiative')?.classList.contains('active')) renderInitiative();
+      _bTrackAll();
     }).subscribe();
   _realtimeSubs.push(charSub);
 
@@ -2633,6 +2678,7 @@ function subscribeRealtime(campId){
           if(document.getElementById('rosterList')?.closest('.screen.active')) renderRoster();
           if(document.getElementById('ptab-overview')?.classList.contains('active')) renderPartyOverview();
           if(document.getElementById('scr-character')?.classList.contains('active')) renderCharacterScreen();
+          _bTrackAll();
         }).subscribe();
       _realtimeSubs.push(sharedCharSub);
     }  // end if(joinCode)
@@ -3547,11 +3593,13 @@ function saveChars(chars){
 
   // Delete removed chars from Supabase
   removed.forEach(c => dbDeleteChar(c.id));
+  _bTrackAll();   // a hero's hit points in a fight count toward the score screen
 }
 function saveChar(char){
   const i = _db.chars.findIndex(c=>String(c.id)===String(char.id));
   if(i>=0) _db.chars[i]=char; else _db.chars.push(char);
   dbSaveChar(char);
+  _bTrackAll();
 }
 
 // ── Campaigns ──
@@ -5366,7 +5414,7 @@ async function adjHP(id,sign){
 
   const applyHP=(char)=>{
     const prevHP=char.currentHP;
-    char.currentHP=Math.max(0,Math.min(char.maxHP,char.currentHP+delta));
+    char.currentHP=Math.max(0,char.currentHP+delta);   // over the maximum: temporary hit points
     // Auto-log to party history
     if(ci_camp>=0){
       if(prevHP>0 && char.currentHP===0){
@@ -11005,7 +11053,8 @@ function renderDiceCharPanel(){
         const acBoosted = ac !== baseAC;
         const initMod = initiativeInfo(char).total;
         const initSign = initMod>=0?'+':'';
-        const pct = Math.max(0,Math.round((char.currentHP/char.maxHP)*100));
+        const pct = Math.max(0,Math.min(100,Math.round((char.currentHP/char.maxHP)*100)));
+        const tmp = Math.max(0,(parseInt(char.currentHP)||0)-(parseInt(char.maxHP)||0));
         const hpC = pct>60?'var(--green)':pct>25?'var(--gold)':'var(--red)';
         return `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:10px">
           <div style="background:var(--surface);border:1px solid ${acBoosted?cc:'var(--border)'};border-radius:8px;padding:6px 4px;text-align:center">
@@ -11018,13 +11067,19 @@ function renderDiceCharPanel(){
           </div>
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 4px;text-align:center">
             <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--muted);letter-spacing:0.5px">HP${gi('HP')}</div>
-            <div style="font-family:'Cinzel',serif;font-size:16px;color:${hpC}">${char.currentHP}</div>
+            <div style="font-family:'Cinzel',serif;font-size:16px;color:${hpC}">${char.currentHP}${tmp?`<div style="font-size:10px;color:var(--purple);font-family:inherit" title="Temporary hit points above the maximum">+${tmp} temp</div>`:''}</div>
           </div>
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 4px;text-align:center">
             <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--muted);letter-spacing:0.5px">MAX</div>
             <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--muted)">${char.maxHP}</div>
           </div>
-        </div>`;
+        </div>
+        ${!char._sharedCampId?`<div class="dc-hp">
+          <div class="dc-hp-bar"><span style="width:${pct}%;background:${hpC}"></span></div>
+          <button class="dc-hp-b dmg" onclick="diceCharHP(-1)" title="Take this much damage">− Damage</button>
+          <input id="dcHpAmt" type="number" min="1" max="999" inputmode="numeric" placeholder="HP" aria-label="Hit points to take or heal" onkeydown="if(event.key==='Enter')diceCharHP(-1)">
+          <button class="dc-hp-b heal" onclick="diceCharHP(1)" title="Heal this much">+ Heal</button>
+        </div>`:''}`;
       })()}
 
       ${activeEffects.length||customFx.length?`
@@ -15447,6 +15502,7 @@ function renderMap(){
       ${gm?`<button class="pc-pill ${_tokWin.npc?'on':''}" onclick="toggleTokWin('npc')" title="GM: a window of NPC tokens to drop onto the map">🧙 NPC tokens</button><button class="pc-pill ${_tokWin.creature?'on':''}" onclick="toggleTokWin('creature')" title="GM: a window of creature tokens to drop onto the map">🐺 creature tokens</button>`:''}
       <button class="pc-pill" onclick="popOutMap()" title="Open this map full-screen in its own window">⛶ pop out</button>
       ${canDesignMaps(camp)?`<button class="pc-pill ${_battle(map)?'on':''}" style="color:var(--red);border-color:var(--red)" onclick="battleOp('toggle')" title="${_battle(map)?'End the encounter — heroes rejoin the party marker':'Turn this map into an encounter everyone sees: grid, initiative and turns'}">⚔ ${_battle(map)?'end battle':'battle mode'}</button>`:''}
+      ${!_battle(map)&&map.lastBattle?`<button class="pc-pill" onclick="openBattleScore()" title="Damage dealt and taken, and healing done, in the last fight on this map">🏆 last battle</button>`:''}
 
 <span class="pc-pill" style="cursor:default">📌 ${_pinPx(map)}px</span>
       <button class="pc-pill ${map.hidePinLabels?'on':''}" onclick="togglePinLabels('${map.id}')" title="Master switch — hide every place name on this map">${map.hidePinLabels?'all names off':'all names on'}</button>
@@ -16528,6 +16584,127 @@ function _bFoeInit(camp, key){ return _bD(20)+_tokStats(camp, key).init; }
 function _bFoeHp(camp, key){ const hp=_tokStats(camp, key).hp; return hp>0 ? {hp, maxHp:hp} : {}; }
 // How a foe is holding up: bloodied at half its hit points, down at 0.
 function _bHealth(e){ if(!(e.maxHp>0)) return null; return e.hp<=0 ? 'down' : e.hp<=e.maxHp/2 ? 'bloodied' : 'ok'; }
+// Damage and healing tallies for the score screen. Whoever's turn it is gets
+// the credit, since they are the one swinging or healing; damage on your own
+// turn (a trap, a fall) counts as taken but not as dealt.
+function _bTally(b, target, kind, n){
+  n=Math.round(+n||0); if(!(n>0)) return;
+  const s=b.stats=b.stats||{}, row=id=>(s[id]=s[id]||{d:0, t:0, h:0});
+  if(kind==='dmg'){ row(target).t+=n; if(b.cur && b.cur!==target && b.list.some(e=>e.id===b.cur)) row(b.cur).d+=n; }
+  else if(b.cur && b.list.some(e=>e.id===b.cur)) row(b.cur).h+=n;
+}
+// Heroes' hit points change on their own sheets, often on another player's
+// device. The GM's app watches them during a fight and tallies the changes.
+function _bTrackHeroes(camp){
+  if(!camp || !canDesignMaps(camp)) return false;
+  let changed=false;
+  _campMaps(camp).forEach(map=>{ const b=_battle(map); if(!b) return;
+    b.list.forEach(e=>{ if(e.kind!=='pc') return; const c=_bChar(camp, e.ref); if(!c) return;
+      const hp=Math.max(0, parseInt(c.currentHP)||0);
+      if(e.seenHp==null){ e.seenHp=hp; changed=true; return; }
+      if(hp===e.seenHp) return;
+      if(hp<e.seenHp) _bTally(b, e.id, 'dmg', e.seenHp-hp); else _bTally(b, e.id, 'heal', hp-e.seenHp);
+      e.seenHp=hp; changed=true; }); });
+  return changed;
+}
+function _bTrackAll(){
+  try{ getCampaigns().forEach(camp=>{ if(_bTrackHeroes(camp)) saveCampaign(camp); }); }catch(e){}
+}
+// One combatant's line on the score screen: the GM's view and the players'.
+// Pictures that are stored inline stay off it (heroes' come from their sheet).
+function _bRowInfo(camp, map, e){
+  const g=_bInfo(camp, map, e, true), p=_bInfo(camp, map, e, false), url=u=>u && !/^data:/.test(u) ? u : '';
+  return {pc:e.kind==='pc', cref:e.kind==='pc'?String(e.ref):'', name:g.name, pname:p.name, img:url(g.img), pimg:url(p.img), color:g.color, label:g.label, plabel:p.label, down:_bHealth(e)==='down'};
+}
+// The final tally, kept on the map so every device can show the score screen.
+function _bScore(camp, map, b){
+  const s=b.stats||{}, gone=b.gone||{}, z={d:0, t:0, h:0};
+  const rows=b.list.map(e=>({id:e.id, ..._bRowInfo(camp, map, e), ...z, ...s[e.id]}))
+    .concat(Object.keys(s).filter(id=>gone[id] && !b.list.some(e=>e.id===id)).map(id=>({id, ...gone[id], ...z, ...s[id]})));
+  return {id:genItemId(), t:Date.now(), round:b.round||1, rows};
+}
+function _bAward(rows, k){ let top=null; rows.forEach(r=>{ if((r[k]||0)>0 && (!top || r[k]>top[k])) top=r; }); return top; }
+// The score screen: three awards and every combatant's numbers. Players see
+// hidden foes as "Unknown foe", as they did during the fight.
+// MVP votes: one per person (by account, or by device when signed out), for
+// any hero in the fight. Tapping your vote again takes it back.
+function _mvpVoter(){
+  if(_authUid) return 'u:'+_authUid;
+  let d=''; try{ d=localStorage.getItem('toh_voter')||''; if(!d){ d='d:'+genItemId(); localStorage.setItem('toh_voter', d); } }catch(e){ d='d:here'; }
+  return d;
+}
+function _mvpTally(sc){
+  const n={}, heroes=new Set((sc.rows||[]).filter(r=>r.pc).map(r=>r.id));
+  Object.values(sc.votes||{}).forEach(id=>{ if(heroes.has(id)) n[id]=(n[id]||0)+1; });
+  const top=Math.max(0, ...Object.values(n));
+  return {n, top, win:top ? Object.keys(n).filter(k=>n[k]===top) : []};
+}
+// The campaign's record of who was crowned, battle by battle (ties share it).
+function _mvpRecord(camp, sc){
+  const ids=_mvpTally(sc).win.map(id=>((sc.rows||[]).find(r=>r.id===id)||{}).cref).filter(Boolean);
+  camp.mvp=camp.mvp||{};
+  if(_jeq(camp.mvp[sc.id]||[], ids)) return false;
+  if(ids.length) camp.mvp[sc.id]=ids; else delete camp.mvp[sc.id];
+  return true;
+}
+function _bScoreHome(id){
+  for(const camp of getCampaigns()) for(const map of _campMaps(camp)) if(map.lastBattle && map.lastBattle.id===id) return {camp, map};
+  return null;
+}
+function battleVote(scId, rowId){
+  const h=_bScoreHome(scId); if(!h) return;
+  const sc=h.map.lastBattle, me=_mvpVoter(); sc.votes=sc.votes||{};
+  if(sc.votes[me]===rowId) delete sc.votes[me]; else sc.votes[me]=rowId;
+  _mvpRecord(h.camp, sc);
+  saveCampaign(h.camp);
+  openBattleScore(sc, canDesignMaps(h.camp));
+}
+// The MVP vote (live) or its result (read-only, for the pop-out) and the
+// campaign's running crown count.
+function _mvpHtml(sc, camp, live, face, nm){
+  const heroes=(sc.rows||[]).filter(r=>r.pc); if(!heroes.length) return '';
+  const t=_mvpTally(sc), mine=live ? (sc.votes||{})[_mvpVoter()] : null, total=Object.values(t.n).reduce((a,b)=>a+b, 0);
+  let h='<div class="bs-h">🗳 VOTE FOR THE MVP'+(total?' <span>'+total+' vote'+(total>1?'s':'')+'</span>':'')+'</div><div class="bs-votes">'
+    +heroes.map(r=>{ const n=t.n[r.id]||0, crown=t.top>0 && n===t.top, me=mine===r.id;
+      return '<div class="bs-vote'+(crown?' win':'')+'">'+face(r, true)+'<span class="bs-vn">'+(crown?'👑 ':'')+esc(nm(r))+'</span>'
+        +'<span class="bs-vbar"><span style="width:'+(t.top?Math.round(n/t.top*100):0)+'%"></span></span><b>'+n+'</b>'
+        +(live?'<button class="bs-vb'+(me?' on':'')+'" onclick="battleVote(\''+jsq(sc.id)+'\',\''+jsq(r.id)+'\')">'+(me?'✓ voted':'vote')+'</button>':'')+'</div>'; }).join('')+'</div>';
+  if(t.win.length) h+='<div class="bs-crown">👑 '+t.win.map(id=>esc(nm(heroes.find(r=>r.id===id)))).join(' & ')+(t.win.length>1?' share':' is')+' the MVP'+(t.win.length>1?'':' of this battle')+'</div>';
+  // the campaign's tally, counting this battle's current leader
+  const mvp=(camp && camp.mvp) || {}, count={};
+  Object.values(mvp).forEach(ids=>(ids||[]).forEach(id=>{ count[id]=(count[id]||0)+1; }));
+  const board=Object.keys(count).map(id=>({id, n:count[id], c:getChars().find(x=>String(x.id)===String(id))})).filter(x=>x.c).sort((a,b)=>b.n-a.n);
+  if(board.length) h+='<div class="bs-h">👑 CAMPAIGN MVPs</div><div class="bs-board">'+board.map(x=>'<span class="bs-chip"><b>'+x.n+'</b>'+esc(x.c.name)+'</span>').join('')+'</div>';
+  return h;
+}
+function _bScoreHtml(sc, gm, o){
+  o=o||{};
+  const nm=r=>gm?r.name:(r.pname||r.name), face=(r, sm)=>{ const c=r.cref&&getChars().find(x=>String(x.id)===r.cref);
+    const img=(c&&(c.token||c.portrait))||(gm?r.img:r.pimg), lb=gm?r.label:(r.plabel||r.label);
+    return '<span class="bs-face'+(sm?' sm':'')+'" style="--cc:'+esc(r.color||'#8880b0')+'">'+esc(lb||'?')+(img?'<img src="'+esc(img)+'" alt="" referrerpolicy="no-referrer" onerror="this.remove()">':'')+'</span>'; };
+  const rows=(sc.rows||[]).slice().sort((a,b)=>(b.d-a.d)||(b.h-a.h)||(a.t-b.t));
+  const heroes=rows.filter(r=>r.pc), award=(k, title, unit, ac)=>{ const r=_bAward(heroes, k);
+    return '<div class="bs-award" style="--ac:'+ac+'">'+(r?face(r):'<span class="bs-face" style="--cc:var(--border2)">–</span>')
+      +'<div style="min-width:0"><div class="bs-k">'+title+'</div>'+(r?'<div class="bs-n">'+esc(nm(r))+'</div><div class="bs-v">'+r[k]+'<small>'+unit+'</small></div>':'<div class="bs-n" style="color:var(--muted)">No one</div>')+'</div></div>'; };
+  const sum=k=>rows.reduce((n,r)=>n+(r[k]||0), 0), downs=rows.filter(r=>!r.pc && r.down).length;
+  const any=sum('d')+sum('t')+sum('h')>0;
+  return '<div class="bs-sum">'+(sc.round||1)+' round'+((sc.round||1)>1?'s':'')+' · '+sum('t')+' damage · '+sum('h')+' healing'+(downs?' · '+downs+' foe'+(downs>1?'s':'')+' down':'')+'</div>'
+    +'<div class="bs-awards">'+award('d', '⚔ Most damage dealt', 'dmg', '#e74c3c')+award('t', '🛡 Most damage taken', 'dmg', '#e67e22')+award('h', '✚ Most healing done', 'hp', '#2ecc71')+'</div>'
+    +_mvpHtml(sc, o.camp, !!o.live, face, nm)
+    +'<div class="bs-h">⚔ EVERY COMBATANT</div>'
+    +'<table class="bs-table"><thead><tr><th>COMBATANT</th><th>DEALT</th><th>TAKEN</th><th>HEALED</th></tr></thead><tbody>'
+    +rows.map(r=>'<tr class="'+(r.pc?'':'foe')+'"><td><div class="bs-who">'+face(r, true)+'<span>'+esc(nm(r))+(r.down&&!r.pc?' 💀':'')+'</span></div></td>'
+      +['d','t','h'].map(k=>'<td class="'+(r[k]?'':'z')+'">'+(r[k]||0)+'</td>').join('')+'</tr>').join('')+'</tbody></table>'
+    +(any?'':'<div class="bs-note">No hits were recorded. Damage and healing count when hit points change during the fight: the GM’s ♥ buttons for foes, and the heroes’ own HP.</div>')
+    +'<div class="bs-note">Damage and healing are credited to whoever’s turn it was.</div>';
+}
+function openBattleScore(sc, gm){
+  if(!sc){ const camp=getCampaigns().find(c=>c.id===editingCampId), map=camp&&_curMap(camp); sc=map&&map.lastBattle; gm=!!camp && canDesignMaps(camp); } if(!sc) return;
+  const home=_bScoreHome(sc.id), old=document.getElementById('battleScoreModal'), y=old?old.querySelector('.slot-picker-sheet')?.scrollTop||0:0;
+  const o=_helpModal('battleScoreModal', '🏆 BATTLE OVER', _bScoreHtml(sc, !!gm, {live:!!home, camp:home&&home.camp}));
+  o.dataset.sc=sc.id; o.dataset.v=JSON.stringify(sc.votes||{});
+  if(y){ const sh=o.querySelector('.slot-picker-sheet'); if(sh) sh.scrollTop=y; }
+}
 // Where the current turn's token stands (normalised), for the ring on the map.
 function _bTurnPos(camp, map){
   const b=_battle(map); if(!b || !b.cur) return null;
@@ -16608,7 +16785,7 @@ function _bStart(camp, map){
     const free=mem.filter(c=>!map.tokens[String(c.id)]), spots=_bCluster(map, map.party.x, map.party.y, free.length);
     free.forEach((c,i)=>{ map.tokens[String(c.id)]=spots[i]; split.push(String(c.id)); });
   }
-  map.battle={on:true, round:1, cur:null, grid:BATTLE_GRIDS[2], split, list:mem.map(c=>({id:genItemId(), kind:'pc', ref:String(c.id), name:c.name, init:null})), log:[]};
+  map.battle={on:true, round:1, cur:null, grid:BATTLE_GRIDS[2], split, list:mem.map(c=>({id:genItemId(), kind:'pc', ref:String(c.id), name:c.name, init:null, seenHp:Math.max(0, parseInt(c.currentHP)||0)})), log:[]};
 }
 function _bEnd(map){
   const b=map.battle; if(b && map.tokens) (b.split||[]).forEach(cid=>{ delete map.tokens[cid]; });   // back into the party marker
@@ -16702,7 +16879,12 @@ function battleDo(camp, map, op, a1, a2){
   const gm=canDesignMaps(camp), b=_battle(map);
   let out=true;
   if(op==='toggle'){ if(!gm) return false;
-    if(b){ _bEnd(map); toast('⚔ Battle over — the party regroups','var(--muted)'); }
+    if(b){ _bTrackHeroes(camp);
+      // A fight that never got going (no initiative, no hits) has nothing to score.
+      const sc=(b.stats || b.list.some(e=>e.init!=null)) ? _bScore(camp, map, b) : null;
+      _bEnd(map);
+      if(sc){ map.lastBattle=sc; _bScoreSeen.set(map.id, sc.id); setTimeout(()=>openBattleScore(sc, true), 0); }
+      else toast('⚔ Battle over — the party regroups','var(--muted)'); }
     else { _bStart(camp, map); toast('⚔ Battle! Roll initiative to begin','var(--red)'); } }
   else if(!b) return false;
   else if(op==='roll'){ out=_bDoRoll(camp, map, a1||{}); if(!out) return false; }
@@ -16711,7 +16893,9 @@ function battleDo(camp, map, op, a1, a2){
   else if(op==='rollInit') _bRollInit(camp, map);
   else if(op==='grid'){ const i=BATTLE_GRIDS.indexOf(+b.grid||0); b.grid=BATTLE_GRIDS[(i+1)%BATTLE_GRIDS.length]; }
   else if(op==='setInit'){ const e=b.list.find(x=>x.id===a1); if(!e) return false; e.init=(a2===''||a2==null||isNaN(+a2))?null:Math.round(+a2); _bSort(b); }
-  else if(op==='remove'){ if(b.cur===a1) _bStep(b, 1); b.list=b.list.filter(x=>x.id!==a1); if(!b.list.length) b.cur=null; }
+  else if(op==='remove'){ const e=b.list.find(x=>x.id===a1);
+    if(e && b.stats && b.stats[a1]){ b.gone=b.gone||{}; b.gone[a1]=_bRowInfo(camp, map, e); }   // their hits still count at the end
+    if(b.cur===a1) _bStep(b, 1); b.list=b.list.filter(x=>x.id!==a1); if(!b.list.length) b.cur=null; }
   else if(op==='add'){ const name=String(a1||'').trim().slice(0,40); if(!name) return false;
     b.list.push({id:genItemId(), kind:'foe', ref:'', name, init:(a2===''||a2==null||isNaN(+a2))?_bD(20):Math.round(+a2)}); _bSort(b); }
   else if(op==='addTokens'){ // NPC / creature tokens on this map join the fight
@@ -16725,11 +16909,11 @@ function battleDo(camp, map, op, a1, a2){
   else if(op==='hp'){ // "7" deals 7 damage, "+7" heals, "=7" sets; the first value given sets the maximum
     const e=b.list.find(x=>x.id===a1); if(!e || e.kind==='pc') return false;
     const mm=String(a2==null?'':a2).trim().match(/^([=+-]?)\s*(\d{1,4})$/); if(!mm) return false;
-    const v=+mm[2];
+    const v=+mm[2], was=e.hp||0;
     if(!(e.maxHp>0)){ if(!v) return false; e.maxHp=e.hp=v; }
     else if(mm[1]==='=') e.hp=Math.min(v, e.maxHp);
-    else if(mm[1]==='+') e.hp=Math.min(e.maxHp, (e.hp||0)+v);
-    else e.hp=Math.max(0, (e.hp||0)-v); }
+    else if(mm[1]==='+'){ e.hp=Math.min(e.maxHp, was+v); _bTally(b, e.id, 'heal', e.hp-was); }
+    else { e.hp=Math.max(0, was-v); if(was>0) _bTally(b, e.id, 'dmg', v); } }
   else if(op==='addHeroes'){ // characters who joined the campaign after the fight began
     const have=new Set(b.list.filter(e=>e.kind==='pc').map(e=>String(e.ref)));
     _campMembers(camp).forEach(c=>{ if(!have.has(String(c.id))) b.list.push({id:genItemId(), kind:'pc', ref:String(c.id), name:c.name, init:null}); }); _bSort(b); }
@@ -16834,9 +17018,16 @@ function _battleStripHtml(camp, map){
 function _battleSig(camp){ try{ return JSON.stringify(_campMaps(camp).map(m=>m.battle||0)); }catch(e){ return ''; } }
 // A player's own app opens the dice screen when it becomes their hero's turn.
 const _bSeen = new Map();   // map id → last turn key seen
+const _bScoreSeen = new Map();   // map id → last score screen shown
 function _battleWatch(camp){
   if(!camp) return;
   _campMaps(camp).forEach(map=>{
+    // When the GM ends a fight, everyone else sees the score screen too.
+    const sc=map.lastBattle, was=_bScoreSeen.get(map.id); _bScoreSeen.set(map.id, sc?sc.id:'');
+    if(sc && was!==undefined && was!==sc.id && !_battle(map) && Date.now()-(+sc.t||0)<10*60*1000) setTimeout(()=>openBattleScore(sc, canDesignMaps(camp)), 0);
+    else if(sc){ const o=document.getElementById('battleScoreModal');
+      if(o && o.dataset.sc===sc.id && o.dataset.v!==JSON.stringify(sc.votes||{})) setTimeout(()=>openBattleScore(sc, canDesignMaps(camp)), 0); }
+    if(sc && canDesignMaps(camp) && _mvpRecord(camp, sc)) setTimeout(()=>saveCampaign(camp), 0);
     const b=_battle(map), key=b&&b.cur ? b.cur+'@'+(b.round||1) : '';
     const prev=_bSeen.get(map.id); _bSeen.set(map.id, key);
     if(prev===undefined || prev===key || !b || !b.cur || canDesignMaps(camp)) return;
@@ -16963,7 +17154,8 @@ window.__tohPop = {
   // is the table's screen, so hidden NPC tokens stay unnamed even for the GM.
   battle(mapId){
     const cx=_popCtx(mapId); if(!cx) return null; const {camp, map}=cx; const b=_battle(map), gm=canDesignMaps(camp);
-    if(!b) return {on:false, gm};
+    // the table's screen: the score uses the players' names for hidden foes
+    if(!b){ const sc=map.lastBattle; return {on:false, gm, score:sc?{id:sc.id, html:_bScoreHtml(sc, false, {camp})}:null}; }
     const list=b.list.map(e=>{ const i=_bInfo(camp, map, e, false);
       // health shows as bloodied / down for everyone; the numbers stay in the GM's app
       return {id:e.id, kind:e.kind, init:e.init, name:i.name, img:i.img, color:i.color, label:i.label, health:_bHealth(e), hasHp:e.maxHp>0, hidden:!!e.hidden,
@@ -17225,6 +17417,20 @@ function _popoutMain(cfg){
   }
   // GM's picker of campaign NPCs and creatures (the Map tab's token windows)
   var pOpen=false, pTab='npc', pQ='', pN=1, pCos=false;
+  // The score screen when a fight ends here (not one from before this window opened).
+  var scoreSeen;
+  function showScore(sc){
+    var id=sc?sc.id:'', was=scoreSeen; scoreSeen=id;
+    var open=document.getElementById('bScore');
+    if(sc && was===id && open){ var bd=open.querySelector('.help-body'); if(bd && bd.innerHTML!==sc.html) bd.innerHTML=sc.html; return; }   // votes coming in
+    if(!sc || was===undefined || was===id) return;
+    var old=document.getElementById('bScore'); if(old) old.remove();
+    var o=document.createElement('div'); o.id='bScore'; o.className='slot-picker-overlay'; o.style.zIndex='9999';
+    o.innerHTML='<div class="slot-picker-sheet help-sheet" role="dialog" aria-modal="true" aria-label="Battle over"><div class="slot-picker-header"><div class="slot-picker-title">&#127942; BATTLE OVER</div>'
+      +'<button aria-label="Close" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px">&#10005;</button></div><div class="help-body">'+sc.html+'</div></div>';
+    o.onclick=function(e){ if(e.target===o || e.target.closest('.slot-picker-header button')) o.remove(); };
+    document.body.appendChild(o);
+  }
   function sg(n){ return (n>=0?'+':'')+n; }
   // The icon / initials sit under the picture, so a picture that fails to load still leaves a face.
   function face(it, px){ return '<span style="position:relative;overflow:hidden;width:'+px+'px;height:'+px+'px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:'+Math.round(px*0.45)+'px;background:'+esc(it.color)+'55;box-shadow:0 0 0 1.5px '+esc(it.color)+';flex:none">'+esc(it.label)
@@ -17235,7 +17441,8 @@ function _popoutMain(cfg){
     var bb=document.getElementById('battleBtn');
     if(bb){ bb.style.display=(b&&b.gm)?'':'none'; bb.innerHTML=on?'&#9876; end battle':'&#9876; battle'; }
     if(!on || !b.gm) gmDrawer.style.display='none';
-    if(!on){ bEl.style.display='none'; dEl.style.display='none'; ban.style.display='none'; dCur=null; document.body.classList.remove('dice-on'); document.body.classList.remove('dice-full'); return; }
+    if(!on){ bEl.style.display='none'; dEl.style.display='none'; ban.style.display='none'; dCur=null; document.body.classList.remove('dice-on'); document.body.classList.remove('dice-full'); showScore(b&&b.score); return; }
+    scoreSeen=scoreSeen===undefined?'':scoreSeen;
     var act=b.active;
     ban.style.display='block';
     ban.textContent='⚔ ENCOUNTER · ROUND '+b.round+(act?' · '+act.name+'’s turn':'');
@@ -18702,15 +18909,16 @@ function _renderCharHero(char, cls){
     +'</div>';
 }
 
-function charQuickHP(sign){
-  const amt=Math.abs(parseInt(document.getElementById('chcHpAmt')?.value)||0);
-  if(!amt) return;
-  const chars=getChars(); const ci=chars.findIndex(c=>String(c.id)===String(charScreenId));
-  if(ci<0){ toast('This character is read-only here','var(--red)'); return; }
+// Damage (sign -1) or healing (+1) on one of your own heroes. Returns false
+// for a hero that is read-only on this device.
+function _charHpBy(id, sign, amt){
+  const chars=getChars(); const ci=chars.findIndex(c=>String(c.id)===String(id));
+  if(ci<0){ toast('This character is read-only here','var(--red)'); return false; }
   const char=chars[ci];
   const max=Math.max(1,parseInt(char.maxHP)||1);
   const prev=Math.max(0,parseInt(char.currentHP)||0);
-  char.currentHP=Math.max(0,Math.min(max,prev+sign*amt));
+  // healing past the maximum is temporary hit points, which damage takes first
+  char.currentHP=sign>0 ? prev+amt : Math.max(0,prev-amt);
   try{
     const camps=getCampaigns(); const cc=camps.findIndex(c=>c.id===getActiveCampId());
     if(cc>=0){
@@ -18719,10 +18927,24 @@ function charQuickHP(sign){
     }
   }catch(e){}
   saveChars(chars);
+  return true;
+}
+function charQuickHP(sign){
+  const amt=Math.abs(parseInt(document.getElementById('chcHpAmt')?.value)||0);
+  if(!amt) return;
+  if(!_charHpBy(charScreenId, sign, amt)) return;
   renderCharacterScreen();
   const inp=document.getElementById('chcHpAmt'); if(inp) inp.value=amt;
 }
-
+// The Dice screen's character card: take damage or heal without leaving the table.
+function diceCharHP(sign){
+  const char=getActiveDiceChar(); if(!char) return;
+  const inp=document.getElementById('dcHpAmt'), amt=Math.abs(parseInt(inp&&inp.value)||0);
+  if(!amt){ inp&&inp.focus(); return; }
+  if(!_charHpBy(char.id, sign, amt)) return;
+  renderDiceCharPanel();
+  toast(sign<0 ? '🩸 '+char.name+' takes '+amt+' damage' : '✚ '+char.name+' heals '+amt,'var(--'+(sign<0?'red':'green')+')');
+}
 function selectCharScreen(id){ charScreenId=id; renderCharacterScreen(); }
 
 /* ── Paperdoll ── */
