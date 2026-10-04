@@ -613,6 +613,13 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .chc-hp-row button{width:34px;height:30px;border-radius:8px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font-size:16px;line-height:1;}
 .chc-hp-row input{width:46px;height:30px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;color:var(--text);text-align:center;font-size:13px;}
 .chc-hp-num{margin-left:auto;font-family:'Cinzel',serif;font-size:13px;}
+.dc-hp{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:-4px 0 10px;}
+.dc-hp-bar{flex:1 0 100%;height:5px;border-radius:3px;background:var(--surface);overflow:hidden;}
+.dc-hp-bar span{display:block;height:100%;border-radius:3px;transition:width .3s;}
+.dc-hp input{flex:1;min-width:0;height:34px;background:var(--surface);border:1px solid var(--border2);border-radius:8px;color:var(--text);text-align:center;font-size:15px;}
+.dc-hp-b{flex:0 0 auto;height:34px;padding:0 12px;border-radius:8px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;background:var(--surface);}
+.dc-hp-b.dmg{border:1px solid var(--red);color:#e74c3c;}
+.dc-hp-b.heal{border:1px solid var(--green);color:var(--green);}
 
 /* HP block */
 .hp-block{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:10px 0;}
@@ -1529,6 +1536,21 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .bs-table tr.foe .bs-who>span:last-child{color:#e8a39a;}
 .bs-table td.z{color:var(--muted);}
 .bs-note{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.4;}
+.bs-h{font-family:'Cinzel',serif;font-size:11px;letter-spacing:1px;color:var(--gold);margin:14px 0 6px;}
+.bs-h span{font-family:inherit;color:var(--muted);letter-spacing:0;margin-left:6px;}
+.bs-votes{display:flex;flex-direction:column;gap:5px;}
+.bs-vote{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);font-size:13px;}
+.bs-vote.win{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 10%,var(--surface2));}
+.bs-vn{flex:0 1 auto;min-width:0;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);}
+.bs-vbar{flex:1;height:6px;border-radius:3px;background:var(--surface);overflow:hidden;min-width:30px;}
+.bs-vbar span{display:block;height:100%;background:var(--gold);border-radius:3px;transition:width .3s;}
+.bs-vote b{font-family:'Cinzel',serif;min-width:16px;text-align:right;color:var(--text);}
+.bs-vb{flex:none;font:inherit;font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--gold);background:none;color:var(--gold);cursor:pointer;}
+.bs-vb.on{background:var(--gold);color:#1a1405;font-weight:700;}
+.bs-crown{text-align:center;font-family:'Cinzel',serif;font-size:14px;color:var(--gold);margin:10px 0 2px;}
+.bs-board{display:flex;flex-wrap:wrap;gap:6px;}
+.bs-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text);border:1px solid var(--border2);border-radius:999px;padding:3px 10px 3px 4px;background:var(--surface2);}
+.bs-chip b{font-family:'Cinzel',serif;font-size:11px;color:#1a1405;background:var(--gold);border-radius:999px;min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;}
 @media(max-width:560px){.bs-awards{grid-template-columns:1fr;gap:6px}.bs-award{flex-direction:row;text-align:left;gap:10px;padding:8px 10px}}
 .battle-strip .bt-pick{border:1px solid rgba(201,162,39,0.45);border-radius:10px;padding:8px;margin:0 0 8px;background:var(--surface);}
 .battle-strip .bt-ptabs{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:6px;}
@@ -11050,7 +11072,13 @@ function renderDiceCharPanel(){
             <div style="font-family:'Cinzel',serif;font-size:11px;color:var(--muted);letter-spacing:0.5px">MAX</div>
             <div style="font-family:'Cinzel',serif;font-size:16px;color:var(--muted)">${char.maxHP}</div>
           </div>
-        </div>`;
+        </div>
+        ${!char._sharedCampId?`<div class="dc-hp">
+          <div class="dc-hp-bar"><span style="width:${pct}%;background:${hpC}"></span></div>
+          <button class="dc-hp-b dmg" onclick="diceCharHP(-1)" title="Take this much damage">− Damage</button>
+          <input id="dcHpAmt" type="number" min="1" max="999" inputmode="numeric" placeholder="HP" aria-label="Hit points to take or heal" onkeydown="if(event.key==='Enter')diceCharHP(-1)">
+          <button class="dc-hp-b heal" onclick="diceCharHP(1)" title="Heal this much">+ Heal</button>
+        </div>`:''}`;
       })()}
 
       ${activeEffects.length||customFx.length?`
@@ -16597,18 +16625,72 @@ function _bScore(camp, map, b){
 function _bAward(rows, k){ let top=null; rows.forEach(r=>{ if((r[k]||0)>0 && (!top || r[k]>top[k])) top=r; }); return top; }
 // The score screen: three awards and every combatant's numbers. Players see
 // hidden foes as "Unknown foe", as they did during the fight.
-function _bScoreHtml(sc, gm){
+// MVP votes: one per person (by account, or by device when signed out), for
+// any hero in the fight. Tapping your vote again takes it back.
+function _mvpVoter(){
+  if(_authUid) return 'u:'+_authUid;
+  let d=''; try{ d=localStorage.getItem('toh_voter')||''; if(!d){ d='d:'+genItemId(); localStorage.setItem('toh_voter', d); } }catch(e){ d='d:here'; }
+  return d;
+}
+function _mvpTally(sc){
+  const n={}, heroes=new Set((sc.rows||[]).filter(r=>r.pc).map(r=>r.id));
+  Object.values(sc.votes||{}).forEach(id=>{ if(heroes.has(id)) n[id]=(n[id]||0)+1; });
+  const top=Math.max(0, ...Object.values(n));
+  return {n, top, win:top ? Object.keys(n).filter(k=>n[k]===top) : []};
+}
+// The campaign's record of who was crowned, battle by battle (ties share it).
+function _mvpRecord(camp, sc){
+  const ids=_mvpTally(sc).win.map(id=>((sc.rows||[]).find(r=>r.id===id)||{}).cref).filter(Boolean);
+  camp.mvp=camp.mvp||{};
+  if(_jeq(camp.mvp[sc.id]||[], ids)) return false;
+  if(ids.length) camp.mvp[sc.id]=ids; else delete camp.mvp[sc.id];
+  return true;
+}
+function _bScoreHome(id){
+  for(const camp of getCampaigns()) for(const map of _campMaps(camp)) if(map.lastBattle && map.lastBattle.id===id) return {camp, map};
+  return null;
+}
+function battleVote(scId, rowId){
+  const h=_bScoreHome(scId); if(!h) return;
+  const sc=h.map.lastBattle, me=_mvpVoter(); sc.votes=sc.votes||{};
+  if(sc.votes[me]===rowId) delete sc.votes[me]; else sc.votes[me]=rowId;
+  _mvpRecord(h.camp, sc);
+  saveCampaign(h.camp);
+  openBattleScore(sc, canDesignMaps(h.camp));
+}
+// The MVP vote (live) or its result (read-only, for the pop-out) and the
+// campaign's running crown count.
+function _mvpHtml(sc, camp, live, face, nm){
+  const heroes=(sc.rows||[]).filter(r=>r.pc); if(!heroes.length) return '';
+  const t=_mvpTally(sc), mine=live ? (sc.votes||{})[_mvpVoter()] : null, total=Object.values(t.n).reduce((a,b)=>a+b, 0);
+  let h='<div class="bs-h">🗳 VOTE FOR THE MVP'+(total?' <span>'+total+' vote'+(total>1?'s':'')+'</span>':'')+'</div><div class="bs-votes">'
+    +heroes.map(r=>{ const n=t.n[r.id]||0, crown=t.top>0 && n===t.top, me=mine===r.id;
+      return '<div class="bs-vote'+(crown?' win':'')+'">'+face(r, true)+'<span class="bs-vn">'+(crown?'👑 ':'')+esc(nm(r))+'</span>'
+        +'<span class="bs-vbar"><span style="width:'+(t.top?Math.round(n/t.top*100):0)+'%"></span></span><b>'+n+'</b>'
+        +(live?'<button class="bs-vb'+(me?' on':'')+'" onclick="battleVote(\''+jsq(sc.id)+'\',\''+jsq(r.id)+'\')">'+(me?'✓ voted':'vote')+'</button>':'')+'</div>'; }).join('')+'</div>';
+  if(t.win.length) h+='<div class="bs-crown">👑 '+t.win.map(id=>esc(nm(heroes.find(r=>r.id===id)))).join(' & ')+(t.win.length>1?' share':' is')+' the MVP'+(t.win.length>1?'':' of this battle')+'</div>';
+  // the campaign's tally, counting this battle's current leader
+  const mvp=(camp && camp.mvp) || {}, count={};
+  Object.values(mvp).forEach(ids=>(ids||[]).forEach(id=>{ count[id]=(count[id]||0)+1; }));
+  const board=Object.keys(count).map(id=>({id, n:count[id], c:getChars().find(x=>String(x.id)===String(id))})).filter(x=>x.c).sort((a,b)=>b.n-a.n);
+  if(board.length) h+='<div class="bs-h">👑 CAMPAIGN MVPs</div><div class="bs-board">'+board.map(x=>'<span class="bs-chip"><b>'+x.n+'</b>'+esc(x.c.name)+'</span>').join('')+'</div>';
+  return h;
+}
+function _bScoreHtml(sc, gm, o){
+  o=o||{};
   const nm=r=>gm?r.name:(r.pname||r.name), face=(r, sm)=>{ const c=r.cref&&getChars().find(x=>String(x.id)===r.cref);
     const img=(c&&(c.token||c.portrait))||(gm?r.img:r.pimg), lb=gm?r.label:(r.plabel||r.label);
     return '<span class="bs-face'+(sm?' sm':'')+'" style="--cc:'+esc(r.color||'#8880b0')+'">'+esc(lb||'?')+(img?'<img src="'+esc(img)+'" alt="" referrerpolicy="no-referrer" onerror="this.remove()">':'')+'</span>'; };
   const rows=(sc.rows||[]).slice().sort((a,b)=>(b.d-a.d)||(b.h-a.h)||(a.t-b.t));
-  const award=(k, title, unit, ac)=>{ const r=_bAward(rows, k);
+  const award=(k, title, unit, ac, only)=>{ const r=_bAward(only||rows, k);
     return '<div class="bs-award" style="--ac:'+ac+'">'+(r?face(r):'<span class="bs-face" style="--cc:var(--border2)">–</span>')
       +'<div style="min-width:0"><div class="bs-k">'+title+'</div>'+(r?'<div class="bs-n">'+esc(nm(r))+'</div><div class="bs-v">'+r[k]+'<small>'+unit+'</small></div>':'<div class="bs-n" style="color:var(--muted)">No one</div>')+'</div></div>'; };
   const sum=k=>rows.reduce((n,r)=>n+(r[k]||0), 0), downs=rows.filter(r=>!r.pc && r.down).length;
   const any=sum('d')+sum('t')+sum('h')>0;
   return '<div class="bs-sum">'+(sc.round||1)+' round'+((sc.round||1)>1?'s':'')+' · '+sum('t')+' damage · '+sum('h')+' healing'+(downs?' · '+downs+' foe'+(downs>1?'s':'')+' down':'')+'</div>'
-    +'<div class="bs-awards">'+award('d', '⚔ Most damage dealt', 'dmg', '#e74c3c')+award('t', '🛡 Most damage taken', 'dmg', '#e67e22')+award('h', '✚ Most healing done', 'hp', '#2ecc71')+'</div>'
+    +'<div class="bs-awards">'+award('d', '⚔ Most damage dealt', 'dmg', '#e74c3c')+award('t', '🛡 Most damage taken', 'dmg', '#e67e22', rows.filter(r=>r.pc))+award('h', '✚ Most healing done', 'hp', '#2ecc71')+'</div>'
+    +_mvpHtml(sc, o.camp, !!o.live, face, nm)
+    +'<div class="bs-h">⚔ EVERY COMBATANT</div>'
     +'<table class="bs-table"><thead><tr><th>COMBATANT</th><th>DEALT</th><th>TAKEN</th><th>HEALED</th></tr></thead><tbody>'
     +rows.map(r=>'<tr class="'+(r.pc?'':'foe')+'"><td><div class="bs-who">'+face(r, true)+'<span>'+esc(nm(r))+(r.down&&!r.pc?' 💀':'')+'</span></div></td>'
       +['d','t','h'].map(k=>'<td class="'+(r[k]?'':'z')+'">'+(r[k]||0)+'</td>').join('')+'</tr>').join('')+'</tbody></table>'
@@ -16616,9 +16698,11 @@ function _bScoreHtml(sc, gm){
     +'<div class="bs-note">Damage and healing are credited to whoever’s turn it was.</div>';
 }
 function openBattleScore(sc, gm){
-  const camp=getCampaigns().find(c=>c.id===editingCampId), map=camp&&_curMap(camp);
-  if(!sc){ sc=map&&map.lastBattle; gm=!!camp && canDesignMaps(camp); } if(!sc) return;
-  _helpModal('battleScoreModal', '🏆 BATTLE OVER', _bScoreHtml(sc, !!gm));
+  if(!sc){ const camp=getCampaigns().find(c=>c.id===editingCampId), map=camp&&_curMap(camp); sc=map&&map.lastBattle; gm=!!camp && canDesignMaps(camp); } if(!sc) return;
+  const home=_bScoreHome(sc.id), old=document.getElementById('battleScoreModal'), y=old?old.querySelector('.slot-picker-sheet')?.scrollTop||0:0;
+  const o=_helpModal('battleScoreModal', '🏆 BATTLE OVER', _bScoreHtml(sc, !!gm, {live:!!home, camp:home&&home.camp}));
+  o.dataset.sc=sc.id; o.dataset.v=JSON.stringify(sc.votes||{});
+  if(y){ const sh=o.querySelector('.slot-picker-sheet'); if(sh) sh.scrollTop=y; }
 }
 // Where the current turn's token stands (normalised), for the ring on the map.
 function _bTurnPos(camp, map){
@@ -16940,6 +17024,9 @@ function _battleWatch(camp){
     // When the GM ends a fight, everyone else sees the score screen too.
     const sc=map.lastBattle, was=_bScoreSeen.get(map.id); _bScoreSeen.set(map.id, sc?sc.id:'');
     if(sc && was!==undefined && was!==sc.id && !_battle(map) && Date.now()-(+sc.t||0)<10*60*1000) setTimeout(()=>openBattleScore(sc, canDesignMaps(camp)), 0);
+    else if(sc){ const o=document.getElementById('battleScoreModal');
+      if(o && o.dataset.sc===sc.id && o.dataset.v!==JSON.stringify(sc.votes||{})) setTimeout(()=>openBattleScore(sc, canDesignMaps(camp)), 0); }
+    if(sc && canDesignMaps(camp) && _mvpRecord(camp, sc)) setTimeout(()=>saveCampaign(camp), 0);
     const b=_battle(map), key=b&&b.cur ? b.cur+'@'+(b.round||1) : '';
     const prev=_bSeen.get(map.id); _bSeen.set(map.id, key);
     if(prev===undefined || prev===key || !b || !b.cur || canDesignMaps(camp)) return;
@@ -17067,7 +17154,7 @@ window.__tohPop = {
   battle(mapId){
     const cx=_popCtx(mapId); if(!cx) return null; const {camp, map}=cx; const b=_battle(map), gm=canDesignMaps(camp);
     // the table's screen: the score uses the players' names for hidden foes
-    if(!b){ const sc=map.lastBattle; return {on:false, gm, score:sc?{id:sc.id, html:_bScoreHtml(sc, false)}:null}; }
+    if(!b){ const sc=map.lastBattle; return {on:false, gm, score:sc?{id:sc.id, html:_bScoreHtml(sc, false, {camp})}:null}; }
     const list=b.list.map(e=>{ const i=_bInfo(camp, map, e, false);
       // health shows as bloodied / down for everyone; the numbers stay in the GM's app
       return {id:e.id, kind:e.kind, init:e.init, name:i.name, img:i.img, color:i.color, label:i.label, health:_bHealth(e), hasHp:e.maxHp>0, hidden:!!e.hidden,
@@ -17333,6 +17420,8 @@ function _popoutMain(cfg){
   var scoreSeen;
   function showScore(sc){
     var id=sc?sc.id:'', was=scoreSeen; scoreSeen=id;
+    var open=document.getElementById('bScore');
+    if(sc && was===id && open){ var bd=open.querySelector('.help-body'); if(bd && bd.innerHTML!==sc.html) bd.innerHTML=sc.html; return; }   // votes coming in
     if(!sc || was===undefined || was===id) return;
     var old=document.getElementById('bScore'); if(old) old.remove();
     var o=document.createElement('div'); o.id='bScore'; o.className='slot-picker-overlay'; o.style.zIndex='9999';
@@ -18812,11 +18901,11 @@ function _renderCharHero(char, cls){
     +'</div>';
 }
 
-function charQuickHP(sign){
-  const amt=Math.abs(parseInt(document.getElementById('chcHpAmt')?.value)||0);
-  if(!amt) return;
-  const chars=getChars(); const ci=chars.findIndex(c=>String(c.id)===String(charScreenId));
-  if(ci<0){ toast('This character is read-only here','var(--red)'); return; }
+// Damage (sign -1) or healing (+1) on one of your own heroes. Returns false
+// for a hero that is read-only on this device.
+function _charHpBy(id, sign, amt){
+  const chars=getChars(); const ci=chars.findIndex(c=>String(c.id)===String(id));
+  if(ci<0){ toast('This character is read-only here','var(--red)'); return false; }
   const char=chars[ci];
   const max=Math.max(1,parseInt(char.maxHP)||1);
   const prev=Math.max(0,parseInt(char.currentHP)||0);
@@ -18829,10 +18918,24 @@ function charQuickHP(sign){
     }
   }catch(e){}
   saveChars(chars);
+  return true;
+}
+function charQuickHP(sign){
+  const amt=Math.abs(parseInt(document.getElementById('chcHpAmt')?.value)||0);
+  if(!amt) return;
+  if(!_charHpBy(charScreenId, sign, amt)) return;
   renderCharacterScreen();
   const inp=document.getElementById('chcHpAmt'); if(inp) inp.value=amt;
 }
-
+// The Dice screen's character card: take damage or heal without leaving the table.
+function diceCharHP(sign){
+  const char=getActiveDiceChar(); if(!char) return;
+  const inp=document.getElementById('dcHpAmt'), amt=Math.abs(parseInt(inp&&inp.value)||0);
+  if(!amt){ inp&&inp.focus(); return; }
+  if(!_charHpBy(char.id, sign, amt)) return;
+  renderDiceCharPanel();
+  toast(sign<0 ? '🩸 '+char.name+' takes '+amt+' damage' : '✚ '+char.name+' heals '+amt,'var(--'+(sign<0?'red':'green')+')');
+}
 function selectCharScreen(id){ charScreenId=id; renderCharacterScreen(); }
 
 /* ── Paperdoll ── */
