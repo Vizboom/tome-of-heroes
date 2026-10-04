@@ -20,5 +20,6 @@ Used by the Equip tab's 3D paperdoll (see the `3D PAPERDOLL` module near the end
 ## Item icons (`icons/`)
 
 - Rendered icons from the same Quaternius RPG items pack, CC0 1.0: trimmed and resized from the pack's 1000px PNGs to 96px WebP. Only the icons the app can pick are kept.
-- Which item shows which icon is `itemIconName` in `index.html` (by name, then type); items with no fitting icon (staffs, wands, rods, shields, crossbows, most wondrous items) keep the type's emoji.
+- The pack has no shields or staffs, so `Shield_*`, `Staff`, `IceStaff` and `WoodenStaff` were rendered from the GLBs in `weapons/` (three.js, orthographic three-quarter view, transparent background) and put through the same trim and resize.
+- Which item shows which icon is `itemIconName` in `index.html` (by name, then type); shields and staffs pick the same model the paperdoll shows. Items with no fitting icon (wands, rods, spears, crossbows, most wondrous items) keep the type's emoji.
 - The original pack (Weapons and Objects zips, with Blender, FBX and OBJ exports) is attached to the `Weapons_Objects` release.
