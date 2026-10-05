@@ -16933,7 +16933,11 @@ const _bPick={open:false, tab:'npc', q:'', n:1, cos:false};
 let _bArm=null;   // {key, n} while the GM taps the map to place a pick
 // Redraws keep the picker list where the GM had scrolled it.
 function _bPickKeep(fn){ const l=document.getElementById('btPickList'), y=l?l.scrollTop:0; const r=fn(); const n=document.getElementById('btPickList'); if(n) n.scrollTop=y; return r; }
-function _bPickToggle(){ _bPick.open=!_bPick.open; if(!_bPick.open && _bArm){ _bArm=null; _placingKey=null; } renderMap(); }
+// The NPCs and Creatures buttons each open the picker on their list; the open one closes it.
+function _bPickToggle(tab){
+  if(_bPick.open && _bPick.tab===tab) _bPick.open=false;
+  else { if(_bPick.tab!==tab) _bPick.q=''; _bPick.tab=tab; _bPick.open=true; }
+  if(!_bPick.open && _bArm){ _bArm=null; _placingKey=null; } renderMap(); }
 function _bPickSet(k, v){ if(k==='tab'){ _bPick.tab=v; _bPick.q=''; } else if(k==='n') _bPick.n=Math.max(1,Math.min(12,_bPick.n+v)); else if(k==='cos') _bPick.cos=true; renderMap(); }
 function _bPickRow(key, act){
   const camp=getCampaigns().find(c=>c.id===editingCampId); if(!camp) return;
@@ -16968,8 +16972,7 @@ function _bPickListHtml(camp, map){
 function _bPickHtml(camp, map){
   const cr=_bPick.tab==='creature';
   return `<div class="bt-pick">
-    <div class="bt-ptabs"><button class="pc-pill ${!cr?'on gold':''}" onclick="_bPickSet('tab','npc')">🧙 NPCs</button><button class="pc-pill ${cr?'on gold':''}" onclick="_bPickSet('tab','creature')">🐺 Creatures</button>
-      ${cr?`<span class="bt-pqty">how many <button class="pc-pill" onclick="_bPickSet('n',-1)" aria-label="Fewer">−</button><b>${_bPick.n}</b><button class="pc-pill" onclick="_bPickSet('n',1)" aria-label="More">+</button><small>share one initiative roll</small></span>`:''}</div>
+    ${cr?`<div class="bt-ptabs"><span class="bt-pqty">how many <button class="pc-pill" onclick="_bPickSet('n',-1)" aria-label="Fewer">−</button><b>${_bPick.n}</b><button class="pc-pill" onclick="_bPickSet('n',1)" aria-label="More">+</button><small>share one initiative roll</small></span></div>`:''}
     <input id="btPickQ" class="bt-pq" placeholder="Search ${cr?'creatures':'NPCs'}…" value="${esc(_bPick.q)}" autocomplete="off" oninput="_bPick.q=this.value; const c=getCampaigns().find(x=>x.id===editingCampId), m=c&&_curMap(c); if(m) document.getElementById('btPickList').innerHTML=_bPickListHtml(c, m)">
     <div class="bt-pnote">Tap one, then tap the map to place it. <b>+ init</b> adds it with no token, <b>✎</b> sets its initiative bonus and hit points.</div>
     <div class="bt-plist" id="btPickList">${_bPickListHtml(camp, map)}</div></div>`;
@@ -17008,7 +17011,7 @@ function _battleStripHtml(camp, map){
     return `<span class="bt-chip ${on?'on':''} ${gm&&e.hidden?'hid':''} ${h==='down'?'down':''}" style="--cc:${i.color}" title="${esc(i.name)}${gm&&e.hidden?' (name hidden from players)':''}"><b>${e.init==null?'–':e.init}</b>${i.img?`<img src="${esc(i.img)}" alt="" referrerpolicy="no-referrer">`:`<span class="bt-ic">${esc(i.label)}</span>`}${esc(_shortName(i.name))}${hp}${gm&&foe?`<button onclick="battleOp('hide','${jsq(e.id)}')" title="${e.hidden?'Show its name to the players':'Hide its name from the players'}">${e.hidden?'🙈':'👁'}</button>`:''}${gm?`<button onclick="battleOp('remove','${jsq(e.id)}')" title="Remove from the fight">✕</button>`:''}</span>`; }).join('');
   return `<div class="battle-strip">
     <div class="bt-head"><span class="bt-title">⚔ ENCOUNTER · ROUND ${b.round||1}</span><span class="bt-now">${ci?esc(ci.name)+'’s turn':(b.list.length?'roll initiative to begin':'no combatants')}</span>
-    ${gm?`<button class="pc-pill" onclick="battleOp('prev')">◀ prev</button><button class="pc-pill on gold" onclick="battleOp('next')">next turn ▶</button><button class="pc-pill" onclick="battleOp('rollInit')">🎲 roll initiative</button><button class="pc-pill" onclick="battleOp('addTokens')" title="Add the NPC and creature tokens on this map to the initiative order">+ map tokens</button><button class="pc-pill ${_bPick.open?'on gold':''}" onclick="_bPickToggle()" aria-expanded="${_bPick.open}" title="Pick from the campaign's NPCs and creatures">＋ NPC or creature</button><button class="pc-pill" onclick="battleOp('grid')">▦ grid ${b.grid||'off'}</button>`:''}
+    ${gm?`<button class="pc-pill" onclick="battleOp('prev')">◀ prev</button><button class="pc-pill on gold" onclick="battleOp('next')">next turn ▶</button><button class="pc-pill" onclick="battleOp('rollInit')">🎲 roll initiative</button><button class="pc-pill" onclick="battleOp('addTokens')" title="Add the NPC and creature tokens on this map to the initiative order">+ map tokens</button>${[['npc','🧙 NPCs'],['creature','🐺 Creatures']].map(([k,l])=>{ const on=_bPick.open&&_bPick.tab===k; return `<button class="pc-pill ${on?'on gold':''}" onclick="_bPickToggle('${k}')" aria-expanded="${on}" title="${on?'Close':'Add '+(k==='npc'?'an NPC':'a creature')+' to the fight'}">${l}</button>`; }).join('')}<button class="pc-pill" onclick="battleOp('grid')">▦ grid ${b.grid||'off'}</button>`:''}
     <button class="pc-pill" onclick="popOutMap()" title="Open the encounter for the table — initiative on the right, dice on each hero's turn">⛶ pop out</button></div>
     ${gm&&_bPick.open?_bPickHtml(camp, map):''}
     <div class="bt-list">${chips}</div>
@@ -17249,7 +17252,6 @@ function _diceFreshTurn(key){
 // What the pop-out may mirror, and which of them only the GM sees.
 const _MIRRORS={
   dice:{el:()=>document.getElementById('scr-dice'), render:()=>renderDiceScreen(), gm:false},
-  npcs:{el:()=>document.getElementById('ctab-npcs'), render:()=>renderNPCs(), gm:true},
 };
 const _MIRROR_OVERLAYS='body > .slot-picker-overlay, body > .gw-backdrop';
 function _mirRoot(camp, name){
@@ -17416,12 +17418,11 @@ function _popoutMain(cfg){
       } else ovs[o.id].set(o, force);
     });
   }
-  var diceMir=null, npcMir=null, dHead=null, dMirEl=null, dLast=null, table=null;
+  var diceMir=null, dHead=null, dMirEl=null, dLast=null, table=null;
   var stagedSig='';
   function refreshAll(force){
     if(diceMir && dMirEl.style.display!=='none') diceMir.pull(false, force);
     if(table){ var a0=api(), mine=dMirEl && dMirEl.style.display!=='none', st=(mine&&a0)?a0.staged(MAPID):[], sig=JSON.stringify(st); if(sig!==stagedSig){ stagedSig=sig; table.stage(st); } }
-    if(npcMir && gmDrawer.style.display==='flex') npcMir.pull(false, force);
     syncOverlays(force);
   }
   // GM's picker of campaign NPCs and creatures (the Map tab's token windows)
@@ -17449,7 +17450,6 @@ function _popoutMain(cfg){
     document.body.classList.toggle('battle', on);
     var bb=document.getElementById('battleBtn');
     if(bb){ bb.style.display=(b&&b.gm)?'':'none'; bb.innerHTML=on?'&#9876; end battle':'&#9876; battle'; }
-    if(!on || !b.gm) gmDrawer.style.display='none';
     if(!on){ bEl.style.display='none'; dEl.style.display='none'; ban.style.display='none'; dCur=null; document.body.classList.remove('dice-on'); document.body.classList.remove('dice-full'); showScore(b&&b.score); return; }
     scoreSeen=scoreSeen===undefined?'':scoreSeen;
     var act=b.active;
@@ -17461,8 +17461,8 @@ function _popoutMain(cfg){
     var h='<div class="bh">INITIATIVE <span style="float:right">ROUND '+b.round+'</span></div>';
     if(b.gm) h+='<div class="bc"><button data-op="prev" title="Previous turn">&#9664;</button><button data-op="next" class="go">next turn &#9654;</button></div>'
       +'<div class="bc"><button data-op="rollInit">&#127922; roll initiative</button><button data-op="addTokens" title="Add the NPC and creature tokens on this map">+ tokens</button><button data-op="grid" title="Grid size">&#9638; '+(b.grid||'off')+'</button></div>'
-      +'<div class="bc"><button data-op="pick" class="pk'+(pOpen?' on':'')+'" aria-expanded="'+pOpen+'">'+(pOpen?'&#10005; close picker':'&#65291; NPC or creature')+'</button>'
-      +'<button data-op="npcTab" class="pk'+(gmDrawer.style.display==='flex'?' on':'')+'" title="The campaign&rsquo;s NPC tab &mdash; only you see it">&#128220; NPC tab</button></div>';
+      +'<div class="bc">'+[['npc','&#129497; NPCs'],['creature','&#128058; Creatures']].map(function(t){ var on=pOpen&&pTab===t[0];
+        return '<button data-op="pick" data-ptab="'+t[0]+'" class="pk'+(on?' on':'')+'" aria-expanded="'+on+'" title="'+(on?'Close':'Add '+(t[0]==='npc'?'an NPC':'a creature')+' to the fight')+'">'+t[1]+'</button>'; }).join('')+'</div>';
     if(b.gm && pOpen) h+=pickHtml();
     if(!b.list.length) h+='<div class="bn0">No one in the fight yet.</div>';
     h+=b.list.map(function(e){ var cur=e.id===b.cur;
@@ -17510,8 +17510,7 @@ function _popoutMain(cfg){
   }
   // ── The NPC / creature picker inside the initiative panel
   function pickHtml(){
-    return '<div class="bp"><div class="bpt">'
-      +'<button data-pt="npc" class="'+(pTab==='npc'?'on':'')+'">&#129497; NPCs</button><button data-pt="creature" class="'+(pTab==='creature'?'on':'')+'">&#128058; Creatures</button></div>'
+    return '<div class="bp">'
       +'<input id="bPQ" placeholder="Search '+(pTab==='npc'?'NPCs':'creatures')+'&hellip;" value="'+esc(pQ)+'" autocomplete="off">'
       +(pTab==='creature'?'<div class="bpn">How many <button data-pn="-1" aria-label="Fewer">&minus;</button><b>'+pN+'</b><button data-pn="1" aria-label="More">+</button><span>share one initiative roll</span></div>':'')
       +'<div class="bps">Tap one, then tap the map to place it. <b>+ init</b> adds it with no token. &#9998; sets its picture.</div>'
@@ -17542,8 +17541,7 @@ function _popoutMain(cfg){
   }
   bEl.addEventListener('input', function(e){ if(e.target.id!=='bPQ') return; pQ=e.target.value; fillPick(); });
   bEl.addEventListener('click', function(e){
-    var t=e.target.closest('button[data-pt],button[data-pn],button[data-pa]'); if(!t) return;
-    if(t.hasAttribute('data-pt')){ pTab=t.getAttribute('data-pt'); pQ=''; renderBattle(); return; }
+    var t=e.target.closest('button[data-pn],button[data-pa]'); if(!t) return;
     if(t.hasAttribute('data-pn')){ pN=Math.max(1,Math.min(12,pN+(+t.getAttribute('data-pn')))); renderBattle(); return; }
     var pa=t.getAttribute('data-pa'), key=t.getAttribute('data-pk'), a=api();
     if(pa==='cos'){ pCos=true; fillPick(); return; }
@@ -17560,10 +17558,6 @@ function _popoutMain(cfg){
     ovBase=ovIds(); a.gmAct(MAPID, t.getAttribute('data-gm'), t.getAttribute('data-pk'));
     setTimeout(function(){ refreshAll(true); }, 60);
   });
-  // GM: the campaign's NPC tab in a drawer beside the initiative panel
-  var gmDrawer=document.getElementById('gmDrawer');
-  npcMir=Mirror('npcs', document.getElementById('gdBody'));
-  window.NPCTAB=function(open){ var on=open==null?gmDrawer.style.display!=='flex':open; gmDrawer.style.display=on?'flex':'none'; if(on) npcMir.pull(true, true); renderBattle(); };
   window.BATTLE=function(){ var a=api(); if(!a){ say('The app window is closed — reopen the pop-out from the app'); return; } a.battleDo(MAPID,'toggle'); renderBattle(); };
   bEl.addEventListener('click', function(e){
     var t=e.target.closest('button[data-op]'); if(!t) return; var a=api(); if(!a) return;
@@ -17572,8 +17566,7 @@ function _popoutMain(cfg){
       var v=window.prompt(has?'Damage for '+nm+' (type +N to heal, =N to set)':'Hit points for '+nm, '');
       if(v!=null && String(v).trim() && !a.battleDo(MAPID,'hp', t.getAttribute('data-id'), v)){ say('Type a number, +N to heal or =N to set'); setTimeout(function(){ say(''); },2600); }
       renderBattle(); return; }
-    if(op==='npcTab'){ window.NPCTAB(); return; }
-    if(op==='pick'){ pOpen=!pOpen; if(!pOpen && placing && placing.kind==='bkey'){ placing=null; say(''); } renderBattle(); return; }
+    if(op==='pick'){ var pt=t.getAttribute('data-ptab'); if(pOpen && pTab===pt) pOpen=false; else { if(pTab!==pt) pQ=''; pTab=pt; pOpen=true; } if(!pOpen && placing && placing.kind==='bkey'){ placing=null; say(''); } renderBattle(); return; }
     if(op==='add'){ var n=document.getElementById('bAddN'), iv=document.getElementById('bAddI'); ok=a.battleDo(MAPID,'add', n?n.value:'', iv?iv.value:''); if(ok){ if(n) n.value=''; if(iv) iv.value=''; } }
     else ok=a.battleDo(MAPID, op, t.getAttribute('data-id'));
     renderBattle();
@@ -17635,9 +17628,8 @@ function popOutMap(){
     +'#battle .bn{flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#battle .bn em{font-style:normal;font-size:11px;letter-spacing:1px;color:#e74c3c;font-weight:700}'
     +'#battle .bx{flex:none;padding:2px 4px;font-size:11px;border-color:transparent;background:none;color:#b8b0d8}'
     +'#battle .badd{display:flex;gap:5px;margin-top:8px}#battle .badd input{min-width:0;flex:1;font:inherit;font-size:12px;padding:5px 7px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:#e8e0ff}#battle .badd input[type=number]{flex:none;width:52px}'
-    +'#battle .bc .pk{border-color:#c9a227;color:#c9a227}#battle .bc .pk.on{border-color:rgba(255,255,255,0.25);color:#e8e0ff}'
+    +'#battle .bc .pk{border-color:#c9a227;color:#c9a227}#battle .bc .pk.on{background:rgba(201,162,39,0.22);font-weight:600}'
     +'#battle .bp{border:1px solid rgba(201,162,39,0.45);border-radius:10px;padding:8px;margin:0 0 10px;background:rgba(0,0,0,0.22)}'
-    +'#battle .bpt{display:flex;gap:5px;margin-bottom:6px}#battle .bpt button{flex:1}#battle .bpt .on{border-color:#c9a227;color:#c9a227;background:rgba(201,162,39,0.12)}'
     +'#battle #bPQ{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:6px 8px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.3);color:#e8e0ff;margin-bottom:6px}'
     +'#battle .bpn{display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:6px}#battle .bpn b{min-width:16px;text-align:center;color:#c9a227}#battle .bpn span{font-size:10px;color:#b8b0d8}'
     +'#battle .bps{font-size:11px;color:#b8b0d8;margin-bottom:6px}#battle .bph{font-family:Cinzel,serif;font-size:10px;letter-spacing:1px;color:#c9a227;margin:8px 0 4px}'
@@ -17654,21 +17646,17 @@ function popOutMap(){
     +'.mir #diceCharPanel,.mir #diceRollPanel{flex:none!important;width:auto!important;max-width:none!important;height:auto!important;max-height:none!important;overflow:visible!important;padding:0!important;border:0!important;position:static!important;background:none!important;margin:0 0 10px!important}'
     +'#dice.foe .mir #diceCharPanel,#dice.foe .mir .dmg-atks{display:none!important}.mir #diceCharPanel .dice-toggle-arrow{display:inline!important}.mir #diceCharPanel.collapsed .dice-char-body{display:none!important}.mir #diceCharPanel>div:first-child{position:static!important}.mir #diceTable{display:none}.mir .mode-btn{padding:8px 4px}'
     +'body.battle.dice-full #dice{width:370px}body.battle.dice-full #vp{left:390px}body.battle.dice-full #tray{left:390px}body.battle.dice-full #bban{left:402px}'
-    // GM: the campaign NPC tab beside the initiative panel
-    +'#gmDrawer{position:fixed;top:56px;right:310px;bottom:10px;width:min(380px,calc(100vw - 340px));z-index:11;background:rgba(20,16,40,0.97);border:1px solid #c9a227;border-radius:12px;display:none;flex-direction:column;color:var(--text);box-shadow:0 6px 30px rgba(0,0,0,0.6)}'
-    +'#gmDrawer .gdh{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid rgba(201,162,39,0.35);font-family:Cinzel,serif;font-size:12px;letter-spacing:1px;color:#c9a227}#gmDrawer .gdh small{flex:1;font-family:system-ui,sans-serif;letter-spacing:0;font-size:10px;color:#b8b0d8}'
-    +'#gmDrawer .gdh button{font:inherit;font-size:12px;padding:3px 8px;border-radius:8px;border:1px solid rgba(255,255,255,0.25);background:none;color:#e8e0ff;cursor:pointer}#gdBody{flex:1;min-height:0;overflow:auto;padding:10px;font-size:14px}'
     +'#ovl .slot-picker-overlay,#ovl .gw-backdrop{z-index:100}'
     +'#dice .dh{display:flex;align-items:center;gap:10px;padding-bottom:8px;border-bottom:1px solid rgba(201,162,39,0.35)}#dice .dt{font-family:Cinzel,serif;font-size:14px;color:#c9a227;letter-spacing:0.5px}#dice .ds{font-size:11px;color:#b8b0d8}'
     +'#dHead button{font:inherit;font-size:12px;padding:6px 9px;border-radius:9px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.06);color:#e8e0ff;cursor:pointer}'
     +'#dice .dr{display:flex;align-items:center;gap:12px;margin:8px 0 2px;padding:6px 10px;border-radius:10px;background:rgba(0,0,0,0.25)}#dice .dv{font-family:Cinzel,serif;font-size:34px;font-weight:700;color:#c9a227;min-width:52px;text-align:center}#dice .dd{font-size:12px}#dice .dd span{color:#b8b0d8;font-size:11px}'
-    +'@media (max-width:760px){body.battle #vp{right:0;bottom:46vh}#battle{top:auto;left:10px;width:auto;height:44vh}body.battle.dice-on #vp{left:0}body.battle.dice-on #tray{left:10px}body.battle.dice-on #bban{left:12px}#dice{top:auto;left:10px;right:10px;width:auto;max-height:30vh;bottom:calc(44vh + 18px)}body.battle.dice-full #dice{width:auto;max-height:52vh;top:52px;bottom:auto}body.battle.dice-full #vp{left:0}body.battle.dice-full #tray{left:10px}body.battle.dice-full #bban{left:12px}#dTab{height:110px}#gmDrawer{right:10px;left:10px;width:auto;top:52px;bottom:calc(44vh + 18px)}#bban{max-width:calc(100% - 24px);top:52px}#battle .bpl{max-height:none}#bar{left:10px;flex-wrap:wrap;justify-content:flex-end;gap:4px}#bar button{padding:6px 8px;font-size:12px}#bar .fsl,#live{display:none}}'
+    +'@media (max-width:760px){body.battle #vp{right:0;bottom:46vh}#battle{top:auto;left:10px;width:auto;height:44vh}body.battle.dice-on #vp{left:0}body.battle.dice-on #tray{left:10px}body.battle.dice-on #bban{left:12px}#dice{top:auto;left:10px;right:10px;width:auto;max-height:30vh;bottom:calc(44vh + 18px)}body.battle.dice-full #dice{width:auto;max-height:52vh;top:52px;bottom:auto}body.battle.dice-full #vp{left:0}body.battle.dice-full #tray{left:10px}body.battle.dice-full #bban{left:12px}#dTab{height:110px}#bban{max-width:calc(100% - 24px);top:52px}#battle .bpl{max-height:none}#bar{left:10px;flex-wrap:wrap;justify-content:flex-end;gap:4px}#bar button{padding:6px 8px;font-size:12px}#bar .fsl,#live{display:none}}'
     +'</style></head><body>'
     +'<div id="ttl">'+title+'</div><div id="bban"></div><div id="hint"></div>'
     +'<div id="vp">'+clone.outerHTML+'</div>'
     +'<div id="bar"><span id="live" style="align-self:center;color:#27ae60;font-size:11px;font-weight:600;margin-right:4px">&#9679; LIVE</span><button id="battleBtn" onclick="BATTLE()" style="display:none;border-color:#c0392b;color:#ff8a7a">&#9876; battle</button><button id="trayBtn" onclick="TRAY()">&#129485; tokens</button><button onclick="Z(1/1.4)">&minus;</button><button onclick="Z(1.4)">&plus;</button><button onclick="FIT()">fit</button><button id="fsBtn" onclick="FS()" title="Fill the screen with the map">&#9974;<span class="fsl"> full screen</span></button></div>'
     +'<div id="tray"></div><div id="battle"></div><div id="dice"></div>'
-    +'<div id="gmDrawer"><div class="gdh">&#128220; NPC TAB <small>GM only &mdash; players don&rsquo;t see this</small><button onclick="NPCTAB(false)" aria-label="Close">&#10005;</button></div><div id="gdBody" class="mir"></div></div><div id="ovl"></div>'
+    +'<div id="ovl"></div>'
     +'<script>var DiceTable=('+_diceTableKit.toString()+')();<\/script>'
     +'<script>('+_popoutMain.toString()+')('+cfg+');<\/script></body></html>');
   w.document.close();
