@@ -544,6 +544,7 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
 .map-chip .mc-depth{color:var(--muted2);margin-right:4px;}
 .map-trail{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-bottom:8px;}
 .map-trail .pc-pill{font-size:11px;padding:4px 9px;}
+.map-jump{max-width:190px;color:var(--gold);border-color:var(--gold);}
 .map-trail .pc-pill.add{border-style:dashed;color:var(--gold);border-color:var(--gold);}
 .map-trail .trail-sep{color:var(--muted2);font-size:11px;}
 .map-kids{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-bottom:10px;}
@@ -15363,39 +15364,20 @@ function renderMap(){
 
   let html = _gmBarHtml(camp);
 
-  // ── Map selector — a player never sees a hidden map at all, and a teased
+  // ── Map jump — the long row of map chips is gone; the trail, the INSIDE
+  //    row and pin badges walk the nest, and this one compact picker reaches
+  //    any other map. A player never sees a hidden map at all, and a teased
   //    one shows as a locked name so they know there is more to come. ──
   const listable = _mapTree(camp).filter(n=>_canSeeMap(camp, n.map));
-  if(listable.length || gm){
-    html += '<div class="map-chips">'+listable.map(({map:m, depth})=>{
-      const trail = _mapChain(camp, m).map(x=>x.name).join(' ▸ ');
-      const v = _effVis(camp, m), meta = VIS_META[v];
-      const open = _canOpenMap(camp, m);
-      const tag = (gm && hasGM(camp) && v!=='revealed') ? `<span class="vis-tag">${meta.icon}</span>` : '';
-      const cls = `map-chip ${map&&m.id===map.id?'on':''} ${depth?'nested':''} ${gm&&v!=='revealed'?'vis-'+v:''} ${open?'':'locked'}`;
-      const title = open ? trail : trail+' — the GM has not opened this map yet';
-      return `<button class="${cls}" style="margin-left:${Math.min(depth,4)*8}px" ${open?`onclick="switchMap('${m.id}')"`:'disabled'} title="${esc(title)}">${depth?'<span class="mc-depth">↳</span>':''}${open?_mapGlyph(camp,m):'🔒'} ${esc(m.name)}${tag}</button>`;
-    }).join('')
-      + `<button class="map-chip add" onclick="toggleAddMap()" title="Add a top-level map — use “＋ sub-map” below to nest one inside this map">+ Map</button>`
-      + `</div>`;
-  }
-  // Curse of Strahd map pack: one upload for the whole pack (owner + campaign only).
-  if(_canUploadStrahdPack(camp)){
-    html += `<div id="mpBulkDrop" class="map-ctrls" style="margin:-2px 0 10px;align-items:center;border:1px dashed var(--border2);border-radius:10px;padding:8px 10px"
-        ondragover="event.preventDefault();this.style.borderColor='var(--gold)'" ondragleave="this.style.borderColor=''" ondrop="this.style.borderColor='';dropStrahdMaps(event)"
-        title="Each image becomes a map named after its file, with a matching place in the travel log (rumoured until you pin it). Images in a folder named after another map nest under it. Maps already here are skipped.">
-      <label class="pc-pill" style="color:var(--gold);border-color:var(--gold);cursor:pointer">📦 Upload maps
-        <input type="file" id="mpBulk" accept="image/*,.zip,application/zip" multiple style="display:none" onchange="bulkAddStrahdMaps(this.files, this)"></label>
-      ${_strahdLegacyMaps(camp).length ? `<button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="bulkAddStrahdMaps([],null)" title="Rename, nest and place the maps from the first upload, hide the DM ones and lock their images to you. Keeps your fog and pins.">🧹 Tidy earlier upload (${_strahdLegacyMaps(camp).length})</button>` : ''}
-      <span id="mpBulkProgress" style="font-size:11px;color:var(--muted)">…or drop the map files, their folder, or the pack's .zip here</span>
-    </div>`;
-  }
-
+  const _jumpHtml = listable.length>1 ? `<select class="pc-pill map-jump" onchange="if(this.value) switchMap(this.value)" title="Go to another map">
+      <option value="">🗺 maps ▾</option>${listable.map(({map:m, depth})=>{ const open=_canOpenMap(camp, m);
+        return `<option value="${m.id}" ${open?'':'disabled'} ${map&&m.id===map.id?'disabled':''}>${'　'.repeat(Math.min(depth,4))}${depth?'↳ ':''}${open?'':'🔒 '}${esc(m.name)}${map&&m.id===map.id?' · here':''}</option>`; }).join('')}
+    </select>` : '';
   // ── Canvas ──
   // The GM may pull a map back under fog mid-session; bounce any player
   // currently standing on it rather than leaving it open on their screen.
   if(map && !_canOpenMap(camp, map)){
-    html += `<div class="empty-state" style="margin-bottom:12px"><div class="es-icon">🔒</div><p><b>${esc(map.name)}</b> is not open to the party yet.<br>Your GM will reveal it when the time comes.</p></div>`;
+    html += `<div class="empty-state" style="margin-bottom:12px"><div class="es-icon">🔒</div><p><b>${esc(map.name)}</b> is not open to the party yet.<br>Your GM will reveal it when the time comes.</p></div>${_jumpHtml?`<div class="map-trail">${_jumpHtml}</div>`:''}`;
     el.innerHTML = html;
     return;
   }
@@ -15408,6 +15390,8 @@ function renderMap(){
           : `<button class="pc-pill" onclick="switchMap('${mm.id}')">${_mapGlyph(camp,mm)} ${esc(mm.name)}</button><span class="trail-sep">▸</span>`
         ).join('')
       + `<button class="pc-pill add" onclick="toggleAddMap(null,null,'${map.id}')" title="Add a map nested inside ${esc(map.name)} — e.g. a graveyard inside a village">＋ sub-map</button>`
+      + `<button class="pc-pill add" onclick="toggleAddMap()" title="Add a top-level map — use “＋ sub-map” to nest one inside this map">＋ map</button>`
+      + _jumpHtml
       + `</div>`;
     const visKids = kids.filter(k=>_canSeeMap(camp, k));
     if(visKids.length){
@@ -15476,16 +15460,6 @@ function renderMap(){
       ${_bTurnSvg(camp, map, VW, VH, gm)}
       ${_fogLayerSvg(camp, map, VW, VH, pinned)}
     </svg>`;
-    // A sub-map leads with the places that plausibly belong there — linked to
-    // the map's own place, or not yet pinned anywhere (fresh discoveries) —
-    // but every other place is one tap away, so a place already pinned on the
-    // region map can be pinned again inside a sub-map and given a map of its own.
-    const parent = map.placeId ? placeById(map.placeId) : null;
-    const _near = p => !parent || !p.pins || !Object.keys(p.pins).length
-      || (parent.links||[]).some(n=>_fuzzyMatch(n,p.name)>=0.75) || (p.links||[]).some(n=>_fuzzyMatch(n,parent.name)>=0.75);
-    const _free = places.filter(p=>!(p.pins&&p.pins[map.id]) && p.id!==map.placeId && _placeLitForParty(camp, p));
-    const _nearby = _free.filter(_near), _rest = _free.filter(p=>!_near(p));
-    const unplaced = window._showAllUnplaced ? _nearby.concat(_rest) : _nearby;
     const _painting = _paintMode && _fogOn(map) && gm;
     const _legend = _painting
       ? (_paintMode==='reveal' ? 'drag to rub the fog away · '+Math.round(_brushR(map))+'px brush' : 'drag to paint the fog back · '+Math.round(_brushR(map))+'px brush')
@@ -15506,6 +15480,7 @@ function renderMap(){
     }
     html += _battleStripHtml(camp, map);
     html += `<div class="map-wrap ${_battle(map)?'battle-on':''} ${(_placingId||_placingParty||_placingTok||_placingKey)?'placing':''} ${_painting?'painting-fog':''} ${_peeking?'gm-preview':''} ${_mapWheelZoom?'zoom-active':''}" id="campMapWrap">${svg}<div class="map-legend">${_legend2}</div></div>`;
+    if(_placingId) html += `<div class="map-ctrls" style="margin:0 0 8px"><span class="pc-pill on gold" style="cursor:default">📌 pinning “${esc(placeById(_placingId)?.name||'')}”</span><button class="pc-pill" onclick="beginPlace(null)">cancel</button></div>`;
     html += _gmMapCtrlsHtml(camp, map);
     html += `<div class="map-ctrls">
       ${(chain.length>1)?`<button class="pc-pill" onclick="switchMap('${chain[chain.length-2].id}')" title="Back to ${esc(chain[chain.length-2].name)}">↑ up a map</button>`:''}
@@ -15513,7 +15488,7 @@ function renderMap(){
       <button class="pc-pill" onclick="zoomReset('${map.id}')" title="Reset zoom">⟲ fit</button>
       <button class="pc-pill" style="border-color:var(--gold);color:var(--gold)" onclick="beginPlaceParty()" title="${map.party?'Reposition the party marker':'Drop a party marker anywhere on the map'}">🚩 ${map.party?'move party':'drop party'}</button>
       ${map.party?`<button class="pc-pill" onclick="removeParty()">✕ party</button><button class="pc-pill" onclick="matchPartyToPins()" title="Shrink the party marker (and minis) to the same size as the town / place markers">📌 party = pin size</button>`:''}
-      ${_campMembers(camp).length?`<button class="pc-pill ${_tokMenu?'on':''}" onclick="toggleTokMenu()" title="Place characters' minis on their own, away from the party marker">🧍 minis</button>`:''}
+      ${_campMembers(camp).length?`<button class="pc-pill ${_tokMenu?'on':''}" onclick="toggleTokMenu()" title="Place characters' tokens on their own, away from the party marker">🧍 Player Tokens</button>`:''}
       ${gm?`<button class="pc-pill ${_tokWin.npc?'on':''}" onclick="toggleTokWin('npc')" title="GM: a window of NPC tokens to drop onto the map">🧙 NPC tokens</button><button class="pc-pill ${_tokWin.creature?'on':''}" onclick="toggleTokWin('creature')" title="GM: a window of creature tokens to drop onto the map">🐺 creature tokens</button>`:''}
       <button class="pc-pill" onclick="popOutMap()" title="Open this map full-screen in its own window">⛶ pop out</button>
       ${canDesignMaps(camp)?`<button class="pc-pill ${_battle(map)?'on':''}" style="color:var(--red);border-color:var(--red)" onclick="battleOp('toggle')" title="${_battle(map)?'End the encounter — heroes rejoin the party marker':'Turn this map into an encounter everyone sees: grid, initiative and turns'}">⚔ ${_battle(map)?'end battle':'battle mode'}</button>`:''}
@@ -15532,16 +15507,12 @@ function renderMap(){
     </div>`;
     if(_tokMenu){
       const mem=_campMembers(camp), solo=map.tokens||{};
-      html += `<div style="font-family:'Cinzel',serif;font-size:11px;color:var(--muted);letter-spacing:1px;margin:2px 0 6px">MINIS — tap a hero, then tap the map. Minis not placed travel with the party marker.</div>
+      html += `<div style="font-family:'Cinzel',serif;font-size:11px;color:var(--muted);letter-spacing:1px;margin:2px 0 6px">PLAYER TOKENS — tap a hero, then tap the map. Tokens not placed travel with the party marker.</div>
       <div class="map-tray">${mem.map(c=>{ const k=String(c.id), placed=!!solo[k];
         return `<span style="display:inline-flex;gap:4px;align-items:center"><button class="pc-pill ${_placingTok===k?'on gold':''}" onclick="beginPlaceTok('${jsq(k)}')" style="display:inline-flex;align-items:center;gap:6px">
           ${c.token||c.portrait?`<img src="${c.token||c.portrait}" alt="" style="width:20px;height:20px;border-radius:50%;object-fit:cover;box-shadow:0 0 0 1.5px ${classColor(c.classIdx)}">`:classIcon(c.classIdx)} ${esc(c.name)}${placed?' · move':''}</button>
           ${placed?`<button class="pc-pill" onclick="removeTok('${jsq(k)}')" title="Back to the party">✕</button>`:''}</span>`; }).join('')}
         <button class="pc-pill" onclick="openMiniStudio()" title="Frame the selected character's token">🎯 frame my token</button></div>`;
-    }
-    if(unplaced.length || _rest.length){
-      html += `<div style="font-family:'Cinzel',serif;font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:6px">${unplaced.length?'NOT ON THIS MAP YET — tap one, then tap the map':'EVERYTHING NEARBY IS PINNED — pull in a place from another map'}</div>
-      <div class="map-tray">${unplaced.map(p=>`<button class="pc-pill ${_placingId===p.id?'on gold':''}" onclick="beginPlace('${p.id}')">${PLACE_ICONS[p.type]||'📍'} ${esc(p.name)}</button>`).join('')}${_placingId?`<button class="pc-pill" onclick="beginPlace(null)">cancel</button>`:''}${_rest.length?`<button class="pc-pill ${window._showAllUnplaced?'on':''}" onclick="toggleAllUnplaced()" title="Places already pinned elsewhere — pin one here too to nest it inside this map">${window._showAllUnplaced?'show fewer':'+ '+_rest.length+' pinned elsewhere'}</button>`:''}</div>`;
     }
   } else if(places.length){
     // No illustrated map yet → the sketch graph
@@ -15626,7 +15597,7 @@ function renderMap(){
     </div>
     <div class="field"><label>Notes</label><textarea id="plDesc" placeholder="What's here, who's here, why it matters…" style="min-height:52px"></textarea></div>
     <button class="btn btn-primary" onclick="addPlace()">Add Place</button>
-    ${_onSub?`<div style="font-size:11px;color:var(--muted2);margin-top:6px;line-height:1.4">Goes into the travel log — pin it here with “📌 pin to map”, or from the tray above the Add Place card.</div>`:''}
+    ${_onSub?`<div style="font-size:11px;color:var(--muted2);margin-top:6px;line-height:1.4">Goes into the travel log below — pin it here with its “📌 pin to map” button.</div>`:''}
     ${_onSub?'':(()=>{ const seeded=(places||[]).filter(pp=>pp.seed==='swordcoast').length; const hint=looksLikeSwordCoast(camp);
       return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
         <span style="font-size:11px;color:var(--muted);font-family:'Cinzel',serif;letter-spacing:0.5px">STARTER SET</span>
@@ -15635,6 +15606,18 @@ function renderMap(){
       </div>
       <div style="font-size:11px;color:var(--muted2);margin-top:4px;line-height:1.4">Adds well-known Sword Coast locations to the travel log, hidden and unpinned — pin each as your party finds it. Bring your own map image as the backdrop.</div>`; })()}
   </div>`;
+  }
+
+  // Curse of Strahd map pack: one upload for the whole pack (owner + campaign only).
+  if(_canUploadStrahdPack(camp)){
+    html += `<div id="mpBulkDrop" class="map-ctrls" style="margin:-6px 0 14px;align-items:center;border:1px dashed var(--border2);border-radius:10px;padding:8px 10px"
+        ondragover="event.preventDefault();this.style.borderColor='var(--gold)'" ondragleave="this.style.borderColor=''" ondrop="this.style.borderColor='';dropStrahdMaps(event)"
+        title="Each image becomes a map named after its file, with a matching place in the travel log (rumoured until you pin it). Images in a folder named after another map nest under it. Maps already here are skipped.">
+      <label class="pc-pill" style="color:var(--gold);border-color:var(--gold);cursor:pointer">📦 Upload maps
+        <input type="file" id="mpBulk" accept="image/*,.zip,application/zip" multiple style="display:none" onchange="bulkAddStrahdMaps(this.files, this)"></label>
+      ${_strahdLegacyMaps(camp).length ? `<button class="pc-pill" style="color:var(--gold);border-color:var(--gold)" onclick="bulkAddStrahdMaps([],null)" title="Rename, nest and place the maps from the first upload, hide the DM ones and lock their images to you. Keeps your fog and pins.">🧹 Tidy earlier upload (${_strahdLegacyMaps(camp).length})</button>` : ''}
+      <span id="mpBulkProgress" style="font-size:11px;color:var(--muted)">…or drop the map files, their folder, or the pack's .zip here</span>
+    </div>`;
   }
 
   // Type legend — toggle each place type on/off for this map
@@ -15682,7 +15665,7 @@ function renderMap(){
           <button class="pc-pill ${p.status==='current'?'on gold':''}" onclick="setPlaceStatus('${p.id}','current')">📍 here</button>
           <button class="pc-pill ${p.status==='visited'?'on':''}" onclick="setPlaceStatus('${p.id}','visited')">visited</button>
           <button class="pc-pill ${p.status==='rumoured'?'on':''}" onclick="setPlaceStatus('${p.id}','rumoured')">heard of</button>
-          ${map&&!onCur?`<button class="pc-pill" onclick="beginPlace('${p.id}')">📌 pin to map</button>`:''}
+          ${map&&!onCur&&p.id!==map.placeId?`<button class="pc-pill ${_placingId===p.id?'on gold':''}" style="color:${_placingId===p.id?'':'var(--gold)'};border-color:var(--gold)" onclick="beginPlace('${p.id}')" title="Tap, then tap the map where ${esc(p.name)} goes">📌 ${_placingId===p.id?'tap the map…':'pin to map'}</button>`:''}
           ${map&&onCur?`<button class="pc-pill" onclick="unpinPlace('${p.id}')">unpin</button>`:''}
           <button class="pc-pill ${p.hideName?'':'on'}" onclick="togglePlaceName('${p.id}')" title="Show or hide this place's name on the map">${p.hideName?'🏷 name off':'🏷 name on'}</button>
           <span class="pc-swatches" style="display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap">${PIN_COLORS.map(c=>`<span onclick="setPlaceColor('${p.id}','${c}')" title="${c}" style="width:15px;height:15px;border-radius:50%;cursor:pointer;background:${c};border:2px solid ${((p.color||'').toLowerCase()===c.toLowerCase())?'var(--gold)':'rgba(0,0,0,0.35)'}"></span>`).join('')}${p.color?`<span onclick="setPlaceColor('${p.id}','')" title="Reset to status colour" class="pc-pill" style="padding:2px 6px;font-size:11px">reset</span>`:''}</span>
@@ -16265,7 +16248,6 @@ function applyPlacesReview(){
 function dismissPlacesReview(){ const camp=_markScanned(); if(camp) saveCampaign(camp); window._pendingPlaceScan=null; closePinModal(); }
 
 /* ── Map management ── */
-function toggleAllUnplaced(){ window._showAllUnplaced=!window._showAllUnplaced; renderMap(); }
 /* Which form sits under a sub-map: the sub-map form (default) or Add Place. */
 function setMapSlot(v){ window._mapSlot = (v==='place')?'place':'map';
   if(v==='place'){ window._showMapForm=false; window._editMapId=null; window._pendingMapImg=null; window._presetMapParent=null; }
@@ -17295,7 +17277,13 @@ function _popoutMain(cfg){
   function toMap(e){ var pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; var m=svg.getScreenCTM(); return m?pt.matrixTransform(m.inverse()):pt; }
   window.Z=function(f){ var cx=v.x+(VW/v.z)/2, cy=v.y+(VH/v.z)/2; v.z=Math.max(1,Math.min(ZMAX,v.z*f)); v.x=cx-(VW/v.z)/2; v.y=cy-(VH/v.z)/2; ap(); };
   window.FIT=function(){ v={z:1,x:0,y:0}; ap(); };
-  window.FS=function(){ var e=document.documentElement; (e.requestFullscreen||e.webkitRequestFullscreen||function(){}).call(e); };
+  // One button both ways: full screen when windowed, back to the window when full.
+  function isFS(){ return !!(document.fullscreenElement||document.webkitFullscreenElement); }
+  function fsLbl(){ var b=document.getElementById('fsBtn'); if(!b) return; var on=isFS(); b.innerHTML=(on?'&#128471;<span class="fsl"> minimize</span>':'&#9974;<span class="fsl"> full screen</span>'); b.title=on?'Leave full screen':'Fill the screen with the map'; }
+  window.FS=function(){ var d=document, e=d.documentElement;
+    if(isFS()) (d.exitFullscreen||d.webkitExitFullscreen||function(){}).call(d);
+    else (e.requestFullscreen||e.webkitRequestFullscreen||function(){}).call(e); };
+  document.addEventListener('fullscreenchange', fsLbl); document.addEventListener('webkitfullscreenchange', fsLbl);
   window.TRAY=function(){ trayOpen=!trayOpen; renderTray(); };
   window.__rebind=function(mapId, vw, vh, keepView){ svg=document.querySelector('#vp svg'); VW=vw; VH=vh; MAPID=mapId; if(!keepView){ v={z:1,x:0,y:0}; placing=null; say(''); } ap(); renderTray(); if(window.__rb) window.__rb(); };
   function esc(t){ return String(t==null?'':t).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
@@ -17313,7 +17301,7 @@ function _popoutMain(cfg){
     if(!d || !trayOpen){ trayEl.style.display='none'; return; }
     var h='';
     if(d.locked) h+='<div class="th">Tokens are locked on this map — unlock them in the app to move them.</div>';
-    h+='<div class="th">MINIS — tap one, then tap the map. Drag a mini or the party marker to move it.</div><div class="tr">'+(d.minis.map(chip).join('')||'<span class="th">No characters in this campaign.</span>')+'</div>';
+    h+='<div class="th">PLAYER TOKENS — tap one, then tap the map. Drag a token or the party marker to move it.</div><div class="tr">'+(d.minis.map(chip).join('')||'<span class="th">No characters in this campaign.</span>')+'</div>';
     if(d.gm) h+='<div class="th">GM: drag NPC and creature tokens here from their windows in the app.</div>';
     trayEl.innerHTML=h; trayEl.style.display='block';
   }
@@ -17666,7 +17654,7 @@ function popOutMap(){
     +'</style></head><body>'
     +'<div id="ttl">'+title+'</div><div id="bban"></div><div id="hint"></div>'
     +'<div id="vp">'+clone.outerHTML+'</div>'
-    +'<div id="bar"><span id="live" style="align-self:center;color:#27ae60;font-size:11px;font-weight:600;margin-right:4px">&#9679; LIVE</span><button id="battleBtn" onclick="BATTLE()" style="display:none;border-color:#c0392b;color:#ff8a7a">&#9876; battle</button><button id="trayBtn" onclick="TRAY()">&#129485; tokens</button><button onclick="Z(1/1.4)">&minus;</button><button onclick="Z(1.4)">&plus;</button><button onclick="FIT()">fit</button><button onclick="FS()">&#9974;<span class="fsl"> full screen</span></button></div>'
+    +'<div id="bar"><span id="live" style="align-self:center;color:#27ae60;font-size:11px;font-weight:600;margin-right:4px">&#9679; LIVE</span><button id="battleBtn" onclick="BATTLE()" style="display:none;border-color:#c0392b;color:#ff8a7a">&#9876; battle</button><button id="trayBtn" onclick="TRAY()">&#129485; tokens</button><button onclick="Z(1/1.4)">&minus;</button><button onclick="Z(1.4)">&plus;</button><button onclick="FIT()">fit</button><button id="fsBtn" onclick="FS()" title="Fill the screen with the map">&#9974;<span class="fsl"> full screen</span></button></div>'
     +'<div id="tray"></div><div id="battle"></div><div id="dice"></div>'
     +'<div id="ovl"></div>'
     +'<script>var DiceTable=('+_diceTableKit.toString()+')();<\/script>'
