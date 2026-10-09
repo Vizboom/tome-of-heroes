@@ -12713,6 +12713,10 @@ function _refreshCampScreen(){
     // Stay in the detail — just update what's visible
     renderCampDetailHeader();
     campTab(_currentCampTab||'sessions');
+  } else if(['campNewForm','campImportForm','campJoinForm'].some(id=>{ const f=document.getElementById(id); return f && f.style.display!=='none'; })){
+    // A create/import/join form is open: renderCampList would close it and
+    // drop whatever is being typed, so leave the screen as it is.
+    return;
   } else {
     renderCampList();
   }
@@ -13155,6 +13159,17 @@ function renderSessions() {
   const allChars = getChars();
   const campChars = getFullParty();
 
+  // Re-renders arrive from sync while someone may be typing in the forms
+  // below, so keep the Claude/Bulk panes as they are and carry over the
+  // manual form's values, the chosen tab and the caret.
+  const oldClaude = el.querySelector('#sessFormClaude');
+  const oldBulk   = el.querySelector('#sessBulkImport');
+  const oldTab    = el.querySelector(':scope > .tab-row .tab-btn.active')?.id;
+  const manualVals = {};
+  el.querySelectorAll('#sessFormManual input[id], #sessFormManual textarea[id]').forEach(f=>{ manualVals[f.id]=f.value; });
+  const focused = el.contains(document.activeElement) && document.activeElement.id ? document.activeElement : null;
+  const caret = focused && 'selectionStart' in focused ? (()=>{ try{ return [focused.selectionStart, focused.selectionEnd, focused.scrollTop]; }catch(e){ return null; } })() : null;
+
   let html = `
   <div class="tab-row" style="margin-bottom:12px">
     <button class="tab-btn active" id="sessTabManual" onclick="sessImportTab('manual',this)">✏ Manual</button>
@@ -13308,6 +13323,17 @@ function renderSessions() {
   }
   const gs = _gettingStartedHtml(camp);
   el.innerHTML = gs + html;
+  if(oldClaude && oldBulk){
+    el.querySelector('#sessFormClaude')?.replaceWith(oldClaude);
+    el.querySelector('#sessBulkImport')?.replaceWith(oldBulk);
+    Object.entries(manualVals).forEach(([id,v])=>{ const f=document.getElementById(id); if(f) f.value=v; });
+    if(manualVals.sGold) updateGoldHint(manualVals.sGold);
+    [..._sessionPresence].forEach(cid=>{ const p=document.getElementById('sp_'+cid); if(p){ _sessionPresence.delete(cid); toggleSessionPresence(cid); } });
+    const tabBtn = oldTab && document.getElementById(oldTab);
+    if(tabBtn && oldTab!=='sessTabManual') sessImportTab(oldTab==='sessTabClaude'?'claude':'bulk', tabBtn);
+    const f = focused && document.getElementById(focused.id);
+    if(f){ try{ f.focus({preventScroll:true}); if(caret){ f.setSelectionRange(caret[0], caret[1]); f.scrollTop=caret[2]; } }catch(e){} }
+  }
   // While a new campaign's checklist is showing, keep the session form tucked
   // away until the DM asks for it.
   if(gs && !(camp.sessions||[]).length && !window._showSessForm){
@@ -14354,6 +14380,8 @@ function addSession() {
     goldAddedToLoot: false, // track whether we've pushed to loot
   };
   _sessionPresence = new Set();
+  ['sTitle','sSummary','sHighlights'].forEach(id=>{ const f=document.getElementById(id); if(f) f.value=''; });
+  ['sXP','sGold'].forEach(id=>{ const f=document.getElementById(id); if(f) f.value='0'; });
   if (!camps[ci].sessions) camps[ci].sessions = [];
   camps[ci].sessions.push(session);
   camps[ci].lastPlayed = Date.now();
