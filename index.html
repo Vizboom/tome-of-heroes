@@ -3667,6 +3667,27 @@ const LOOT_TABLES = [
     ['Magic Gem of the Wizard of Wines',null,0,'One of three gems that keep the vineyard fruitful.',{type:'gem',value:1000}],
     ['Bones of St. Andral',null,2,'Holy relic. Returned to St. Andral\'s Church, they reconsecrate it.',{type:'misc'}],
     ['Skull of Argynvost',null,30,'The silver dragon\'s skull. Placed in Argynvostholt\'s beacon, it rekindles the light.',{type:'misc'}]]},
+
+  {id:'lmop-valuables', group:'Lost Mine of Phandelver', camp:'lmop', name:'Phandalin Frontier Finds', type:'treasure', entries:[
+    ['Lionshield Coster Supply Crate',25,40,'Stolen trade goods stamped with a blue lion.'],['Redbrand Scarlet Cloak',1,4,'The grimy red cloak worn by the Redbrand ruffians.'],
+    ["Miner's Pick",2,10,'',{type:'tool'}],['Sack of Raw Silver Ore',10,20],['Gold Nugget',25,0.5],['Pouch of Gold Dust',50,0],
+    ['Dwarven Drinking Horn',15,1,'Banded in brass and carved with mountain runes.'],['Hooded Lantern',5,2,'',{type:'misc'}],
+    ['Cask of Dwarven Ale',10,40],['Silver Holy Symbol of Tymora',25,1,'A lucky coin-shaped amulet of the goddess of fortune.'],
+    ['Cragmaw Goblin Totem',2,1,'A crude fetish of bone and feathers.'],['Worg Pelt',5,8],
+    ['Silver Comb with Mother-of-Pearl Inlay',25,0],['Jade Figurine of a Frog',40,0.5],['Elven Silver Chain',30,0],
+    ['Bundle of Dried Herbs',1,1,'',{type:'misc'}],['Old Phandelver Pact Coin',10,0,'An ancient coin from the alliance of dwarves, gnomes and wizards.'],
+    ['Brass Spyglass Tube (cracked)',15,1],['Silver Drinking Cup',25,1],['Bag of Mixed Gemstone Chips',30,0,'',{type:'gem'}]]},
+  {id:'lmop-relics', group:'Lost Mine of Phandelver', camp:'lmop', name:'Treasures of the Lost Mine', type:'wondrous', rarity:'uncommon', note:'Named treasures — usually placed by the DM rather than rolled.', entries:[
+    ['Lightbringer',null,4,'Mace +1, made for a cleric of Lathander. Glows on command (bright light 15 ft) and deals an extra 1d6 radiant damage to undead.',{type:'weapon',hands:'1'}],
+    ['Dragonguard',null,20,'Breastplate +1. Gives advantage on saving throws against the breath weapons of dragons.',{type:'armor',value:1500}],
+    ['Hew',null,4,'Battleaxe +1. Deals maximum damage against plant creatures and wooden objects. The wielder feels uneasy travelling through forests.',{type:'weapon',hands:'v'}],
+    ['Talon',null,3,'Longsword +1 with a hilt shaped like a dragon\'s claw.',{type:'weapon',hands:'v'}],
+    ['Spider Staff',null,4,'Staff topped with a carved spider. Extra 1d6 poison damage on a hit. Has charges to cast Spider Climb or Web.',{type:'staff',rarity:'rare',attune:'required'}],
+    ['Staff of Defense',null,4,'+1 to AC while held. Has charges to cast Mage Armor or Shield.',{type:'staff',rarity:'rare',attune:'required'}],
+    ['Wand of Magic Missiles'],['Gauntlets of Ogre Power'],
+    ["Bowgentle's Spellbook",null,3,'The lost spellbook of the wizard Bowgentle.',{type:'misc',value:250}],
+    ["Gundren's Map to Wave Echo Cave",null,0,'The Rockseeker brothers\' map to the lost mine.',{type:'misc',rarity:'common'}],
+    ["Glasstaff's Letter",null,0,'A letter signed by the Black Spider, ordering the Redbrands\' leader to deal with the adventurers.',{type:'misc',rarity:'common'}]]},
 ];
 function _lootTableItem(t, e){
   const [name, value, weight, desc, extra] = e;
@@ -12682,7 +12703,14 @@ let _ltOpen = {}, _ltLast = {}, _ltShowCamp = {};
 function _lootTableCampOn(t){
   if(!t.camp) return true;
   if(_ltShowCamp[t.camp]) return true;
-  return t.camp==='cos' && _looksLikeStrahd(getActiveCamp());
+  const camp = getActiveCamp();
+  if(t.camp==='cos') return _looksLikeStrahd(camp);
+  if(t.camp==='lmop') return _looksLikePhandelver(camp);
+  return false;
+}
+function _looksLikePhandelver(camp){
+  const h=((camp&&camp.name)||'')+' '+((camp&&camp.setting)||'')+' '+((camp&&camp.description)||'');
+  return /phandel|phandalin|wave echo|cragmaw|redbrand/i.test(h);
 }
 function renderLootTables(){
   const el = document.getElementById('ltab-tables'); if(!el) return;
@@ -12706,8 +12734,8 @@ function renderLootTables(){
     h += `<div class="divider"><span>${esc(g.name)}</span></div>`;
     if(!on){ h += `<button class="pc-pill" style="margin:0 0 10px" onclick="_ltShowCamp['${g.camp}']=1;renderLootTables()">Show the ${esc(g.name)} tables</button>`; return; }
     g.tables.forEach(t=>{
-      const open = !!_ltOpen[t.id], vals = t.entries.map(e=>_lootTableItem(t,e).value||0);
-      const lo = Math.min(...vals), hi = Math.max(...vals);
+      const open = !!_ltOpen[t.id], vals = t.entries.map(e=>_lootTableItem(t,e).value||0).filter(v=>v>0);
+      const lo = vals.length ? Math.min(...vals) : 0, hi = vals.length ? Math.max(...vals) : 0;
       const range = hi ? (lo===hi ? fmtGp(hi) : fmtGp(lo)+' – '+fmtGp(hi)) : '';
       const last = _ltLast[t.id];
       h += `<div class="card" style="margin-bottom:8px;padding:10px 12px">
