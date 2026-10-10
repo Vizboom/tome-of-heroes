@@ -1680,12 +1680,14 @@ input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
       <button class="tab-btn" onclick="lootTab('add')">Add Item</button>
       <button class="tab-btn" onclick="lootTab('pool')">Pool</button>
       <button class="tab-btn" onclick="lootTab('wealth')">Wealth</button>
+      <button class="tab-btn" onclick="lootTab('tables')">🎲 Tables</button>
       <button class="tab-btn" onclick="lootTab('bulk')" style="color:var(--gold)">⬇ Bulk</button>
     </div>
     <div class="tab-pane active" id="ltab-inventory"></div>
     <div class="tab-pane" id="ltab-add"></div>
     <div class="tab-pane" id="ltab-pool"></div>
     <div class="tab-pane" id="ltab-wealth"></div>
+    <div class="tab-pane" id="ltab-tables"></div>
     <div class="tab-pane" id="ltab-bulk"></div>
   </div>
 
@@ -3565,6 +3567,117 @@ const DND_ITEMS = [
   {name:'Oil (flask)',type:'misc',rarity:'common',qty:1,weight:1,value:0.1,attune:'none',desc:'Burns 6 hrs in a lamp, or throw to splash and ignite (5 fire damage).'},
   {name:'Tent (two-person)',type:'misc',rarity:'common',qty:1,weight:20,value:2,attune:'none',desc:'A simple canvas shelter for two.'},
 ];
+
+/* ══ LOOT TABLES ══
+   Rollable treasure tables for the Loot ▸ Tables tab. Each entry is
+   [name, value gp, weight lb, description?]; the table's type/rarity apply to
+   every entry. Tables with `camp` only show by default for a matching
+   campaign (see _lootTableCampOn). Named entries that already exist in
+   DND_ITEMS use that full entry when added. */
+const LOOT_TABLES = [
+  {id:'gem10', group:'Gemstones', name:'10 gp Gemstones', type:'gem', entries:[
+    ['Azurite',10,0,'Opaque mottled deep blue.'],['Banded Agate',10,0,'Translucent striped brown, blue, white or red.'],
+    ['Blue Quartz',10,0,'Transparent pale blue.'],['Eye Agate',10,0,'Translucent circles of grey, white, brown, blue or green.'],
+    ['Hematite',10,0,'Opaque grey-black.'],['Lapis Lazuli',10,0,'Opaque light and dark blue with yellow flecks.'],
+    ['Malachite',10,0,'Opaque striated light and dark green.'],['Moss Agate',10,0,'Translucent pink or yellow-white with mossy grey or green markings.'],
+    ['Obsidian',10,0,'Opaque black volcanic glass.'],['Rhodochrosite',10,0,'Opaque light pink.'],
+    ['Tiger Eye',10,0,'Translucent brown with golden centre.'],['Turquoise',10,0,'Opaque light blue-green.']]},
+  {id:'gem50', group:'Gemstones', name:'50 gp Gemstones', type:'gem', entries:[
+    ['Bloodstone',50,0,'Opaque dark grey with red flecks.'],['Carnelian',50,0,'Opaque orange to red-brown.'],
+    ['Chalcedony',50,0,'Opaque white.'],['Chrysoprase',50,0,'Translucent green.'],
+    ['Citrine',50,0,'Transparent pale yellow-brown.'],['Jasper',50,0,'Opaque blue, black or brown.'],
+    ['Moonstone',50,0,'Translucent white with a pale blue glow.'],['Onyx',50,0,'Opaque bands of black and white, or pure black or white.'],
+    ['Quartz',50,0,'Transparent white, smoky grey or yellow.'],['Sardonyx',50,0,'Opaque bands of red and white.'],
+    ['Star Rose Quartz',50,0,'Translucent rosy stone with a white star-shaped centre.'],['Zircon',50,0,'Transparent pale blue-green.']]},
+  {id:'gem100', group:'Gemstones', name:'100 gp Gemstones', type:'gem', entries:[
+    ['Amber',100,0,'Transparent watery gold to rich gold.'],['Amethyst',100,0,'Transparent deep purple.'],
+    ['Chrysoberyl',100,0,'Transparent yellow-green to pale green.'],['Coral',100,0,'Opaque crimson.'],
+    ['Garnet',100,0,'Transparent red, brown-green or violet.'],['Jade',100,0,'Translucent light green, deep green or white.'],
+    ['Jet',100,0,'Opaque deep black.'],['Pearl',100,0,'Opaque lustrous white, yellow or pink. Component for Identify.'],
+    ['Spinel',100,0,'Transparent red, red-brown or deep green.'],['Tourmaline',100,0,'Transparent pale green, blue, brown or red.']]},
+  {id:'gem500', group:'Gemstones', name:'500 gp Gemstones', type:'gem', rarity:'uncommon', entries:[
+    ['Alexandrite',500,0,'Transparent dark green.'],['Aquamarine',500,0,'Transparent pale blue-green.'],
+    ['Black Pearl',500,0,'Opaque pure black.'],['Blue Spinel',500,0,'Transparent deep blue.'],
+    ['Peridot',500,0,'Transparent rich olive green.'],['Topaz',500,0,'Transparent golden yellow.']]},
+  {id:'gem1000', group:'Gemstones', name:'1,000 gp Gemstones', type:'gem', rarity:'rare', entries:[
+    ['Black Opal',1000,0,'Translucent dark green with black mottling and golden flecks.'],['Blue Sapphire',1000,0,'Transparent blue-white to medium blue.'],
+    ['Emerald',1000,0,'Transparent deep bright green.'],['Fire Opal',1000,0,'Translucent fiery red.'],
+    ['Opal',1000,0,'Translucent pale blue with green and golden mottling.'],['Star Ruby',1000,0,'Translucent ruby with a white star-shaped centre.'],
+    ['Star Sapphire',1000,0,'Translucent blue sapphire with a white star-shaped centre.'],['Yellow Sapphire',1000,0,'Transparent fiery yellow or yellow-green.']]},
+  {id:'gem5000', group:'Gemstones', name:'5,000 gp Gemstones', type:'gem', rarity:'very-rare', entries:[
+    ['Black Sapphire',5000,0,'Translucent lustrous black with glowing highlights.'],['Diamond',5000,0,'Transparent blue-white, canary, pink, brown or blue. Component for Revivify, Raise Dead and Resurrection.'],
+    ['Jacinth',5000,0,'Transparent fiery orange.'],['Ruby',5000,0,'Transparent clear red to deep crimson.']]},
+
+  {id:'art25', group:'Art Objects', name:'25 gp Art Objects', type:'treasure', entries:[
+    ['Silver Ewer',25,2],['Carved Bone Statuette',25,0.5],['Small Gold Bracelet',25,0],['Cloth-of-Gold Vestments',25,2],
+    ['Black Velvet Mask Stitched with Silver Thread',25,0],['Copper Chalice with Silver Filigree',25,1],['Pair of Engraved Bone Dice',25,0],
+    ['Small Mirror in a Painted Wooden Frame',25,0.5],['Embroidered Silk Handkerchief',25,0],['Gold Locket with a Painted Portrait',25,0]]},
+  {id:'art250', group:'Art Objects', name:'250 gp Art Objects', type:'treasure', entries:[
+    ['Gold Ring Set with Bloodstones',250,0],['Carved Ivory Statuette',250,1],['Large Gold Bracelet',250,0.5],
+    ['Silver Necklace with a Gemstone Pendant',250,0],['Bronze Crown',250,2],['Silk Robe with Gold Embroidery',250,2],
+    ['Large Well-Made Tapestry',250,10],['Brass Mug with Jade Inlay',250,1],['Box of Turquoise Animal Figurines',250,1],
+    ['Gold Bird Cage with Electrum Filigree',250,5]]},
+  {id:'art750', group:'Art Objects', name:'750 gp Art Objects', type:'treasure', rarity:'uncommon', entries:[
+    ['Silver Chalice Set with Moonstones',750,1],['Silver-Plated Longsword with Jet in the Hilt',750,3],
+    ['Carved Harp of Exotic Wood with Ivory and Zircon Inlay',750,6],['Small Gold Idol',750,2],
+    ['Gold Dragon Comb with Red Garnet Eyes',750,0],['Bottle Stopper Embossed with Gold Leaf and Amethysts',750,0],
+    ['Ceremonial Electrum Dagger with a Black Pearl Pommel',750,1],['Silver and Gold Brooch',750,0],
+    ['Obsidian Statuette with Gold Fittings',750,2],['Painted Gold War Mask',750,1]]},
+  {id:'art2500', group:'Art Objects', name:'2,500 gp Art Objects', type:'treasure', rarity:'rare', entries:[
+    ['Fine Gold Chain Set with a Fire Opal',2500,0],['Old Masterpiece Painting',2500,5],
+    ['Silk and Velvet Mantle Set with Moonstones',2500,3],['Platinum Bracelet Set with a Sapphire',2500,0],
+    ['Embroidered Glove Set with Jewel Chips',2500,0],['Jeweled Anklet',2500,0],['Gold Music Box',2500,2],
+    ['Gold Circlet Set with Four Aquamarines',2500,0.5],['Eye Patch with a Sapphire and Moonstone Mock Eye',2500,0],
+    ['Necklace of Small Pink Pearls',2500,0]]},
+  {id:'art7500', group:'Art Objects', name:'7,500 gp Art Objects', type:'treasure', rarity:'very-rare', entries:[
+    ['Jeweled Gold Crown',7500,3],['Jeweled Platinum Ring',7500,0],['Small Gold Statuette Set with Rubies',7500,2],
+    ['Gold Cup Set with Emeralds',7500,1],['Gold Jewelry Box with Platinum Filigree',7500,2],
+    ["Painted Gold Child's Sarcophagus",7500,20],['Jade Game Board with Solid Gold Pieces',7500,5],
+    ['Bejeweled Ivory Drinking Horn with Gold Filigree',7500,2]]},
+
+  {id:'household', group:'Household Valuables', name:'Fine Furnishings', type:'treasure', entries:[
+    ['Brass Candelabra',5,5,'A five-branched brass candelabra, dented but serviceable.'],['Silver Candelabra',25,6,'A heavy three-branched candelabra of polished silver.'],
+    ['Pair of Silver Candlesticks',15,3],['Pewter Tankard',0.2,1],['Silver Serving Platter',20,4],
+    ['Set of Silver Cutlery',30,2,'Twelve place settings in a felt-lined box.'],['Porcelain Teapot',10,2,'Delicate, hand-painted with blue flowers.'],
+    ['Crystal Decanter',25,2],['Gilded Picture Frame',10,3],['Brass Hand Mirror',5,1],
+    ['Carved Ivory Comb',10,0],['Bolt of Fine Silk',25,5,'Ten yards of dyed silk.'],['Small Woven Tapestry',15,5],
+    ['Bottle of Fine Wine',10,1.5],['Cut-Glass Perfume Bottle',15,0],['Enamelled Snuff Box',12,0],
+    ['Brass Hourglass',25,1],['Silver Hairpin',5,0],['Leather-Bound Book of Poetry',25,3],['Pouch of Saffron',15,0,'Prized spice, worth its weight in gold.']]},
+
+  {id:'cos-valuables', group:'Curse of Strahd', camp:'cos', name:'Barovian Valuables', type:'treasure', entries:[
+    ['Black Iron Candelabra',10,8,'Wrought with bat-wing arms; the wax has run black.'],['Tarnished Silver Candelabra',25,6,'Engraved with the von Zarovich crest.'],
+    ['Silver Holy Symbol of the Morninglord',25,1,'A sunburst on a fine chain.'],['Tarokka Deck',5,0,'A Vistani fortune-telling deck of 54 cards.',{type:'misc'}],
+    ['Silver Hand Mirror',20,1,'Its glass is clouded, as if something breathes on it.'],['Portrait Locket',25,0,'A painted portrait of a dark-haired young woman.'],
+    ['Black Lace Mourning Veil',10,0],['Crystal Wine Goblet',10,0.5],['Gilded Raven Figurine',50,1],
+    ['Brass Church Censer',15,2],['Wolf Pelt',2,5],['Vistani Silk Scarf',10,0,'Brightly dyed and embroidered.'],
+    ['Signet Ring of a Barovian Boyar',50,0],['Music Box (plays a waltz)',75,2],['Silver-Framed Noble Portrait',100,8],
+    ['Garlic Braid',0.1,1,'Every Barovian household keeps one by the door.'],['Silvered Dagger',102,1,'Light, finesse, thrown (20/60). 1d4 piercing. Counts as silvered against creatures resistant to non-silvered weapons.',{type:'weapon',hands:'off'}],
+    ['Wooden Stakes (bundle of 5)',0.5,2,'',{type:'misc'}],['Flask of Holy Water',25,1,'Throw (20 ft): 2d6 radiant damage to a fiend or undead.',{type:'misc'}],
+    ['Dream Pastry',0.5,0,'A sweet meat pie that brings on vivid dreams and a dull, obedient stupor.']]},
+  {id:'cos-wine', group:'Curse of Strahd', camp:'cos', name:'Wizard of Wines Cellar', type:'treasure', entries:[
+    ['Bottle of Purple Grapemash No. 3',2,1.5,'A cheap, sweet Barovian table wine.'],
+    ['Bottle of Red Dragon Crush',10,1.5,'A rich, full-bodied red.'],
+    ['Bottle of Champagne du le Stomp',25,1.5,'The vineyard\'s finest sparkling wine.'],
+    ['Cask of Purple Grapemash No. 3',20,60],['Cask of Red Dragon Crush',100,60]]},
+  {id:'cos-relics', group:'Curse of Strahd', camp:'cos', name:'Treasures of Barovia', type:'wondrous', rarity:'rare', note:'Named treasures — usually placed by the DM rather than rolled.', entries:[
+    ['Sunsword'],['Holy Symbol of Ravenkind'],['Icon of Ravenloft'],['Tome of Strahd'],
+    ['Blood Spear',null,3,'Spear. When you reduce a creature to 0 HP with it, you gain 2d6 temporary HP. Its chosen wielder gains +2 to attack and damage rolls.',{type:'weapon',rarity:'uncommon',attune:'required',hands:'v'}],
+    ["Saint Markovia's Thighbone",null,4,'Has the properties of a Mace of Disruption. If it hits a vampire or vampire spawn in a battle, it crumbles to dust when that battle ends.',{type:'weapon',attune:'required',hands:'1'}],
+    ['Gulthias Staff',null,4,'Blackened staff cut from the Gulthias Tree. Holds charges of vampiric magic that drain life from creatures it strikes.',{type:'staff',attune:'required'}],
+    ['Magic Gem of the Wizard of Wines',null,0,'One of three gems that keep the vineyard fruitful.',{type:'gem',value:1000}],
+    ['Bones of St. Andral',null,2,'Holy relic. Returned to St. Andral\'s Church, they reconsecrate it.',{type:'misc'}],
+    ['Skull of Argynvost',null,30,'The silver dragon\'s skull. Placed in Argynvostholt\'s beacon, it rekindles the light.',{type:'misc'}]]},
+];
+function _lootTableItem(t, e){
+  const [name, value, weight, desc, extra] = e;
+  const base = DND_ITEMS.find(i=>i.name.toLowerCase()===name.toLowerCase());
+  if(base && value==null) return Object.assign({}, base);
+  return Object.assign({name, type:t.type, rarity:t.rarity||'common', weight:weight||0, value:value||0, attune:'none', desc:desc||''}, extra||{});
+}
+// Make every table entry findable from the Add Item search too.
+LOOT_TABLES.forEach(t=>t.entries.forEach(e=>{
+  if(!DND_ITEMS.some(i=>i.name.toLowerCase()===e[0].toLowerCase())) DND_ITEMS.push(_lootTableItem(t, e));
+}));
 
 /* ══ STORAGE ══ */
 /* ══ DATA ACCESS — in-memory _db, Supabase is source of truth ══ */
@@ -11757,7 +11870,7 @@ function renderDiceHistory(){const el=document.getElementById('rollHistory');if(
 
 /* ══ LOOT ══ */
 let lootOwner='pool',lootFilter='all';
-function lootTab(t){document.querySelectorAll('#scr-loot .tab-btn').forEach((b,i)=>b.classList.toggle('active',['inventory','add','pool','wealth','bulk'][i]===t));document.querySelectorAll('#scr-loot .tab-pane').forEach(p=>p.classList.remove('active'));document.getElementById('ltab-'+t).classList.add('active');if(t==='inventory')renderInventory();if(t==='add')renderAddTab();if(t==='pool')renderPool();if(t==='wealth')renderWealth();if(t==='bulk')renderBulkImportTab();}
+function lootTab(t){document.querySelectorAll('#scr-loot .tab-btn').forEach((b,i)=>b.classList.toggle('active',['inventory','add','pool','wealth','tables','bulk'][i]===t));document.querySelectorAll('#scr-loot .tab-pane').forEach(p=>p.classList.remove('active'));document.getElementById('ltab-'+t).classList.add('active');if(t==='inventory')renderInventory();if(t==='add')renderAddTab();if(t==='pool')renderPool();if(t==='wealth')renderWealth();if(t==='tables')renderLootTables();if(t==='bulk')renderBulkImportTab();}
 
 function renderBulkImportTab(){
   const el = document.getElementById('ltab-bulk');
@@ -12563,6 +12676,89 @@ document.addEventListener('mousedown', function(e) {
 });
 function addItem(){const name=(document.getElementById('iName')?.value||'').trim();if(!name){toast('Enter item name','var(--red)');return;}const item={id:'i'+Date.now(),name,type:document.getElementById('iType').value,hands:(document.getElementById('iType').value==='weapon'?(document.getElementById('iHands')?.value||'1'):undefined),rarity:document.getElementById('iRarity').value,qty:Math.max(1,parseInt(document.getElementById('iQty').value)||1),weight:parseFloat(document.getElementById('iWt').value)||0,value:parseFloat(document.getElementById('iVal').value)||0,attune:document.getElementById('iAttune').value,desc:(document.getElementById('iDesc').value||'').trim(),owner:document.getElementById('iOwner').value};const items=getItems();items.push(item);saveItems(items);document.getElementById('iName').value='';document.getElementById('iDesc').value='';document.getElementById('iQty').value='1';toast('✦ '+name+' added!');renderInventory();renderPool();}
 function quickAdd(qi){const q=QUICK_ITEMS[qi];const ownerEl=document.querySelector('#ltab-add #iOwner');const owner=ownerEl?.value||'pool';const item={...q,id:'i'+Date.now()+qi,owner};const items=getItems();items.push(item);saveItems(items);toast('✦ '+q.name+' added!');renderInventory();renderPool();}
+
+/* ── Loot ▸ Tables: roll or pick from LOOT_TABLES ── */
+let _ltOpen = {}, _ltLast = {}, _ltShowCamp = {};
+function _lootTableCampOn(t){
+  if(!t.camp) return true;
+  if(_ltShowCamp[t.camp]) return true;
+  return t.camp==='cos' && _looksLikeStrahd(getActiveCamp());
+}
+function renderLootTables(){
+  const el = document.getElementById('ltab-tables'); if(!el) return;
+  const chars = getFullParty();
+  const prevOwner = document.getElementById('ltOwner')?.value || 'pool';
+  const prevRolls = document.getElementById('ltRolls')?.value || '1';
+  const groups = [];
+  LOOT_TABLES.forEach(t=>{ let g=groups.find(x=>x.name===t.group); if(!g) groups.push(g={name:t.group, camp:t.camp, tables:[]}); g.tables.push(t); });
+  const fmtGp = v => v>=1 ? Number(v).toLocaleString()+' gp' : (v>=0.1 ? Math.round(v*10)+' sp' : Math.round(v*100)+' cp');
+  let h = `<div class="card">
+    <p style="font-size:12px;color:var(--muted);margin:0 0 10px;line-height:1.5">Roll on a table, or open one to pick an item. Everything you add goes straight into the inventory.</p>
+    <div class="form-row two">
+      <div class="field"><label>Add To</label>
+        <select id="ltOwner"><option value="pool">Party Pool</option>${chars.map(c=>`<option value="${c.id}"${String(c.id)===String(prevOwner)?' selected':''}>${classIcon(c.classIdx)} ${esc(c.name)}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Rolls per click</label><input id="ltRolls" type="number" min="1" max="20" value="${esc(prevRolls)}"></div>
+    </div>
+  </div>`;
+  groups.forEach(g=>{
+    const on = g.tables.some(_lootTableCampOn);
+    h += `<div class="divider"><span>${esc(g.name)}</span></div>`;
+    if(!on){ h += `<button class="pc-pill" style="margin:0 0 10px" onclick="_ltShowCamp['${g.camp}']=1;renderLootTables()">Show the ${esc(g.name)} tables</button>`; return; }
+    g.tables.forEach(t=>{
+      const open = !!_ltOpen[t.id], vals = t.entries.map(e=>_lootTableItem(t,e).value||0);
+      const lo = Math.min(...vals), hi = Math.max(...vals);
+      const range = hi ? (lo===hi ? fmtGp(hi) : fmtGp(lo)+' – '+fmtGp(hi)) : '';
+      const last = _ltLast[t.id];
+      h += `<div class="card" style="margin-bottom:8px;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <button onclick="_ltOpen['${t.id}']=!_ltOpen['${t.id}'];renderLootTables()" style="flex:1;min-width:0;background:none;border:none;color:var(--text);text-align:left;cursor:pointer;padding:0">
+            <div style="font-family:'Cinzel',serif;font-size:12px">${open?'▾':'▸'} ${esc(t.name)}</div>
+            <div style="font-size:11px;color:var(--muted)">d${t.entries.length}${range?' · '+range:''}</div>
+          </button>
+          <button class="btn btn-gold" style="width:auto;margin:0;padding:6px 12px;font-size:11px" onclick="rollLootTable('${t.id}')">🎲 Roll</button>
+        </div>
+        ${t.note?`<div style="font-size:11px;color:var(--muted);font-style:italic;margin-top:4px">${esc(t.note)}</div>`:''}
+        ${last?`<div style="font-size:11px;color:var(--gold);margin-top:6px">Rolled: ${last.map(esc).join(', ')}</div>`:''}
+        ${open?`<div style="margin-top:8px;border-top:1px solid var(--border)">${t.entries.map((e,ei)=>{
+          const it = _lootTableItem(t,e);
+          return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:11px;color:var(--muted);width:22px;text-align:right;flex-shrink:0">${ei+1}</span>
+            <span style="font-size:16px;width:20px;text-align:center;flex-shrink:0">${itemIcon(it)}</span>
+            <div style="flex:1;min-width:0"><div style="font-size:12px" class="rtext-${it.rarity}">${esc(it.name)}</div>
+              ${it.desc?`<div style="font-size:11px;color:var(--muted);line-height:1.4">${esc(it.desc)}</div>`:''}</div>
+            <span style="font-size:11px;color:var(--muted);white-space:nowrap">${it.value?fmtGp(it.value):'—'}</span>
+            <button class="pc-pill" style="margin:0;flex-shrink:0" onclick="addLootTableItem('${t.id}',${ei})" aria-label="Add ${esc(it.name)}">＋</button>
+          </div>`;}).join('')}</div>`:''}
+      </div>`;
+    });
+  });
+  el.innerHTML = h;
+}
+// Adds one table entry; gems and treasure stack onto a matching item the owner already has.
+function _ltAdd(items, t, ei, owner){
+  const it = _lootTableItem(t, t.entries[ei]);
+  const stack = (it.type==='gem'||it.type==='treasure') && items.find(i=>i.owner===owner && i.name===it.name && (parseFloat(i.value)||0)===(it.value||0));
+  if(stack) stack.qty = (stack.qty||1)+1;
+  else items.push(Object.assign(it, {id:'i'+Date.now()+'_'+Math.random().toString(36).slice(2,7), qty:1, owner}));
+  return it.name;
+}
+function addLootTableItem(tid, ei){
+  const t = LOOT_TABLES.find(x=>x.id===tid); if(!t) return;
+  const owner = document.getElementById('ltOwner')?.value || 'pool';
+  const items = getItems(); const name = _ltAdd(items, t, ei, owner);
+  saveItems(items); toast('✦ '+name+' added!'); renderInventory(); renderPool();
+}
+function rollLootTable(tid){
+  const t = LOOT_TABLES.find(x=>x.id===tid); if(!t) return;
+  const owner = document.getElementById('ltOwner')?.value || 'pool';
+  const n = Math.min(20, Math.max(1, parseInt(document.getElementById('ltRolls')?.value)||1));
+  const items = getItems(), got = [];
+  for(let k=0;k<n;k++) got.push(_ltAdd(items, t, Math.floor(Math.random()*t.entries.length), owner));
+  saveItems(items); _ltLast[tid] = got;
+  toast('🎲 '+(n===1 ? got[0]+' added!' : n+' items added!'));
+  renderInventory(); renderPool(); renderLootTables();
+}
 function renderPool(){
   const items=getItems().filter(i=>i.owner==='pool');
   const el=document.getElementById('ltab-pool');
