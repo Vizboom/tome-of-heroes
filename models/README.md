@@ -1,12 +1,19 @@
 # 3D paperdoll models
 
-Used by the Equip tab's 3D paperdoll (see the `3D PAPERDOLL` module near the end of `index.html`).
+Used by the Equip tab's 3D paperdoll (see the `3D PAPERDOLL` module near the end of `index.html`). Everything here is CC0 except the race bodies below.
 
 - **Universal Base Characters** (Standard) and **Modular Character Outfits – Fantasy** (Source: Knight, Noble, Wizard, Ranger and Peasant, first colourway) by [Quaternius](https://quaternius.com), licensed [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
 - Converted from the packs' glTF exports: textures stripped out of the models (they are shared and live in `tex/`; UVs are kept), meshes quantized and meshopt-compressed; textures resized to 1024px WebP.
 - The original packs are attached to the `Models-raw` release.
 
 `Base_*` are the full-body characters; the viewer uses only their skeleton and draws a plain, faceless mannequin head and neck in code. `Female_*`/`Male_*` are outfit parts on the same skeleton.
+
+## Race bodies (`Race_*`)
+
+- **Characters – Fantasy Races Kit** (Source version) by [Quaternius](https://quaternius.com), licensed under the **Quaternius Asset License (QAL) v1.0** (https://quaternius.com/license.html), **not CC0**. They may be used in this app but must not be redistributed as assets: don't attach the original pack to a public release or copy these files into other asset collections.
+- `Race_Elf`, `Race_Orc`, `Race_Dragonborn`, `Race_SeaElf` (Water Elf with ears) and `Race_Triton` (Water Elf with fins), `_Male`/`_Female`. The Ape bodies aren't used. They share the paperdoll's skeleton (Dragonborn adds tail bones), so every outfit part fits.
+- Converted from the pack's GLB exports: textures stripped out (they live in `tex/` as `Race_<Race>_<Body>_<colourway>.webp`, `Race_<Race>_<Body>_N.webp`, `Race_Hair*.webp` and `Eye_*.webp`, 1024px WebP, eyes 128px), the Elf horn option removed, vertex colours and spare UV sets dropped, meshes quantized and meshopt-compressed.
+- Only the head and neck of the body are drawn (the outfits cover the rest); eyes, hair, fin-ears and the Dragonborn tail are shown, and hair hides under helmets and hoods. Which race gets which body and colourway is `RACE_BODIES` in `index.html`; all other races keep the mannequin.
 
 ## Weapons (`weapons/`)
 

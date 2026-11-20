@@ -23187,7 +23187,8 @@ bootApp();
 <script type="module">
 /* ══════════════════════════════════════════════════════════════════
    3D PAPERDOLL — Quaternius Universal Base Characters + Modular Outfits
-   (CC0, models/). A generic, faceless mannequin with the race's build and
+   (CC0, models/), plus Fantasy Races Kit bodies (QAL) for elves, orcs,
+   dragonborn and water elves. Otherwise a generic, faceless mannequin with the race's build and
    tone; equipped armour picks the outfit parts, and weapons are built in
    code and put in the hands.
    three.js is only fetched the first time a 3D doll is shown.
@@ -23375,6 +23376,12 @@ function dollSpec(char){
   if(mk) weapons.push({hand:'r',kind:mk,glow:glow(eq.mainhand),model:_weaponModel(eq.mainhand,mk)});
   if(ok) weapons.push({hand:'l',kind:ok,glow:glow(eq.offhand),model:_weaponModel(eq.offhand,ok)});
   const horns=F.horns||null;
+  // Races with a sculpted body (Fantasy Races Kit) bring their own head, hair,
+  // ears and tail, and their own proportions; the rest keep the mannequin.
+  const race=_raceBody(char, body, h);
+  if(race) return {body, skin:race.skin, race, parts, dyes, ears:null, tail:null, height, build:{w:1,legs:1,head:1},
+    hat:hat?{kind:hat, glow:RARITY_GLOW[eq.head.rarity]||null}:null, hooded,
+    cape:/cloak|cape|mantle/.test(allNames), horns:null, hornCol:null, weapons};
   return {body, skin, parts, dyes, ears:hooded?null:(F.ears||null), tail:_raceTail(char.race), height, build:{w:RB.w,legs:RB.legs,head:RB.head},
     hat:hat?{kind:hat, glow:RARITY_GLOW[eq.head.rarity]||null}:null,
     cape:/cloak|cape|mantle/.test(allNames), horns:hooded&&horns!=='ridge'?null:horns, hornCol:F.skin==='dragon'?skin:'#2b2226', weapons};
@@ -23542,6 +23549,33 @@ const RACE_BUILD=[
   {k:['tabaxi','yuan-ti'],       h:1.78, w:0.95, legs:1.02, head:1.0},
   {k:['aasimar'],                h:1.8,  w:1.0,  legs:1.0,  head:1.0},
 ];
+// Sculpted race bodies (Quaternius Fantasy Races Kit, models/Race_*.glb).
+// m: the model, tex: its texture set, v: skin colourways to pick from
+// (models/tex/Race_<tex>_<Body>_<v>.webp), hair: a fixed hair colour in
+// place of the model's own, first keyword match wins.
+// Dragonborn pick their colourway from the ancestry named in the race.
+const RACE_BODIES=[
+  {k:['drow'],                    m:'Elf',        tex:'Elf',        v:[2,3], hair:'#ece9e2'},
+  {k:['sea elf'],                 m:'SeaElf',     tex:'WaterElf',   v:[1,2,3]},
+  {k:['triton'],                  m:'Triton',     tex:'WaterElf',   v:[1,2,3]},
+  {k:['eladrin','half-elf','elf'],m:'Elf',        tex:'Elf',        v:[1]},
+  {k:['hobgoblin'],               m:'Orc',        tex:'Orc',        v:[2]},
+  {k:['orc'],                     m:'Orc',        tex:'Orc',        v:[1]},
+  {k:['dragonborn'],              m:'Dragonborn', tex:'Dragonborn', v:[1,2,3]},
+];
+// Each colourway's typical skin, for the bare-skin bits of outfits (hands).
+const RACE_SKIN={Elf:['#b37858','#5a4569','#282932'], Orc:['#4c5300','#662817'],
+  Dragonborn:['#63242e','#455312','#282320'], WaterElf:['#3f8a86','#5a4a8a','#a8822a']};
+function _raceBody(char, body, h){
+  const r=String(char.race||'').toLowerCase();
+  const b=RACE_BODIES.find(b=>b.k.some(k=>r.indexOf(k)>=0)); if(!b) return null;
+  let v=b.v[h%b.v.length];
+  if(b.m==='Dragonborn'){
+    const c=/\b(red|brass|copper|gold|bronze)\b/.test(r)?1:/\bgreen\b/.test(r)?2:/\b(black|blue|silver|white)\b/.test(r)?3:0;
+    if(c) v=c;
+  }
+  return {m:b.m, tex:b.tex+'_'+body+'_', v, skin:RACE_SKIN[b.tex][v-1], hair:b.hair||null};
+}
 function _raceBuild(race){
   const r=String(race||'').toLowerCase();
   for(const b of RACE_BUILD){ if(b.k.some(k=>r.indexOf(k)>=0)) return b; }
@@ -23658,14 +23692,60 @@ function _onHead(p, hp, k){
   const d=p.clone().sub(c).divide(r), n=d.length()||1;
   return d.multiplyScalar(1/n).multiply(r).add(c);
 }
+// A sculpted race body under the outfits: only its head and neck show (the
+// outfits cover the rest, hands included), plus eyes, hair, fin-ears and tail.
+// Hair gives way to helmets and hoods; a Triton's arm and leg fins stay hidden
+// under sleeves.
+const RACE_HEAD_BONES=['Head','neck_01'];
+function _showRaceHead(root, R, spec){
+  const skinM=new T.MeshStandardMaterial({map:tex('Race_'+R.tex+R.v,true), normalMap:tex('Race_'+R.tex+'N'), roughness:0.72, metalness:0});
+  const hairM=new T.MeshStandardMaterial({map:tex('Race_Hair',true), normalMap:tex('Race_Hair_N'), roughness:0.8, metalness:0});
+  if(R.hair){
+    // Recolour: the texture's shading as greyscale, lifted and tinted.
+    const u={uHair:{value:new T.Color(R.hair)}};
+    hairM.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,u);
+      sh.fragmentShader='uniform vec3 uHair;\n'+sh.fragmentShader.replace('#include <map_fragment>',
+        '#include <map_fragment>\n float _hl=dot(diffuseColor.rgb,vec3(0.299,0.587,0.114));\n diffuseColor.rgb = uHair * clamp(0.3+_hl*0.9,0.0,1.0);'); };
+    hairM.customProgramCacheKey=()=>'toh-hair';
+  }
+  const eyeM={};
+  root.traverse(o=>{
+    if(!o.isSkinnedMesh) return;
+    const mn=o.material.name||'', n=o.name||'';
+    o.castShadow=true; o.frustumCulled=false;
+    if(/^MI_Eyes_/.test(mn)){
+      const k=mn.slice(8);
+      o.material=eyeM[k]||(eyeM[k]=new T.MeshStandardMaterial({map:tex('Eye_'+k,true), roughness:0.25}));
+      o.visible=true;
+    } else if(mn==='MI_Race_Hair'){ o.material=hairM; o.visible=!spec.hooded; }
+    else if(/Tail|Ears/.test(n)){ o.material=skinM; o.visible=!(/Ears/.test(n)&&spec.hooded); }
+    else if(/Body$/.test(n)){ o.material=skinM; o.geometry=_headOnly(o); o.visible=true; }
+  });
+}
+// The triangles of a skinned body mostly weighted to the head and neck.
+function _headOnly(mesh){
+  const g=mesh.geometry;
+  if(g.userData.headOnly) return g.userData.headOnly;
+  const keep=new Set(mesh.skeleton.bones.map((b,i)=>RACE_HEAD_BONES.includes(b.name)?i:-1).filter(i=>i>=0));
+  const si=g.attributes.skinIndex, sw=g.attributes.skinWeight;
+  const onHead=v=>{ let w=0; for(let c=0;c<4;c++) if(keep.has(si.getComponent(v,c))) w+=sw.getComponent(v,c); return w>=0.5; };
+  const idx=g.index.array, out=[];
+  for(let i=0;i<idx.length;i+=3){
+    if(onHead(idx[i])||onHead(idx[i+1])||onHead(idx[i+2])) out.push(idx[i],idx[i+1],idx[i+2]);
+  }
+  const h=g.clone(); h.setIndex(out);
+  return g.userData.headOnly=h;
+}
 async function buildFigure(spec, L){
-  const names=['Base_'+spec.body, ...spec.parts];
+  const R=spec.race;
+  const names=[R?'Race_'+R.m+'_'+spec.body:'Base_'+spec.body, ...spec.parts];
   const loaded=await Promise.all(names.map(n=>glb(n)));
   const root=cloneScene(loaded[0].scene);
   let skel=null; root.traverse(o=>{ if(o.isSkinnedMesh&&!skel) skel=o.skeleton; });
   const boneBy={}; skel.bones.forEach(b=>boneBy[b.name]=b);
-  // Mannequin skin: one smooth matte tone, no texture detail.
-  const skinMat=new T.MeshStandardMaterial({color:new T.Color(spec.skin).multiplyScalar(0.62), roughness:0.6});
+  // Mannequin skin: one smooth matte tone, no texture detail. A sculpted race
+  // passes its colourway's typical tone, already dark, for outfits' bare hands.
+  const skinMat=new T.MeshStandardMaterial({color:new T.Color(spec.skin).multiplyScalar(R?1:0.62), roughness:0.6});
   const cloth={};
   const clothMat=f=>cloth[f]||(cloth[f]=gradedMat(spec.dyes[f]||f, L, f==='Knight'));
   const pick=n=>{ const f=/MI_(Knight|Noble|Wizard|Ranger|Peasant)/.exec(n);
@@ -23676,7 +23756,8 @@ async function buildFigure(spec, L){
   // Outfits cover the body; the base body's head, eyes and brows give way to
   // a faceless mannequin head and neck.
   root.traverse(o=>{ if(o.isSkinnedMesh) o.visible=false; });
-  if(boneBy.Head && boneBy.neck_01){
+  if(R) _showRaceHead(root, R, spec);
+  else if(boneBy.Head && boneBy.neck_01){
     const hp=new T.Vector3(), np=new T.Vector3(); boneBy.Head.getWorldPosition(hp); boneBy.neck_01.getWorldPosition(np);
     const egg=new T.Mesh(new T.SphereGeometry(1,32,24), skinMat); egg.castShadow=true;
     egg.scale.set(...HEAD_EGG.r); egg.position.set(...HEAD_EGG.c).add(hp);
