@@ -23551,10 +23551,11 @@ const RACE_BUILD=[
 ];
 // Sculpted race bodies (Quaternius Fantasy Races Kit, models/Race_*.glb).
 // m: the model, tex: its texture set, v: skin colourways to pick from
-// (models/tex/Race_<tex>_<Body>_<v>.webp), first keyword match wins.
+// (models/tex/Race_<tex>_<Body>_<v>.webp), hair: a fixed hair colour in
+// place of the model's own, first keyword match wins.
 // Dragonborn pick their colourway from the ancestry named in the race.
 const RACE_BODIES=[
-  {k:['drow'],                    m:'Elf',        tex:'Elf',        v:[2,3]},
+  {k:['drow'],                    m:'Elf',        tex:'Elf',        v:[2,3], hair:'#ece9e2'},
   {k:['sea elf'],                 m:'SeaElf',     tex:'WaterElf',   v:[1,2,3]},
   {k:['triton'],                  m:'Triton',     tex:'WaterElf',   v:[1,2,3]},
   {k:['eladrin','half-elf','elf'],m:'Elf',        tex:'Elf',        v:[1]},
@@ -23573,7 +23574,7 @@ function _raceBody(char, body, h){
     const c=/\b(red|brass|copper|gold|bronze)\b/.test(r)?1:/\bgreen\b/.test(r)?2:/\b(black|blue|silver|white)\b/.test(r)?3:0;
     if(c) v=c;
   }
-  return {m:b.m, tex:b.tex+'_'+body+'_', v, skin:RACE_SKIN[b.tex][v-1]};
+  return {m:b.m, tex:b.tex+'_'+body+'_', v, skin:RACE_SKIN[b.tex][v-1], hair:b.hair||null};
 }
 function _raceBuild(race){
   const r=String(race||'').toLowerCase();
@@ -23699,6 +23700,14 @@ const RACE_HEAD_BONES=['Head','neck_01'];
 function _showRaceHead(root, R, spec){
   const skinM=new T.MeshStandardMaterial({map:tex('Race_'+R.tex+R.v,true), normalMap:tex('Race_'+R.tex+'N'), roughness:0.72, metalness:0});
   const hairM=new T.MeshStandardMaterial({map:tex('Race_Hair',true), normalMap:tex('Race_Hair_N'), roughness:0.8, metalness:0});
+  if(R.hair){
+    // Recolour: the texture's shading as greyscale, lifted and tinted.
+    const u={uHair:{value:new T.Color(R.hair)}};
+    hairM.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,u);
+      sh.fragmentShader='uniform vec3 uHair;\n'+sh.fragmentShader.replace('#include <map_fragment>',
+        '#include <map_fragment>\n float _hl=dot(diffuseColor.rgb,vec3(0.299,0.587,0.114));\n diffuseColor.rgb = uHair * clamp(0.3+_hl*0.9,0.0,1.0);'); };
+    hairM.customProgramCacheKey=()=>'toh-hair';
+  }
   const eyeM={};
   root.traverse(o=>{
     if(!o.isSkinnedMesh) return;
