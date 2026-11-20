@@ -23556,7 +23556,7 @@ const RACE_BUILD=[
 // Dragonborn pick their colourway from the ancestry named in the race.
 const RACE_BODIES=[
   {k:['drow'],                    m:'Elf',        tex:'Elf',        v:[2,3], hair:'#ece9e2'},
-  {k:['sea elf'],                 m:'SeaElf',     tex:'WaterElf',   v:[1,2,3]},
+  {k:['sea elf','elf (sea)'],     m:'SeaElf',     tex:'WaterElf',   v:[1,2,3]},
   {k:['triton'],                  m:'Triton',     tex:'WaterElf',   v:[1,2,3]},
   {k:['eladrin','half-elf','elf'],m:'Elf',        tex:'Elf',        v:[1]},
   {k:['hobgoblin'],               m:'Orc',        tex:'Orc',        v:[2]},
@@ -23571,7 +23571,7 @@ function _raceBody(char, body, h){
   const b=RACE_BODIES.find(b=>b.k.some(k=>r.indexOf(k)>=0)); if(!b) return null;
   let v=b.v[h%b.v.length];
   if(b.m==='Dragonborn'){
-    const c=/\b(red|brass|copper|gold|bronze)\b/.test(r)?1:/\bgreen\b/.test(r)?2:/\b(black|blue|silver|white)\b/.test(r)?3:0;
+    const c=/\b(red|brass|copper|gold|bronze)\b/.test(r)?1:/\bgreen\b/.test(r)?2:/\b(black|blue|silver|white|ravenite)\b/.test(r)?3:0;
     if(c) v=c;
   }
   return {m:b.m, tex:b.tex+'_'+body+'_', v, skin:RACE_SKIN[b.tex][v-1], hair:b.hair||null};
