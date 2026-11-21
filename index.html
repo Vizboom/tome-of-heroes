@@ -23188,9 +23188,9 @@ bootApp();
 /* ══════════════════════════════════════════════════════════════════
    3D PAPERDOLL — Quaternius Universal Base Characters + Modular Outfits
    (CC0, models/), plus Fantasy Races Kit bodies (QAL) for elves, orcs,
-   dragonborn and water elves. Otherwise a generic, faceless mannequin with the race's build and
-   tone; equipped armour picks the outfit parts, and weapons are built in
-   code and put in the hands.
+   dragonborn and water elves. Otherwise the base body's own face, tinted to
+   the race's tone, with its build; equipped armour picks the outfit parts,
+   and weapons are built in code and put in the hands.
    three.js is only fetched the first time a 3D doll is shown.
    ══════════════════════════════════════════════════════════════════ */
 const DOLL_DIR = 'models/';
@@ -23382,7 +23382,9 @@ function dollSpec(char){
   if(race) return {body, skin:race.skin, race, parts, dyes, ears:null, tail:null, height, build:{w:1,legs:1,head:1},
     hat:hat?{kind:hat, glow:RARITY_GLOW[eq.head.rarity]||null}:null, hooded,
     cape:/cloak|cape|mantle/.test(allNames), horns:null, hornCol:null, weapons};
-  return {body, skin, parts, dyes, ears:hooded?null:(F.ears||null), tail:_raceTail(char.race), height, build:{w:RB.w,legs:RB.legs,head:RB.head},
+  // Brows take the character's hair colour; hairless races have none.
+  const brow=F.noHair?null:_parseColorWord(char.hair,_HAIR_WORDS,F.hairDef||'#3d2718');
+  return {body, skin, brow, parts, dyes, ears:hooded?null:(F.ears||null), tail:_raceTail(char.race), height, build:{w:RB.w,legs:RB.legs,head:RB.head},
     hat:hat?{kind:hat, glow:RARITY_GLOW[eq.head.rarity]||null}:null,
     cape:/cloak|cape|mantle/.test(allNames), horns:hooded&&horns!=='ridge'?null:horns, hornCol:F.skin==='dragon'?skin:'#2b2226', weapons};
 }
@@ -23683,8 +23685,8 @@ function addRaceFeatures(spec, B, skinMat){
 }
 
 /* ── Build a posed figure ──────────────────────────────────────────── */
-// The mannequin head: an egg over the head bone, sized to the models' skull
-// (figure space, before the race's head scale).
+// The base head's skull as an egg over the head bone (figure space, before the
+// race's head scale): hats, ears and horns are fitted to it.
 const HEAD_EGG={c:[0,0.098,0.012], r:[0.076,0.12,0.1]};
 // Move a figure-space point `p` onto the egg's surface along its radius.
 function _onHead(p, hp, k){
@@ -23722,6 +23724,34 @@ function _showRaceHead(root, R, spec){
     else if(/Body$/.test(n)){ o.material=skinM; o.geometry=_headOnly(o); o.visible=true; }
   });
 }
+// A texture's shading as greyscale, recoloured: `avg` is the luminance that
+// comes out as `color` itself (lighter and darker texels scale from there).
+function _tinted(m, color, avg){
+  const u={uTint:{value:new T.Color(color)}, uAvg:{value:avg}};
+  m.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,u);
+    sh.fragmentShader='uniform vec3 uTint; uniform float uAvg;\n'+sh.fragmentShader.replace('#include <map_fragment>',
+      '#include <map_fragment>\n diffuseColor.rgb = uTint * (dot(diffuseColor.rgb,vec3(0.299,0.587,0.114))/uAvg);'); };
+  m.customProgramCacheKey=()=>'toh-tint';
+  return m;
+}
+// Every other race: the base body's own head and face (Universal Base
+// Characters), its painted detail tinted to the race's skin tone, with eyes and
+// brows in the character's hair colour.
+const BASE_SKIN_LUM={Male:0.49, Female:0.52};
+function _showBaseHead(root, spec, tone){
+  const skinM=_tinted(new T.MeshStandardMaterial({map:tex('Base_'+spec.body,true), normalMap:tex('Base_'+spec.body+'_N'), roughness:0.62, metalness:0}), tone, BASE_SKIN_LUM[spec.body]);
+  root.traverse(o=>{
+    if(!o.isSkinnedMesh) return;
+    const mn=o.material.name||'';
+    o.castShadow=true; o.frustumCulled=false;
+    if(mn==='MI_Eyes'){ o.material=new T.MeshStandardMaterial({map:tex('Base_Eye',true), roughness:0.25}); o.visible=true; }
+    else if(/^MI_Hair_\d/.test(mn)){
+      if(!spec.brow) return;
+      o.material=_tinted(new T.MeshStandardMaterial({map:tex('Base_Brows_'+mn.slice(-1),true), roughness:0.85}), spec.brow, 0.55);
+      o.visible=true;
+    } else if(/Superhero/.test(mn)){ o.material=skinM; o.geometry=_headOnly(o); o.visible=true; }
+  });
+}
 // The triangles of a skinned body mostly weighted to the head and neck.
 function _headOnly(mesh){
   const g=mesh.geometry;
@@ -23736,6 +23766,9 @@ function _headOnly(mesh){
   const h=g.clone(); h.setIndex(out);
   return g.userData.headOnly=h;
 }
+// Directions for Tail_1…Tail_7 (figure space, +Z front): down, then back and
+// a little to one side.
+const TAIL_REST=[[0,-0.7,-0.7],[0,-0.9,-0.45],[0.03,-0.95,-0.3],[0.06,-0.85,-0.5],[0.09,-0.6,-0.8],[0.12,-0.3,-0.95],[0.14,-0.1,-1]];
 async function buildFigure(spec, L){
   const R=spec.race;
   const names=[R?'Race_'+R.m+'_'+spec.body:'Base_'+spec.body, ...spec.parts];
@@ -23743,8 +23776,8 @@ async function buildFigure(spec, L){
   const root=cloneScene(loaded[0].scene);
   let skel=null; root.traverse(o=>{ if(o.isSkinnedMesh&&!skel) skel=o.skeleton; });
   const boneBy={}; skel.bones.forEach(b=>boneBy[b.name]=b);
-  // Mannequin skin: one smooth matte tone, no texture detail. A sculpted race
-  // passes its colourway's typical tone, already dark, for outfits' bare hands.
+  // Bare skin on the outfits (hands): the race's tone. A sculpted race passes
+  // its colourway's typical tone, already dark.
   const skinMat=new T.MeshStandardMaterial({color:new T.Color(spec.skin).multiplyScalar(R?1:0.62), roughness:0.6});
   const cloth={};
   const clothMat=f=>cloth[f]||(cloth[f]=gradedMat(spec.dyes[f]||f, L, f==='Knight'));
@@ -23753,20 +23786,10 @@ async function buildFigure(spec, L){
   const assign=o=>{ o.castShadow=true; o.frustumCulled=false;
     if(Array.isArray(o.material)) o.material=o.material.map(m=>pick(m.name)); else o.material=pick(o.material.name); };
   root.updateMatrixWorld(true);
-  // Outfits cover the body; the base body's head, eyes and brows give way to
-  // a faceless mannequin head and neck.
+  // Outfits cover the body; only its head and neck show.
   root.traverse(o=>{ if(o.isSkinnedMesh) o.visible=false; });
   if(R) _showRaceHead(root, R, spec);
-  else if(boneBy.Head && boneBy.neck_01){
-    const hp=new T.Vector3(), np=new T.Vector3(); boneBy.Head.getWorldPosition(hp); boneBy.neck_01.getWorldPosition(np);
-    const egg=new T.Mesh(new T.SphereGeometry(1,32,24), skinMat); egg.castShadow=true;
-    egg.scale.set(...HEAD_EGG.r); egg.position.set(...HEAD_EGG.c).add(hp);
-    boneBy.Head.attach(egg);
-    const a=np.clone().add(new T.Vector3(0,-0.04,-0.01)), b=hp.clone().add(new T.Vector3(0,0.05,-0.01));
-    const neck=new T.Mesh(new T.CylinderGeometry(0.042,0.05,a.distanceTo(b),20), skinMat); neck.castShadow=true;
-    neck.position.copy(a).lerp(b,0.5); neck.quaternion.setFromUnitVectors(new T.Vector3(0,1,0), b.clone().sub(a).normalize());
-    boneBy.neck_01.attach(neck);
-  }
+  else _showBaseHead(root, spec, skinMat.color);
   // Every other piece shares the base skeleton, so one pose drives them all.
   for(let i=1;i<loaded.length;i++){
     const sc=cloneScene(loaded[i].scene), meshes=[];
@@ -23804,6 +23827,9 @@ async function buildFigure(spec, L){
     aim(B['lowerarm_'+sd],B['hand_'+sd],mx([0.1,-1,0.32],sd));
     aim(B['hand_'+sd],B['middle_01_'+sd],mx([0.12,-1,0.18],sd));
   });
+  // A modelled tail (Dragonborn) is rigged sticking straight back: let it hang
+  // down behind the legs and curl out along the floor.
+  TAIL_REST.forEach((d,i)=>aim(B['Tail_'+(i+1)],B['Tail_'+(i+2)],d));
   const held={r:false,l:false}, holders=[];
   root.updateMatrixWorld(true);
   const floor0=new T.Box3().setFromObject(root).min.y;   // the feet, before anything is held
